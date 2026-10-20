@@ -6,7 +6,7 @@ whenToUse: "同步扩展文档, 更新扩展文档, 检查扩展文档, 文档�
 
 # Sync IUI Docs
 
-Scope: the `dsh-intelligent-ui` repository — the Intelligent UI extension for DeepSeek Harness (DSH). It ships a Node Host half (`lib/index.js`), a browser Client half (`lib/client.js`), and a model-facing Agent Skill (`skills/intelligent-ui/`). Its docs describe all three plus the DSH services they need; DSH shell docs are out of scope.
+Scope: the `dsh-intelligent-ui` repository — the Intelligent UI extension for DeepSeek Harness (DSH). It ships a Node Host half (`lib/index.js`), a browser Client half (`lib/client.js`), and a model-facing Agent Skill (`skills/intelligent-ui/`). Its docs describe all three plus the DSH services they need, and keep the release history in `CHANGELOG.md`; DSH shell docs are out of scope.
 
 Docs split into two contracts. **As-built** docs describe what the extension does now and must match the code. **As-planned** docs (roadmaps, proposals, specs, future checklists) and **historical** docs (verification logs, decisions already made) may differ on purpose. Classify first, then sync only the as-built set.
 
@@ -14,7 +14,7 @@ This skill works on documentation only — editing when sync is authorized, repo
 
 ## When to Use
 
-- After changing behavior, user-visible copy, counts, dependencies, requirements, install steps, or release state under `src/`, `skills/intelligent-ui/`, `locale/`, `package.json`, `scripts/`, or the docs guards in `test/`.
+- After changing behavior, user-visible copy, counts, dependencies, requirements, install steps, or release state under `src/`, `skills/intelligent-ui/`, `locale/`, `package.json`, `scripts/`, or the docs guards in `test/` — including appending or moving entries in `CHANGELOG.md`.
 - When `npm run check`, a docs-consistency test, or a link check fails.
 - When asked to check, sync, or update the extension's README pair, the detailed docs under `docs/`, Agent Skill references, locale meta, test/renderer README, or release/ship-status claims.
 - Before release, or after a DSH version or dependency upgrade.
@@ -64,21 +64,22 @@ Check each as-built claim against its truth source from [`references/doc-map.md`
 
 Claim groups for this extension:
 
-- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.1 (validated on 0.2.1-rc.2), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.1.0-26-10-20`), no `engines.dsh`.
+- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.1 (validated on 0.2.1-rc.2), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.1.0-26-10-21`), no `engines.dsh`.
 - **Tool contract**: `render_ui` name, `{ program, title? }`, success `{ statements, warnings? }`, model-visible result line, exact error strings.
 - **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria.
 - **UI copy**: zh/en labels and menu text from `src/shared/locales.ts`; zh docs quote zh labels, English docs quote English labels.
 - **Vocabulary and counts**: 55 components, 73 functions (14 core + 59 library), 5 action steps; component signatures; prompt size (~8.5K tokens, approximate).
-- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 13 / Client 29 / packaging 16, total 58), renderer 41/41 parse and render, i18n 4 programs, pack 29 files (~1.6 MB tarball, ~4.5 MB unpacked), three screenshots all referenced.
+- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 13 / Client 29 / packaging 16, total 58), renderer 41/41 parse and render, i18n 4 programs, pack 34 files (~2.20 MB tarball, ~5.16 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
 - **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, UI language and Agent Skill; `docs/development*.md` expands install/uninstall, development commands, restart tips and the release layout. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
 - **Repository and contribution**: the README clone URL is the HTTPS equivalent of `git config remote.origin.url`; GitHub Issues is the contribution channel; `npm run check` is the local gate because there is no CI; docs changes follow `.agents/skills/sync-iui-docs/SKILL.md`.
-- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.1.0-26-10-20`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
+- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
+- **Release history**: `CHANGELOG.md` (English-only) mirrors the published versions (`package.json` version plus npm publish time); `Unreleased` collects the current main-branch delta; released sections are append-only, and the file is repo-only (not in `package.json` `files`).
 
 Completion criterion: every audited claim is verified, corrected, or listed unresolved; full audits state which docs and claim groups were not covered.
 
 ### 4. Edit minimally, only when authorized
 
-In audit mode, stop and propose; do not edit. In sync mode, change only claims proven wrong or missing. Update both `README.md` / `README.en.md` and both sides of a `docs/*.md` / `docs/*.en.md` pair in the same edit and keep them structurally and factually aligned. Take UI copy from `src/shared/locales.ts` (and `locale/*.json` for display metadata), not from older docs. Take counts and sizes from command output, never from arithmetic on memory. Match each document's language and tone.
+In audit mode, stop and propose; do not edit. In sync mode, change only claims proven wrong or missing. Update both `README.md` / `README.en.md`, both sides of a `docs/*.md` / `docs/*.en.md` pair, and the matching `CHANGELOG.md` section in the same edit, keeping them structurally and factually aligned. Take UI copy from `src/shared/locales.ts` (and `locale/*.json` for display metadata), not from older docs. Take counts and sizes from command output, never from arithmetic on memory. Match each document's language and tone.
 
 Generated and vendored content is off-limits: `vendor/**`, `src/generated/prompt.txt`, `lib/**`, lockfiles, `LICENSE`/`NOTICE`/`licenses/`. Regenerate through the build (`npm run build`, which runs `scripts/generate-prompt.mjs`) instead of editing.
 
@@ -88,24 +89,25 @@ Completion criterion: read-only runs have zero edits; every changed line traces 
 
 ### 5. Guard the claims that will drift again
 
-Where a claim is mechanically checkable, extend an existing guard instead of adding a new mechanism: `test/packaging/manifest.test.mjs` (manifest, files, README pair and screenshots, locale meta), `test/packaging/references.test.mjs` (Agent Skill catalog and counts), a renderer/i18n test, or the docs link/pair checks in [`references/verification.md`](references/verification.md). When behavior changes, update the guard's expected values together with the docs.
+Where a claim is mechanically checkable, extend an existing guard instead of adding a new mechanism: `test/packaging/manifest.test.mjs` (manifest, files, README pair and changelog, screenshots, locale meta), `test/packaging/references.test.mjs` (Agent Skill catalog and counts), a renderer/i18n test, or the docs link/pair and changelog checks in [`references/verification.md`](references/verification.md). When behavior changes, update the guard's expected values together with the docs.
 
 Completion criterion: each riskiest corrected claim is now covered by a guard, or the report says why no guard is feasible and what to watch instead.
 
 ### 6. Verify and report
 
-Re-run the guards after edits (`npm run check`; `npm run pack:check`; the README and detailed-docs checks in [`references/verification.md`](references/verification.md)). Report mode, authorization, coverage, and the lists in the template below.
+Re-run the guards after edits (`npm run check`; `npm run pack:check`; the README, changelog and detailed-docs checks in [`references/verification.md`](references/verification.md)). Report mode, authorization, coverage, and the lists in the template below.
 
 Completion criterion: guards pass or their failures are explained; the report lets the owner see which decisions were theirs.
 
 ## Doc-Specific Gotchas
 
 - **The README pair and each doc pair are updated together.** Heading depth, language switcher, back link, facts, and screenshot references must mirror; a one-sided edit is drift by construction.
+- **`CHANGELOG.md` is append-only history (English only).** Both READMEs link it from their documentation section; add entries under `## [Unreleased]`; move them under the released version when publishing. Never rewrite a released section. Repo-only: not in `package.json` `files`; the packaging test asserts the file exists, is linked from both READMEs, carries `Unreleased`, and stays out of the tarball.
 - **`docs/verification*.md` is not as-built truth.** Keep the verification record as history; don't rewrite past verification. Refresh only live subclaims (test counts, pack sizes, DSH version). Release planning is intentionally not part of the shipped READMEs — don't re-add a release checklist to public docs.
 - **Docs live in `docs/`, screenshots live in `assets/`.** The npm package excludes `docs/`, so the READMEs link to the detailed docs with absolute GitHub URLs; keep that if docs stay out of `files`.
 - **Version-skew examples quote an old Host on purpose.** Troubleshooting and "Host/Client 版本错位" describe a stale host (`Usage: /iui [on|off]`, "already off for this session"); do not "fix" those quotes to the current host.
 - **UI copy has two languages and two layers.** Client chrome is bilingual through `src/shared/locales.ts`; model-facing text (tool description, prompt, Agent Skill body) stays English. Host `/iui` replies and command-palette descriptions are English by DSH platform behavior, not untranslated drift.
-- **Screenshots are English-UI captures.** Three images under `assets/` must all be referenced by both READMEs; recapturing a Chinese-UI screenshot needs a live Chinese session and cannot be faked.
+- **Screenshots are English-UI captures.** Every image under `assets/` must be referenced by both READMEs; the set is now a card-level component tour plus examples (WebP, captured with the real renderer at 2× against DSH theme tokens), so recapture it rather than hand-editing an image. A Chinese-UI capture needs a live Chinese session and cannot be faked.
 - **Generated and vendored files are caches.** `src/generated/prompt.txt` comes from `vendor/system-prompt.txt` via `scripts/generate-prompt.mjs`; `vendor/spec.json` drives the validator and `references/components.md` is hand-maintained against it. Never hand-edit the generated side.
 - **`lib/` is gitignored but packaged.** Build before `npm run pack:check` or any claim about artifacts; the browser half and host bundle sizes are build outputs.
 - **`npm run typecheck` exists but has no `tsconfig.json`.** Do not cite it as a working check until it is wired (the command list in `docs/development*.md` is the source for what works).
@@ -116,7 +118,7 @@ Completion criterion: guards pass or their failures are explained; the report le
 - A doc or section could be a plan or an as-built claim (for example a future release step versus the current packaging behavior).
 - An as-built doc promises a feature that does not exist (qualify, move, implement, or delete — the owner chooses).
 - Screenshots, marketing copy, or user-visible wording need a product decision or a new capture.
-- Release state, npm dist-tag, version, or `engines.dsh` may change.
+- Release state, npm dist-tag, version, or `engines.dsh` may change — this includes moving `Unreleased` entries under a new version and deciding whether the changelog should stay repo-only or ship in the npm package.
 - Code and a plan/spec disagree, and the plan may be authoritative.
 
 ## Report Template
@@ -144,6 +146,6 @@ Questions:
 - [`references/doc-map.md`](references/doc-map.md) — per-doc class, truth source, and existing guard for this repository. Load in step 2.
 - [`references/verification.md`](references/verification.md) — guard commands, expected outputs, README structural checks, and known non-bugs. Load in step 1 and before reporting.
 
-These two references describe the repo as of 2026-10-20. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
+These two references describe the repo as of 2026-10-21. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
 
 This skill lives at `.agents/skills/sync-iui-docs/` for project-local discovery. It is not listed in `package.json` `files` and is not shipped to npm.

@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { webUrl } from "./style";
+import { CURRENCY_PREFIX, hasCjk, webUrl } from "./style";
 
 // A small Markdown renderer that builds React elements and never injects HTML.
 // Inline: **bold**, *italic*, ~~strike~~, `code`, [text](https://...).
@@ -8,6 +8,17 @@ import { webUrl } from "./style";
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+?\*\*|__[^_\n]+?__)|(~~[^~\n]+?~~)|(\*[^*\s][^*\n]*?\*|_[^_\s][^_\n]*?_)|(\[[^\]\n]+\]\([^)\s]+\))/;
 
 export function inline(text: string, key = "i"): ReactNode {
+  // Currency symbols are set tight in display type; don't let a heading's negative
+  // tracking close the gap between the sign and the amount.
+  const currency = CURRENCY_PREFIX.exec(text);
+  if (currency !== null) {
+    return (
+      <Fragment key={key}>
+        <span className="iui-currency-prefix">{currency[1]}</span>
+        {inline(text.slice(1), `${key}-c`)}
+      </Fragment>
+    );
+  }
   const out: ReactNode[] = [];
   let rest = text;
   let n = 0;
@@ -127,7 +138,7 @@ export function MarkdownBlocks({ text }: { text: string }) {
             return <blockquote key={k}>{inline(b.text, k)}</blockquote>;
           case "h":
             return (
-              <div key={k} role="heading" aria-level={b.level + 1} className={`iui-md-h iui-md-h${b.level}`}>
+              <div key={k} role="heading" aria-level={b.level + 1} className={`iui-md-h iui-md-h${b.level}${hasCjk(b.text) ? " iui-title-cjk" : ""}`}>
                 {inline(b.text, k)}
               </div>
             );

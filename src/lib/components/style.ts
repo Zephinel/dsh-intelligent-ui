@@ -160,3 +160,9 @@ export const cx = (...names: (string | false | null | undefined)[]) => names.fil
 
 /** A short plain-text name for an element, from its rendered text, for action messages. */
 export const textOf = (element: HTMLElement | null) => (element?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+
+/** True when text contains CJK ideographs, kana or hangul. Display tracking is a Latin-size choice. */
+export const hasCjk = (text: string): boolean => /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(text);
+
+/** A leading currency sign immediately followed by a digit, e.g. "¥3,000" — the gap after it must not inherit negative display tracking. */
+export const CURRENCY_PREFIX = /^([$€£¥￥₹₩₽₺₪₫฿₴₦₱])(?=\d)/;

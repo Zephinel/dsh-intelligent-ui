@@ -9,7 +9,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Current status
 
-**Published.** `@zephinel/dsh-intelligent-ui@0.1.0-26-10-20` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published.** `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
 
 ## Requirements
 
@@ -48,9 +48,9 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm (current latest: 0.1.0-26-10-20)
+# npm (current latest: 0.1.0-26-10-21)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-20   # pin a version
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21   # pin a version
 # or GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
@@ -59,7 +59,7 @@ The npm package name is **`@zephinel/dsh-intelligent-ui`** (the unscoped `dsh-in
 
 Packaging behavior that matters when publishing:
 
-- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (29 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
+- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (34 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
 - A Git checkout installs from source: pnpm runs the package's `prepare` build, so the install may ask for **build-script approval** and needs the toolchain. A registry tarball has nothing to build.
 - Without `dsh.bundle`, the manager would install the package as a plain dependency with the warning `declares no dsh.bundle — installed as a plain dependency, not a profile layer`, and nothing would load. This package declares it, so that warning means the wrong spec or an old tarball.
 
@@ -67,7 +67,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.1.0-26-10-20 --dsh-version 0.2.1-rc.2 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.1.0-26-10-21 --dsh-version 0.2.1-rc.2 --accept-risk
 ```
 
 Remove it with the mirror command:
@@ -184,4 +184,4 @@ Work top-down; each step rules out one layer:
 - This extension is web-only: profiles without a browser surface register the tool but have no card to render into.
 - The browser half requires the client locale service (`dsh-client-locale`); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - The `/iui` Host replies and the command palette's command description stay English even in a Chinese UI; both are DSH platform behavior, and the command palette localizes only first-party commands by identity.
-- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.1.0-26-10-20`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
+- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.

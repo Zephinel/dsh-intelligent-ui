@@ -91,9 +91,18 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
   const band = w / Math.max(1, rows.length);
   const xAt = (i: number) => pad.left + band * i + band / 2;
   const y = (v: number) => pad.top + h - ((v - lo) / (hi - lo)) * h;
-  // Label every nth category so the labels never overlap.
+  // Label every nth category so the labels never overlap, and trim a label that
+  // is still wider than its band instead of letting the SVG text spill out.
   const longest = Math.max(1, ...rows.map((r) => label(r, x).length));
   const every = Math.max(1, Math.ceil((longest * 6.6 + 10) / band));
+  // A centered label may use the room to its nearer chart edge (the card padding
+  // absorbs a small overhang), capped by the spacing to the next shown label.
+  const OVERHANG = 20;
+  const fitLabel = (text: string, center: number) => {
+    const room = (Math.min(center, width - center) + OVERHANG) * 2 - 6;
+    const max = Math.max(3, Math.floor(Math.min(room, band * every - 6) / 6.6));
+    return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+  };
   const shown = (i: number) => i % every === 0;
   const onMove = (event: PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -123,7 +132,8 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
         {rows.map((row, i) =>
           shown(i) ? (
             <text key={i} x={xAt(i)} y={height - 6} textAnchor="middle" className="iui-chart-category">
-              {label(row, x)}
+              {fitLabel(label(row, x), xAt(i))}
+              {fitLabel(label(row, x), xAt(i)) !== label(row, x) ? <title>{label(row, x)}</title> : null}
             </text>
           ) : null,
         )}

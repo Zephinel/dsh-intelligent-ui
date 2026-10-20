@@ -6,7 +6,7 @@
  *   node --test test/packaging/manifest.test.mjs
  */
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { test } from 'node:test'
 
 const root = new URL('../../', import.meta.url)
@@ -53,21 +53,31 @@ test('the published files list covers every runtime and bundle input', () => {
 })
 
 test('every shipped screenshot exists and is used by both READMEs', () => {
-  const screenshots = [
-    'intelligent-ui-san-francisco.png',
-    'intelligent-ui-toggle.png',
-    'intelligent-ui-responsive.png',
-  ]
+  const screenshots = readdirSync(new URL('assets', root))
+  assert.ok(screenshots.length >= 3, 'assets ships the README screenshots')
   for (const image of screenshots) {
     assert.ok(existsSync(new URL(`assets/${image}`, root)), `assets/${image} exists`)
     assert.ok(read('README.md').includes(`assets/${image}`), `README.md uses ${image}`)
     assert.ok(read('README.en.md').includes(`assets/${image}`), `README.en.md uses ${image}`)
+  }
+  // The other direction: a README must not point at a screenshot that is gone.
+  for (const readme of ['README.md', 'README.en.md']) {
+    for (const [, image] of read(readme).matchAll(/assets\/([^)\s]+)/g)) {
+      assert.ok(existsSync(new URL(`assets/${image}`, root)), `${readme} references a shipped assets/${image}`)
+    }
   }
 })
 
 test('the two README languages ship and link to each other', () => {
   assert.match(read('README.md'), /\[English\]\(README\.en\.md\)/, 'Chinese README links to English')
   assert.match(read('README.en.md'), /\[中文\]\(README\.md\)/, 'English README links to Chinese')
+  // The changelog is English-only and repo-only: both READMEs link it, it has an
+  // Unreleased section, and it stays out of the npm tarball.
+  assert.match(read('README.md'), /CHANGELOG\.md/, 'Chinese README links the changelog')
+  assert.match(read('README.en.md'), /CHANGELOG\.md/, 'English README links the changelog')
+  assert.ok(existsSync(new URL('CHANGELOG.md', root)), 'CHANGELOG.md exists')
+  assert.match(read('CHANGELOG.md'), /^## \[Unreleased\]$/m, 'CHANGELOG.md has an Unreleased section')
+  assert.ok(!pkg.files.includes('CHANGELOG.md'), 'CHANGELOG.md stays out of the npm package')
 })
 
 test('the bundle patch inserts the host row under the installed package name', () => {

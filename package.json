@@ -1,6 +1,6 @@
 {
   "name": "@zephinel/dsh-intelligent-ui",
-  "version": "0.1.0-26-10-20",
+  "version": "0.1.0-26-10-21",
   "description": "Intelligent UI for DeepSeek Harness: render OpenUI Lang answers as interactive maps, photos, charts, forms, drawings and working tools inside the Web chat. Off by default; enable it for one session or all sessions from the composer UI switch.",
   "type": "module",
   "main": "lib/index.js",
@@ -42,7 +42,7 @@
     "build:prompt": "node scripts/generate-prompt.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/host/*.test.mjs test/client/*.test.mjs test/packaging/*.test.mjs",
-    "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs",
+    "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs",
     "check": "npm run build && npm test && npm run test:renderer",
     "pack:check": "npm pack --dry-run --json",
     "prepare": "node scripts/build.mjs",

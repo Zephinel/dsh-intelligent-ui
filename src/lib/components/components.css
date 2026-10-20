@@ -5,6 +5,9 @@
    "wght" variation the page body sets for react-ui text. The renderer root
    class scopes every rule that could otherwise touch host chrome. */
 .dsh-iui-host [class*="iui-"] { font-variation-settings: normal; }
+/* Standard quarter-em separation between CJK and Latin/digits, where the browser
+   implements CSS Text 4 (Chrome 132+). Older engines ignore the declaration. */
+.dsh-iui-host { text-autospace: normal; }
 
 /* Layout */
 .iui-col, .iui-box { display: flex; flex-direction: column; min-width: 0; }
@@ -42,6 +45,9 @@
 .iui-title-xl { font-size: 25px; line-height: 1.2; font-weight: 640; letter-spacing: -0.8px; }
 .iui-title-2xl { font-size: 32px; line-height: 1.15; font-weight: 640; letter-spacing: -1px; }
 .iui-title-3xl { font-size: 40px; line-height: 1.1; font-weight: 640; letter-spacing: -1.4px; }
+/* A currency sign is set tight against its amount. Negative display tracking is a
+   Latin-size choice, so the sign keeps normal tracking even inside a tracked title. */
+.iui-currency-prefix { letter-spacing: normal; }
 .iui-text { margin: 0; overflow-wrap: anywhere; line-height: 1.6; white-space: pre-line; }
 .iui-inline { display: inline-flex; vertical-align: -0.15em; margin: 0 1px; }
 .iui-inline > .iui-badge { vertical-align: 0.1em; }
@@ -61,7 +67,7 @@
 .iui-link { color: inherit; text-decoration: underline; text-decoration-color: var(--iui-border-strong); text-underline-offset: 3px; }
 .iui-link:hover { text-decoration-color: currentColor; }
 .iui-link-arrow { display: inline; width: 0.85em; height: 0.85em; margin-left: 2px; vertical-align: -0.05em; }
-.iui-badge { display: inline-flex; align-items: center; align-self: flex-start; gap: 5px; width: fit-content; max-width: 100%; min-height: 26px; padding: 3px 10px; border-radius: 999px; background: var(--iui-badge-neutral-soft); color: var(--iui-content-ink); font-size: 13px; line-height: 18px; font-weight: 560; white-space: nowrap; }
+.iui-badge { display: inline-flex; align-items: center; align-self: flex-start; gap: 5px; width: fit-content; max-width: 100%; min-height: 26px; padding: 3px 10px; border-radius: 999px; background: var(--iui-badge-neutral-soft); color: var(--iui-content-ink); font-size: 13px; line-height: 18px; font-weight: 560; overflow-wrap: anywhere; }
 .iui-badge > svg { flex: none; margin-left: -2px; }
 .iui-row > .iui-badge { align-self: center; flex: none; }
 /* Badges stay calm: info is the neutral grey pill, and the other tones are soft tints with same-hue text. */
@@ -122,7 +128,7 @@
 .iui-md-h3, .iui-md-h4 { font-size: 16px; line-height: 1.4; }
 
 /* Buttons */
-.iui-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; align-self: flex-start; flex: none; min-height: 36px; padding: 8px 16px; border: 1px solid transparent; border-radius: 999px; font-size: 14px; line-height: 1.2; font-weight: 560; white-space: nowrap; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.iui-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; align-self: flex-start; flex: 0 1 auto; max-width: 100%; min-height: 36px; padding: 8px 16px; border: 1px solid transparent; border-radius: 999px; font-size: 14px; line-height: 1.2; font-weight: 560; text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
 .iui-row > .iui-button { align-self: center; }
 .iui-button-sm { min-height: 32px; padding: 6px 12px; font-size: 13px; }
 .iui-button-lg { min-height: 44px; padding: 10px 20px; font-size: 15px; }
@@ -261,7 +267,7 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .iui-chart-category { fill: var(--iui-muted); font-size: 12px; }
 .iui-chart-hover { fill: var(--iui-surface); }
 .iui-chart-guide { stroke: var(--iui-border-strong); stroke-dasharray: 3 3; }
-.iui-chart-tooltip { position: absolute; z-index: 2; display: flex; flex-direction: column; gap: 3px; min-width: 110px; padding: 10px 12px; transform: translateX(-50%); border: 1px solid var(--iui-border); border-radius: var(--iui-radius-lg); background: var(--iui-canvas); box-shadow: var(--iui-shadow); font-size: 12px; pointer-events: none; }
+.iui-chart-tooltip { position: absolute; z-index: 2; display: flex; flex-direction: column; gap: 3px; min-width: 110px; max-width: min(240px, calc(100% - 8px)); padding: 10px 12px; transform: translateX(-50%); border: 1px solid var(--iui-border); border-radius: var(--iui-radius-lg); background: var(--iui-canvas); box-shadow: var(--iui-shadow); font-size: 12px; overflow-wrap: anywhere; pointer-events: none; }
 .iui-chart-tooltip > strong { font-weight: 640; }
 .iui-chart-tooltip > span { display: flex; align-items: center; gap: 6px; color: var(--iui-content-muted); }
 .iui-chart-tooltip b { margin-left: auto; padding-left: 8px; color: var(--iui-content-ink); font-weight: 560; font-variant-numeric: tabular-nums; }
@@ -374,8 +380,13 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .iui-flow > .iui-title + :is(.iui-text, .iui-caption, .iui-row:has(> .iui-badge)) { margin-top: var(--iui-space-inner); }
 .iui-flow > .iui-caption + .iui-title { margin-top: var(--iui-space-tight); }
 
-/* Inside a card or a grid cell, titles are card-sized (18/24) and body text is 15/22. */
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > :is(.iui-title-lg, .iui-title-xl, .iui-title-2xl, .iui-title-3xl) { font-size: 18px; line-height: 24px; letter-spacing: -0.3px; }
+/* Inside a card or a grid cell, display titles use a capped scale (18/24 → 30/36)
+   instead of the page scale, so a section heading and a KPI number keep their
+   relative hierarchy without turning a panel into a mini landing page. */
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-lg { font-size: 18px; line-height: 24px; letter-spacing: -0.3px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-xl { font-size: 22px; line-height: 28px; letter-spacing: -0.4px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-2xl { font-size: 26px; line-height: 32px; letter-spacing: -0.5px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-3xl { font-size: 30px; line-height: 36px; letter-spacing: -0.6px; }
 :is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) { font-size: 15px; line-height: 22px; }
 
 /* Media row: a photo beside text. The photo is a fixed 4:3, a third of the row
@@ -403,3 +414,9 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .dsh-iui-fallback-details { margin: 0; color: var(--iui-content-muted); font-size: 12px; line-height: 18px; }
 .dsh-iui-fallback-details > summary { cursor: pointer; }
 .dsh-iui-fallback-details pre { max-height: 260px; margin: 8px 0 0; padding: 10px 12px; overflow: auto; border-radius: var(--iui-radius-md); background: var(--iui-surface-strong); color: var(--iui-content-ink); font: 12px/1.5 var(--iui-mono); white-space: pre-wrap; }
+
+/* Display tracking is tuned for Latin. CJK glyphs already sit on a full em, so a
+   negative track makes Chinese, Japanese and Korean headings feel cramped: drop it. */
+:is(.iui-title-md, .iui-title-lg, .iui-title-xl, .iui-title-2xl, .iui-title-3xl).iui-title-cjk.iui-title,
+.iui-md-h.iui-title-cjk,
+.iui-flashcard-word.iui-flashcard-word-cjk { letter-spacing: normal; }

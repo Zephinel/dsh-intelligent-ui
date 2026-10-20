@@ -7,19 +7,35 @@
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.1.0-26-10-20`**（`latest`）。
+> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`**（`latest`）。
 
 ## 效果
 
-![旧金山一日游：照片、地图、时间线、预算与可交互控件都由 OpenUI Lang 渲染](assets/intelligent-ui-san-francisco.png)
+![上海两日行程：照片、地图、时间线、清单、预算与可交互控件都由 OpenUI Lang 渲染](assets/intelligent-ui-itinerary.webp)
 
-- 用户问「帮我安排旧金山一日游」，模型不再只回一段文字，而是在回答末尾渲染可点击、可勾选、可拖动的行程页面（地图 + 照片 + 时间线 + 清单）。
+- 用户问「帮我排一个上海两日游」，模型不再只回一段文字：回答末尾直接渲染一张可点击、可勾选、可拖动的行程页面（地图 + 照片 + 时间线 + 清单 + 预算）。
 - 卡片内的 `$变量`、`@Set`、`@functions` 全部在浏览器本地执行：勾选、滑动条、Stepper、计时器、预算分配都不需要再请求模型。
 - 只有真正需要继续对话的动作（`@ToAssistant`，例如表单提交）会把一条简短消息放回输入框并发送。
 
-窄屏（546 px）下卡片自动切为单列，地图与图表改为横向滚动而不是溢出：
+## 组件一览
 
-![窄屏下的手冲咖啡配方计算器：单列卡片、无横向溢出](assets/intelligent-ui-responsive.png)
+渲染器不是把一段文字包进聊天气泡，而是一套完整的组件库：**55 个组件、73 个函数、5 种动作**。下面三张卡片都是扩展的真实渲染结果——同一套渲染器、同一套 DSH 主题 token，没有设计稿：
+
+![布局与排版：Col、Row、Box、Grid、Card、Carousel、Popover、Divider、Spacer 与 12 个文本组件](assets/intelligent-ui-components-layout.webp)
+
+![输入、媒体与数据：13 个表单控件，以及照片、表格、图表、地图与 YouTube](assets/intelligent-ui-components-inputs.webp)
+
+![交互与绘制：翻面卡、撒花开关、Svg 十种图元与沙盒 iframe 小游戏](assets/intelligent-ui-components-drawing.webp)
+
+## 更多示例
+
+![销售看板：KPI、折线、环图与明细表都随区域筛选实时重算](assets/intelligent-ui-example-dashboard.webp)
+
+![咖啡冲煮小测：翻面卡、答对反馈、得分条与沙盒小游戏](assets/intelligent-ui-example-quiz.webp)
+
+窄屏下卡片自动切为单列，地图与图表按卡片宽度自适应；图表分类标签过长时会截断而不是溢出（约 380 px 宽）：
+
+![窄屏下的手冲咖啡计算器：单列卡片、无横向溢出](assets/intelligent-ui-responsive.webp)
 
 ## 核心能力
 
@@ -66,7 +82,7 @@ dsh --version    # 0.2.1 或 0.2.1-rc.2
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # 固定当前版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-20
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -88,7 +104,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 然后在输入框右侧点 **UI** 控件，选择「仅本会话」或「全部会话」（或 `/iui session` / `/iui global`），直接提问，例如：
 
 ```text
-帮我安排旧金山一日游，要能勾选和调整
+帮我排一个上海两日游，要能勾选和调整
 ```
 
 卸载、开发与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
@@ -105,7 +121,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 打开开关后直接用自然语言提问，例如：
 
-- 「帮我安排旧金山一日游，要能勾选和调整」
+- 「帮我排一个上海两日游，要能勾选和调整」
 - 「做一个 7 速自行车的换挡模拟器」
 - 「把这几张表变成一个可以筛选的销售看板」
 - 「教我打领带，每一步配一张图」
@@ -126,7 +142,7 @@ npm run pack:check  # 检查 npm pack 的最终文件清单
 
 - 问题与功能请求：使用 [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues)。
 - 提交前运行 `npm run check`；当前仓库没有 CI，以本地命令结果为准。
-- 行为、文案或计数变化时，中英 README 与 `docs/` 对应文档要一起更新；同步规则见 `.agents/skills/sync-iui-docs/SKILL.md`（开发环境使用，不随 npm 包发布）。
+- 行为、文案或计数变化时，中英 README、`CHANGELOG.md` 与 `docs/` 对应文档要一起更新；同步规则见 `.agents/skills/sync-iui-docs/SKILL.md`（开发环境使用，不随 npm 包发布）。
 
 ## 已知限制
 
@@ -143,6 +159,7 @@ npm run pack:check  # 检查 npm pack 的最终文件清单
 - [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、三档开关的完整语义、界面语言、Agent Skill。
 - [开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)：安装与卸载、开发命令、改名/重建后的重启提示、Host/Client 版本错位、发布物布局。
 - [验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)：端到端验证、测试与打包结果（历史记录）。
+- [变更日志](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)：按版本记录新增、变更与修复（英文）。
 
 ## 许可证
 

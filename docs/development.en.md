@@ -13,10 +13,10 @@ Requires DSH 0.2.1 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.1.0-26-10-20
+# npm; current latest is 0.1.0-26-10-21
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-20
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -95,7 +95,8 @@ When you see this mixed state, first **restart the DSH process that serves the W
 | `src/shared/locales.ts` | bilingual UI dictionaries (`ctx.locale` registration and the renderer's English fallback) |
 | `README.md` / `README.en.md` | Chinese / English docs, linked to each other at the top |
 | `docs/` | detailed docs (architecture, development, verification); not shipped in the npm package |
-| `assets/` | the three README screenshots (desktop itinerary, switch, narrow-screen responsive) |
+| `CHANGELOG.md` | release changelog (English, historical, append-only); not shipped in the npm package |
+| `assets/` | README screenshots: itinerary, three component tours, dashboard and quiz examples, narrow screen and the composer switch (WebP + PNG) |
 | `icon.svg` | plugin card icon |
 | `skills/intelligent-ui/` | the embedded Agent Skill that also ships with the package |
 | `licenses/` | full text of third-party licenses (Open Intelligent UI, OpenUI, lucide, KaTeX, MapLibre, zod) |

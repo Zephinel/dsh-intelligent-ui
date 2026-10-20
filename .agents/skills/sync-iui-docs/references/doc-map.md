@@ -6,7 +6,7 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 
 | Doc / section | Truth source | Existing guard |
 | --- | --- | --- |
-| `README.md` — 效果, 核心能力, 获取代码, 前置条件, 快速开始, 三档开关, 使用, 构建、测试与部署, 贡献, 已知限制, 文档, 许可证; the 当前状态 line | `src/shared/locales.ts` (UI labels), `src/host/index.ts` (tool contract), `src/host/mode.ts` (switch semantics, persistence, command copy), `src/client/index.tsx` (services/registrations), `src/lib/render.tsx` (renderer behavior), `package.json` (scripts, files, status), `git config remote.origin.url` (clone URL), `vendor/spec.json` (vocabulary), `docs/*.md` (linked detail), command output (prompt size, switch behavior) | `test/packaging/manifest.test.mjs` for package/README links/screenshots/locale meta; `test/packaging/references.test.mjs` for Agent Skill counts; clone URL and docs-link checks are in `references/verification.md` |
+| `README.md` — 效果, 组件一览, 更多示例, 核心能力, 获取代码, 前置条件, 快速开始, 三档开关, 使用, 构建、测试与部署, 贡献, 已知限制, 文档, 许可证; the 当前状态 line | `src/shared/locales.ts` (UI labels), `src/host/index.ts` (tool contract), `src/host/mode.ts` (switch semantics, persistence, command copy), `src/client/index.tsx` (services/registrations), `src/lib/render.tsx` (renderer behavior), `package.json` (scripts, files, status), `git config remote.origin.url` (clone URL), `vendor/spec.json` (vocabulary), `docs/*.md` (linked detail), command output (prompt size, switch behavior) | `test/packaging/manifest.test.mjs` for package/README links/screenshots/locale meta; `test/packaging/references.test.mjs` for Agent Skill counts; clone URL and docs-link checks are in `references/verification.md` |
 | `README.en.md` | Same truth sources as `README.md`, with English labels from the `en` dictionary; must mirror `README.md` structure, facts, language switcher, and screenshot references | `test/packaging/manifest.test.mjs` (cross-link + screenshots); structural and factual parity is manual |
 | `docs/architecture.md` / `docs/architecture.en.md` | As-built detailed docs: component tree, full three-state switch semantics, UI language and Agent Skill. Sources: `src/client/index.tsx`, `src/host/index.ts`, `src/host/mode.ts`, `src/shared/locales.ts`, `skills/intelligent-ui/SKILL.md` | Local link/anchor check; not covered by product tests — manual |
 | `docs/development.md` / `docs/development.en.md` | As-built install/dev/troubleshooting/layout details. Sources: `package.json` scripts/`files`, `scripts/build.mjs`, `scripts/generate-prompt.mjs`, `scripts/install.mjs`, `cordis.patch.yml`, `test/packaging/*` | `npm run check` and `npm run pack:check` for commands/counts; prose is manual |
@@ -20,7 +20,7 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 | `package.json` | As-built manifest: description, version, keywords, scripts, `files`, `exports`, `dsh`, publishability | `test/packaging/manifest.test.mjs`; `npm run pack:check` for the shipped list/sizes |
 | `locale/en.json`, `locale/zh.json` | As-built plugin display metadata. The zh title/description must be translated (`智能 UI`, description in Chinese) | `test/packaging/manifest.test.mjs` (key parity, zh CJK, descriptions differ) |
 | `cordis.patch.yml` | As-built bundle-install comment and row | `test/packaging/manifest.test.mjs` (row id + package name) |
-| `assets/*.png` | README screenshots; English-UI captures | `test/packaging/manifest.test.mjs` (each exists and is referenced by both READMEs) |
+| `assets/*` | README screenshots (WebP card captures + the PNG composer switch); English-UI captures | `test/packaging/manifest.test.mjs` (each exists, is referenced by both READMEs, and no README references a missing asset) |
 
 ## Generated / vendored / legal (never hand-edit)
 
@@ -37,8 +37,9 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 | Doc / section | Class | Rule |
 | --- | --- | --- |
 | `docs/verification.md` / `docs/verification.en.md` | Historical evidence record | Don't rewrite past verification. Append new evidence when verification happens; only refresh live subclaims (test counts, pack sizes, DSH version) |
+| `CHANGELOG.md` | Historical release log (English only). Truth sources: `package.json` version, npm publish time, git tags/GitHub releases; repo-only (not in `package.json` `files`) | Append entries under `Unreleased`; move them under the released version when publishing. Never rewrite past releases. Guarded by `test/packaging/manifest.test.mjs` (existence, linked from both READMEs, `Unreleased` heading, absent from the tarball) and the changelog checks in `references/verification.md`. |
 | Release planning / internal checklists | As-planned | Kept outside the shipped READMEs. Don't re-add a release checklist to public docs; if release steps must be documented, keep them outside the published package and verify only live subclaims (publication status, dist-tag) |
-| Future `docs/roadmap*`, `docs/plans/**`, `.agents/notes/**`, `ROADMAP*`, `CHANGELOG*` | As-planned or historical | Don't sync with code. Flag unmarked plans; append to changelogs, never rewrite them |
+| Future `docs/roadmap*`, `docs/plans/**`, `.agents/notes/**`, `ROADMAP*` | As-planned or historical | Don't sync with code. Flag unmarked plans; append, never rewrite |
 | `vendor/**` docs and upstream links | External / vendored | Don't align with this implementation |
 
 ## Classification rules for a new doc

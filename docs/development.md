@@ -13,10 +13,10 @@
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.1.0-26-10-20
+# npm；当前 latest 为 0.1.0-26-10-21
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-20
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -95,7 +95,8 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 | `src/shared/locales.ts` | 中英文 UI 字典（`ctx.locale` 注册、渲染器英文兜底） |
 | `README.md` / `README.en.md` | 中文 / English 文档，顶部互相链接 |
 | `docs/` | 详细文档（架构、开发、验证）；不随 npm 包发布 |
-| `assets/` | README 用的三张截图（桌面向导、开关、窄屏响应式） |
+| `CHANGELOG.md` | 版本变更记录（英文，历史记录，只追加）；不随 npm 包发布 |
+| `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配与输入框开关（WebP + PNG） |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
 | `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod） |

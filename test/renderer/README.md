@@ -1,9 +1,9 @@
 # Renderer self-checks
 
-These scripts cover the `src/lib` half (the OpenUI Lang renderer) without a browser.
-They are not part of the client bundle. `npm run test:renderer` runs the parser,
-render, contrast and i18n checks in order; `npm run check` runs them after the build
-and the Node test suites.
+Most of these scripts cover the `src/lib` half (the OpenUI Lang renderer) without a
+browser; the typography check uses headless Chrome. They are not part of the client
+bundle. `npm run test:renderer` runs the parser, render, contrast, i18n and typography
+checks in order; `npm run check` runs them after the build and the Node test suites.
 
 ## Parser check
 
@@ -58,6 +58,22 @@ Chinese locale seat and once without one (the English fallback). It asserts that
 renderer's own chrome — Code, Timer, Map controls and the empty-program fallback —
 follows the seat, so a component that forgets `useT()` fails here before the browser
 E2E. Exits nonzero when an expected localized string is missing.
+
+## Typography check
+
+```sh
+node test/renderer/typography-check.mjs
+```
+
+Renders a small fixture in headless Chrome and asserts the text rules static checks
+cannot see: a leading currency sign keeps normal tracking inside a tracked display
+title, CJK titles and Markdown headings drop the Latin display tracking, long badges
+and buttons wrap inside a 360px card instead of clipping, an over-long chart category
+label is trimmed with an ellipsis while keeping the full text in its `<title>`,
+CJK/Latin autospacing (`text-autospace`, where the engine supports it) is inherited,
+and the page never scrolls horizontally. It skips with exit code 0 when no Chrome
+binary is available (`CHROME_BIN` overrides the default path) and is part of
+`npm run test:renderer`.
 
 These checks bundle their harness into `test/renderer/.build/` (git-ignored) and are
 never part of the client bundle used by DSH.

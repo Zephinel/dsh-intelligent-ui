@@ -7,19 +7,35 @@
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.1.0-26-10-20`** (`latest`).
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`** (`latest`).
 
 ## What it looks like
 
-![One-day San Francisco itinerary: photos, map, timeline, budget and interactive controls all rendered by OpenUI Lang](assets/intelligent-ui-san-francisco.png)
+![Two days in Shanghai: photos, map, timeline, checklist, budget and interactive controls all rendered by OpenUI Lang](assets/intelligent-ui-itinerary.webp)
 
-- When the user asks "plan a one-day trip to San Francisco", the model no longer replies with just a paragraph; instead it renders an itinerary page (map + photos + timeline + checklist) at the end of the answer that can be clicked, checked off and dragged.
+- When the user asks "plan two days in Shanghai", the model no longer replies with just a paragraph: it renders an itinerary page (map + photos + timeline + checklist + budget) at the end of the answer that can be clicked, checked off and dragged.
 - The `$variables`, `@Set` and `@functions` inside the card all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request.
 - Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer and send it.
 
-On a narrow screen (546 px) the card switches to a single column, and maps and charts scroll horizontally instead of overflowing:
+## Component tour
 
-![The pour-over coffee calculator on a narrow screen: single-column cards, no horizontal overflow](assets/intelligent-ui-responsive.png)
+The renderer is not a chat bubble around a paragraph — it is a full component library: **55 components, 73 functions, 5 action steps**. The three cards below are real renders from the extension: same renderer, same DSH theme tokens, no mockups:
+
+![Layout and typography: Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer and 12 text components](assets/intelligent-ui-components-layout.webp)
+
+![Inputs, media and data: 13 form controls plus photos, tables, charts, maps and YouTube](assets/intelligent-ui-components-inputs.webp)
+
+![Play and drawing: flip cards, the confetti trigger, ten SVG shape primitives and a sandboxed iframe game](assets/intelligent-ui-components-drawing.webp)
+
+## More examples
+
+![Sales dashboard: KPIs, line chart, donut and detail table all recompute when the region filter changes](assets/intelligent-ui-example-dashboard.webp)
+
+![Coffee brewing quiz: flip cards, per-answer feedback, score bar and a sandboxed mini-game](assets/intelligent-ui-example-quiz.webp)
+
+On a narrow screen (about 380 px) the card switches to a single column, and maps and charts fit the card width; over-long chart category labels are trimmed instead of overflowing:
+
+![The pour-over coffee calculator on a narrow screen: single-column cards, no horizontal overflow](assets/intelligent-ui-responsive.webp)
 
 ## Capabilities
 
@@ -66,7 +82,7 @@ Install from npm (prerequisites are in the previous section):
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # pin the current version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-20
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -88,7 +104,7 @@ node scripts/install.mjs  # writes $DSH_HOME/profiles/web/cordis.patch.yml (auto
 Then click the **UI** control, choose "This session only" or "All sessions" (or `/iui session` / `/iui global`), and ask, for example:
 
 ```text
-Plan a one-day trip to San Francisco, with checkboxes and adjustments
+Plan two days in Shanghai, with checkboxes and adjustments
 ```
 
 See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall, development and troubleshooting.
@@ -105,7 +121,7 @@ See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/
 
 With the switch on, just ask in natural language, for example:
 
-- "Plan a one-day trip to San Francisco, with checkboxes and adjustments"
+- "Plan two days in Shanghai, with checkboxes and adjustments"
 - "Build a gear-shifting simulator for a 7-speed bicycle"
 - "Turn these tables into a sales dashboard I can filter"
 - "Teach me how to tie a tie, with an image for every step"
@@ -126,7 +142,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 
 - Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
 - Run `npm run check` before submitting; the repository has no CI, so the local command is the source of truth.
-- When behavior, copy or counts change, update the Chinese and English READMEs and the matching documents under `docs/`; the sync rules live in `.agents/skills/sync-iui-docs/SKILL.md` (development-only, not shipped in the npm package).
+- When behavior, copy or counts change, update the Chinese and English READMEs, `CHANGELOG.md`, and the matching documents under `docs/`; the sync rules live in `.agents/skills/sync-iui-docs/SKILL.md` (development-only, not shipped in the npm package).
 
 ## Known limitations
 
@@ -143,6 +159,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full three-state switch semantics, UI language and the Agent Skill.
 - [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch and the release layout.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
+- [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.
 
 ## License
 

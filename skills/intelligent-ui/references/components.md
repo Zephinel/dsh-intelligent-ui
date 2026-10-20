@@ -126,7 +126,7 @@ Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Co
 
 Heading; md for a card title, lg for a section, 2xl for a big number.
 
-**Notes.** Page title `xl`/`2xl`; card or block title `md`/`sm`. Avoid `lg`+ inside a Card.
+**Notes.** Page title `xl`/`2xl`; card or block title `md`/`sm`. Inside a Card, display sizes use a capped scale — `lg` 18px, `xl` 22px, `2xl` 26px, `3xl` 30px — so `xl` reads as a big number (a KPI) without turning the panel into a page; use it for one number, not for the card heading.
 
 ### `Text`
 

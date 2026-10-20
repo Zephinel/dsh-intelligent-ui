@@ -6,7 +6,7 @@ import { Fragment } from "react";
 import { z } from "zod/v4";
 import { Glyph } from "./glyph";
 import { inline, MarkdownBlocks } from "./markdown";
-import { children, color, textFg, cx, webUrl } from "./style";
+import { children, color, textFg, cx, hasCjk, webUrl } from "./style";
 
 const str = (value: unknown) => (value == null ? "" : String(value));
 const HEADING_LEVEL: Record<string, number> = { "3xl": 1, "2xl": 2, xl: 2, lg: 2, md: 3, sm: 4 };
@@ -21,9 +21,10 @@ export const Title = defineComponent({
   description: "Heading; md for a card title, lg for a section, 2xl for a big number.",
   component: ({ props }) => {
     const sizeName = props.size ?? "md";
+    const text = str(props.text);
     return (
-      <div role="heading" aria-level={HEADING_LEVEL[sizeName] ?? 3} className={`iui-title iui-title-${sizeName}`} style={{ color: textFg(props.color) }}>
-        {inline(str(props.text))}
+      <div role="heading" aria-level={HEADING_LEVEL[sizeName] ?? 3} className={cx("iui-title", `iui-title-${sizeName}`, hasCjk(text) && "iui-title-cjk")} style={{ color: textFg(props.color) }}>
+        {inline(text)}
       </div>
     );
   },

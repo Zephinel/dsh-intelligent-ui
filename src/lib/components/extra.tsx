@@ -12,7 +12,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { z } from "zod/v4";
 import { inline } from "./markdown";
-import { children, cx } from "./style";
+import { children, cx, hasCjk } from "./style";
 import { useT } from "../i18n";
 
 const str = (value: unknown) => (value == null ? "" : String(value));
@@ -217,7 +217,7 @@ export const Flashcard = defineComponent({
   component: function FlashcardView({ props, renderNode }) {
     const t = useT();
     const [flipped, setFlipped] = useState(false);
-    const face = (value: unknown) => (typeof value === "string" ? <span className="iui-flashcard-word">{inline(value)}</span> : renderSlot(value, renderNode));
+    const face = (value: unknown) => (typeof value === "string" ? <span className={cx("iui-flashcard-word", hasCjk(value) && "iui-flashcard-word-cjk")}>{inline(value)}</span> : renderSlot(value, renderNode));
     return (
       <button type="button" className={cx("iui-flashcard", flipped && "is-flipped")} aria-pressed={flipped} onClick={() => setFlipped(!flipped)}>
         <span className="iui-flashcard-inner">
