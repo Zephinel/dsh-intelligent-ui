@@ -1,0 +1,192 @@
+/**
+ * Chrome for Intelligent UI turn-tail cards, their process row, and the
+ * composer switch.
+ *
+ * Class prefix `dsh-iui-`. Surfaces, borders, type, and focus ride the DSH
+ * semantic theme aliases (`--dsw-alias-*`), so light/dark follow the shell via
+ * the theme owner with no local theme selectors. The card keeps
+ * `overflow: visible` so shadows and focus rings are not cut; the body clips
+ * horizontal bleed from arbitrary model layouts, while wide tables/charts keep
+ * their own internal horizontal scrolling.
+ */
+
+.dsh-iui-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dsh-iui-card {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg) var(--dsw-radius-lg) 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.dsh-iui-header:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-iui-header:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.dsh-iui-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-state {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-chevron {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 120ms ease;
+}
+.dsh-iui-header[aria-expanded='false'] .dsh-iui-chevron { transform: rotate(-90deg); }
+
+.dsh-iui-body {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+.dsh-iui-body[hidden] { display: none; }
+
+/* A collapsed card becomes header-only: keep its rounded silhouette. */
+.dsh-iui-card[data-dsh-iui-collapsed='true'] .dsh-iui-header {
+  border-bottom-color: transparent;
+  border-radius: var(--dsw-radius-lg);
+}
+
+.dsh-iui-error {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dsh-iui-row-state {
+  margin-left: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/*
+ * Composer scope chip, seated in `conversation.input.activity` beside the model
+ * selector. Geometry mirrors the sibling permission chip (28px tall, transparent
+ * until hover) because the popup itself is the shell's native Menu surface.
+ */
+.dsh-iui-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dsh-iui-trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-iui-trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+.dsh-iui-trigger:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+.dsh-iui-trigger[data-state='session'],
+.dsh-iui-trigger[data-state='global'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+.dsh-iui-trigger-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.dsh-iui-trigger-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.dsh-iui-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsh-iui-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+.dsh-iui-chevron[data-open='true'] { transform: rotate(180deg); }
+.dsh-iui-chevron svg { width: 14px; height: 14px; }
+
+.dsh-iui-toggle-error {
+  margin-left: 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-header,
+  .dsh-iui-chevron,
+  .dsh-iui-toggle { transition: none; }
+}

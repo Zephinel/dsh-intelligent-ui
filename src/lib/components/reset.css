@@ -1,0 +1,57 @@
+/* DSH does not ship the upstream app's global reset, and the component library
+   was written against it: `width: 100%` elements with their own padding/border
+   overflowed the card by exactly that padding (Cards, SegmentedControl, Slider,
+   inputs) once it was missing. These rules reproduce only the parts of
+   globals.css the library depends on, scoped to the renderer host so the DSH
+   chrome is untouched.
+
+   `:where()` keeps specificity at zero, so the library component classes still
+   win every later declaration exactly as they did over the upstream bare
+   element selectors. */
+
+:where(.dsh-iui-host, .dsh-iui-host *),
+:where(.dsh-iui-host, .dsh-iui-host *)::before,
+:where(.dsh-iui-host, .dsh-iui-host *)::after {
+  box-sizing: border-box;
+}
+
+:where(.dsh-iui-host) img,
+:where(.dsh-iui-host) svg,
+:where(.dsh-iui-host) video,
+:where(.dsh-iui-host) canvas {
+  display: block;
+  max-width: 100%;
+}
+
+:where(.dsh-iui-host) img,
+:where(.dsh-iui-host) video {
+  height: auto;
+}
+
+:where(.dsh-iui-host) table {
+  border-collapse: collapse;
+}
+
+:where(.dsh-iui-host) button,
+:where(.dsh-iui-host) input,
+:where(.dsh-iui-host) select,
+:where(.dsh-iui-host) textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:where(.dsh-iui-host) button {
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Flex/grid children default to min-width:auto, so a nowrap Row or a Grid cell
+   refuses to shrink and pushes its content past the card. The library relies on
+   the app-level layout never being narrower than its content; inside a chat
+   column that is not true on phones. */
+:where(.dsh-iui-host) .iui-row > *,
+:where(.dsh-iui-host) .iui-col > *,
+:where(.dsh-iui-host) .iui-grid > *,
+:where(.dsh-iui-host) .iui-box > * {
+  min-width: 0;
+}

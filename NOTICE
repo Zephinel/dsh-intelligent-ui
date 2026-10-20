@@ -1,0 +1,54 @@
+NOTICE
+======
+
+dsh-intelligent-ui — Intelligent UI for DeepSeek Harness
+Published by Zephinel
+Copyright (c) 2026 Zephinel
+Licensed under the MIT License (see LICENSE).
+
+This package is an independent, open-source derivative built on the Open
+Intelligent UI project and the OpenUI ecosystem. It is not affiliated with or
+endorsed by OpenAI or Thesys.
+
+Bundled or adapted third-party material
+---------------------------------------
+
+Open Intelligent UI
+  https://github.com/thesysdev/open-intelligent-ui
+  MIT License, Copyright (c) 2026 Thesys Inc.
+  Adapted: the component library implementation and styles under
+  src/lib/components, the generic @functions under src/lib/functions, the
+  library definition (src/lib/library.ts) and actions, and the generated
+  component spec (vendor/spec.json) and system prompt (vendor/system-prompt.txt).
+  Full text: licenses/Open-Intelligent-UI-LICENSE.
+
+OpenUI — @openuidev/react-lang, @openuidev/lang-core,
+         @openuidev/observability, @openuidev/devtools
+  https://github.com/thesysdev/openui
+  MIT License.
+  Full texts: licenses/OpenUI-*-LICENSE.
+
+lucide-react (icons)
+  https://github.com/lucide-icons/lucide
+  ISC License.
+  Full text: licenses/lucide-react-LICENSE.
+
+KaTeX
+  https://github.com/KaTeX/KaTeX
+  MIT License.
+  Full text: licenses/katex-LICENSE.
+
+MapLibre GL JS
+  https://github.com/maplibre/maplibre-gl-js
+  BSD 3-Clause License, Copyright (c) MapLibre contributors.
+  The generated MapLibre worker source embedded in the browser bundle retains
+  its license header.
+  Full text: licenses/maplibre-gl-LICENSE.
+
+zod
+  https://github.com/colinhacks/zod
+  MIT License.
+  Full text: licenses/zod-LICENSE.
+
+React and React DOM are provided by the hosting DeepSeek Harness platform and
+are not bundled in this package.
