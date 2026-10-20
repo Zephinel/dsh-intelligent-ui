@@ -88,7 +88,15 @@ dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
 
-重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；launchd/systemd：重启对应服务；DSH Desktop：退出重开），打开它打印的 URL，输入框右侧出现 **UI** 控件即加载成功。
+重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；launchd/systemd：重启对应服务），打开它打印的 URL，输入框右侧出现 **UI** 控件即加载成功。
+
+**DSH Desktop（桌面版）**不需要终端命令，在应用内安装：
+
+1. 侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）。
+2. 输入 `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`（或只填包名装最新版），点 **安装**。
+3. 安装完成后点 **立即启用**；若输入框右侧没有 **UI** 控件，退出并重开 DSH Desktop。
+
+桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。
 
 本地开发时从 checkout 安装：
 

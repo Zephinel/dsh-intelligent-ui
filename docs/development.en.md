@@ -25,7 +25,7 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 > The npm package name is **`@zephinel/dsh-intelligent-ui`**: the unscoped `dsh-intelligent-ui` is taken by another, unrelated project, so the package uses the `@zephinel` scope. GitHub installs are unaffected.
 
-On the Web side you can also install and enable it from the **Plugins** page. With a bundle install the skill appears automatically along with the Host plugin and needs no separate installation.
+On the Web side you can also install and enable it from the **Plugins** page. DSH Desktop installs the same bundle inside the app: **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**) → enter the package name and version → **Install** → **Enable now**. The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected; if the **UI** control does not appear after enabling, quit and reopen Desktop. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found. With a bundle install the skill appears automatically along with the Host plugin and needs no separate installation.
 
 ### Local checkout (development)
 

@@ -88,7 +88,15 @@ dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
 
-Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again; launchd/systemd: restart the service; DSH Desktop: quit and reopen), open the URL it prints, and look for the **UI** control on the right side of the composer.
+Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again; launchd/systemd: restart the service), open the URL it prints, and look for the **UI** control on the right side of the composer.
+
+**DSH Desktop** needs no terminal command — install it inside the app:
+
+1. Open **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**).
+2. Enter `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21` (or just the package name for the latest), then click **Install**.
+3. When the install finishes, click **Enable now**; if the **UI** control does not appear, quit and reopen DSH Desktop.
+
+The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
 
 For local development, install from a checkout:
 
