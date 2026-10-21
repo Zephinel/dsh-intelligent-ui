@@ -14,15 +14,17 @@ Host  lib/index.js (Node)
 │   └─ @openuidev/lang-core validates against the component library spec; errors are returned precisely, and the model repairs them in the same turn
 ├─ session switch + answer style (global defaults + session overrides)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
-├─ Config.globalEnabled / answerStyle / freeComposition (volatile)  # written by the plugin detail page; the prompt reads them live per request
+├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale (volatile)  # written by the plugin detail page; the prompt reads them live per request
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
 Client  lib/client.js (browser, lazily loaded by the DSH module loader)
 ├─ ctx.locale.register('intelligent-ui')  # zh/en UI dictionaries; slots declare locale and receive the injected t
 ├─ conversation.input.activity             # the composer UI control (chip + Menu + style panel; reads the projection + runs switch/style commands)
-├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # plugin detail page: Availability, Answer style and Composition (writes volatile Host settings fields)
+├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # plugin detail page: Availability, Answer style, Composition and Image export (writes volatile Host settings fields)
 ├─ conversation.chat.turnTail list item    # at the end of each turn, takes that turn's render_ui program and renders the card
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 57 ported components (chrome reads the renderer i18n context)
+├─ conversation.chat.assistant-actions list item  # export button, only for messages whose Turn recorded render_ui
+│   └─ menu (raw / rounded / card) -> SnapDOM capture -> composed PNG download
 ├─ tool.call.toolview keyed 'render_ui'   # leaves a single "Interactive answer" (交互式回答 in Chinese) line in the process area
 └─ built-in CSS (the component library / MapLibre / KaTeX use DSH global styles + a scoped reset)
 ```
@@ -31,13 +33,13 @@ With the switch off there is no trace of this tool on the model side; only after
 
 ## Switch and answer style
 
-![The UI control on the right side of the composer](../assets/intelligent-ui-toggle.png)
+![The composer UI control: the three-way switch and Display style below an inset divider](../assets/intelligent-ui-toggle.png)
 
-- **Global defaults:** the Plugin detail page provides **Enable in all sessions**, the global Auto / Card / Article style, and the **Free-form layout** switch. New sessions inherit these values. The page groups them into **Availability**, **Answer style** and **Composition**.
+- **Global defaults:** the Plugin detail page provides **Enable in all sessions**, the global Auto / Card / Article style, the **Free-form layout** switch, and the **Image export** defaults (background color, 1x/2x). New sessions inherit these values. The page groups them into **Availability**, **Answer style**, **Composition** and **Image export**.
 - **Session overrides:** the composer UI control changes only the current session. `/iui on|off|inherit` sets the enable override; `/iui style auto|card|article|inherit` sets the style override. A session override wins over the global value; `inherit` follows it.
 - **Answer styles:** `Card` is the compact interactive card; `Article` is a reading layout inside the `render_ui` card (`Toc` + collapsible `Section`s + long Markdown prose); `Auto` lets the model choose per request.
 - **State:** the global enable/style/free-composition values live in the Host settings document; session enable, off and style overrides are written atomically to `<DSH_HOME>/dsh-intelligent-ui.json` (`sessions`, `offSessions`, `styles`). Legacy `{ "global": true, "sessions": [...] }` files are still read as migration values.
-- The session command log folds into the `intelligent-ui` projection, which carries the current enable/style view and pending state; the composer control only mirrors the projection, and the Host owns every state decision. The control broadcasts its optimistic view to other tabs over BroadcastChannel; the projection wins once it arrives.
+- The session command log folds into the `intelligent-ui` projection, which carries the current enable/style view and pending state; the composer control only mirrors the projection, and the Host owns every state decision. The control broadcasts its optimistic view to other tabs over BroadcastChannel; the projection wins once it arrives. The scope menu and the export menu share the same `MenuItem`/`MenuDivider` rows (content-based width with a 208px minimum, one vertical rhythm, consistent selected/hover/disabled states); the scope menu right-aligns with the chip; the Display style row is always visible, disabled while off, with an inset hairline above it; the style panel is a second level, and its back button returns to the scope menu instead of dismissing every popup.
 - The switch requires a deployment that composes both `sessionProjections` and `commands` (DSH Web has both by default). If either service is missing, the session controls cannot be displayed or persisted, and the extension falls back to **always on**.
 
 ## Decision policy
@@ -49,6 +51,14 @@ The switch only makes the capability visible; the policy that decides whether a 
 - **Prose is the bounded exception:** the whole answer is a single fact or one or two sentences; the user explicitly asks for text / a document / code; the content cannot be shown as a page (a safety warning, material that must be quoted verbatim); or two render attempts failed in the turn.
 - **One source:** the Agent Skill does not repeat the decision policy; it only covers how to build.
 - **Free-form layout switch:** the plugin detail page writes a volatile field in the Host settings document. When on, the design playbook becomes advisory. It is orthogonal to the answer style and does not replace it.
+
+## Image export
+
+- **Entry:** the extension contributes an entry to DSH's `conversation.chat.assistant-actions` list (the standard copy / like / branch strip) and uses `order` plus `margin-left: auto` to sit at the **far right** of that row, styled as a labeled export pill to stand apart from the native icon controls. The entry renders only when the finalized assistant message's Turn recorded an exportable `render_ui` call, so plain text answers keep the shipped action row unchanged. The `render_ui` tool call is the durable marker; no extra session metadata is written.
+- **Scope:** one export covers every card rendered by that Turn. Exported images contain the rendered cards only — not the Markdown text around them and not the export control itself.
+- **Capture:** the entry temporarily expands collapsed cards (restoring them afterwards), waits for in-card photos and image searches plus each map's readiness signal (`data-iui-map-ready` mirrors MapLibre `idle`, and style swaps, tile fallback and resizes reset it first) to settle, freezes CSS transitions and animations, and rasterizes the live card DOM with SnapDOM. SVG rasterization does not honour `backface-visibility`, so a flashcard's 3D faces are flattened during the capture to the face the reader currently sees. Maps are captured through MapLibre's preserved WebGL drawing buffer; sandboxed iframes (`HtmlView`) are not capturable and are missing from the image. Images, fonts and local interaction state follow the live DOM.
+- **Frames:** the menu offers **raw** (the answer alone), **rounded** (background color plus rounded padding) and **card** (padding, rounded corners and a soft shadow). The frame is chosen per export; the menu right-aligns with the export pill and its width follows its content. The background color and 1x/2x resolution are defaults from the **Image export** group on the Plugin detail page.
+- **Download:** the browser receives one PNG named after the answer title plus a local timestamp. No Host or session data is involved.
 
 ## UI language
 

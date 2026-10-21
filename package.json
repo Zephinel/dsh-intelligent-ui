@@ -47,7 +47,7 @@
     "pack:check": "npm pack --dry-run --json",
     "prepare": "node scripts/build.mjs",
     "check:theme": "node test/renderer/theme-torture.mjs",
-    "test:browser": "node test/browser/style-panel.e2e.mjs"
+    "test:browser": "node test/browser/style-panel.e2e.mjs && node test/browser/export-image.e2e.mjs"
   },
   "keywords": [
     "deepseek-harness",
@@ -78,6 +78,7 @@
     "@openuidev/react-lang": "^1.0.1",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@zumer/snapdom": "^3.3.6",
     "esbuild": "^0.25.0",
     "katex": "^0.16.47",
     "lucide-react": "^0.562.0",

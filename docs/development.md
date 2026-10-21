@@ -45,16 +45,16 @@ npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
 npm run check          # build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
-npm run test:browser   # 可选：真实浏览器样式面板 E2E（需要 Chrome）
+npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导出，需要 Chrome）
 ```
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（开启会话默认出卡片、文字例外有界、显式调用是直接指令）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
-- `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`）、turn-tail 卡片、`render_ui` 进程行、程序提取器，以及 `ctx.locale` 字典注册。
+- `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` 进程行、程序提取器、导出消息/Turn 查找与图片导出管线（SnapDOM + 美化合成），以及 `ctx.locale` 字典注册。
 - `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）。
-- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition`）、内嵌 skill 注册；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
+- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale`）、内嵌 skill 注册；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
 
@@ -101,7 +101,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 | `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配、输入框开关/样式面板与插件设置页（WebP + PNG） |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
-| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod） |
+| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod、SnapDOM） |
 | `LICENSE` / `NOTICE` | 本项目 MIT 许可证与第三方归属声明 |
 
 ## 发布（Trusted Publishing）

@@ -2,13 +2,14 @@
  * Configuration on the Plugins detail page for the Intelligent UI extension.
  *
  * The page owns the deployment-wide defaults: the global on/off switch, the
- * default answer style (`auto`, `card`, or `article`), and the free-composition
- * preference. All three are volatile fields in the Host settings document (entry
- * id `intelligent-ui`). The composer's UI panel only overrides them for one
+ * default answer style (`auto`, `card`, or `article`), the free-composition
+ * preference, and the image-export background and scale. All of them are
+ * volatile fields in the Host settings document (entry id `intelligent-ui`).
+ * The composer's UI panel only overrides availability and style for one
  * session. When the Host serves no settings namespace (or the document is
  * read-only), the controls stay disabled and the page says why.
  */
-import { useCallback, useId, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the settings client `configForms` service and its wire types.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -16,10 +17,15 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
   ANSWER_STYLE_FIELD,
+  EXPORT_BACKGROUND_FIELD,
+  EXPORT_SCALES,
+  EXPORT_SCALE_FIELD,
   FREE_COMPOSITION_FIELD,
   GLOBAL_ENABLED_FIELD,
   isAnswerStyle,
+  readImageExportSettings,
   type AnswerStyle,
+  type ExportScale,
   type IntelligentUISettings,
 } from '../shared/intelligent-ui.ts'
 import { StylePicker } from './StylePicker.tsx'
@@ -65,8 +71,13 @@ export type SettingsPageProps =
     readonly t?: Translate
   }
 
-/** The three writeable fields shown on this page. */
-type PendingField = typeof GLOBAL_ENABLED_FIELD | typeof ANSWER_STYLE_FIELD | typeof FREE_COMPOSITION_FIELD
+/** The writeable fields shown on this page. */
+type PendingField =
+  | typeof GLOBAL_ENABLED_FIELD
+  | typeof ANSWER_STYLE_FIELD
+  | typeof FREE_COMPOSITION_FIELD
+  | typeof EXPORT_BACKGROUND_FIELD
+  | typeof EXPORT_SCALE_FIELD
 
 /** One labelled switch row; the three settings in this page share this shape. */
 function SwitchRow({
@@ -104,7 +115,7 @@ function SwitchRow({
 
 /**
  * Render the extension's configuration on its Plugin detail page: global
- * enablement, default answer style, and free composition.
+ * enablement, default answer style, free composition, and image-export defaults.
  * @param props - bundle-config owner props, the injected form, and the locale seat.
  * @returns the page content, or disabled controls with a state note.
  */
@@ -121,6 +132,10 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   const storedStyle = snapshot.value?.answerStyle
   const answerStyle: AnswerStyle = isAnswerStyle(storedStyle) ? storedStyle : 'auto'
   const free = snapshot.value?.freeComposition === true
+  const exportSettings = readImageExportSettings(snapshot.value)
+  // The native color input streams changes while the user drags; stage the
+  // draft locally, then commit it on blur or shortly after the chooser settles.
+  const [colorDraft, setColorDraft] = useState<string | null>(null)
   const ready = snapshot.status === 'ready'
   const disabled = !ready || !snapshot.writable || pending !== null
 
@@ -136,6 +151,17 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
       setPending(null)
     }
   }
+
+  const commitColor = (next: string | null): void => {
+    setColorDraft(null)
+    if (next !== null && next !== exportSettings.background) void save(EXPORT_BACKGROUND_FIELD, next)
+  }
+
+  useEffect(() => {
+    if (colorDraft === null || disabled) return
+    const timer = window.setTimeout(() => { commitColor(colorDraft) }, 400)
+    return () => { window.clearTimeout(timer) }
+  }, [colorDraft, disabled, exportSettings.background])
 
   const note = failed
     ? t('settings.error')
@@ -216,6 +242,55 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
           describedBy={`${idPrefix}-free ${noteId}`}
           onToggle={() => { void save(FREE_COMPOSITION_FIELD, !free) }}
         />
+      </div>
+
+      <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-export`}>
+        <div className="dsh-iui-settings-group-head">
+          <h3 id={`${idPrefix}-export`} className="dsh-iui-settings-group-title">
+            {t('settings.group.export')}
+          </h3>
+          <p className="dsh-iui-settings-group-hint">{t('settings.group.exportHint')}</p>
+        </div>
+        <div className="dsh-iui-settings-row">
+          <div className="dsh-iui-settings-copy">
+            <div className="dsh-iui-settings-label">{t('settings.export.background.label')}</div>
+            <p className="dsh-iui-settings-hint">{t('settings.export.background.hint')}</p>
+          </div>
+          <label className="dsh-iui-color">
+            <input
+              type="color"
+              className="dsh-iui-color-input"
+              value={colorDraft ?? exportSettings.background}
+              disabled={disabled}
+              aria-label={t('settings.export.background.label')}
+              data-dsh-iui-export-background
+              onChange={(event) => { setColorDraft(event.target.value) }}
+              onBlur={() => { commitColor(colorDraft) }}
+            />
+            <span className="dsh-iui-color-value" aria-hidden="true">{colorDraft ?? exportSettings.background}</span>
+          </label>
+        </div>
+        <div className="dsh-iui-settings-row">
+          <div className="dsh-iui-settings-copy">
+            <div className="dsh-iui-settings-label">{t('settings.export.scale.label')}</div>
+            <p className="dsh-iui-settings-hint">{t('settings.export.scale.hint')}</p>
+          </div>
+          <div className="dsh-iui-choice-group" role="group" aria-label={t('settings.export.scale.label')}>
+            {EXPORT_SCALES.map((scale: ExportScale) => (
+              <button
+                key={scale}
+                type="button"
+                className="dsh-iui-choice"
+                aria-pressed={exportSettings.scale === scale}
+                data-selected={exportSettings.scale === scale ? 'true' : undefined}
+                disabled={disabled}
+                onClick={() => { void save(EXPORT_SCALE_FIELD, scale) }}
+              >
+                {scale}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <p id={noteId} className="dsh-iui-settings-note">{t('settings.note')}</p>

@@ -50,5 +50,11 @@ zod
   MIT License.
   Full text: licenses/zod-LICENSE.
 
+SnapDOM — @zumer/snapdom
+  https://github.com/zumerlab/snapdom
+  MIT License, Copyright (c) 2025 ZumerLab.
+  Bundled for the browser-side answer image export.
+  Full text: licenses/snapdom-LICENSE.
+
 React and React DOM are provided by the hosting DeepSeek Harness platform and
 are not bundled in this package.

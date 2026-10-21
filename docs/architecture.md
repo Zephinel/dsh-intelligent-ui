@@ -14,15 +14,17 @@ Host  lib/index.js（Node）
 │   └─ @openuidev/lang-core 按组件库 spec 校验；错误精确回传，模型同一轮自修
 ├─ 会话开关 + 回答样式（全局默认 + 会话覆盖）   # /iui 命令 + 投影 + 每 agent 工具可见性
 ├─ ctx.systemPrompt.section(...)          # 开关打开时才注入 OpenUI Lang 生成提示词
-├─ Config.globalEnabled / answerStyle / freeComposition (volatile)  # 插件详情页写入；prompt 每次请求读取实时值
+├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale (volatile)  # 插件详情页写入；prompt 每次请求读取实时值
 └─ ctx.skills.register(intelligent-ui)    # 内嵌 Agent Skill（skills/intelligent-ui/SKILL.md）
 
 Client  lib/client.js（浏览器，DSH module loader 懒加载）
 ├─ ctx.locale.register('intelligent-ui')  # zh/en UI 字典；slot 声明 locale 后组件拿到注入的 t
 ├─ conversation.input.activity             # 输入框右侧的 UI 控件（chip + Menu + 样式面板；读投影 + 执行开关/样式命令）
-├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # 插件详情页：可用性、回答样式、编排方式（写 Host 设置文档的 volatile 字段）
+├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # 插件详情页：可用性、回答样式、编排方式与图片导出（写 Host 设置文档的 volatile 字段）
 ├─ conversation.chat.turnTail 列表项       # 每轮结束时取出该轮 render_ui 程序并渲染卡片
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 移植后的 57 个组件（chrome 走渲染器 i18n context）
+├─ conversation.chat.assistant-actions 列表项  # 仅该轮记录过 render_ui 的消息出现导出按钮
+│   └─ 菜单（原始 / 圆角 / 卡片）→ SnapDOM 截取 → 合成 PNG 下载
 ├─ tool.call.toolview keyed 'render_ui'   # 进程区只留一行「交互式回答」（英文界面 "Interactive answer"）
 └─ 内置 CSS（组件库 / MapLibre / KaTeX 使用 DSH 全局样式 + scoped reset）
 ```
@@ -31,13 +33,13 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ## 开关与回答样式
 
-![输入框右侧的 UI 控件](../assets/intelligent-ui-toggle.png)
+![输入框右侧的 UI 控件：三档开关与分隔线下的 Display style](../assets/intelligent-ui-toggle.png)
 
-- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article），以及「自由布局」开关。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **编排方式** 分组。
+- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article）、「自由布局」开关，以及图片导出的默认值（背景色、1x/2x）。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **编排方式** / **图片导出** 分组。
 - **会话覆盖**：输入框 UI 控件只改当前会话。`/iui on` / `off` / `inherit` 设置启用覆盖；`/iui style auto|card|article|inherit` 设置样式覆盖。会话覆盖优先于全局，`inherit` 跟随全局。
 - **答案样式**：`Card` 为紧凑交互卡片；`Article` 为 `render_ui` 卡片内的阅读版式（`Toc` + 可折叠 `Section` + 长 Markdown 正文）；`Auto` 由模型按请求选择。
 - 状态：全局启用/样式/自由布局在 Host 设置文档；会话启用、关闭与样式覆盖原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`（`sessions`、`offSessions`、`styles`）。旧版 `{ "global": true, "sessions": [...] }` 仍可读取为全局/会话迁移值。
-- 会话里的命令日志折叠成 `intelligent-ui` 投影，提供当前启用/样式状态和 pending 状态；输入框控件只镜像投影，Host 负责全部状态决定。控件会把乐观视图通过 BroadcastChannel 同步给其他标签，投影到达后收敛为该投影值。
+- 会话里的命令日志折叠成 `intelligent-ui` 投影，提供当前启用/样式状态和 pending 状态；输入框控件只镜像投影，Host 负责全部状态决定。控件会把乐观视图通过 BroadcastChannel 同步给其他标签，投影到达后收敛为该投影值。作用域菜单与导出菜单共用 `MenuItem`/`MenuDivider` 菜单行（宽度按内容、最小 208px，统一行距与选中/悬停/禁用态）；作用域菜单右缘与 chip 右缘对齐；「显示样式」一行常驻，关闭时置灰禁用，上方有一条内缩的浅分割线；样式面板是菜单的第二级，返回按钮回到作用域菜单而不是关闭全部浮层。
 - 开关依赖部署同时组合 `sessionProjections` + `commands`（DSH Web 默认都有）。缺任一服务时无法显示/持久化会话控件，扩展回到**始终开启**行为。
 
 ## 决策策略
@@ -49,6 +51,14 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 - **文字是有界例外**：整段回答只有单个事实或一两句话；用户明确要文字 / 文档 / 代码；内容无法页面化（安全警示、必须逐字引用的材料）；或本轮连续两次渲染失败。
 - **单一规则源**：Agent Skill 不重复决策规则，只负责“怎么做”。
 - **自由布局开关**：插件详情页的「自由布局」写入 Host 设置文档的 volatile 字段；开启后设计规范降级为建议。它和答案样式正交，不替代样式选择。
+
+## 图片导出
+
+- **入口**：扩展向 DSH 的 `conversation.chat.assistant-actions` 列表贡献一项（复制 / 点赞 / 分支所在的标准操作栏），并通过 `order` 与 `margin-left:auto` 把它排到该行**最右侧**，用带「导出」字样的药丸样式与原生图标控件区分。只有该条已定稿消息所属的 Turn 记录过可用的 `render_ui` 调用时，这一项才渲染；纯文字回答保持原生的操作栏不变。`render_ui` 工具调用本身就是持久化标识，不额外写入会话元数据。
+- **范围**：一次导出覆盖该 Turn 渲染出的全部卡片。图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字，也不包含导出按钮本身。
+- **截取**：导出前临时展开折叠的卡片（完成后恢复原状），等待卡片内的图片、图片搜索与地图就绪信号（每个地图在 `data-iui-map-ready` 上报告 MapLibre `idle`（样式切换、瓦片回退与 resize 会先重置为未就绪））落定，并冻结过渡与动画，再用 SnapDOM 对实时卡片 DOM 做栅格化。3D 翻卡片的双面在 SVG 栅格化中不会遵守 `backface-visibility`，截图期间会按当前状态展平为读者看到的那一面。地图通过保留下来的 MapLibre WebGL 绘制缓冲入图；沙盒 iframe（`HtmlView`）无法截取，图片中会缺失。图片、字体与本地交互状态都跟随实时 DOM。
+- **美化框**：菜单提供 **原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）与 **卡片**（留白、圆角与柔和阴影）。美化样式每次导出时选择；菜单右缘与导出按钮右缘对齐，宽度跟随内容。背景色与 1x/2x 分辨率来自插件详情页的 **图片导出** 分组。
+- **下载**：浏览器收到一张以回答标题与本地时间命名的 PNG；不涉及 Host 或会话数据。
 
 ## 界面语言
 

@@ -1,18 +1,18 @@
 # Verification — dsh-intelligent-ui docs
 
-Run from the repo root. Current expected values are dated 2026-10-21; derive them from the commands, never copy them forward blindly.
+Run from the repo root. Current expected values are dated 2026-10-22; derive them from the commands, never copy them forward blindly.
 
 ## Guards
 
-| Command | Expected (2026-10-21) | What it proves |
+| Command | Expected (2026-10-22) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js ~595 kB`, `client lib/client.js ~3.27 MB`; tests: 74 total = Host 24 + Client 32 + packaging 18; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 36 files; tarball ~2.34 MB; unpacked ~5.49 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run check` | build: `host lib/index.js ~609 kB`, `client lib/client.js ~3.54 MB`; tests: 89 total = Host 24 + Client 47 + packaging 18; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run pack:check` | 37 files; tarball ~2.49 MB; unpacked ~5.84 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 18 pass (manifest 9 + reference catalog 4 + guardrails 5) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails and decision policy |
 | `node --test test/packaging/guardrails.test.mjs` | 5 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 4 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json` |
 | `node --test test/host/*.test.mjs` | 24 pass = mode 8 + skill 3 + tool 13 | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 32 pass = programs 11 + toggle 10 + locales 6 + settings 5 | Client extractor, switch control (incl. Chinese), dictionaries, settings switch |
+| `node --test test/client/*.test.mjs` | 47 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup and image-frame geometry |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 
 ## README and changelog structural checks

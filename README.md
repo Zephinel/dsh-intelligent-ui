@@ -47,11 +47,12 @@
 | 能力 | 说明 |
 |---|---|
 | 交互页面 | 地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图 |
+| 导出图片 | 回答底部操作栏右侧的「导出」药丸按钮可把渲染结果保存为一张 PNG：原始 / 圆角 / 卡片三种美化；背景色与 1x/2x 在插件详情页设置 |
 | 本地执行 | `$变量`、`@Set`、`@functions` 在浏览器运行；只有 `@ToAssistant` 回写消息 |
 | 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；Auto / Card / Article 三档样式 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
 | Agent Skill | 随插件注册 `intelligent-ui`，模型按需加载完整语法、示例与排障 |
-| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（Auto / Card / Article）、编排方式（自由布局） |
+| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（Auto / Card / Article）、编排方式（自由布局）、图片导出（背景色、分辨率） |
 | 可重放 | 生成程序作为工具参数进入会话日志，随历史重放 |
 
 ## 获取代码
@@ -125,7 +126,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 ## 开关与回答样式
 
-![输入框右侧的 UI 控件：Off / This session only / Follow global](assets/intelligent-ui-toggle.png)
+![输入框右侧的 UI 控件：Off / This session only / Follow global，以及分隔线下的 Display style](assets/intelligent-ui-toggle.png)
 
 ![选择「仅本会话」后的样式面板：本会话 Auto / Card / Article 与跟随全局](assets/intelligent-ui-style-panel.webp)
 
@@ -147,9 +148,11 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 如果一定要保证出卡片（或模型仍然回了文字），在开关已打开的会话里用 `/intelligent-ui` 显式调用技能；显式调用会被当作直接指令。也可以说「读取 intelligent-ui skill 然后用 render_ui 做一个…」。
 
-![插件详情页：可用性、回答样式与编排方式三组设置](assets/intelligent-ui-settings.webp)
+![插件详情页：可用性、回答样式、编排方式与图片导出四组设置](assets/intelligent-ui-settings.webp)
 
-插件详情页按 **可用性**、**回答样式** 和 **编排方式** 分组。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。
+插件详情页按 **可用性**、**回答样式**、**编排方式** 和 **图片导出** 分组。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**图片导出** 保存的是导出图片的默认背景色与 1x/2x 分辨率。
+
+回答渲染完成后，消息底部操作栏的**最右侧**会出现一个带「导出」字样的**药丸按钮**（与复制/点赞/分支等自带图标控件区分开）；只有扩展渲染的回答才有这个按钮。点开后可选择图片的美化样式——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影），把该轮的全部渲染结果保存为一张 PNG。导出前会临时展开折叠的卡片，完成后恢复原状；图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字，也不包含导出按钮本身。
 
 ## 构建、测试与部署
 
@@ -157,7 +160,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 npm run build       # 生成 prompt、Host 与 Client bundle
 npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
 npm run pack:check  # 检查 npm pack 的最终文件清单
-npm run test:browser # 可选：真实浏览器样式面板 E2E（需要本机 Chrome）
+npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出，需要本机 Chrome）
 ```
 
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
@@ -179,16 +182,18 @@ npm run test:browser # 可选：真实浏览器样式面板 E2E（需要本机 C
 - KaTeX 使用 DSH 壳层已加载的全局样式；若该样式被移除，Math 组件会退化为纯文本。
 - 生成提示词约 8.5K tokens，**只在开关命中该会话时发送**（全局开启，或该会话显式开启）；关闭时这部分开销为 0（工具 schema 也不出现）。Article 模式会生成更长的页面，输出 token 与渲染时间相应增加。
 - 扩展 UI 文案随 DSH 界面语言切换；但 `/iui` 的 Host 返回文案、命令面板里的命令描述与 README 截图仍是英文（前两者是 DSH 平台行为）。
+- 导出图片时，沙盒 iframe（`HtmlView` 里的小游戏）不会被截入图片，图片中该区域会缺失；地图通过保留 WebGL 绘制缓冲入图，禁用 WebGL 的浏览器会按地图自身的降级逻辑显示地点列表。
+- 同一轮回复渲染出的多张卡片会合并成一张图片；导出的是**当前屏幕上渲染出的内容**，因此导出的图片会包含当时的交互状态（勾选项、筛选结果等）。导出会等待卡片内的图片加载和图片搜索完成（最多约 12.5 秒）；离线或仍未就绪时按页面上的占位状态导出。
 - 浏览器半边要求部署组合 `dsh-client-locale`（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载，Host 工具与提示词仍可用。
 - 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。全局启用/样式与自由布局只改变提示词与页面形态，不保证每个模型都完全遵守；会话样式覆盖仍以 Host 注入的提示词为准。
 
 ## 文档
 
-- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、Agent Skill。
+- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、图片导出流程、Agent Skill。
 - [开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)：安装与卸载、开发命令、改名/重建后的重启提示、Host/Client 版本错位、发布物布局。
 - [验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)：端到端验证、测试与打包结果（历史记录）。
 - [变更日志](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)：按版本记录新增、变更与修复（英文）。
 
 ## 许可证
 
-本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）。完整声明与许可证全文见 `NOTICE` 与 `licenses/`。
+本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）。完整声明与许可证全文见 `NOTICE` 与 `licenses/`。

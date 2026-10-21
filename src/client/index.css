@@ -336,6 +336,87 @@
   .dsh-iui-switch-thumb { transition: none; }
 }
 
+/* Image-export settings: color swatch and a two-option scale choice. */
+.dsh-iui-color {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.dsh-iui-color-input {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.dsh-iui-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.dsh-iui-color-input::-webkit-color-swatch { border: 0; border-radius: 6px; }
+
+.dsh-iui-color-input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dsh-iui-color-input:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.dsh-iui-color-value {
+  min-width: 62px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-choice-group {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
+}
+
+.dsh-iui-choice {
+  min-width: 38px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.dsh-iui-choice:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-choice[data-selected='true'] {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.dsh-iui-choice:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dsh-iui-choice:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
 /* Answer-style picker: two mini previews over a three-stop slider. */
 .dsh-iui-settings-style {
   display: flex;
@@ -846,19 +927,16 @@
   opacity: 0.72;
 }
 
-.dsh-iui-chevron-svg {
-  transition: transform 140ms ease;
-}
-
-.dsh-iui-chevron-svg[data-open='true'] {
-  transform: rotate(180deg);
-}
-
 /* Composer scope menu: borderless floating card. */
 .dsh-iui-menu {
   position: fixed;
   z-index: 1001;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
   padding: 6px;
   border: 0;
   border-radius: 16px;
@@ -868,15 +946,19 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.dsh-iui-scope-menu {
+  min-width: 208px;
+}
+
 .dsh-iui-menu-item {
   display: flex;
   box-sizing: border-box;
   align-items: center;
   gap: 9px;
   width: 100%;
-  min-height: 38px;
+  min-height: 42px;
   margin: 0;
-  padding: 5px 8px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -904,6 +986,22 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.dsh-iui-menu-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.dsh-iui-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-menu-divider {
+  height: 0;
+  margin: 6px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l1) 72%, transparent);
+}
+
 .dsh-iui-menu-icon {
   display: inline-flex;
   flex: none;
@@ -925,12 +1023,14 @@
   font-size: 12.5px;
   font-weight: 500;
   line-height: 18px;
+  white-space: nowrap;
 }
 
 .dsh-iui-menu-hint {
   color: var(--dsw-alias-label-tertiary);
   font-size: 10.5px;
   line-height: 15px;
+  white-space: nowrap;
 }
 
 .dsh-iui-menu-trailing {
@@ -942,6 +1042,111 @@
 
 .dsh-iui-menu-item[data-selected='true'] .dsh-iui-menu-trailing {
   color: var(--dsw-alias-state-business-primary);
+}
+
+/* Assistant action strip: a labeled export pill at the far right of the
+   message footer. The order/margin move it after the shell's copy/branch/usage
+   cluster; the pill treatment keeps it visually distinct from the native icon
+   controls and makes it the prominent action. */
+.dsh-iui-export-trigger {
+  display: inline-flex;
+  flex: none;
+  order: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-left: auto;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+  border-radius: 999px;
+  corner-shape: round;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 110ms ease, border-color 110ms ease, color 110ms ease;
+}
+
+.dsh-iui-export-trigger:hover {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 13%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A dismissed menu must not swallow a failed export: the pill keeps the error
+   state until the next open. */
+.dsh-iui-export-trigger[data-status='error'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-export-trigger:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-export-trigger svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.dsh-iui-export-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+}
+
+.dsh-iui-export-heading {
+  padding: 4px 8px 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dsh-iui-export-status {
+  margin: 6px 8px 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-export-status.is-error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Snapshot flattening: SVG rasterization does not honour backface-visibility,
+   so a flashcard's front and back faces would stack on top of each other in the
+   exported image. While one capture runs, motion is frozen and the flip is
+   flattened to the face the reader currently sees. Freezing transitions also
+   keeps mid-gesture positions (carousel, flip) out of the image, and a running
+   CSS transition would otherwise outrank the flattening declarations. */
+.dsh-iui-export-capture,
+.dsh-iui-export-capture * {
+  transition: none !important;
+  animation: none !important;
+}
+
+.dsh-iui-export-capture .iui-flashcard-inner {
+  transform: none !important;
+  transform-style: flat !important;
+}
+
+.dsh-iui-export-capture .iui-flashcard:not(.is-flipped) .iui-flashcard-face.is-back,
+.dsh-iui-export-capture .iui-flashcard.is-flipped .iui-flashcard-face.is-front {
+  display: none !important;
+}
+
+.dsh-iui-export-capture .iui-flashcard.is-flipped .iui-flashcard-face.is-back {
+  transform: none !important;
 }
 
 /* Settings page: borderless layered cards. */

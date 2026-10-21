@@ -9,12 +9,16 @@ import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 
 /** Fixed-position placement measured from the trigger. */
 export interface PopupPlacement {
-  /** Viewport x for the popup's left edge. */
-  readonly left: number
+  /** Viewport x for the popup's left edge (start alignment). */
+  readonly left?: number
+  /** Viewport distance from the right edge (end alignment). */
+  readonly right?: number
   /** Viewport distance from the bottom edge. */
   readonly bottom: number
-  /** Rendered width after viewport clamping. */
-  readonly width: number
+  /** Rendered width after viewport clamping (start alignment). */
+  readonly width?: number
+  /** Content-width cap for end-aligned popups. */
+  readonly maxWidth?: number
   /** Optional maximum height for scrollable panels. */
   readonly maxHeight?: number
 }
@@ -29,6 +33,12 @@ export interface PopupPlacementOptions {
   readonly margin?: number
   /** Whether to cap the height by the space above the trigger. */
   readonly maxHeight?: boolean
+  /**
+   * Align the popup's right edge with the trigger's right edge and let the
+   * width follow its content, capped by `maxWidth`. Used by the menus.
+   * `minWidth` only applies to start-aligned popups; menu minimums belong in CSS.
+   */
+  readonly alignEnd?: boolean
 }
 
 /**
@@ -42,26 +52,55 @@ export function useAnchoredPopup(
   open: boolean,
   triggerRef: RefObject<HTMLElement | null>,
   options: PopupPlacementOptions,
+  popupRef?: RefObject<HTMLElement | null>,
 ): PopupPlacement | null {
   const [placement, setPlacement] = useState<PopupPlacement | null>(null)
-  const { minWidth, maxWidth, margin = 12, maxHeight = false } = options
+  const { minWidth, maxWidth, margin = 12, maxHeight = false, alignEnd = false } = options
 
   useLayoutEffect(() => {
     if (!open || triggerRef.current === null) {
       setPlacement(null)
       return
     }
-    const viewport = window.innerWidth
-    const width = Math.min(maxWidth, Math.max(minWidth, viewport - margin * 2))
-    const rect = triggerRef.current.getBoundingClientRect()
-    const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewport - width - margin))
-    setPlacement({
-      left,
-      bottom: Math.max(margin, window.innerHeight - rect.top + 8),
-      width,
-      ...maxHeight ? { maxHeight: Math.max(260, rect.top - 24) } : {},
-    })
-  }, [open, triggerRef, minWidth, maxWidth, margin, maxHeight])
+    const trigger = triggerRef.current
+    const place = (): void => {
+      const viewport = window.innerWidth
+      const rect = trigger.getBoundingClientRect()
+      const bottom = Math.max(margin, window.innerHeight - rect.top + 8)
+      if (alignEnd) {
+        // The caller sizes the popup from its content; only the edge and width
+        // cap are placed here.
+        setPlacement({
+          right: Math.min(Math.max(margin, viewport - rect.right), viewport - margin),
+          maxWidth: Math.min(maxWidth, viewport - margin * 2),
+          bottom,
+          ...maxHeight ? { maxHeight: Math.max(260, rect.top - 24) } : {},
+        })
+        return
+      }
+      const width = Math.min(maxWidth, Math.max(minWidth, viewport - margin * 2))
+      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewport - width - margin))
+      setPlacement({
+        left,
+        bottom,
+        width,
+        ...maxHeight ? { maxHeight: Math.max(260, rect.top - 24) } : {},
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('resize', place) }
+  }, [open, triggerRef, minWidth, maxWidth, margin, maxHeight, alignEnd])
+
+  // An end-aligned popup wider than the space left of its trigger would clip
+  // at the left edge. Once mounted, nudge its right edge right until it fits.
+  useLayoutEffect(() => {
+    if (!open || !alignEnd || popupRef?.current === null || popupRef?.current === undefined || placement === null) return
+    const rect = popupRef.current.getBoundingClientRect()
+    if (rect.left >= margin) return
+    const right = Math.max(margin, window.innerWidth - margin - rect.width)
+    setPlacement(current => current === null || current.right === right ? current : { ...current, right })
+  }, [open, alignEnd, popupRef, placement, margin])
 
   return placement
 }
@@ -104,7 +143,7 @@ export function usePopupDismiss(
     return () => {
       document.removeEventListener('pointerdown', onPointer, true)
       document.removeEventListener('keydown', onKey, true)
-      triggerRef.current?.focus()
+      triggerRef.current?.focus({ preventScroll: true })
     }
   }, [open, onClose, initialFocus, popupRef, triggerRef])
 }

@@ -103,11 +103,13 @@ test('plugin display metadata is valid and localized', () => {
 
 test('third-party attribution ships with the package', () => {
   const notice = read('NOTICE')
-  for (const name of ['Open Intelligent UI', 'OpenUI', 'lucide-react', 'KaTeX', 'MapLibre GL JS', 'zod']) {
+  for (const name of ['Open Intelligent UI', 'OpenUI', 'lucide-react', 'KaTeX', 'MapLibre GL JS', 'zod', 'SnapDOM']) {
     assert.ok(notice.includes(name), `NOTICE mentions ${name}`)
   }
-  const licenses = readFileSync(new URL('licenses/Open-Intelligent-UI-LICENSE', root), 'utf8')
-  assert.match(licenses, /MIT License/)
+  for (const file of ['licenses/Open-Intelligent-UI-LICENSE', 'licenses/snapdom-LICENSE']) {
+    const licenses = readFileSync(new URL(file, root), 'utf8')
+    assert.match(licenses, /MIT License/, `${file} carries the license text`)
+  }
 })
 
 test('the shipped Agent Skill exists and is referenced by the host build', () => {

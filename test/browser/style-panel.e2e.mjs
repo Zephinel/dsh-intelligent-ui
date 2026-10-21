@@ -63,9 +63,50 @@ try {
 
   await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
   await cdp.waitFor('!!document.querySelector("[role=menu]")', 'menu')
+  // Let the chip's chevron rotation finish before measuring it.
+  await cdp.waitFor(`(() => {
+    const matrix = new DOMMatrix(getComputedStyle(document.querySelector('.dsh-iui-chevron')).transform)
+    return Math.abs(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI) > 170
+  })()`, 'chevron rotated up')
   const menu = await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].map(b => b.textContent.trim())')
   assert.ok(!menu.some(item => /All sessions|全部会话/.test(item)), 'All sessions must be absent')
   assert.ok(menu.some(item => /Display style|显示样式/.test(item)), 'Display style entry must exist')
+
+  const layout = await cdp.evaluate(`(() => {
+    const root = document.querySelector('[role=menu]')
+    const rect = root.getBoundingClientRect()
+    const rows = [...root.querySelectorAll('[role=menuitem]')].map(row => row.getBoundingClientRect())
+    const divider = root.querySelector('.dsh-iui-menu-divider')?.getBoundingClientRect()
+    const chip = document.querySelector('[data-dsh-iui-toggle]')
+    const chipRect = chip.getBoundingClientRect()
+    const chevron = chip.querySelector('.dsh-iui-chevron')
+    return {
+      width: Math.round(rect.width),
+      left: Math.round(rect.left),
+      rightGap: Math.round(chipRect.right - rect.right),
+      rowHeights: rows.map(row => Math.round(row.height)),
+      divider: divider === undefined ? null : {
+        insetLeft: Math.round(divider.left - rect.left),
+        insetRight: Math.round(rect.right - divider.right),
+      },
+      chevronOpen: chevron.dataset.open,
+      chevronRotation: (() => {
+        const matrix = new DOMMatrix(getComputedStyle(chevron).transform)
+        return Math.round(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI)
+      })(),
+      wraps: [...root.querySelectorAll('.dsh-iui-menu-label, .dsh-iui-menu-hint')]
+        .some(el => el.scrollWidth > el.clientWidth + 1),
+    }
+  })()`)
+  assert.ok(layout.width >= 208 && layout.width < 320, 'the scope menu is content-sized with a comfortable minimum width')
+  assert.equal(layout.rightGap, 0, 'the scope menu right edge aligns with the chip')
+  assert.ok(layout.left >= 0, 'the right-aligned menu stays inside the viewport')
+  assert.ok(layout.rowHeights.every(height => height >= 40), 'menu rows keep the shared vertical rhythm')
+  assert.ok(layout.divider !== null, 'a divider separates the Display style row')
+  assert.ok(layout.divider.insetLeft >= 8 && layout.divider.insetRight >= 8, 'the divider is inset from the menu edges')
+  assert.equal(layout.chevronOpen, 'true', 'the open chip reports an open chevron')
+  assert.ok(Math.abs(layout.chevronRotation) > 170, 'the open chip points its chevron up once (180deg)')
+  assert.equal(layout.wraps, false, 'menu labels and hints stay on one line')
 
   // The explicit Display style row must open the panel while the chip stays on
   // Follow global; this is the route that does not require an `on` override.
@@ -74,6 +115,25 @@ try {
   const route = await cdp.evaluate(`(() => { const b=document.querySelector('[data-dsh-iui-toggle]'); return { state:b.dataset.state, label:b.textContent.trim() } })()`)
   assert.equal(route.state, 'inherit', 'Display style must not change the enable scope')
   assert.match(route.label, /Follow global/, 'the chip must stay on Follow global')
+
+  // Back goes one level up (scope menu), it does not dismiss every popup.
+  await cdp.evaluate('document.querySelector(".dsh-iui-style-back").click()')
+  await cdp.waitFor('!document.querySelector("[data-dsh-iui-style-panel]") && !!document.querySelector("[role=menu]")', 'back returned to the scope menu')
+  const afterBack = await cdp.evaluate(`(() => {
+    const chip = document.querySelector('[data-dsh-iui-toggle]')
+    return {
+      state: chip.dataset.state,
+      label: chip.textContent.trim(),
+      items: document.querySelectorAll('[role=menuitem]').length,
+      focusBackOnStyle: document.activeElement?.getAttribute('data-style-entry') === 'true',
+    }
+  })()`)
+  assert.equal(afterBack.state, 'inherit', 'back must not change the enable scope')
+  assert.match(afterBack.label, /Follow global/)
+  assert.ok(afterBack.items >= 4, 'back lands on the full scope menu')
+  assert.equal(afterBack.focusBackOnStyle, true, 'back restores focus to the Display style row')
+  await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => /Display style|显示样式/.test(b.textContent)).click()')
+  await cdp.waitFor('!!document.querySelector("[data-dsh-iui-style-panel]")', 'style panel reopened from the menu')
   await cdp.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
   await cdp.waitFor('!document.querySelector("[data-dsh-iui-style-panel]")', 'style panel closed after route check')
   await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
@@ -103,6 +163,33 @@ try {
   await cdp.waitFor('!document.querySelector("[data-dsh-iui-style-panel]")', 'panel closed')
   const afterClose = await cdp.evaluate('document.activeElement?.dataset?.dshIuiToggle')
   assert.equal(afterClose, 'true', 'focus must return to the chip')
+  await cdp.waitFor('getComputedStyle(document.querySelector(".dsh-iui-chevron")).transform === "none"', 'chevron rotation finished')
+  const closedChevron = await cdp.evaluate('getComputedStyle(document.querySelector(".dsh-iui-chevron")).transform')
+  assert.equal(closedChevron, 'none', 'the closed chip points its chevron down')
+
+  // Switching Intelligent UI off keeps the Display style row visible but
+  // disabled, and the divider still separates it from the scope rows.
+  await cdp.evaluate('window.__setEnabled(false)')
+  await cdp.waitFor('document.querySelector("[data-dsh-iui-toggle]").dataset.state === "off"', 'chip off')
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
+  await cdp.waitFor('!!document.querySelector("[role=menu]")', 'disabled menu')
+  const disabled = await cdp.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('[role=menuitem]')]
+    const style = rows.find(row => /Display style|显示样式/.test(row.textContent))
+    return {
+      stylePresent: style !== undefined,
+      disabled: style?.disabled === true,
+      ariaDisabled: style?.getAttribute('aria-disabled') === 'true',
+      dividers: document.querySelectorAll('.dsh-iui-menu-divider').length,
+    }
+  })()`)
+  assert.equal(disabled.stylePresent, true, 'Display style stays visible while off')
+  assert.equal(disabled.disabled, true, 'Display style is disabled while off')
+  assert.equal(disabled.ariaDisabled, true, 'the disabled row is announced')
+  assert.equal(disabled.dividers, 1, 'the divider remains above the disabled row')
+  await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => /Display style|显示样式/.test(b.textContent)).click()')
+  await new Promise(resolve => setTimeout(resolve, 150))
+  assert.equal(await cdp.evaluate('!!document.querySelector("[data-dsh-iui-style-panel]")'), false, 'a disabled row cannot open the panel')
   console.log('style-panel E2E: OK')
 } finally {
   await cleanup()
@@ -120,7 +207,7 @@ function html() {
     --dsw-alias-state-business-primary:#6aa9ff; --dsw-alias-brand-primary:#6aa9ff; --dsw-alias-state-error-primary:#ff7b72;
     --dsw-radius-sm:6px; --dsw-radius-md:10px; --dsw-radius-lg:14px; --dsw-focus-ring-width:2px; --dsw-focus-ring-color:#6aa9ff; }
   html,body{margin:0;width:100%;height:100%;background:#111;color:#eee;font-family:system-ui,sans-serif}
-  body{display:flex;align-items:flex-end} #root{position:fixed;left:24px;bottom:28px}
+  body{display:flex;align-items:flex-end} #root{position:fixed;right:24px;bottom:28px}
 </style></head><body><div id="root"></div><script type="module" src="./bundle.js"></script></body></html>`
 }
 

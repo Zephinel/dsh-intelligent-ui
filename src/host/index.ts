@@ -27,6 +27,10 @@ import promptText from '../generated/prompt.txt'
 import { installSessionControls, readPreference, type IntelligentUIPreferenceConfig } from './mode.ts'
 import {
   ANSWER_STYLES,
+  DEFAULT_EXPORT_BACKGROUND,
+  EXPORT_BACKGROUND_PATTERN,
+  EXPORT_SCALES,
+  DEFAULT_EXPORT_SCALE,
   PAGE_STYLES,
   RENDER_UI_TOOL,
   isPageStyle,
@@ -45,6 +49,10 @@ export const Config = z.object({
   freeComposition: z.boolean().default(false).volatile(),
   globalEnabled: z.boolean().volatile(),
   answerStyle: z.union([z.const('auto'), z.const('card'), z.const('article')]).volatile(),
+  // Image-export defaults. The beautification frame is chosen per export and
+  // therefore stays out of the settings document.
+  exportBackground: z.string().pattern(EXPORT_BACKGROUND_PATTERN).default(DEFAULT_EXPORT_BACKGROUND).volatile(),
+  exportScale: z.union(EXPORT_SCALES.map(scale => z.const(scale))).default(DEFAULT_EXPORT_SCALE).volatile(),
 })
 
 /** Host services this plugin consumes; both must exist before apply runs. */

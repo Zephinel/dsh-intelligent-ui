@@ -47,11 +47,12 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Capability | What it gives you |
 |---|---|
 | Interactive pages | Maps, photos, charts, checklists, forms, SVG drawings and mini-games are real components, not screenshots |
+| Image export | The labeled export pill at the right of an answer's action strip saves the rendered result as one PNG with a raw, rounded or card frame; background color and 1x/2x live on the Plugin detail page |
 | Local execution | `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` writes a message back |
 | Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
-| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), and Composition (Free-form layout) |
+| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), Composition (Free-form layout) and Image export (background color, resolution) |
 | Replayable | The generated program enters the session log as a tool argument and replays with history |
 
 ## Getting the code
@@ -125,7 +126,7 @@ See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/
 
 ## Switch and answer style
 
-![The composer UI control: Off / This session only / Follow global](assets/intelligent-ui-toggle.png)
+![The composer UI control: Off / This session only / Follow global, plus Display style below an inset divider](assets/intelligent-ui-toggle.png)
 
 ![The This-session style panel: Auto / Card / Article for this session, or follow the global choice](assets/intelligent-ui-style-panel.webp)
 
@@ -147,9 +148,11 @@ Once enabled, **any answer with structure defaults to a card** — including exp
 
 To guarantee a card (or when the model still replies in text), invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on; explicit invocation is treated as a direct instruction. You can also say "read the intelligent-ui skill and then build ... with render_ui".
 
-![Plugin detail page: availability, answer style and composition](assets/intelligent-ui-settings.webp)
+![Plugin detail page: availability, answer style, composition and image export](assets/intelligent-ui-settings.webp)
 
-The Plugin detail page groups its settings into **Availability**, **Answer style** and **Composition**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style.
+The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Image export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Image export** stores the default background color and 1x/2x resolution for exported images.
+
+Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It offers a beautification frame — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — and saves every card rendered by that turn as one PNG. Collapsed cards are expanded for the capture and restored afterwards; the image contains the rendered cards only, not the Markdown text around them and not the export control itself.
 
 ## Build, test and deploy
 
@@ -157,7 +160,7 @@ The Plugin detail page groups its settings into **Availability**, **Answer style
 npm run build       # build the prompt, Host and Client bundle
 npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
-npm run test:browser # optional: real-browser style-panel E2E (Chrome required)
+npm run test:browser # optional: real-browser E2E (style panel + image export; Chrome required)
 ```
 
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
@@ -179,16 +182,18 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - KaTeX uses global styles already loaded by the DSH shell; if those styles are removed, the Math component degrades to plain text.
 - The generation prompt is about 8.5K tokens and is **sent only when the switch covers that session** (global on, or the session explicitly on); when off, that cost is zero (the tool schema is absent too). Article mode produces longer pages, so output tokens and render time increase accordingly.
 - The extension's UI copy follows DSH's UI language; the `/iui` Host replies, the command palette's command description and the README screenshots stay in English (the first two are DSH platform behavior).
+- Image export does not capture sandboxed iframes (`HtmlView` mini-games), so that region is missing from the image; maps are captured through the preserved WebGL drawing buffer, and a browser without WebGL falls back to the map's own place-list presentation.
+- Every card rendered by one turn is combined into one image; the image captures **what is currently rendered**, so it includes the interaction state at export time (checked items, active filters and so on). The export waits for in-card photos and image searches to settle (at most about 12.5 seconds); offline or still-pending photos are recorded from the placeholder state shown on the page.
 - The browser half requires a deployment that composes `dsh-client-locale` (included by default in DSH Web 0.2.1); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. Global enable/style and free-form layout only change the prompt and page shape; no model is guaranteed to follow them perfectly, and session style overrides still rely on the Host-injected prompt.
 
 ## Documentation
 
-- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language and the Agent Skill.
+- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language, image export flow and the Agent Skill.
 - [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch and the release layout.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
 - [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.
 
 ## License
 
-This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause) and zod (MIT). Full notices and license texts are in `NOTICE` and `licenses/`.
+This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT). Full notices and license texts are in `NOTICE` and `licenses/`.

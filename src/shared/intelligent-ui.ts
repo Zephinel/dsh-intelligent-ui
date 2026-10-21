@@ -63,6 +63,41 @@ export const GLOBAL_ENABLED_FIELD = 'globalEnabled'
 /** Volatile enum field with the deployment-wide default answer style. */
 export const ANSWER_STYLE_FIELD = 'answerStyle'
 
+/** Volatile string field with the image-export background color. */
+export const EXPORT_BACKGROUND_FIELD = 'exportBackground'
+
+/** Volatile enum field with the image-export pixel scale. */
+export const EXPORT_SCALE_FIELD = 'exportScale'
+
+/** Pixel scales an exported image can record. */
+export const EXPORT_SCALES = ['1x', '2x'] as const
+
+/** One image-export pixel scale. */
+export type ExportScale = (typeof EXPORT_SCALES)[number]
+
+/** Fallback background when the settings document provides none. */
+export const DEFAULT_EXPORT_BACKGROUND = '#ffffff'
+
+/** The stored background must be a 6-digit hex colour. */
+export const EXPORT_BACKGROUND_PATTERN = /^#[0-9a-f]{6}$/i
+
+/** Fallback scale when the settings document provides none. */
+export const DEFAULT_EXPORT_SCALE: ExportScale = '2x'
+
+/** Beautification frames offered when exporting one rendered answer as an image. */
+export const BEAUTIFY_STYLES = ['raw', 'rounded', 'card'] as const
+
+/** One image beautification frame; chosen per export, not persisted. */
+export type BeautifyStyle = (typeof BEAUTIFY_STYLES)[number]
+
+/** Image-export preferences resolved from the Host settings document. */
+export interface ImageExportSettings {
+  /** Canvas background behind the answer. */
+  readonly background: string
+  /** Output pixel scale. */
+  readonly scale: ExportScale
+}
+
 /** Wire shape of this extension's settings namespace. */
 export interface IntelligentUISettings {
   /** Whether the design playbook is advisory instead of a template. */
@@ -71,6 +106,32 @@ export interface IntelligentUISettings {
   readonly globalEnabled?: boolean
   /** Deployment-wide default answer style; a session override still wins. */
   readonly answerStyle?: AnswerStyle
+  /** Background color for exported images. */
+  readonly exportBackground?: string
+  /** Pixel scale for exported images. */
+  readonly exportScale?: ExportScale
+}
+
+/** Type guard for a settings-provided export background. */
+export function isExportBackground(value: unknown): value is string {
+  return typeof value === 'string' && EXPORT_BACKGROUND_PATTERN.test(value)
+}
+
+/** Type guard for a settings-provided export scale. */
+export function isExportScale(value: unknown): value is ExportScale {
+  return value === '1x' || value === '2x'
+}
+
+/**
+ * Resolve the image-export preferences from one settings snapshot.
+ * @param settings - last accepted Host settings section, when available.
+ * @returns valid stored values with defaults for everything else.
+ */
+export function readImageExportSettings(settings: IntelligentUISettings | undefined): ImageExportSettings {
+  return {
+    background: isExportBackground(settings?.exportBackground) ? settings.exportBackground : DEFAULT_EXPORT_BACKGROUND,
+    scale: isExportScale(settings?.exportScale) ? settings.exportScale : DEFAULT_EXPORT_SCALE,
+  }
 }
 
 /** Host session-projection key carrying the per-session switch and style state. */

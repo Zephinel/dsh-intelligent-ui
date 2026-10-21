@@ -88,6 +88,25 @@ test('on reflects the global enable, style, and free-composition values', () => 
   assert.match(html, /Display style: Article/)
 })
 
+test('image export shows its defaults: white background and 2x', () => {
+  const html = render()
+  assert.match(html, /Image export/)
+  assert.match(html, /type="color"/)
+  assert.match(html, /value="#ffffff"/)
+  assert.match(html, />1x</)
+  assert.match(html, />2x</)
+  assert.match(html, /aria-pressed="true"[^>]*>2x</)
+  assert.match(html, /Background color/)
+  assert.match(html, /Resolution/)
+})
+
+test('image export reflects stored background and scale', () => {
+  const html = render({ form: form({ value: { exportBackground: '#112233', exportScale: '1x' } }) })
+  assert.match(html, /value="#112233"/)
+  assert.match(html, /aria-pressed="true"[^>]*>1x</)
+  assert.doesNotMatch(html, /aria-pressed="true"[^>]*>2x</)
+})
+
 test('an unavailable namespace disables the controls and explains why', () => {
   const html = render({ form: form({ status: 'unavailable', writable: false, value: undefined }) })
   assert.match(html, /disabled=""/)
@@ -108,4 +127,7 @@ test('the Chinese dictionary localizes the page copy', () => {
   assert.match(html, /卡片（简洁）/)
   assert.match(html, /文章（详细）/)
   assert.match(html, /自由布局/)
+  assert.match(html, /图片导出/)
+  assert.match(html, /背景颜色/)
+  assert.match(html, /分辨率/)
 })

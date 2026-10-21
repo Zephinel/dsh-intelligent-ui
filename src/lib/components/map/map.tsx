@@ -128,6 +128,9 @@ export const MapView = defineComponent({
         instance = new lib.Map({
           container: surface.current, style: vectorStyle(dark), center: [0, 20], zoom: 1, minZoom: 0,
           scrollZoom: false, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: false,
+          // Keep the WebGL back buffer so exporting the answer to an image can
+          // read the painted map; MapLibre clears it after present otherwise.
+          canvasContextAttributes: { preserveDrawingBuffer: true },
           // On a phone a one-finger swipe scrolls the answer instead of getting stuck on the map.
           cooperativeGestures: window.matchMedia("(pointer: coarse)").matches,
         });
@@ -135,6 +138,15 @@ export const MapView = defineComponent({
         setMapUnavailable(true);
         return;
       }
+      // Export waits for this attribute before rasterizing a card: the SVG
+      // snapshot must see painted tiles, not the initial empty WebGL buffer.
+      const setReadyAttr = (value: boolean) => {
+        if (container.current) container.current.dataset.iuiMapReady = value ? "true" : "false";
+      };
+      instance.on("idle", () => setReadyAttr(true));
+      instance.on("dataloading", () => setReadyAttr(false));
+      instance.on("sourcedataloading", () => setReadyAttr(false));
+      instance.on("styledataloading", () => setReadyAttr(false));
       instance.touchZoomRotate.disableRotation();
       instance.addControl(new lib.AttributionControl({ compact: false }), "bottom-left");
       instance.addControl(new lib.NavigationControl({ showCompass: false }), "bottom-right");
@@ -153,6 +165,7 @@ export const MapView = defineComponent({
         const source = (event as { sourceId?: string }).sourceId;
         if (source && source !== "places") return;
         fellBack = true;
+        setReadyAttr(false);
         instance.setStyle(rasterStyle(getComputedStyle(surface.current ?? document.body).colorScheme === "dark"));
       });
       instance.on("sourcedata", (event) => { if (fellBack && event.isSourceLoaded) setMapError(false); });
@@ -160,7 +173,13 @@ export const MapView = defineComponent({
       map.current = instance;
       const markerEntries = markers.current;
       // A resize must never reframe the camera during streaming or user panning.
-      const observer = new ResizeObserver(() => instance.resize());
+      // Readiness drops until MapLibre finishes the resize repaint (and any new
+      // tiles), so an image export cannot snapshot the stale buffer.
+      const observer = new ResizeObserver(() => {
+        setReadyAttr(false);
+        instance.resize();
+        instance.once("idle", () => setReadyAttr(true));
+      });
       observer.observe(surface.current);
       return () => {
         observer.disconnect(); markerEntries.forEach((entry) => entry.marker.remove()); markerEntries.clear();
@@ -174,6 +193,7 @@ export const MapView = defineComponent({
     useEffect(() => {
       if (!map.current || styledDark.current === dark) return;
       styledDark.current = dark;
+      if (container.current) container.current.dataset.iuiMapReady = "false";
       map.current.setStyle(vectorStyle(dark), { diff: false });
     }, [dark]);
 
@@ -305,6 +325,8 @@ export const MapView = defineComponent({
         <div
           ref={container}
           className={`iui-map${expanded ? " is-expanded" : ""}`}
+          data-iui-map
+          data-iui-map-ready="false"
           style={expanded ? undefined : { height }}
           role={expanded ? "dialog" : "region"}
           aria-modal={expanded || undefined}

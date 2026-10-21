@@ -10,25 +10,31 @@ been published yet.
 ### Added
 
 - **Answer styles:** sessions can render as a compact `Card` or an `Article` reading page. Article mode adds a `Toc` component and a collapsible `Section` component, plus a single-column reading layout in the card.
+- **Image export:** completed answers rendered by `render_ui` gain an export button in the assistant message action strip. The entry sits at the far right of the action strip as a labeled export pill, visually distinct from the native icon controls; its menu right-aligns with the pill and follows its content width, and saves every card rendered by that turn as one PNG with a raw, rounded or card beautification frame. Collapsed cards are expanded for the capture and restored afterwards; maps are captured through the preserved MapLibre drawing buffer and the export waits for each map's readiness signal (reset on resize/data loading, set on MapLibre `idle`). The new **Image export** group on the Plugin detail page stores the default background color and 1x/2x resolution.
 - **Global defaults:** the Plugin detail page now owns **Enable in all sessions**, the global Auto / Card / Article style, and the **Free-form layout** switch.
 - **Session overrides:** the composer UI control is now Off / This session only / Follow global, and opening the session entry shows the answer-style panel with two previews, Auto/Card/Article slider, and Follow global. `/iui on|off|inherit` and `/iui style auto|card|article|inherit` are the command equivalents.
 - **Style metadata:** `render_ui` now takes a required `style` argument; the Host validates it against the effective session style and records it with the card.
-- **Browser E2E:** `npm run test:browser` drives the composer menu, Follow-global style entry, custom slider and focus/escape flow in headless Chrome.
+- **Browser E2E:** `npm run test:browser` drives the composer menu (content width, chevron direction, inset divider, disabled Display style row, custom slider) and focus/escape flow in headless Chrome, then opens the export menu, asserts its right alignment and scroll dismissal, flips a flashcard, runs the real export pipeline and asserts the flattened flip, eager/loaded photos and the produced PNG.
 
 ### Changed
 
 - The composer no longer offers **All sessions**; global enablement and the global style moved to the Plugin detail page. Session state is stored as `sessions`, `offSessions` and `styles` in `dsh-intelligent-ui.json`; legacy `global`/`enabled` files remain readable.
-- The Plugin detail page is grouped into **Availability**, **Answer style** and **Composition**; the former **Free composition** setting is now labelled **Free-form layout**, with clearer on/off hints in both languages.
-- Every extension-owned surface (settings page, composer chip/menu, style panel and slider) now uses custom borderless rounded cards and a custom range control instead of shell menu/range defaults.
+- The Plugin detail page is grouped into **Availability**, **Answer style**, **Composition** and **Image export**; the former **Free composition** setting is now labelled **Free-form layout**, with clearer on/off hints in both languages.
+- Every extension-owned surface (settings page, composer chip/menu, style panel and slider) now uses custom borderless rounded cards and a custom range control instead of shell menu/range defaults. The composer scope menu and the export menu share content-sized menu rows with one vertical rhythm (the scope menu has a 208px minimum and right-aligns with the chip); the Display style row stays visible (disabled while Intelligent UI is off) below an inset hairline divider, and the export menu dismisses on scroll, resize or when its trigger leaves the viewport.
+- `@zumer/snapdom` (MIT) now ships inside the browser bundle for the image export; `NOTICE` and `licenses/` carry its attribution.
 - The Agent Skill and injected prompt now carry the Card/Article/Auto guidance, the article-first content contract, and the `Section`/`Toc` vocabulary.
 
 ### Fixed
 
 - Article Section/Toc anchors now decouple display titles from stable ids (`Section(title, children, anchor?)`, `Toc(items, anchors?)`); duplicate effective anchors and empty anchors are rejected or normalized consistently by the Host and renderer.
+- The style panel's back button now returns to the scope menu (one level up) instead of dismissing every popup, and returns focus to the Display style row.
+- Menu dismissal no longer scrolls the page back to an off-screen trigger; end-aligned menus clamp inside the viewport; a menu dismissed mid-export leaves the pill in an error state instead of swallowing the failure; map readiness is invalidated before style swaps and photos settle before maps.
+- The composer chip's chevron rotated twice on open (the inner SVG repeated the outer span's 180°), so an open menu still pointed down; only the outer element rotates now.
+- Image export normalizes the card for snapshot rasterization: CSS transitions and animations are frozen, the flashcard's two 3D faces are flattened to the face the reader currently sees (they previously stacked and rendered mirrored text), and the export waits for in-card photos and `SearchImage` lookups to settle so photos no longer export as empty boxes. The card frame also reserves the shadow bleed around its background so the soft shadow is actually painted instead of being clipped at the canvas edge.
 
 ### Documentation
 
-- Regenerated the 57-component layout, composer menu, style-panel and Plugin settings screenshots; the settings copy and hints are bilingual.
+- Regenerated the 57-component layout, composer menu, style-panel and Plugin settings screenshots; the settings screenshot now includes the **Image export** group, and the settings copy and hints are bilingual.
 
 ## [0.2.2-26-10-21] - 2026-10-21
 

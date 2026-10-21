@@ -7,7 +7,7 @@
  * owns every state decision; the control forwards one explicit `/iui` command
  * and the next projection frame settles the chip.
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the ui-conversation SlotMap / input seat merge.
@@ -21,6 +21,7 @@ import {
   type StylePreference,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
+import { MenuDivider, MenuItem } from './Menu.tsx'
 import { StylePicker } from './StylePicker.tsx'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
 import {
@@ -118,12 +119,14 @@ interface ScopeMenuItem {
   readonly icon: ReactNode
   /** Drill-in rows show a chevron instead of a selected check. */
   readonly drillIn?: boolean
+  /** Disabled rows explain a state but cannot be chosen. */
+  readonly disabled?: boolean
 }
 
 /** Inline chevron, so the trigger does not depend on a shell icon skin. */
-function ChevronIcon({ open = false }: { readonly open?: boolean }): ReactNode {
+function ChevronIcon(): ReactNode {
   return (
-    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" className="dsh-iui-chevron-svg" data-open={open ? 'true' : 'false'}>
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" className="dsh-iui-chevron-svg">
       <path d="M2.5 4.25 6 7.75l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -182,6 +185,7 @@ export function ToggleControl({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const focusStyleRef = useRef(false)
 
   const sessionEnable = view?.sessionEnable ?? 'inherit'
   const pending = view?.pending === true || busy
@@ -208,11 +212,17 @@ export function ToggleControl({
 
   const closeMenu = useCallback(() => { setOpen(false) }, [])
   const closePanel = useCallback(() => { setPanelOpen(false) }, [])
-  const menuPlacement = useAnchoredPopup(open, triggerRef, { minWidth: 220, maxWidth: 248 })
+  const menuPlacement = useAnchoredPopup(open, triggerRef, { minWidth: 0, maxWidth: 320, alignEnd: true }, menuRef)
   const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 280, maxWidth: 380, maxHeight: true })
   const menuVisible = open && menuPlacement !== null
   const panelVisible = panelOpen && panelPlacement !== null && enabled
-  usePopupDismiss(menuVisible, triggerRef, menuRef, closeMenu, '[data-selected="true"], button')
+  usePopupDismiss(
+    menuVisible,
+    triggerRef,
+    menuRef,
+    closeMenu,
+    focusStyleRef.current ? '[data-style-entry="true"]' : '[data-selected="true"], button',
+  )
   usePopupDismiss(panelVisible, triggerRef, panelRef, closePanel)
 
   // Hooks stay above this return: the projection may land after the first frame.
@@ -222,9 +232,18 @@ export function ToggleControl({
   const state = pending ? 'pending' : sessionEnable
 
   const openPanel = (): void => {
+    focusStyleRef.current = false
     setOpen(false)
     setError(null)
     setPanelOpen(true)
+  }
+
+  // The panel is a second level: its back button returns to the scope menu
+  // instead of dismissing every popup.
+  const backToMenu = (): void => {
+    focusStyleRef.current = true
+    setPanelOpen(false)
+    setOpen(true)
   }
 
   const opensStyle = (scope: SessionEnable): boolean =>
@@ -280,15 +299,17 @@ export function ToggleControl({
     label: t(SCOPES[scope].menu),
     icon: <ScopeIcon scope={scope} />,
   }))
-  if (view.enabled) {
-    items.push({
-      id: 'style',
-      label: t('style.slider.label'),
-      hint: t('style.panel.title'),
-      icon: <StyleIcon />,
-      drillIn: true,
-    })
-  }
+  // The style entry stays visible so the menu anatomy is stable; it is
+  // disabled while Intelligent UI is off, and a hairline separates it from the
+  // three scope rows above.
+  items.push({
+    id: 'style',
+    label: t('style.slider.label'),
+    hint: t('style.panel.title'),
+    icon: <StyleIcon />,
+    drillIn: true,
+    disabled: !view.enabled,
+  })
 
   const panel = panelVisible
     ? createPortal(
@@ -305,7 +326,7 @@ export function ToggleControl({
             type="button"
             className="dsh-iui-style-back"
             aria-label={t('style.panel.back')}
-            onClick={() => setPanelOpen(false)}
+            onClick={backToMenu}
           >
             <span aria-hidden="true">‹</span>
           </button>
@@ -351,8 +372,8 @@ export function ToggleControl({
     >
       <span className="dsh-iui-trigger-icon" aria-hidden><ScopeIcon scope={sessionEnable} /></span>
       <span className="dsh-iui-trigger-label">{t('chip.label', { scope: t(current.trigger) })}</span>
-      <span className="dsh-iui-chevron" data-open={open ? 'true' : 'false'} aria-hidden>
-        <ChevronIcon open={open} />
+      <span className="dsh-iui-chevron" data-open={open || panelOpen ? 'true' : 'false'} aria-hidden>
+        <ChevronIcon />
       </span>
     </button>
   )
@@ -364,38 +385,38 @@ export function ToggleControl({
         ? createPortal(
           <div
             ref={menuRef}
-            className="dsh-iui-menu"
+            className="dsh-iui-menu dsh-iui-scope-menu"
             role="menu"
             aria-label={t('chip.aria', { scope: t(current.aria) })}
-            style={{ left: menuPlacement.left, bottom: menuPlacement.bottom, width: menuPlacement.width }}
+            style={{
+              ...menuPlacement.right === undefined ? {} : { right: menuPlacement.right },
+              ...menuPlacement.maxWidth === undefined ? {} : { maxWidth: menuPlacement.maxWidth },
+              bottom: menuPlacement.bottom,
+            }}
             data-dsh-iui-menu
           >
             {items.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                className="dsh-iui-menu-item"
-                data-selected={item.id === sessionEnable ? 'true' : undefined}
-                onClick={() => {
-                  if (item.id === 'style') {
-                    openPanel()
-                    return
-                  }
-                  choose(item.id)
-                }}
-              >
-                <span className="dsh-iui-menu-icon" aria-hidden>{item.icon}</span>
-                <span className="dsh-iui-menu-copy">
-                  <span className="dsh-iui-menu-label">{item.label}</span>
-                  {item.hint === undefined ? null : <span className="dsh-iui-menu-hint">{item.hint}</span>}
-                </span>
-                {item.drillIn === true
-                  ? <span className="dsh-iui-menu-trailing" aria-hidden><DrillIcon /></span>
-                  : item.id === sessionEnable
-                    ? <span className="dsh-iui-menu-trailing" aria-hidden><CheckIcon /></span>
-                    : null}
-              </button>
+              <Fragment key={item.id}>
+                {item.id === 'style' ? <MenuDivider /> : null}
+                <MenuItem
+                  icon={item.icon}
+                  label={item.label}
+                  hint={item.hint}
+                  selected={item.id === sessionEnable}
+                  disabled={item.disabled}
+                  trailing={item.drillIn === true
+                    ? <DrillIcon />
+                    : item.id === sessionEnable ? <CheckIcon /> : undefined}
+                  data={item.id === 'style' ? { 'data-style-entry': 'true' } : undefined}
+                  onSelect={() => {
+                    if (item.id === 'style') {
+                      openPanel()
+                      return
+                    }
+                    choose(item.id)
+                  }}
+                />
+              </Fragment>
             ))}
           </div>,
           document.body,
