@@ -7,10 +7,41 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.2.0-26-10-21] - 2026-10-21
+
+### Added
+
+- Releases publish from GitHub Actions through npm Trusted Publishing (OIDC) with provenance: pushing a `v*` tag
+  that matches `package.json` runs `.github/workflows/publish.yml`, which builds, runs `npm run check`, and publishes
+  with `--provenance` without a repository token.
+- A **Settings → Intelligent UI** page with a **Free composition** switch. The page registers through
+  `settings.section` and persists the volatile `freeComposition` field of the extension's Host settings entry;
+  `@deepseek-ai/schemastery` is now a runtime dependency for that Config schema. When on, the injected prompt and
+  the Agent Skill treat the design playbook as advisory; off (the default) keeps the current layout rules. The
+  page states that this is a prompt-level preference rather than enforcement, and points at `/intelligent-ui`
+  when a card must be guaranteed.
+
+### Changed
+
+- In a session that enables the switch, a `render_ui` page is now the default answer format for any structured
+  answer, including explanations, introductions and timelines. Prose is limited to a single fact or a one- or
+  two-sentence reply, an explicit request for text, content that cannot be shown as a page, or two failed render
+  attempts. The policy lives only in the injected prompt (with its dynamic enabled-session prefix); the Agent
+  Skill no longer restates it.
+- Explicit user invocation of the `intelligent-ui` skill (`/intelligent-ui`) is now a direct instruction to render
+  a page, documented in the READMEs and the skill.
+
 ### Documentation
 
+- The README pair, architecture pair, Agent Skill and integration reference now document the default-card policy
+  and the explicit-invocation guarantee, plus the Settings page and the free-composition switch.
+- The `intelligent-ui` Agent Skill now infers whether the session is enabled from the injected prompt and tool
+  availability instead of asking the model to inspect the composer chip, and states its decision boundary once
+  (default page, bounded prose exceptions, explicit invocation).
 - The README pair, `docs/development` pair and the Agent Skill integration reference now document the DSH Desktop install path (Plugins → Add plugin → Install → Enable now) and why `dsh plugin --profile desktop` is rejected.
+- The README pair now carries npm version, license and DSH badges, and states the local development loop explicitly (no standalone dev server; build → install → restart → check for the UI control), plus the Chrome requirement of the typography check.
 - The verification record now mentions the changelog guard and the typography check in its current test and packaging summary.
+- The `docs/development` pair documents the tag-driven Trusted Publishing release flow and the one-time `npm trust github` setup.
 
 ## [0.1.0-26-10-21] - 2026-10-21
 

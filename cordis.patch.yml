@@ -3,9 +3,10 @@
 # Installed as a bundle, the profile applies this patch after its earlier bundle
 # layers. The inserted row's package name resolves to the installed
 # `@zephinel/dsh-intelligent-ui` package; its exports["."] is lib/index.js (the host half,
-# which registers the `render_ui` tool, the system-prompt section and the
-# embedded Agent Skill). The browser half ships through the same package's
-# `dsh.client` declaration (exports["./client"]).
+# which registers the `render_ui` tool, the system-prompt section, the embedded
+# Agent Skill and the volatile Config field behind the Settings page). The
+# browser half ships through the same package's `dsh.client` declaration
+# (exports["./client"]).
 #
 # For a local checkout instead of a published package, `node scripts/install.mjs`
 # writes an equivalent row that points straight at lib/index.js.

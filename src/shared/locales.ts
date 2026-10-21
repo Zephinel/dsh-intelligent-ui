@@ -42,6 +42,20 @@ export const zh = {
   'chip.title': '{description} — 点击更改',
   'chip.error': '切换失败',
 
+  // Extension settings section.
+  'settings.nav': '智能 UI',
+  'settings.title': '回答版式',
+  'settings.description': '默认使用扩展的设计规范（标题层级、间距、卡片密度等）。开启自由布局后，这些规范只作为建议，模型可以按内容自行选择组件与版式；技术硬规则、主题 token 与可读性始终生效。',
+  'settings.note': '这是提示词层的偏好，不是硬性强制：开启后模型通常会更自由地组织页面，但不保证完全忽略默认规范；需要固定出卡片时，用 /intelligent-ui 显式调用技能。',
+  'settings.switch.label': '自由布局',
+  'settings.switch.on': '当前：自由布局，模型自行组织页面。',
+  'settings.switch.off': '当前：默认设计规范。',
+  'settings.loading': '正在加载设置…',
+  'settings.unavailable': '当前部署未提供设置服务。',
+  'settings.readonly': '当前配置不可写。',
+  'settings.saving': '正在保存…',
+  'settings.error': '保存失败，请重试。',
+
   // Turn-tail card and compact tool row.
   'card.title': '交互式回答',
   'state.preparing': '准备中',
@@ -122,6 +136,19 @@ export const en: Record<keyof typeof zh, string> = {
   'chip.aria': 'Intelligent UI: {scope}',
   'chip.title': '{description} — click to change',
   'chip.error': 'Switch failed',
+
+  'settings.nav': 'Intelligent UI',
+  'settings.title': 'Answer layout',
+  'settings.description': 'The extension applies its design playbook (title scale, spacing, card density) by default. With free composition on, that playbook is advisory and the model may choose components and layout for the content; the hard rules, theme tokens and readability still apply.',
+  'settings.note': 'This is a prompt-level preference, not enforcement: with it on the model usually composes more freely, but it is not guaranteed to ignore the default playbook. To force a card, invoke /intelligent-ui explicitly.',
+  'settings.switch.label': 'Free composition',
+  'settings.switch.on': 'On: free composition, the model shapes the page.',
+  'settings.switch.off': 'Off: the default design playbook.',
+  'settings.loading': 'Loading settings…',
+  'settings.unavailable': 'This deployment provides no settings service.',
+  'settings.readonly': 'These settings are read-only.',
+  'settings.saving': 'Saving…',
+  'settings.error': 'Saving failed. Try again.',
 
   'card.title': 'Interactive answer',
   'state.preparing': 'Preparing',

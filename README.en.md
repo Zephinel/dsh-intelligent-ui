@@ -2,12 +2,17 @@
 
 [中文](README.md) | English
 
+[![npm version](https://img.shields.io/npm/v/@zephinel/dsh-intelligent-ui?label=npm)](https://www.npmjs.com/package/@zephinel/dsh-intelligent-ui)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![DSH](https://img.shields.io/badge/DSH-0.2.1-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
+[![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
+
 **Turn a model answer into a page you can actually use.** The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.0](https://openui.com) program; at the end of the turn, DSH renders it into an interactive page — maps, photos, charts, checklists, forms, SVG drawings and mini-games are all real components, not screenshots.
 
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`** (`latest`).
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.2.0-26-10-21`** (`latest`).
 
 ## What it looks like
 
@@ -46,6 +51,7 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Three-state switch | Off by default; "This session only" / "All sessions"; composer UI control or `/iui` commands |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
+| Settings page | Settings → Intelligent UI: a Free composition switch; the default playbook, or a model-chosen layout when on |
 | Replayable | The generated program enters the session log as a tool argument and replays with history |
 
 ## Getting the code
@@ -61,8 +67,8 @@ You can also install it from npm without a checkout (next section).
 
 ## Prerequisites
 
-- **DSH 0.2.1** (the `dsh` CLI): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified.
-- **Node.js 24**: build, tests and `npm pack` are verified on Node 24; the repository has no `engines` or `.nvmrc` pin, so verify a lower version yourself before using one.
+- **DSH 0.2.1** (the [`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified.
+- **Node.js 24**: build, tests and `npm pack` are verified on Node 24; the Host bundle targets Node 22 (`target: 'node22'`), and the repository has no `engines` or `.nvmrc` pin, so verify a lower version yourself before using one.
 - **`@deepseek-ai/dsh-client-locale`**: the browser half requires a deployment that composes it; DSH Web 0.2.1 includes it by default, and without it the switch and card do not mount (the Host tool and prompt keep working).
 
 Confirm the tools are present:
@@ -82,7 +88,7 @@ Install from npm (prerequisites are in the previous section):
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # pin the current version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.0-26-10-21
 
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -93,12 +99,12 @@ Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, th
 **DSH Desktop** needs no terminal command — install it inside the app:
 
 1. Open **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**).
-2. Enter `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21` (or just the package name for the latest), then click **Install**.
+2. Enter `@zephinel/dsh-intelligent-ui@0.2.0-26-10-21` (or just the package name for the latest), then click **Install**.
 3. When the install finishes, click **Enable now**; if the **UI** control does not appear, quit and reopen DSH Desktop.
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
 
-For local development, install from a checkout:
+For local development, install from a checkout. The extension has **no development server of its own** — it runs inside DSH. The loop is: build → install into the profile → restart DSH Web → open the URL it prints; the **UI** control appears when it worked. There is no watch mode: rebuild with `npm run build` and restart per the cache note below.
 
 ```bash
 cd /path/to/dsh-intelligent-ui
@@ -132,9 +138,13 @@ With the switch on, just ask in natural language, for example:
 - "Plan two days in Shanghai, with checkboxes and adjustments"
 - "Build a gear-shifting simulator for a 7-speed bicycle"
 - "Turn these tables into a sales dashboard I can filter"
-- "Teach me how to tie a tie, with an image for every step"
+- "Introduce Chinese history, expandable by dynasty"
 
-When the switch is off the model cannot see `render_ui` and answers in plain text — that is not a failure; turn the switch on and ask again. If the model replies with text only, just say "show it with render_ui". To explicitly bring in the full skill, say "read the intelligent-ui skill and then build ... with render_ui".
+Once enabled, **any answer with structure defaults to a card** — including explanations, introductions, timelines, stages, comparisons and things to explore; Markdown is reserved for a single fact, a one- or two-sentence reply, an explicit request for text/document/code, or repeated render failures. When the switch is off the model cannot see `render_ui` and answers in plain text — that is not a failure; turn the switch on and ask again.
+
+To guarantee a card (or when the model still replies in text), invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on; explicit invocation is treated as a direct instruction. You can also say "read the intelligent-ui skill and then build ... with render_ui".
+
+The extension also adds **Settings → Intelligent UI** with a **Free composition** switch: off by default (the extension's design playbook); when on, the playbook is advisory and the model may choose components and layout for the content (the hard rules, theme tokens and readability still apply). The choice persists in the DSH settings document and applies to every session.
 
 ## Build, test and deploy
 
@@ -144,13 +154,16 @@ npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
 ```
 
+- The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
+
 The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall, local development and version notes.
 
 ## Contributing
 
 - Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
-- Run `npm run check` before submitting; the repository has no CI, so the local command is the source of truth.
+- Run `npm run check` before submitting; there is no PR CI, so the local command is the gate. Releases are published by the GitHub Actions Trusted Publishing workflow (push a `v*` tag that matches `package.json`).
 - When behavior, copy or counts change, update the Chinese and English READMEs, `CHANGELOG.md`, and the matching documents under `docs/`; the sync rules live in `.agents/skills/sync-iui-docs/SKILL.md` (development-only, not shipped in the npm package).
+- Repository maintenance skills and doc-sync rules live under `.agents/skills/` (not shipped); AI coding agents also use `npm run check` as the pre-submit gate.
 
 ## Known limitations
 
@@ -161,6 +174,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - The generation prompt is about 8.5K tokens and is **sent only when the switch covers that session** (all sessions, or the session is on the allowlist); when off, that cost is zero (the tool schema is absent too). Enabled requests are the same as the previous version, so DSH cache hits offset most of the cost.
 - The extension's UI copy follows DSH's UI language; the `/iui` Host replies, the command palette's command description and the README screenshots stay in English (the first two are DSH platform behavior).
 - The browser half requires a deployment that composes `dsh-client-locale` (included by default in DSH Web 0.2.1); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
+- The settings page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. The free-composition switch only changes how strongly the prompt recommends the design playbook; it cannot guarantee every model ignores the defaults entirely.
 
 ## Documentation
 

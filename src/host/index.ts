@@ -7,14 +7,19 @@
  * system-prompt section. Both the tool and the prompt are gated by the
  * per-session switch in ./mode.ts, which is off by default. The browser half
  * (exports["./client"]) renders the recorded programs and hosts the composer
- * switch, which only mirrors the host projection.
+ * switch, which only mirrors the host projection. The browser half also
+ * registers the extension's Settings section; its free-composition toggle is
+ * persisted as one volatile field in the Host settings document.
  *
- * This file is bundled by scripts/build.mjs into lib/index.js; it intentionally
- * imports no DSH package so the artifact runs against the installed CLI.
+ * This file is bundled by scripts/build.mjs into lib/index.js. It imports only
+ * `@deepseek-ai/schemastery` (the DSH settings schema) besides Node built-ins,
+ * its own modules and the generated prompt, so the artifact runs against the
+ * installed CLI.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import z from '@deepseek-ai/schemastery'
 import { createParser } from '@openuidev/lang-core'
 import librarySpec from '../../vendor/spec.json'
 import promptText from '../generated/prompt.txt'
@@ -22,6 +27,15 @@ import { installModeControl } from './mode.ts'
 import { RENDER_UI_TOOL } from '../shared/intelligent-ui.ts'
 
 export const name = 'intelligent-ui'
+
+/**
+ * Preferences served to the DSH settings document. Only `.volatile()` fields
+ * are editable from the browser; each value is a live reference, so the prompt
+ * section reads the current choice on every request without a plugin reload.
+ */
+export const Config = z.object({
+  freeComposition: z.boolean().default(false).volatile(),
+})
 
 /** Host services this plugin consumes; both must exist before apply runs. */
 export const inject = ['tools', 'systemPrompt']
@@ -180,6 +194,41 @@ function inspectProgram(program: string): { statements: number; findings: ParseF
   return { statements: meta.statementCount ?? 0, findings }
 }
 
+/**
+ * Sentence prepended to the generation prompt while the switch admits the
+ * session. The generation prompt itself is static; this line makes the user's
+ * opt-in explicit instead of leaving the model to infer it from the tool's
+ * presence, and restates the bounded prose exception in one place.
+ */
+const ENABLED_SESSION_PREFIX =
+  'Intelligent UI is enabled for this session. Treat a rendered page as the default answer format; '
+  + 'use Markdown only for a single fact or one or two sentences, an explicit request for text, content that cannot be shown as a page, '
+  + 'or after render_ui fails twice in the turn.\n\n'
+
+/** Prompt suffix appended when the deployment enables free composition. */
+const FREE_COMPOSITION_NOTE =
+  '\n\nFree composition is on for this deployment: the layout and typography playbook in the intelligent-ui skill, '
+  + 'and the design guidance above, are advisory rather than a template. Choose the page shape, hierarchy, density '
+  + 'and blocks the content needs, and vary them between answers. The hard rules, the theme tokens and readable text still apply.'
+
+/** Loose shape of the volatile config reference the Host passes to `apply`. */
+interface IntelligentUIConfig {
+  readonly freeComposition?: { get?: () => unknown }
+}
+
+/**
+ * Read the free-composition preference from its live config reference.
+ * @param config - the plugin Config resolved by the Host, when settings are composed.
+ * @returns true only when the deployment opted in; a missing ref means off.
+ */
+function isFreeComposition(config: IntelligentUIConfig | undefined): boolean {
+  try {
+    return config?.freeComposition?.get?.() === true
+  } catch {
+    return false
+  }
+}
+
 /** Register the tool, the switch, the generation prompt, and the embedded Agent Skill. */
 export function apply(ctx: {
   tools: { register(definition: unknown): unknown }
@@ -191,34 +240,51 @@ export function apply(ctx: {
     }): unknown
   }
   logger?: { warn(message: string): void }
-  inject?: SkillHostContext['inject']
+  inject?: (dependencies: readonly string[], callback: (scoped: never) => void) => unknown
   on?: (event: string, handler: (...args: never[]) => unknown) => unknown
   agents?: { list?: () => Iterable<unknown> }
-}): void {
+  fiber?: unknown
+}, config?: IntelligentUIConfig): void {
   // The switch decides whether the prompt section and the tool are visible.
   // A deployment without session projections/commands cannot persist a switch,
   // and `enabledFor` then reports legacy always-on.
   const mode = installModeControl(ctx as never)
+  // The extension ships its own settings page, so ask the Host settings service
+  // to suppress its generated form. Optional: minimal deployments without the
+  // settings service keep the tool and prompt working.
+  ctx.inject?.(['settings'], (child: never) => {
+    const scoped = child as unknown as {
+      readonly settings?: { configure?: (options: { auto: boolean }, fiber: unknown) => unknown }
+      effect?(fn: () => unknown): unknown
+    }
+    if (typeof scoped.settings?.configure !== 'function') return
+    scoped.effect?.(() => scoped.settings!.configure!({ auto: false }, ctx.fiber))
+  })
   ctx.systemPrompt.section({
     name: 'tool:intelligent-ui',
     order: 3100,
     // Resolved per request: empty while the user keeps the switch off, so the
-    // ~8.5k-token generation prompt costs nothing in a disabled session.
+    // ~8.5k-token generation prompt costs nothing in a disabled session. The
+    // free-composition preference is read live from its volatile config ref.
     text: (context) => {
       const sessionId = context?.agent?.session?.id
-      return mode.enabledFor(sessionId) ? promptText : ''
+      if (!mode.enabledFor(sessionId)) return ''
+      const section = isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
+      return `${ENABLED_SESSION_PREFIX}${section}`
     },
   })
-  registerEmbeddedSkill(ctx)
+  registerEmbeddedSkill(ctx as never)
 
   ctx.tools.register({
     name: RENDER_UI_TOOL,
     description:
       'Render an interactive answer as UI in the chat. Pass a complete openui-lang program that follows the '
-      + 'Intelligent UI rules in the system prompt. Use it whenever a visual, interactive or working answer '
-      + 'serves the user better than prose: itineraries, comparisons, dashboards, step-by-step guides, maps, '
-      + 'drawings, forms, planners, games or calculators. The user sees the rendered page; do not repeat its '
-      + 'content in prose. Call it at most once per turn, after any brief introductory sentence.',
+      + 'Intelligent UI rules in the system prompt. When Intelligent UI is enabled for the session this is the '
+      + 'default answer format: use it for any structured answer, including introductions, explainers, timelines, '
+      + 'comparisons, dashboards, step-by-step guides, maps, drawings, forms, planners, games or calculators. '
+      + 'Answer in prose only for a single fact or a one-line reply, an explicit text request, content that cannot '
+      + 'be shown as a page, or after rendering fails. The user sees the rendered page; do not repeat its content '
+      + 'in prose. Call it at most once per turn, after any brief introductory sentence.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT,

@@ -1,43 +1,38 @@
 ---
 name: intelligent-ui
-description: "Render an interactive answer as UI in DSH with the render_ui tool: a complete OpenUI Lang program (maps, photos, charts, tables, forms, SVG drawings, games) rendered as a turn-tail card. Use it whenever the user would rather see, choose or compute than read prose — itineraries, comparisons, dashboards, calculators, guides, planners, quizzes, explorers — even if they do not mention UI. Switch defaults to off; if render_ui is missing, answer in prose. Load references for signatures and fixes."
-whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games — or the user asks to render, show, visualize or build a page."
+description: "Render an interactive answer as UI in DSH: one complete OpenUI Lang program (maps, photos, charts, tables, forms, SVG drawings, games) shown as a turn-tail card. Use it for structured answers — itineraries, comparisons, dashboards, timelines, explainers, guides — when the session has Intelligent UI enabled; it is then the default format and prose is the bounded exception. If render_ui is missing, answer in prose."
+whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games, timelines, explainers — or the user asks to render, show, visualize or build a page, or invokes /intelligent-ui. Not for a single fact, a one-line reply, or a plain text/code answer."
 ---
 
 # Intelligent UI
 
-`render_ui` turns one OpenUI Lang program into an interactive card at the end of the turn. The program is not prose and not HTML: it declares named values and components, and the card evaluates them in the browser. When the switch admits the session, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the judgment and the deep reference that the prompt cannot fit.
+`render_ui` turns one OpenUI Lang program into an interactive card at the end of the turn. The program is not prose and not HTML: it declares named values and components, and the card evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the decision boundary, the workflow, the design playbook and the deep reference that the prompt cannot fit.
 
-## Before you start: is the switch on?
+## Before you start: is the session enabled?
 
-The extension is opt-in. One host switch has three scopes: **Off** (no session), **This session only**, and **All sessions**. Check the **UI** chip in the composer (right side of the input box): its menu picks the scope, and `/iui off`, `/iui session` and `/iui global` are the equivalent commands (a bare `/iui` prints the current scope). The chip and menu follow the app's UI language: in a Chinese UI the chip reads `UI：关闭 / UI：本会话 / UI：全部` and the menu reads 「关闭 / 仅本会话 / 全部会话」.
+The extension is opt-in; the host switch has three scopes — **Off**, **This session only**, **All sessions**. You cannot see the composer, so infer the state from the request:
 
-- **Switch admits this session** → continue with this skill.
-- **Switch is off, or scoped to another session** → answer in prose. If a page would genuinely serve better, say once that picking **This session only** (仅本会话) or **All sessions** (全部会话) makes it available; do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
-- **Switch admits the session but `render_ui` is still absent** → the plugin or its host services are not loaded; answer in prose (see [integration.md](references/integration.md#troubleshooting-a-missing-render_ui)).
+- **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; a page is the default answer format.
+- **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) or **All sessions** (全部会话) in the **UI** chip on the right side of the composer, or run `/iui session` / `/iui global`. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
+- **Explicit invocation is a directive:** the user invoked `/intelligent-ui`, or asked you to build the page with this skill → render; prose only when the user also asked for text or the tool is unavailable.
 
-**The contract.** Call `render_ui({ program, title? })` with a complete program. On success the user sees the page after your turn; the tool returns `{ statements, warnings? }` and the UI appears at the turn tail. On a fatal parse error the tool throws with the exact finding: fix it and call again in the same turn. Warnings do not throw, but they mean missing or dropped content — fix them too.
+A deployment may also enable **Free composition** in Settings → Intelligent UI. When the injected prompt says "Free composition is on for this deployment", the design playbook below is advisory rather than a template.
 
-## When to call it
+## Decide the format
 
-Call `render_ui` when the answer benefits from **seeing, choosing or computing**:
+The decision policy is owned by the injected `tool:intelligent-ui` prompt; this skill applies it. In an enabled session `render_ui` is the **default answer format** for any answer with structure: several facts, a timeline, stages, steps, options, numbers, a comparison, or something to explore — including introductions, explainers, overviews and guides about a topic.
 
-- Plans and itineraries (day-by-day, stops, budget, checklist).
-- Comparisons and decision aids (options × criteria, trade-offs, pickers).
-- Dashboards and reports over numbers the user gave or described.
-- Calculators and simulators (sliders/segmented controls feeding computed figures).
-- How-to and step-by-step guides, especially anything with a shape, fold or assembly.
-- Forms and intake requests, planners, quizzes, flashcards, small games.
-- Anything the user would otherwise have to picture, tally or compute.
+Answer in Markdown only when the whole answer is:
 
-## When to answer in prose
+- a single fact or one or two sentences;
+- an explicit request for text, a document, Markdown, code or a plain answer;
+- content that cannot be shown as a page (a safety warning, material that must be quoted verbatim);
+- a fallback after two failed render attempts in the turn.
 
-- A fact, definition, short explanation, opinion, code answer or safety advice.
-- A single number or a one-line reply; a page would be scaffolding around one sentence.
-- The user asked for a document they will copy as text (plain Markdown).
-- The switch does not admit this session (see [Before you start](#before-you-start-is-the-switch-on)); never fake a card with HTML or a code block.
+Two consequences matter in practice:
 
-One page per turn is the target. A rejected call may be retried; a successful one should not be followed by a second `render_ui` call in the same turn.
+- **A knowledge or explainer topic is not a prose signal.** If the answer would have parts (eras, stages, factors, examples, dynasties, events), make the page — timeline, cards or an explorer — instead of a long text answer.
+- **A page is never faked.** If the switch is off or the tool is missing, say so once and answer in prose; never simulate a card with HTML or a fenced block.
 
 ## Workflow
 
@@ -76,14 +71,14 @@ Completion: the program satisfies the hard rules below, and the pre-flight check
 
 Call `render_ui({ program: <the complete program>, title: "Short noun phrase" })`. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
 
-**The call is the preflight.** Do not build a local harness, and do not let testing leak into the extension itself: while answering, treat the extension checkout (the skill's base directory, including `test/renderer/.build/`) as read-only — no scratch programs, tests, fixtures or build output. A rejected call is never partially rendered, and a successful call still reports dropped content as warnings, so one or two retries in the same turn are cheaper and more accurate than any local setup. If a draft must be saved, put it in a temporary directory (`mktemp`, `/tmp`). The rule ends only when the user explicitly asks you to work on the extension itself.
+**The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 11 carries the full version.
 
 ### 5. Handle the result
 
 - **Success, no warnings** — done. The page is on screen; do not re-call.
 - **Success, with warnings** — a name was unresolved or a statement was unreachable. Fix the program and call once more; the warnings name the exact statement.
 - **Fatal error** — read every finding after the `render_ui:` prefix, fix all of them, and retry in the same turn. Two or three attempts are normal. If the same finding returns, re-read the program instead of rewording the message. If retries keep failing, drop the most complex block (Map, HtmlView, nested `@Each`), send a simpler page, and say so in one sentence.
-- **Tool missing** — either the switch does not admit this session (handled before you start) or the plugin is not loaded; answer in prose and point at [integration.md](references/integration.md#troubleshooting-a-missing-render_ui) if the user is setting it up.
+- **Tool missing** — follow [Before you start](#before-you-start-is-the-session-enabled): answer in prose, and point at [integration.md](references/integration.md#troubleshooting-a-missing-render_ui) if the user is setting it up.
 
 ## Hard rules (OpenUI Lang)
 
@@ -96,12 +91,14 @@ Call `render_ui({ program: <the complete program>, title: "Short noun phrase" })
 7. `@Each(array, "x", template)`: the loop variable exists only inside the template. Inline the template.
 8. Money, percentages, counts and dates shown as text use `@Format` / `@Plural` / `@FormatDate`; relative dates start from `@Today()`, and dates are ordered with `@DaysBetween(a, b) > 0`.
 9. The program is complete: no `...`, no TODO, no placeholder comments.
-10. One successful call per turn; retries only after a rejection.
+10. One page per turn: a rejected call may be retried; a successful one must not be followed by a second `render_ui` call in the same turn.
 11. **Keep the extension checkout read-only while answering.** Never add scratch programs, tests, fixtures or build output under the skill base directory or the plugin's source tree (including `test/renderer/.build/`) to test a program. `render_ui` is the preflight; save drafts in a temporary directory outside the repository. Only an explicit request to develop the extension lifts this rule.
 
 Exact signatures, argument order, enums and function list: [references/components.md](references/components.md). Syntax, state and wrong-vs-right snippets: [references/language.md](references/language.md).
 
 ## Design playbook
+
+**Free composition.** When the injected prompt says "Free composition is on for this deployment", this playbook is advisory, not a template: choose the page shape and blocks the content needs, and vary them between answers. The hard rules above and the theme/readability guidance below still apply.
 
 - **Compose a page, not a form letter.** A `Title` (`xl`/`2xl`), one short `Text`, then 2–4 mixed blocks. Group related blocks in `Card`s; do not wrap the whole page in one card.
 - **Spacing is a system.** `gap`/`padding` count 4px steps: inner 1–2, group 3–4, section 5–6. Leave `gap` unset on the page root and on card contents (the app applies the article rhythm); set a gap on `Row`/`Grid` only.
@@ -122,7 +119,6 @@ Exact signatures, argument order, enums and function list: [references/component
 - **Dark/light is automatic.** Tokens, components and the `HtmlView` document's `color-scheme` follow the host theme. Do not hardcode white backgrounds or black text.
 - **`HtmlView` is the only escape hatch** for arbitrary HTML/CSS/JS: canvas games, physics toys, custom animations. It runs in a sandboxed iframe with an opaque origin, no access to the page or its storage, and network limited to script/style/font CDNs and https images. Use it only when components plus `Svg` cannot express the idea, and keep the whole game in one string; it cannot share state with the page.
 - **`@ToAssistant` starts a new turn.** In this deployment only the message string is forwarded — the optional `context` object is not delivered — so compose needed values into the message: `@ToAssistant("Plan for " + $people + " people on " + $date)`. Keep it short and first-person, and never use it for something the page can already compute.
-- **If the switch admits the session but `render_ui` is absent, the plugin/host services are not loaded.** Answer in prose; do not simulate a card with a fenced block or claim a UI was rendered.
 
 ## Pitfalls that account for most failures
 

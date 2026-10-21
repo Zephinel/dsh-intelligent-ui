@@ -11,12 +11,12 @@ import { test } from 'node:test'
 const plugin = await import('../../lib/index.js')
 
 /** Mount the plugin on a stub context and return its registrations. */
-function mount() {
+function mount(config) {
   const registered = { tool: undefined, sections: [] }
   plugin.apply({
     tools: { register(definition) { registered.tool = definition } },
     systemPrompt: { section(section) { registered.sections.push(section) } },
-  })
+  }, config)
   return registered
 }
 
@@ -40,6 +40,17 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   const enabledText = sections[0].text()
   assert.ok(enabledText.length > 10_000, 'the OpenUI Lang generation prompt is contributed while the host switch is on')
   assert.match(enabledText, /render_ui/)
+})
+
+test('the free-composition preference appends its advisory note to the prompt', () => {
+  // The settings page writes this volatile field; the prompt reads it live.
+  assert.ok(plugin.Config, 'the Host exports the settings schema')
+  const strict = mount()
+  assert.doesNotMatch(strict.sections[0].text(), /Free composition is on for this deployment/)
+  const free = mount({ freeComposition: { get: () => true } })
+  const text = free.sections[0].text()
+  assert.match(text, /Free composition is on for this deployment/)
+  assert.match(text, /advisory rather than a template/)
 })
 
 test('accepts a valid program and reports statement count', async () => {

@@ -60,6 +60,9 @@ async function buildHost() {
     platform: 'node',
     format: 'esm',
     target: 'node22',
+    // The DSH settings schema travels as a declared runtime dependency so the
+    // Host shares the composition's `@deepseek-ai/schemastery` copy.
+    external: ['@deepseek-ai/schemastery'],
     sourcemap: false,
     minify: true,
     legalComments: 'none',

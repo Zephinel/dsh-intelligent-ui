@@ -40,3 +40,12 @@ test('the troubleshooting reference repeats the guardrail with the failure it pr
   assert.match(troubleshooting, /test\/renderer\/\.build/, 'the reference names the build directory')
   assert.match(troubleshooting, /rejected program is never partially rendered/i, 'the reference explains why retrying is safe')
 })
+
+test('the enabled-session policy is single-sourced and explicit invocation is a directive', () => {
+  assert.match(prompt, /default answer format/i, 'the prompt makes a page the default in an enabled session')
+  assert.match(prompt, /single fact or at most one or two sentences/i, 'the prompt bounds the prose exception')
+  assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
+  assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')
+  assert.match(skill, /Explicit invocation is a directive/i, 'the skill states the explicit-invocation directive')
+  assert.doesNotMatch(skill, /## When to answer in prose/, 'the skill no longer duplicates the prose policy')
+})

@@ -14,11 +14,13 @@ Host  lib/index.js (Node)
 │   └─ @openuidev/lang-core validates against the component library spec; errors are returned precisely, and the model repairs them in the same turn
 ├─ three-state switch (off/session/global, persisted)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
+├─ Config.freeComposition (volatile)      # written by the settings page; the prompt reads it live per request
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
 Client  lib/client.js (browser, lazily loaded by the DSH module loader)
 ├─ ctx.locale.register('intelligent-ui')  # zh/en UI dictionaries; slots declare locale and receive the injected t
 ├─ conversation.input.activity             # the UI control on the right side of the composer (chip + native Menu; reads the projection + runs switch commands)
+├─ settings.section 'intelligent-ui'       # settings page: the free-composition switch (writes a volatile Host settings field)
 ├─ conversation.chat.turnTail list item    # at the end of each turn, takes that turn's render_ui program and renders the card
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 55 ported components (chrome reads the renderer i18n context)
 ├─ tool.call.toolview keyed 'render_ui'   # leaves a single "Interactive answer" (交互式回答 in Chinese) line in the process area
@@ -42,6 +44,16 @@ With the switch off there is no trace of this tool on the model side; only after
 - The composer control and the slash commands are equivalent; both work in DSH Desktop and Web.
 - The switch requires a deployment that composes both `sessionProjections` and `commands` (DSH Web has both by default). If either service is missing, the switch cannot be displayed or persisted, and the extension falls back to the old **always on** behavior.
 
+## Decision policy
+
+The switch only makes the capability visible; the policy that decides whether a turn gets a card lives in one place — the injected `tool:intelligent-ui` prompt section (the Host also prefixes it with "Intelligent UI is enabled for this session" when the switch admits the session). Because it is injected together with the switch, an enabled session behaves as follows:
+
+- **Pages are the default:** any answer with structure — several facts, a timeline, stages, steps, options, numbers, a comparison, or something to explore, including introductions, explainers and overviews — is answered with `render_ui`.
+- **Prose is the bounded exception:** the whole answer is a single fact or one or two sentences; the user explicitly asks for text / a document / code; the content cannot be shown as a page (a safety warning, material that must be quoted verbatim); or two render attempts failed in the turn.
+- **Explicit invocation is a direct instruction:** when the user invokes the skill with `/intelligent-ui`, or asks for the page with `render_ui`, the model must build the page (unless the user also asked for text or the tool is unavailable).
+- **One source:** the Agent Skill no longer repeats the decision policy, it only covers how to build. The earlier duplicate prose rule in the skill and the prompt made the same question resolve differently across models and deployments.
+- **Free composition switch:** the settings page writes a volatile field in the Host settings document. When on, the injected prompt appends "the design playbook is advisory", and the skill's Design playbook explicitly downgrades to guidance. Off keeps the default layout rules. The page also states that this is a prompt-level preference rather than enforcement; `/intelligent-ui` remains the way to force a card.
+
 ## UI language
 
 - All of the extension's own browser-side copy (the composer switch, its menu, card titles and states, render-failure notices, component chrome such as the map, code blocks and timers, and accessible labels) is translated through DSH's locale service: `ctx.locale.register('intelligent-ui', { zh, en })`, with slot registrations declaring `locale` so components receive the injected `t`.
@@ -57,9 +69,9 @@ On mount, the plugin registers `skills/intelligent-ui/SKILL.md` as an **embedded
 
 - `intelligent-ui` appears in the session catalog, and the model loads it on demand with the `skill` tool;
 - the skill catalog entry is always visible (at negligible cost); but **do not call `render_ui` while the switch is off** — the Host rejects it, so ask the user to turn the switch on first;
-- users can also invoke it directly with `/intelligent-ui` (`userInvocable`);
+- users can also invoke it directly with `/intelligent-ui` (`userInvocable`); explicit invocation injects the same skill content and turns the invocation into a directive to build a page;
 - the skill contains:
-  - `SKILL.md` — when to use it / when not to, the workflow (including the read-only-checkout preflight rule while answering), hard OpenUI Lang rules, design guidelines, DSH behavior, and a reference index;
+  - `SKILL.md` — the workflow (the decision policy is owned by the injected prompt; explicit invocation is a directive), the read-only-checkout preflight rule while answering, hard OpenUI Lang rules, design guidelines (advisory when free composition is on), DSH behavior, and a reference index;
   - `references/components.md` — complete parameter tables for 55 components + 73 `@functions` (14 core + 59 library) + 5 action steps;
   - `references/language.md` — syntax, expressions, `$` state, `@Each`, and a table of common errors;
   - `references/examples.md` — 6+ complete, directly runnable programs (itinerary, calculator, SVG tutorial, dashboard, forms, mini-game);

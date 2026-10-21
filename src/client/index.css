@@ -185,8 +185,92 @@
   line-height: 18px;
 }
 
+/* Extension settings page (Settings → Intelligent UI). */
+.dsh-iui-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-iui-settings-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+.dsh-iui-settings-description {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.dsh-iui-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+.dsh-iui-settings-copy { min-width: 0; }
+.dsh-iui-settings-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.dsh-iui-settings-hint {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.dsh-iui-settings-note,
+.dsh-iui-settings-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+.dsh-iui-settings-note { color: var(--dsw-alias-label-tertiary); }
+.dsh-iui-settings-error { color: var(--dsw-alias-state-error-primary); }
+.dsh-iui-switch {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-active);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.dsh-iui-switch[aria-checked='true'] { background: var(--dsw-alias-state-business-primary); }
+.dsh-iui-switch:disabled { cursor: not-allowed; opacity: 0.5; }
+.dsh-iui-switch:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+.dsh-iui-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-primary-foreground);
+  transition: transform 120ms ease;
+}
+.dsh-iui-switch[aria-checked='true'] .dsh-iui-switch-thumb { transform: translateX(16px); }
+
 @media (prefers-reduced-motion: reduce) {
   .dsh-iui-header,
   .dsh-iui-chevron,
-  .dsh-iui-toggle { transition: none; }
+  .dsh-iui-toggle,
+  .dsh-iui-switch,
+  .dsh-iui-switch-thumb { transition: none; }
 }

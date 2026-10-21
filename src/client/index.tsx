@@ -5,7 +5,8 @@
  * card at its end (the Chat's turn-tail list), and the call's own Tool row
  * becomes a compact process line instead of exposing the raw program. The
  * composer's `conversation.input.activity` seat carries the per-session on/off
- * switch that gates the tool and its prompt.
+ * switch that gates the tool and its prompt, and the Settings section carries
+ * the deployment-wide free-composition preference.
  *
  * Only `import type` reaches other DSH feature packages; runtime imports are
  * this repo's own modules, React, and the shell's platform modules (the icon
@@ -25,11 +26,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 // Type-only: pull the client locale service (`ctx.locale`) and its dictionary types.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pull the settings `settings.section` SlotMap merge and `configForms` service.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { IntelligentUICards, type IntelligentUICardsInjected } from './IntelligentUICards.tsx'
 import { RenderUiRow } from './RenderUiRow.tsx'
+import { SettingsPage, type SettingsFormLike, type SettingsPageInjected } from './SettingsPage.tsx'
 import { ToggleControl, type ToggleControlInjected } from './ToggleControl.tsx'
 import { modeCommand, startModeSync } from './toggle.ts'
-import type { IntelligentUIScope } from '../shared/intelligent-ui.ts'
+import { HOST_ENTRY_ID, type IntelligentUIScope } from '../shared/intelligent-ui.ts'
 import { NS, en, zh } from '../shared/locales.ts'
 import './index.css'
 
@@ -43,8 +47,8 @@ export const inject = ['locale', 'sessions', 'slots', 'uiConversation', 'remote'
 const CARD_ID = 'intelligent-ui'
 
 /**
- * Register the Turn-tail cards, the compact `render_ui` Tool row, and the
- * composer Intelligent UI switch.
+ * Register the Turn-tail cards, the compact `render_ui` Tool row, the composer
+ * Intelligent UI switch, and the extension's Settings section.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -94,4 +98,19 @@ export function apply(ctx: ClientContext): void {
       },
     }),
   }, ToggleControl))
+  // Settings page: one switch persisted as this Host entry's volatile
+  // `freeComposition` field. Optional: a deployment without the settings domain
+  // keeps the composer switch and the card.
+  const t = ctx.locale.bind(NS)
+  ctx.inject(['configForms'], (child) => {
+    const form = child.configForms.get(HOST_ENTRY_ID) as unknown as SettingsFormLike
+    child.slots.inject('settings.section', () => child.slots.register({
+      name: 'settings.section',
+      id: HOST_ENTRY_ID,
+      order: 40,
+      label: () => t('settings.nav'),
+      locale: NS,
+      inject: (): SettingsPageInjected => ({ form }),
+    }, SettingsPage))
+  })
 }

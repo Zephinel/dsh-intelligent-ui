@@ -27,6 +27,18 @@ export interface RenderUiArgs {
 /** Slash-command name that switches the extension on or off for one session. */
 export const MODE_COMMAND = 'iui'
 
+/** Host settings namespace (and profile entry id) serving this extension's preferences. */
+export const HOST_ENTRY_ID = 'intelligent-ui'
+
+/** Volatile boolean field controlling free composition in the Host settings document. */
+export const FREE_COMPOSITION_FIELD = 'freeComposition'
+
+/** Wire shape of this extension's settings namespace. */
+export interface IntelligentUISettings {
+  /** Whether the design playbook is advisory instead of a template. */
+  readonly freeComposition?: boolean
+}
+
 /** Host session-projection key carrying the per-session switch state. */
 export const MODE_PROJECTION_KEY = 'intelligent-ui'
 

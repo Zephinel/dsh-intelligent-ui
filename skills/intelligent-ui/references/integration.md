@@ -2,14 +2,14 @@
 
 dsh-intelligent-ui is a DSH bundle with two halves:
 
-- **Host** (`lib/index.js`, Node): registers the `render_ui` tool, validates programs with `@openuidev/lang-core` against the generated component spec compiled into the bundle, owns the three-scope switch (persistence file + slash command + session projection + per-agent tool visibility), contributes the OpenUI Lang generation prompt as a conditional system-prompt section (`tool:intelligent-ui`, order 3100), and registers the shipped Agent Skill when the deployment composes a skill service.
-- **Client** (`lib/client.js`, browser): registers a `conversation.chat.turnTail` card that renders every `render_ui` program recorded by the closing turn, a compact `render_ui` process row that keeps the raw program out of the tool list, and the composer UI switch in `conversation.input.activity`. It also registers the extension's zh/en UI dictionaries with the client locale service (`ctx.locale.register('intelligent-ui', { zh, en })`) and declares `locale` on those three slot registrations, so an in-app language switch re-renders all of its chrome.
+- **Host** (`lib/index.js`, Node): registers the `render_ui` tool, validates programs with `@openuidev/lang-core` against the generated component spec compiled into the bundle, owns the three-scope switch (persistence file + slash command + session projection + per-agent tool visibility), contributes the OpenUI Lang generation prompt as a conditional system-prompt section (`tool:intelligent-ui`, order 3100), serves one volatile settings field (`freeComposition`) read live by the prompt, and registers the shipped Agent Skill when the deployment composes a skill service. `@deepseek-ai/schemastery` is the one runtime dependency, used only for the Config schema the Host settings service reads.
+- **Client** (`lib/client.js`, browser): registers a `conversation.chat.turnTail` card that renders every `render_ui` program recorded by the closing turn, a compact `render_ui` process row that keeps the raw program out of the tool list, the composer UI switch in `conversation.input.activity`, and the Settings page in `settings.section`. It also registers the extension's zh/en UI dictionaries with the client locale service (`ctx.locale.register('intelligent-ui', { zh, en })`) and declares `locale` on those four slot registrations, so an in-app language switch re-renders all of its chrome.
 
 The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment can use the tool without the skill; the skill is what makes an agent good at it.
 
 ## Current status
 
-**Published.** `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published.** `@zephinel/dsh-intelligent-ui@0.2.0-26-10-21` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
 
 ## Requirements
 
@@ -17,6 +17,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 - The **web** profile (or any profile whose app has a browser chat surface); the client half declares `"dsh": { "client": { "platform": "web" } }`.
 - The app composes the client locale service (`@deepseek-ai/dsh-client-locale`; DSH Web includes it by default). The browser half requires the `locale` service: without it the switch and the card do not mount, while the Host tool and prompt keep working. UI dictionaries live in `src/shared/locales.ts` (`zh` as the key-set source of truth, `en` checked complete); the renderer falls back to English outside DSH.
 - Network access for the nice-to-haves: Wikipedia/Wikimedia (photo search), OpenFreeMap tiles and OSRM demo routing (Map). Offline, the page still renders with the fallbacks described below.
+- Runtime dependency **`@deepseek-ai/schemastery`** (~3.18.5), installed with the package; the Host uses it only for the Settings page Config schema.
 - The package declares **no `engines.dsh` yet**; it was verified against `0.2.1-rc.2`. A later DSH may refuse it until a compatible release lands or an exact-version exemption is granted (below).
 
 ## Three-scope switch (off by default)
@@ -29,6 +30,9 @@ The extension costs ~8.5k prompt tokens, so access is opt-in. The host owns one 
 - **Controls:** the **UI** chip in the composer opens the shell's native menu with **Off**, **This session only** and **All sessions**, or use `/iui off`, `/iui session`, `/iui global`. The chip and menu follow the app's UI language (in a Chinese UI: `UI：关闭 / UI：本会话 / UI：全部` and 「关闭 / 仅本会话 / 全部会话」). A bare `/iui` prints the current scope, `on` and `all` are aliases for `global`.
 - **Persistence:** `<DSH_HOME>/dsh-intelligent-ui.json` (default `~/.dsh/dsh-intelligent-ui.json`), written atomically on every flip: `{ "global": false, "sessions": ["<session-id>"] }`. A legacy `{ "enabled": true }` file is read as global. Selecting **off** or **all sessions** clears the session list.
 - **What off means for a session:** the `render_ui` schema is denied per agent through `agent.ctx.tools.restrict()`, so it is absent from the request tool catalog; the `tool:intelligent-ui` prompt section resolves to an empty string; a stray call (for example from a request assembled before the switch changed) throws `render_ui is disabled for this session`.
+- **What on means for a session:** the `tool:intelligent-ui` prompt section is injected and makes a `render_ui` page the default answer format for structured answers, including introductions, explainers and timelines. Markdown is the bounded exception: a single fact or one or two sentences, an explicit request for text, content that cannot be shown as a page, or two failed calls. The policy lives only in the prompt section; the Agent Skill points at it instead of restating it.
+- **Explicit invocation:** a user-invocable `/intelligent-ui` token in direct user input injects the skill as a user-role instructions context; the skill treats that as a direct instruction to answer with `render_ui`. Use it to force a card when the model's own judgement would otherwise answer in prose.
+- **Settings page:** the extension contributes a Settings section (`settings.section`, id `intelligent-ui`) whose **Free composition** switch writes the volatile `freeComposition` field. Off (default) keeps the design playbook; on appends an advisory note to the injected prompt and marks the skill's Design playbook as guidance. The preference is deployment-wide and read live, so no restart is needed. The page states that this is a prompt-level preference, not enforcement; `/intelligent-ui` remains the way to force a card.
 - **Projection and tabs:** the `intelligent-ui` session projection folds the `command/run` + `command/done` pair of the session that flipped it (for the `pending` state) and projects the effective scope for that session. Tabs share **control** flips over a `BroadcastChannel` (`dsh-intelligent-ui-mode`); a typed `/iui` in another tab shows up on that tab's next projection frame or refresh.
 - **Deployments without `sessionProjections` + `commands`:** there is no composer control and no persistence, so the extension keeps its legacy **always-on** behavior. DSH Web composes both services, so this only affects minimal custom profiles.
 
@@ -39,7 +43,7 @@ The switch is not per-session-only: choosing **all sessions** covers every sessi
 The browser half follows DSH's UI language and needs no configuration:
 
 - `src/shared/locales.ts` holds one flat dictionary per built-in locale (`zh` is the key-set source of truth, `en` is type-checked against it, `{name}` placeholders are interpolated at lookup). `src/client/index.tsx` registers both with `ctx.locale.register('intelligent-ui', { zh, en })`.
-- All three slot registrations declare `locale: 'intelligent-ui'`, so the slot system hands each component the `t` seat; switching the language in Settings re-renders the composer chip, its menu, the card chrome and the renderer's component chrome (map controls, copy button, timer, fallbacks) without a reload.
+- All four slot registrations declare `locale: 'intelligent-ui'`, so the slot system hands each component the `t` seat; switching the language in Settings re-renders the composer chip, its menu, the card chrome, the Settings page and the renderer's component chrome (map controls, copy button, timer, fallbacks) without a reload.
 - The renderer library is also mounted outside DSH by the self-checks and standalone embeds, so `src/lib/render.tsx` accepts the seat as a prop, publishes it through React context, and falls back to English when none is given.
 - Model-facing text is out of scope: the tool description, the generation prompt and the Agent Skill stay in English, and so do the `/iui` Host replies (DSH's locale service covers browser UI only). The plugin's display title and description come from `locale/en.json` / `locale/zh.json`, a separate `PluginLocalizedMeta` mechanism.
 
@@ -48,9 +52,9 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm (current latest: 0.1.0-26-10-21)
+# npm (current latest: 0.2.0-26-10-21)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.1.0-26-10-21   # pin a version
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.0-26-10-21   # pin a version
 # or GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
@@ -69,7 +73,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.1.0-26-10-21 --dsh-version 0.2.1-rc.2 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.2.0-26-10-21 --dsh-version 0.2.1-rc.2 --accept-risk
 ```
 
 Remove it with the mirror command:
@@ -186,4 +190,4 @@ Work top-down; each step rules out one layer:
 - This extension is web-only: profiles without a browser surface register the tool but have no card to render into.
 - The browser half requires the client locale service (`dsh-client-locale`); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - The `/iui` Host replies and the command palette's command description stay English even in a Chinese UI; both are DSH platform behavior, and the command palette localizes only first-party commands by identity.
-- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.1.0-26-10-21`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
+- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.2.0-26-10-21`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.

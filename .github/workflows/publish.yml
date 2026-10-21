@@ -1,0 +1,67 @@
+# Publish a tagged release to npm with Trusted Publishing (OIDC + provenance).
+#
+# One-time npm setup (package owner, needs account 2FA) — either the CLI:
+#
+#   npm login
+#   npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
+#     --repo Zephinel/dsh-intelligent-ui --allow-publish --yes
+#
+# or npmjs.com → the package → Settings → Trusted Publishing → GitHub Actions
+# (repository Zephinel/dsh-intelligent-ui, workflow publish.yml).
+#
+# Release: bump the version and update the docs, commit, then push a matching tag:
+#
+#   git tag v0.2.0-26-10-21
+#   git push origin main --follow-tags
+#
+# The job fails if the tag does not match package.json, so a mistyped tag cannot
+# publish the wrong version.
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Check that the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package version v${version}"
+            exit 1
+          fi
+          echo "publishing ${version}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and test
+        run: npm run check
+
+      - name: Publish with provenance
+        run: npm publish --access public --tag latest --provenance
