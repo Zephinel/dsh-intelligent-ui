@@ -78,7 +78,7 @@ node --version   # v24.x
 dsh --version    # 0.2.1 or 0.2.1-rc.2
 ```
 
-The restart examples cover a foreground `dsh web`, macOS launchd and Linux systemd; for other supervisors restart the corresponding service. The verified environment is macOS; Windows is unverified.
+The restart examples cover a foreground `dsh web`, macOS launchd and Linux systemd; for other supervisors restart the corresponding service. Verified platforms: macOS (Web + DSH Desktop) and Windows (DSH Desktop); Linux is unverified.
 
 ## Quick start
 

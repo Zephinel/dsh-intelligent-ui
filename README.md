@@ -78,7 +78,7 @@ node --version   # v24.x
 dsh --version    # 0.2.1 或 0.2.1-rc.2
 ```
 
-重启示例覆盖前台 `dsh web`、macOS launchd 与 Linux systemd；用其他方式托管时重启对应服务。当前验证环境是 macOS，Windows 未验证。
+重启示例覆盖前台 `dsh web`、macOS launchd 与 Linux systemd；用其他方式托管时重启对应服务。验证平台：macOS（Web + DSH Desktop）与 Windows（DSH Desktop）；Linux 未验证。
 
 ## 快速开始
 
@@ -96,7 +96,7 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；launchd/systemd：重启对应服务），打开它打印的 URL，输入框右侧出现 **UI** 控件即加载成功。
 
-**DSH Desktop（桌面版）**不需要终端命令，在应用内安装：
+**DSH Desktop（桌面版）** 不需要终端命令，在应用内安装：
 
 1. 侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）。
 2. 输入 `@zephinel/dsh-intelligent-ui@0.2.1-26-10-21`（或只填包名装最新版），点 **安装**。
