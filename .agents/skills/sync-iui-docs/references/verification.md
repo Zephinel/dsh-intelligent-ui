@@ -156,5 +156,6 @@ NODE
 - Model-facing English text (tool description, generation prompt, Agent Skill body) and the `/iui` Host replies / command-palette description are English by design.
 - `npm run typecheck` exists but has no `tsconfig.json`; don't cite it as a working check until it is wired.
 - There is no PR CI; `.github/workflows/publish.yml` is the only workflow and publishes on `v*` tags via Trusted Publishing (OIDC + provenance). `npm run check` remains the local gate, and the workflow itself checks that the tag matches `package.json`.
+- Release verification is manual: after pushing a `v*` tag, watch `gh run list --workflow=publish.yml`; then confirm the registry version and `npm audit signatures` from a temporary install. See the release bullet in `docs/verification*.md`.
 - `lib/` is gitignored; artifact sizes are build outputs and must come from a fresh `npm run check`.
 - `references/components.md` has no generator script; it is hand-maintained against `vendor/spec.json` and guarded by tests.
