@@ -7,6 +7,18 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.2.2-26-10-21] - 2026-10-21
+
+### Fixed
+
+- The README pair's **DSH Desktop（桌面版）** label no longer renders its Markdown asterisks: a space now separates
+  the closing emphasis run from the following CJK text, which CommonMark's right-flanking delimiter rule requires.
+
+### Documentation
+
+- The README pair and the verification record now list macOS (Web + DSH Desktop) and Windows (DSH Desktop) as
+  verified platforms; Linux remains unverified.
+
 ## [0.2.1-26-10-21] - 2026-10-21
 
 ### Changed

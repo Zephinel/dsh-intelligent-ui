@@ -12,7 +12,7 @@
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.2.1-26-10-21`**（`latest`）。
+> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`**（`latest`）。
 
 ## 效果
 
@@ -88,7 +88,7 @@ dsh --version    # 0.2.1 或 0.2.1-rc.2
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # 固定当前版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.1-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.2-26-10-21
 
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -99,7 +99,7 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 **DSH Desktop（桌面版）** 不需要终端命令，在应用内安装：
 
 1. 侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）。
-2. 输入 `@zephinel/dsh-intelligent-ui@0.2.1-26-10-21`（或只填包名装最新版），点 **安装**。
+2. 输入 `@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`（或只填包名装最新版），点 **安装**。
 3. 安装完成后点 **立即启用**；若输入框右侧没有 **UI** 控件，退出并重开 DSH Desktop。
 
 桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。
