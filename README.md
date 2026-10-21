@@ -12,7 +12,7 @@
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.2.0-26-10-21`**（`latest`）。
+> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.2.1-26-10-21`**（`latest`）。
 
 ## 效果
 
@@ -51,7 +51,7 @@
 | 三档开关 | 默认关闭；「仅本会话」/「全部会话」；输入框 UI 控件或 `/iui` 命令 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
 | Agent Skill | 随插件注册 `intelligent-ui`，模型按需加载完整语法、示例与排障 |
-| 设置页 | 设置 → 智能 UI：自由布局开关；默认使用设计规范，开启后模型按内容自行组织版式 |
+| 插件详情页 | 插件 → 智能 UI 详情页：自由布局开关；默认使用设计规范，开启后模型按内容自行组织版式 |
 | 可重放 | 生成程序作为工具参数进入会话日志，随历史重放 |
 
 ## 获取代码
@@ -88,7 +88,7 @@ dsh --version    # 0.2.1 或 0.2.1-rc.2
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # 固定当前版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.0-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.1-26-10-21
 
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -99,7 +99,7 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 **DSH Desktop（桌面版）**不需要终端命令，在应用内安装：
 
 1. 侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）。
-2. 输入 `@zephinel/dsh-intelligent-ui@0.2.0-26-10-21`（或只填包名装最新版），点 **安装**。
+2. 输入 `@zephinel/dsh-intelligent-ui@0.2.1-26-10-21`（或只填包名装最新版），点 **安装**。
 3. 安装完成后点 **立即启用**；若输入框右侧没有 **UI** 控件，退出并重开 DSH Desktop。
 
 桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。
@@ -144,7 +144,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 如果一定要保证出卡片（或模型仍然回了文字），在开关已打开的会话里用 `/intelligent-ui` 显式调用技能；显式调用会被当作直接指令。也可以说「读取 intelligent-ui skill 然后用 render_ui 做一个…」。
 
-扩展在 **设置 → 智能 UI** 里还有一个「自由布局」开关：默认关闭，使用扩展的设计规范；开启后，设计规范只作为建议，模型可以按内容自行选择组件与版式（技术硬规则、主题 token 与可读性不变）。该设置持久化在 DSH 的设置文档里，对所有会话生效。
+扩展在 **插件 → 智能 UI 的详情页**里还有一个「自由布局」开关：默认关闭，使用扩展的设计规范；开启后，设计规范只作为建议，模型可以按内容自行选择组件与版式（技术硬规则、主题 token 与可读性不变）。该设置持久化在 DSH 的设置文档里，对所有会话生效。
 
 ## 构建、测试与部署
 
@@ -174,7 +174,7 @@ npm run pack:check  # 检查 npm pack 的最终文件清单
 - 生成提示词约 8.5K tokens，**只在开关命中该会话时发送**（全部会话，或该会话在白名单里）；关闭时这部分开销为 0（工具 schema 也不出现）。启用后的请求与旧版一致，DSH 缓存命中可抵消大部分成本。
 - 扩展 UI 文案随 DSH 界面语言切换；但 `/iui` 的 Host 返回文案、命令面板里的命令描述与 README 截图仍是英文（前两者是 DSH 平台行为）。
 - 浏览器半边要求部署组合 `dsh-client-locale`（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载，Host 工具与提示词仍可用。
-- 设置页依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。自由布局开关只改变提示词里设计规范的建议强度，不保证每个模型都完全不受默认规范影响。
+- 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。自由布局开关只改变提示词里设计规范的建议强度，不保证每个模型都完全不受默认规范影响。
 
 ## 文档
 

@@ -43,7 +43,7 @@ test('registers the render_ui tool with its argument schema and one prompt secti
 })
 
 test('the free-composition preference appends its advisory note to the prompt', () => {
-  // The settings page writes this volatile field; the prompt reads it live.
+  // The Plugin detail page writes this volatile field; the prompt reads it live.
   assert.ok(plugin.Config, 'the Host exports the settings schema')
   const strict = mount()
   assert.doesNotMatch(strict.sections[0].text(), /Free composition is on for this deployment/)

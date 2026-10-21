@@ -30,6 +30,9 @@ export const MODE_COMMAND = 'iui'
 /** Host settings namespace (and profile entry id) serving this extension's preferences. */
 export const HOST_ENTRY_ID = 'intelligent-ui'
 
+/** npm package name of this bundle; keys its Plugin-detail configuration page. */
+export const PACKAGE_NAME = '@zephinel/dsh-intelligent-ui'
+
 /** Volatile boolean field controlling free composition in the Host settings document. */
 export const FREE_COMPOSITION_FIELD = 'freeComposition'
 

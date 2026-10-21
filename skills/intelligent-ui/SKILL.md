@@ -16,7 +16,7 @@ The extension is opt-in; the host switch has three scopes — **Off**, **This se
 - **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) or **All sessions** (全部会话) in the **UI** chip on the right side of the composer, or run `/iui session` / `/iui global`. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
 - **Explicit invocation is a directive:** the user invoked `/intelligent-ui`, or asked you to build the page with this skill → render; prose only when the user also asked for text or the tool is unavailable.
 
-A deployment may also enable **Free composition** in Settings → Intelligent UI. When the injected prompt says "Free composition is on for this deployment", the design playbook below is advisory rather than a template.
+A deployment may also enable **Free composition** on the extension's Plugin detail page (Plugins → Intelligent UI). When the injected prompt says "Free composition is on for this deployment", the design playbook below is advisory rather than a template.
 
 ## Decide the format
 

@@ -1,18 +1,20 @@
 /**
- * Settings section for the Intelligent UI extension.
+ * Configuration on the Plugins detail page for the Intelligent UI extension.
  *
  * The page owns one switch: `freeComposition`, a volatile field in the Host
  * settings document (entry id `intelligent-ui`). The switch is the user-facing
  * control for the design-playbook policy — the Host reads the field live and
  * appends the free-composition note to the injected prompt, while the browser
- * settings page only stages the write. When the Host serves no settings
+ * bundle-config page only stages the write. When the Host serves no settings
  * namespace (or the document is read-only) the switch stays disabled and the
  * page says why.
  */
 import { useCallback, useId, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only: pull the settings client SlotMap merge and the `configForms` service.
+// Type-only: pull the settings client `configForms` service and its wire types.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pull the Plugins page `plugins.bundle.config` SlotMap merge.
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { FREE_COMPOSITION_FIELD, type IntelligentUISettings } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
@@ -44,12 +46,12 @@ export interface SettingsFormLike {
 /** Business face injected by the plugin registration. */
 export interface SettingsPageInjected {
   /** Shared form for the `intelligent-ui` Host settings namespace. */
-  readonly form: SettingsFormLike
+  readonly settingsForm: SettingsFormLike
 }
 
-/** Full props: standard settings-section kit, injected form, and the locale seat. */
+/** Full props: the Plugins-page bundle-config kit, injected form, and locale seat. */
 export type SettingsPageProps =
-  & PropsRuntime<'settings.section'>
+  & PropsRuntime<'plugins.bundle.config'>
   & InjectFace<SettingsPageInjected>
   & {
     /** DSH locale seat; defaults to English when rendered outside a slot. */
@@ -57,13 +59,14 @@ export type SettingsPageProps =
   }
 
 /**
- * Render the extension's settings page: heading, explanation, and one switch.
- * @param props - settings-section owner props, the injected form, and the locale seat.
+ * Render the extension's configuration on its Plugin detail page: heading,
+ * explanation, and one switch.
+ * @param props - bundle-config owner props, the injected form, and the locale seat.
  * @returns the page content, or a disabled switch with a state note.
  */
-export function SettingsPage({ form, t = fallbackT }: SettingsPageProps): ReactNode {
-  const subscribe = useCallback((listener: () => void): (() => void) => form.subscribe(listener), [form])
-  const getSnapshot = useCallback((): SettingsFormSnapshot => form.getSnapshot(), [form])
+export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps): ReactNode {
+  const subscribe = useCallback((listener: () => void): (() => void) => settingsForm.subscribe(listener), [settingsForm])
+  const getSnapshot = useCallback((): SettingsFormSnapshot => settingsForm.getSnapshot(), [settingsForm])
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [pending, setPending] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -79,7 +82,7 @@ export function SettingsPage({ form, t = fallbackT }: SettingsPageProps): ReactN
     setPending(true)
     setFailed(false)
     try {
-      if (!(await form.set(FREE_COMPOSITION_FIELD, !free))) setFailed(true)
+      if (!(await settingsForm.set(FREE_COMPOSITION_FIELD, !free))) setFailed(true)
     } catch {
       setFailed(true)
     } finally {

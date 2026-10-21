@@ -14,13 +14,13 @@ Host  lib/index.js (Node)
 │   └─ @openuidev/lang-core validates against the component library spec; errors are returned precisely, and the model repairs them in the same turn
 ├─ three-state switch (off/session/global, persisted)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
-├─ Config.freeComposition (volatile)      # written by the settings page; the prompt reads it live per request
+├─ Config.freeComposition (volatile)      # written by the plugin detail page; the prompt reads it live per request
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
 Client  lib/client.js (browser, lazily loaded by the DSH module loader)
 ├─ ctx.locale.register('intelligent-ui')  # zh/en UI dictionaries; slots declare locale and receive the injected t
 ├─ conversation.input.activity             # the UI control on the right side of the composer (chip + native Menu; reads the projection + runs switch commands)
-├─ settings.section 'intelligent-ui'       # settings page: the free-composition switch (writes a volatile Host settings field)
+├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # plugin detail page: the free-composition switch (writes a volatile Host settings field)
 ├─ conversation.chat.turnTail list item    # at the end of each turn, takes that turn's render_ui program and renders the card
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 55 ported components (chrome reads the renderer i18n context)
 ├─ tool.call.toolview keyed 'render_ui'   # leaves a single "Interactive answer" (交互式回答 in Chinese) line in the process area
@@ -52,7 +52,7 @@ The switch only makes the capability visible; the policy that decides whether a 
 - **Prose is the bounded exception:** the whole answer is a single fact or one or two sentences; the user explicitly asks for text / a document / code; the content cannot be shown as a page (a safety warning, material that must be quoted verbatim); or two render attempts failed in the turn.
 - **Explicit invocation is a direct instruction:** when the user invokes the skill with `/intelligent-ui`, or asks for the page with `render_ui`, the model must build the page (unless the user also asked for text or the tool is unavailable).
 - **One source:** the Agent Skill no longer repeats the decision policy, it only covers how to build. The earlier duplicate prose rule in the skill and the prompt made the same question resolve differently across models and deployments.
-- **Free composition switch:** the settings page writes a volatile field in the Host settings document. When on, the injected prompt appends "the design playbook is advisory", and the skill's Design playbook explicitly downgrades to guidance. Off keeps the default layout rules. The page also states that this is a prompt-level preference rather than enforcement; `/intelligent-ui` remains the way to force a card.
+- **Free composition switch:** the plugin detail page writes a volatile field in the Host settings document. When on, the injected prompt appends "the design playbook is advisory", and the skill's Design playbook explicitly downgrades to guidance. Off keeps the default layout rules. The page also states that this is a prompt-level preference rather than enforcement; `/intelligent-ui` remains the way to force a card.
 
 ## UI language
 

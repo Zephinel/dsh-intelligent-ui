@@ -13,10 +13,10 @@
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.2.0-26-10-21
+# npm；当前 latest 为 0.2.1-26-10-21
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.0-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.1-26-10-21
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -47,11 +47,11 @@ npm run check          # build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 ```
 
-- `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是设置页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入。
+- `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（开启会话默认出卡片、文字例外有界、显式调用是直接指令）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
-- `src/client/**`：DSH Slot 注册（输入框 UI 开关、设置页 `settings.section`）、turn-tail 卡片、`render_ui` 进程行、程序提取器，以及 `ctx.locale` 字典注册。
+- `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`）、turn-tail 卡片、`render_ui` 进程行、程序提取器，以及 `ctx.locale` 字典注册。
 - `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）。
 - `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`freeComposition`）、内嵌 skill 注册；`mode.ts` 实现三档开关（持久化文件、命令、投影、每 agent 工具可见性）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
@@ -92,7 +92,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 | `lib/index.js` / `lib/client.js` | 构建产物，npm 包发布内容 |
 | `cordis.patch.yml` | DSH bundle patch（插入 `intelligent-ui` 行） |
 | `.github/workflows/publish.yml` | tag 触发的发布工作流（Trusted Publishing / OIDC + provenance）；不随 npm 包发布 |
-| `locale/en.json` / `locale/zh.json` | 插件市场/设置页显示名与描述 |
+| `locale/en.json` / `locale/zh.json` | 插件市场/插件详情页显示名与描述 |
 | `src/shared/locales.ts` | 中英文 UI 字典（`ctx.locale` 注册、渲染器英文兜底） |
 | `README.md` / `README.en.md` | 中文 / English 文档，顶部互相链接 |
 | `docs/` | 详细文档（架构、开发、验证）；不随 npm 包发布 |
@@ -125,7 +125,7 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 4. 创建并推送与版本一致的 tag：
 
 ```bash
-git tag v0.2.0-26-10-21
+git tag v0.2.1-26-10-21
 git push origin main --follow-tags
 ```
 

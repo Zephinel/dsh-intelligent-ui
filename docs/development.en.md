@@ -13,10 +13,10 @@ Requires DSH 0.2.1 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.2.0-26-10-21
+# npm; current latest is 0.2.1-26-10-21
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.0-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.1-26-10-21
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -47,11 +47,11 @@ npm run check          # build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 ```
 
-- `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the settings-page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads.
+- `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads.
 - `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version that is invoked "through the render_ui tool", and owns the decision policy (enabled sessions default to a page, prose is a bounded exception, explicit invocation is a directive); rebuild after editing.
 - `scripts/install.mjs`: profile install/uninstall for a local checkout (writes a marked patch block, with automatic backup).
 - `src/lib/**`: the port of the upstream component library and 59 library `@functions`; `src/lib/render.tsx` is the DSH wrapper (theme isolation, error boundary, `@ToAssistant` backfill), and `src/lib/i18n.tsx` gives renderer components their `t` seat plus the English fallback.
-- `src/client/**`: DSH Slot registrations (the composer UI switch and the Settings `settings.section` page), the turn-tail card, the `render_ui` process line, the program extractor, and the `ctx.locale` dictionary registration.
+- `src/client/**`: DSH Slot registrations (the composer UI switch and the Plugin detail page `plugins.bundle.config`), the turn-tail card, the `render_ui` process line, the program extractor, and the `ctx.locale` dictionary registration.
 - `src/shared/**`: Host/Client protocol constants (`intelligent-ui.ts`) and the bilingual UI dictionaries (`locales.ts`).
 - `src/host/**`: tool registration, program validation, the system prompt section, the settings Config (`freeComposition`), and embedded skill registration; `mode.ts` implements the three-state switch (persistence file, commands, projection, per-agent tool visibility).
 - `skills/intelligent-ui/**`: the Agent Skill shipped with the package.
@@ -92,7 +92,7 @@ When you see this mixed state, first **restart the DSH process that serves the W
 | `lib/index.js` / `lib/client.js` | build artifacts, the contents published to npm |
 | `cordis.patch.yml` | DSH bundle patch (inserts the `intelligent-ui` row) |
 | `.github/workflows/publish.yml` | tag-triggered release workflow (Trusted Publishing / OIDC + provenance); not shipped in the npm package |
-| `locale/en.json` / `locale/zh.json` | display name and description for the plugin marketplace/settings page |
+| `locale/en.json` / `locale/zh.json` | display name and description for the plugin marketplace/plugin detail page |
 | `src/shared/locales.ts` | bilingual UI dictionaries (`ctx.locale` registration and the renderer's English fallback) |
 | `README.md` / `README.en.md` | Chinese / English docs, linked to each other at the top |
 | `docs/` | detailed docs (architecture, development, verification); not shipped in the npm package |
@@ -125,7 +125,7 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 4. create and push a tag that matches the version:
 
 ```bash
-git tag v0.2.0-26-10-21
+git tag v0.2.1-26-10-21
 git push origin main --follow-tags
 ```
 

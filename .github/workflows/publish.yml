@@ -11,7 +11,7 @@
 #
 # Release: bump the version and update the docs, commit, then push a matching tag:
 #
-#   git tag v0.2.0-26-10-21
+#   git tag v0.2.1-26-10-21
 #   git push origin main --follow-tags
 #
 # The job fails if the tag does not match package.json, so a mistyped tag cannot

@@ -120,11 +120,14 @@ test('the shipped Agent Skill exists and is referenced by the host build', () =>
   assert.match(host, /skills/)
 })
 
-test('the built client bundle registers exactly the package name', () => {
+test('the built client bundle registers its configuration on the bundle detail page', () => {
   const file = new URL('lib/client.js', root)
   // `npm run check` builds first; a bare test run may not have artifacts yet.
   if (!existsSync(file)) return
-  const head = readFileSync(file, 'utf8').slice(0, 400)
+  const client = readFileSync(file, 'utf8')
+  const head = client.slice(0, 400)
   const id = /id:\s*"([^"]+)"/.exec(head)?.[1]
   assert.equal(id, pkg.name, 'client bundle loader id must equal package.json name — run `npm run build` after changing the package name')
+  assert.match(client, /plugins\.bundle\.config/, 'configuration registers on the Plugins detail page')
+  assert.doesNotMatch(client, /settings\.section/, 'the separate Settings section is gone')
 })

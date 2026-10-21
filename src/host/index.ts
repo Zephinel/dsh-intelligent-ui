@@ -249,8 +249,8 @@ export function apply(ctx: {
   // A deployment without session projections/commands cannot persist a switch,
   // and `enabledFor` then reports legacy always-on.
   const mode = installModeControl(ctx as never)
-  // The extension ships its own settings page, so ask the Host settings service
-  // to suppress its generated form. Optional: minimal deployments without the
+  // The extension ships its own configuration on the Plugins detail page, so ask
+  // the Host settings service to suppress its generated form. Optional: minimal deployments without the
   // settings service keep the tool and prompt working.
   ctx.inject?.(['settings'], (child: never) => {
     const scoped = child as unknown as {

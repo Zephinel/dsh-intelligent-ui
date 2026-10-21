@@ -57,7 +57,7 @@ function form(overrides = {}) {
  */
 function render(options = {}) {
   return renderToStaticMarkup(createElement(SettingsPage, {
-    form: options.form ?? form(),
+    settingsForm: options.form ?? form(),
     // Omitted `t` exercises the English fallback used in bare tests.
     t: options.t,
   }))

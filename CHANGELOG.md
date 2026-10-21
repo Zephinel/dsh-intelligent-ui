@@ -7,6 +7,21 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.2.1-26-10-21] - 2026-10-21
+
+### Changed
+
+- The deployment-wide **Free composition** switch now lives on the extension's **Plugins detail page**
+  (`plugins.bundle.config`, keyed by the package name) instead of a separate **Settings → Intelligent UI**
+  section; the Settings page is gone.
+- The switch now mirrors the shell's native switch styling: 36×20 track with 2px padding, full-radius
+  `corner-shape: round`, the brand/border/switch-thumb tokens, and the native thumb transition.
+
+### Documentation
+
+- The README pair, architecture pair, development pair, Agent Skill and integration reference now point at the
+  Plugins detail page instead of the removed Settings section.
+
 ## [0.2.0-26-10-21] - 2026-10-21
 
 ### Added
