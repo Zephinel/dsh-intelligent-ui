@@ -134,7 +134,7 @@ NODE
 ## Updating counts after a test or packaging change
 
 1. Run `npm run check` and `npm run pack:check`; read the real numbers.
-2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `41/41` pairs, i18n program count, pack file count and sizes.
+2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `41/41` pairs, typography `22/22`, i18n program count, pack file count and sizes.
 3. If the change introduced a new test file or suite, keep the totals inside the same sentence and verify `npm test` totals match the sum.
 4. Never adjust a count by arithmetic on a previous docs value.
 5. Append the user-visible change to `CHANGELOG.md`; move `Unreleased` entries under the new version when publishing.

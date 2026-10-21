@@ -10,6 +10,7 @@ been published yet.
 ### Documentation
 
 - The README pair, `docs/development` pair and the Agent Skill integration reference now document the DSH Desktop install path (Plugins → Add plugin → Install → Enable now) and why `dsh plugin --profile desktop` is rejected.
+- The verification record now mentions the changelog guard and the typography check in its current test and packaging summary.
 
 ## [0.1.0-26-10-21] - 2026-10-21
 
