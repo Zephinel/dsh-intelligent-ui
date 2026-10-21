@@ -48,13 +48,14 @@ npm run pack:check     # npm pack --dry-run, checks the final published file lis
 npm run test:browser   # optional real-browser E2E (style panel + image export; Chrome required)
 ```
 
-- `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads.
+- `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.
 - `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version that is invoked "through the render_ui tool", and owns the decision policy (enabled sessions default to a page, prose is a bounded exception, explicit invocation is a directive); rebuild after editing.
 - `scripts/install.mjs`: profile install/uninstall for a local checkout (writes a marked patch block, with automatic backup).
 - `src/lib/**`: the port of the upstream component library and 59 library `@functions`; `src/lib/render.tsx` is the DSH wrapper (theme isolation, error boundary, `@ToAssistant` backfill), and `src/lib/i18n.tsx` gives renderer components their `t` seat plus the English fallback.
-- `src/client/**`: DSH Slot registrations (the composer UI switch, the Plugin detail page `plugins.bundle.config` and the export entry in the message action strip), the turn-tail card, the `render_ui` process line, the program extractor, export message/Turn lookup and the image-export pipeline (SnapDOM plus frame composition), and the `ctx.locale` dictionary registration.
+- `src/client/**`: DSH Slot registrations (the composer UI switch, the Plugin detail page `plugins.bundle.config` and the export entry in the message action strip), the turn-tail card, the `render_ui` process line, the program extractor, export message/Turn lookup, the image-export pipeline (SnapDOM plus frame composition), interactive-page assembly (asset fetch + theme snapshot + inline HTML), and the `ctx.locale` dictionary registration.
+- `src/standalone/**`: the standalone page entry and chrome (card title/collapse, `@ToAssistant` copy fallback, theme styles); `npm run build` emits `lib/standalone.*`, and the Host serves them on same-origin routes for the export flow.
 - `src/shared/**`: Host/Client protocol constants (`intelligent-ui.ts`) and the bilingual UI dictionaries (`locales.ts`).
-- `src/host/**`: tool registration, program validation, the system prompt section, the settings Config (`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale`), and embedded skill registration; `mode.ts` implements the global defaults + session overrides for the switch and style (persistence file, commands, projection, per-agent tool visibility).
+- `src/host/**`: tool registration, program validation, the system prompt section, the settings Config (`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale`), embedded skill registration, and (when `webServer` is available) the same-origin routes serving the interactive-page assets; `mode.ts` implements the global defaults + session overrides for the switch and style (persistence file, commands, projection, per-agent tool visibility).
 - `skills/intelligent-ui/**`: the Agent Skill shipped with the package.
 - `vendor/`: upstream source (components/functions/generated artifacts) and licenses.
 
@@ -63,7 +64,7 @@ npm run test:browser   # optional real-browser E2E (style panel + image export; 
 The browser-side plugin module uses **`package.json`'s `name` as its `__ModuleLoader__` registration id**, while a running DSH Web host caches the client module graph and bundle snapshot by revision. While the service is running:
 
 - you rename the package (for example switching between `dsh-intelligent-ui` / `@zephinel/dsh-intelligent-ui`), or
-- you rebuild `lib/client.js` (`npm run build` / the `prepare` hook of `npm pack` also rebuilds it)
+- you rebuild `lib/client.js` or `lib/standalone.*` (`npm run build` / the `prepare` hook of `npm pack` also rebuilds it; the Host routes cache assets per process)
 
 afterwards **a page refresh alone may fetch the old revision**, and the page shows:
 
@@ -90,7 +91,7 @@ When you see this mixed state, first **restart the DSH process that serves the W
 
 | Path | Purpose |
 |---|---|
-| `lib/index.js` / `lib/client.js` | build artifacts, the contents published to npm |
+| `lib/index.js` / `lib/client.js` / `lib/standalone.js` / `lib/standalone.css` | build artifacts published to npm; the last two are the standalone renderer assets for interactive-page export |
 | `cordis.patch.yml` | DSH bundle patch (inserts the `intelligent-ui` row) |
 | `.github/workflows/publish.yml` | tag-triggered release workflow (Trusted Publishing / OIDC + provenance); not shipped in the npm package |
 | `locale/en.json` / `locale/zh.json` | display name and description for the plugin marketplace/plugin detail page |
@@ -101,7 +102,7 @@ When you see this mixed state, first **restart the DSH process that serves the W
 | `assets/` | README screenshots: itinerary, three component tours, dashboard and quiz examples, narrow screen, the composer switch/style panel and the plugin settings page (WebP + PNG) |
 | `icon.svg` | plugin card icon |
 | `skills/intelligent-ui/` | the embedded Agent Skill that also ships with the package |
-| `licenses/` | full text of third-party licenses (Open Intelligent UI, OpenUI, lucide, KaTeX, MapLibre, zod, SnapDOM) |
+| `licenses/` | full text of third-party licenses (Open Intelligent UI, OpenUI, lucide, KaTeX, MapLibre, zod, SnapDOM, React) |
 | `LICENSE` / `NOTICE` | this project's MIT license and third-party attribution notices |
 
 ## Releasing (Trusted Publishing)

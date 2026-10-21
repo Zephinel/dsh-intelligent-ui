@@ -48,13 +48,14 @@ npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导出，需要 Chrome）
 ```
 
-- `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入。
+- `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（开启会话默认出卡片、文字例外有界、显式调用是直接指令）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
-- `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` 进程行、程序提取器、导出消息/Turn 查找与图片导出管线（SnapDOM + 美化合成），以及 `ctx.locale` 字典注册。
+- `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` 进程行、程序提取器、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册。
+- `src/standalone/**`：交互页面的独立入口与页面 chrome（卡片标题/折叠、`@ToAssistant` 复制兜底、主题样式）；由 `npm run build` 打成 `lib/standalone.*`，Host 通过 same-origin 路由提供给导出流程。
 - `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）。
-- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale`）、内嵌 skill 注册；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
+- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
 
@@ -63,7 +64,7 @@ npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导
 浏览器端的插件模块用 **`package.json` 的 `name` 作为 `__ModuleLoader__` 注册 id**，而运行中的 DSH Web 宿主会按 revision 缓存 client module graph 与 bundle 快照。服务运行期间：
 
 - 改了包名（例如在 `dsh-intelligent-ui` / `@zephinel/dsh-intelligent-ui` 之间切换），或
-- 重建了 `lib/client.js`（`npm run build` / `npm pack` 的 `prepare` 也会重建）
+- 重建了 `lib/client.js` 或 `lib/standalone.*`（`npm run build` / `npm pack` 的 `prepare` 也会重建；Host 路由按进程缓存资产）
 
 之后**只刷新页面可能拿到旧 revision**，页面会显示：
 
@@ -90,7 +91,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 
 | 路径 | 作用 |
 |---|---|
-| `lib/index.js` / `lib/client.js` | 构建产物，npm 包发布内容 |
+| `lib/index.js` / `lib/client.js` / `lib/standalone.js` / `lib/standalone.css` | 构建产物，npm 包发布内容；后两者是交互页面导出用的独立渲染器资产 |
 | `cordis.patch.yml` | DSH bundle patch（插入 `intelligent-ui` 行） |
 | `.github/workflows/publish.yml` | tag 触发的发布工作流（Trusted Publishing / OIDC + provenance）；不随 npm 包发布 |
 | `locale/en.json` / `locale/zh.json` | 插件市场/插件详情页显示名与描述 |
@@ -101,7 +102,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 | `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配、输入框开关/样式面板与插件设置页（WebP + PNG） |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
-| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod、SnapDOM） |
+| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod、SnapDOM、React） |
 | `LICENSE` / `NOTICE` | 本项目 MIT 许可证与第三方归属声明 |
 
 ## 发布（Trusted Publishing）

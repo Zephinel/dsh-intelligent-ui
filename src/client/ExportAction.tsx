@@ -19,12 +19,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   BEAUTIFY_STYLES,
   type BeautifyStyle,
+  type ExportPageCard,
   type ImageExportSettings,
   type IntelligentUIProgram,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { messageHasRenderUi, type ExportChatSnapshot } from './export-data.ts'
-import { MenuItem } from './Menu.tsx'
+import { exportCardsHtml } from './export-html.ts'
+import { MenuDivider, MenuItem } from './Menu.tsx'
 import { exportCardsImage } from './export-image.ts'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
 
@@ -83,8 +85,9 @@ export function ExportAction({
 }: ExportActionProps): ReactNode {
   const visible = useChat(snapshot => messageHasRenderUi(snapshot, String(messageId)))
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState<BeautifyStyle | null>(null)
+  const [busy, setBusy] = useState<BeautifyStyle | 'page' | null>(null)
   const [status, setStatus] = useState<ExportStatus>('idle')
+  const [lastKind, setLastKind] = useState<'image' | 'page'>('image')
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   // Keep close stable: a busy-state change must not re-run the dismiss effect
@@ -166,6 +169,7 @@ export function ExportAction({
     const preferences = settings()
     busyRef.current = true
     setBusy(style)
+    setLastKind('image')
     setStatus('working')
     try {
       await exportCardsImage(trigger, {
@@ -189,10 +193,49 @@ export function ExportAction({
     }
   }
 
+  const runPage = async (): Promise<void> => {
+    const trigger = triggerRef.current
+    if (trigger === null || busyRef.current) return
+    const programs = programsFor(String(messageId))
+    if (programs.length === 0) {
+      setStatus('empty')
+      return
+    }
+    busyRef.current = true
+    setBusy('page')
+    setLastKind('page')
+    setStatus('working')
+    try {
+      const cards: ExportPageCard[] = programs.map(program => ({
+        program: program.program,
+        title: program.title,
+        style: program.style === 'article' ? 'article' : 'card',
+        callId: program.callId,
+      }))
+      await exportCardsHtml({
+        cards,
+        title: programs[0]?.title,
+        lang: document.documentElement.lang || 'en',
+      })
+      setStatus('done')
+      closeTimerRef.current = window.setTimeout(() => {
+        closeTimerRef.current = null
+        setOpen(false)
+        setStatus('idle')
+      }, 650)
+    } catch (error) {
+      console.warn('[intelligent-ui] page export failed', error)
+      setStatus('error')
+    } finally {
+      busyRef.current = false
+      setBusy(null)
+    }
+  }
+
   const statusLine = status === 'working'
-    ? t('export.state.working')
+    ? lastKind === 'page' ? t('export.state.workingHtml') : t('export.state.working')
     : status === 'done'
-      ? t('export.state.done')
+      ? lastKind === 'page' ? t('export.state.doneHtml') : t('export.state.done')
       : status === 'empty'
         ? t('export.error.noPrograms')
         : status === 'error'
@@ -245,6 +288,14 @@ export function ExportAction({
                 onSelect={() => { void run(style) }}
               />
             ))}
+            <MenuDivider />
+            <MenuItem
+              label={t('export.menu.page')}
+              hint={t('export.page.hint')}
+              disabled={busy !== null}
+              data={{ 'data-export-page': 'true' }}
+              onSelect={() => { void runPage() }}
+            />
             {statusLine === null ? null : (
               <p
                 className={status === 'error' ? 'dsh-iui-export-status is-error' : 'dsh-iui-export-status'}

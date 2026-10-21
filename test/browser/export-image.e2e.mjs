@@ -165,9 +165,6 @@ try {
     assert.equal(card.height - raw.height, card.expectedDelta, 'card frame reserves the shadow bleed vertically')
     assert.ok(card.maxAlpha > 0, 'the card frame shadow is painted inside the canvas')
 
-    const probesAfter = await cdp.evaluate('window.captureProbes')
-    assert.equal(probesAfter.length, 2, 'both exports rasterized the card')
-
     // Third export: 2x rounded proves the scale path and the no-bleed frame.
     await cdp.evaluate('window.setExportScale("2x")')
     await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed again')
@@ -183,9 +180,32 @@ try {
     assert.equal(rounded.width, raw.width * 2 + 96, '2x rounded frame doubles the source and adds 2x padding')
     assert.equal(rounded.height, raw.height * 2 + 96, '2x rounded frame doubles the source and adds 2x padding')
 
+    // The fourth entry builds the single-file interactive page: it must inline
+    // the fetched renderer assets, the current theme and every recorded card.
+    await cdp.evaluate('window.setExportScale("1x")')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed before page export')
+    await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'page export menu')
+    assert.equal(await cdp.evaluate('!!document.querySelector("[data-export-page]")'), true, 'the menu offers the interactive page export')
+    await cdp.evaluate('document.querySelector("[data-export-page]").click()')
+    await cdp.waitFor('window.downloads.length === 4', 'page download', { timeout: 30000 })
+    const page = await cdp.evaluate(`(async () => {
+      const blob = window.exportedBlobs[3]
+      return { type: blob.type, name: window.downloads[3], size: blob.size, text: await blob.text() }
+    })()`)
+    assert.match(page.name, /^Export-harness-\d{8}-\d{6}\.html$/, 'the page download carries title and timestamp')
+    assert.match(page.type, /^text\/html/, 'the page download is HTML')
+    assert.ok(page.size > 1000, 'the page carries the inlined renderer')
+    assert.match(page.text, /<title>Export harness<\/title>/)
+    assert.match(page.text, /--dsw-alias-bg-base/, 'the current theme tokens are inlined')
+    assert.match(page.text, /window\.mountIUI/, 'the standalone mount call is inlined')
+    assert.match(page.text, /--standalone-css:true/, 'the fetched stylesheet is inlined')
+    assert.match(page.text, /"program":"root = Col/, 'the recorded card program is embedded')
+    assert.match(page.text, /"callId":"call-1"/)
+
     const probesAfterAll = await cdp.evaluate('window.captureProbes')
-    assert.equal(probesAfterAll.length, 3, 'all three exports rasterized the card')
-    console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha})`)
+    assert.equal(probesAfterAll.length, 3, 'the three image exports rasterized the card')
+    console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {
   cdp?.close()

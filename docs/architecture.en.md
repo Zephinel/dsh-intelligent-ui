@@ -15,6 +15,7 @@ Host  lib/index.js (Node)
 ├─ session switch + answer style (global defaults + session overrides)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
 ├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale (volatile)  # written by the plugin detail page; the prompt reads them live per request
+├─ webServer routes (optional injection)     # /api/intelligent-ui/export/standalone.{js,css} for the interactive-page export
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
 Client  lib/client.js (browser, lazily loaded by the DSH module loader)
@@ -24,7 +25,7 @@ Client  lib/client.js (browser, lazily loaded by the DSH module loader)
 ├─ conversation.chat.turnTail list item    # at the end of each turn, takes that turn's render_ui program and renders the card
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 57 ported components (chrome reads the renderer i18n context)
 ├─ conversation.chat.assistant-actions list item  # export button, only for messages whose Turn recorded render_ui
-│   └─ menu (raw / rounded / card) -> SnapDOM capture -> composed PNG download
+│   └─ menu (image: raw / rounded / card; interactive page) -> PNG or single-file HTML download
 ├─ tool.call.toolview keyed 'render_ui'   # leaves a single "Interactive answer" (交互式回答 in Chinese) line in the process area
 └─ built-in CSS (the component library / MapLibre / KaTeX use DSH global styles + a scoped reset)
 ```
@@ -59,6 +60,13 @@ The switch only makes the capability visible; the policy that decides whether a 
 - **Capture:** the entry temporarily expands collapsed cards (restoring them afterwards), waits for in-card photos and image searches plus each map's readiness signal (`data-iui-map-ready` mirrors MapLibre `idle`, and style swaps, tile fallback and resizes reset it first) to settle, freezes CSS transitions and animations, and rasterizes the live card DOM with SnapDOM. SVG rasterization does not honour `backface-visibility`, so a flashcard's 3D faces are flattened during the capture to the face the reader currently sees. Maps are captured through MapLibre's preserved WebGL drawing buffer; sandboxed iframes (`HtmlView`) are not capturable and are missing from the image. Images, fonts and local interaction state follow the live DOM.
 - **Frames:** the menu offers **raw** (the answer alone), **rounded** (background color plus rounded padding) and **card** (padding, rounded corners and a soft shadow). The frame is chosen per export; the menu right-aligns with the export pill and its width follows its content. The background color and 1x/2x resolution are defaults from the **Image export** group on the Plugin detail page.
 - **Download:** the browser receives one PNG named after the answer title plus a local timestamp. No Host or session data is involved.
+
+## Interactive-page export
+
+- **Entry:** it shares the action-strip export pill and menu with the image export; the item below a divider, labelled **Interactive page**, is separate from the three image frames.
+- **Assets:** `scripts/build.mjs` also builds `lib/standalone.js` / `lib/standalone.css` (React + renderer + KaTeX/MapLibre styles). Through an optional `webServer` injection the Host registers two same-origin exact routes (`/api/intelligent-ui/export/standalone.js` and `.../standalone.css`) and reads those build artifacts per request; a deployment without `webServer` registers nothing and the client reports a page-build failure.
+- **Assembly:** on click the browser fetches both assets in parallel, walks the current page stylesheets to snapshot computed custom properties as the theme, then `export-html-plan.ts` inlines the card programs, assets and theme into one HTML document (about 3.4–4.9 MB). The download name carries the answer title and a local timestamp.
+- **Page runtime:** `src/standalone/index.tsx` mounts the real `OpenUIRenderer` plus the card chrome (title, collapse), so maps, charts and forms keep the same interactions as inside DSH. `@OpenUrl` opens links as usual; `@ToAssistant` degrades to copy-message + toast telling the reader to paste back into DSH, and a failed clipboard leaves the message in the toast. The page keeps only the theme it was exported with (current light/dark) and does not follow later DSH theme switches.
 
 ## UI language
 

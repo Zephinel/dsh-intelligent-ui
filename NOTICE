@@ -56,5 +56,10 @@ SnapDOM — @zumer/snapdom
   Bundled for the browser-side answer image export.
   Full text: licenses/snapdom-LICENSE.
 
-React and React DOM are provided by the hosting DeepSeek Harness platform and
-are not bundled in this package.
+React and React DOM
+  https://github.com/facebook/react
+  MIT License, Copyright (c) Meta Platforms, Inc. and affiliates.
+  The hosting DeepSeek Harness platform provides React for the client bundle;
+  the standalone interactive-page bundle additionally inlines React and
+  React DOM so the exported HTML runs without DSH.
+  Full text: licenses/react-LICENSE.

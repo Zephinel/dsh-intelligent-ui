@@ -31,6 +31,8 @@ import {
   EXPORT_BACKGROUND_PATTERN,
   EXPORT_SCALES,
   DEFAULT_EXPORT_SCALE,
+  EXPORT_STANDALONE_CSS_PATH,
+  EXPORT_STANDALONE_JS_PATH,
   PAGE_STYLES,
   RENDER_UI_TOOL,
   isPageStyle,
@@ -331,6 +333,62 @@ ${section}`
     },
   })
   registerEmbeddedSkill(ctx as never)
+
+  // Interactive HTML export needs the standalone renderer assets. Serve them
+  // same-origin for the browser export to inline; deployments without a web
+  // server simply omit the route and the client reports the page build error.
+  ctx.inject?.(['webServer'], (child: never) => {
+    const scoped = child as unknown as {
+      readonly webServer?: {
+        register(route: {
+          kind: 'exact'
+          path: string
+          handler: (req: unknown, res: unknown) => void
+        }): () => void
+      }
+      effect?(fn: () => unknown): unknown
+    }
+    if (typeof scoped.webServer?.register !== 'function') return
+    const server = scoped.webServer
+    const assetDir = dirname(fileURLToPath(import.meta.url))
+    const serve = (fileName: string, type: string, path: string): (() => void) => {
+      let cached: Buffer | undefined
+      return server.register({
+        kind: 'exact',
+        path,
+        handler: (req, res) => {
+          const request = req as { method?: string }
+          const response = res as {
+            writeHead(status: number, headers?: Record<string, string>): void
+            end(body?: Buffer): void
+          }
+          if (request.method !== 'GET' && request.method !== 'HEAD') {
+            response.writeHead(405)
+            response.end()
+            return
+          }
+          try {
+            cached ??= readFileSync(join(assetDir, fileName))
+            response.writeHead(200, {
+              'content-type': type,
+              'cache-control': 'no-store',
+              'content-length': String(cached.byteLength),
+            })
+            if (request.method === 'HEAD') response.end()
+            else response.end(cached)
+          } catch {
+            response.writeHead(404)
+            response.end()
+          }
+        },
+      })
+    }
+    scoped.effect?.(() => {
+      const disposeJs = serve('standalone.js', 'text/javascript; charset=utf-8', EXPORT_STANDALONE_JS_PATH)
+      const disposeCss = serve('standalone.css', 'text/css; charset=utf-8', EXPORT_STANDALONE_CSS_PATH)
+      return () => { disposeJs(); disposeCss() }
+    })
+  })
 
   ctx.tools.register({
     name: RENDER_UI_TOOL,

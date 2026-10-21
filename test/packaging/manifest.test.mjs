@@ -17,6 +17,8 @@ const pkg = JSON.parse(read('package.json'))
 const REQUIRED_FILES = [
   'lib/index.js',
   'lib/client.js',
+  'lib/standalone.js',
+  'lib/standalone.css',
   'cordis.patch.yml',
   'icon.svg',
   'LICENSE',
@@ -39,7 +41,7 @@ test('package.json is one DSH bundle with bundle-patch-only options', () => {
 })
 
 test('the published files list covers every runtime and bundle input', () => {
-  for (const entry of ['lib/index.js', 'lib/client.js', 'cordis.patch.yml', 'skills', 'locale', 'licenses', 'assets', 'icon.svg', 'LICENSE', 'NOTICE']) {
+  for (const entry of ['lib/index.js', 'lib/client.js', 'lib/standalone.js', 'lib/standalone.css', 'cordis.patch.yml', 'skills', 'locale', 'licenses', 'assets', 'icon.svg', 'LICENSE', 'NOTICE']) {
     assert.ok(pkg.files.includes(entry), `files includes ${entry}`)
   }
   for (const file of REQUIRED_FILES) {
@@ -103,10 +105,10 @@ test('plugin display metadata is valid and localized', () => {
 
 test('third-party attribution ships with the package', () => {
   const notice = read('NOTICE')
-  for (const name of ['Open Intelligent UI', 'OpenUI', 'lucide-react', 'KaTeX', 'MapLibre GL JS', 'zod', 'SnapDOM']) {
+  for (const name of ['Open Intelligent UI', 'OpenUI', 'lucide-react', 'KaTeX', 'MapLibre GL JS', 'zod', 'SnapDOM', 'React']) {
     assert.ok(notice.includes(name), `NOTICE mentions ${name}`)
   }
-  for (const file of ['licenses/Open-Intelligent-UI-LICENSE', 'licenses/snapdom-LICENSE']) {
+  for (const file of ['licenses/Open-Intelligent-UI-LICENSE', 'licenses/snapdom-LICENSE', 'licenses/react-LICENSE']) {
     const licenses = readFileSync(new URL(file, root), 'utf8')
     assert.match(licenses, /MIT License/, `${file} carries the license text`)
   }

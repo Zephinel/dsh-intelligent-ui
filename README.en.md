@@ -48,6 +48,7 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 |---|---|
 | Interactive pages | Maps, photos, charts, checklists, forms, SVG drawings and mini-games are real components, not screenshots |
 | Image export | The labeled export pill at the right of an answer's action strip saves the rendered result as one PNG with a raw, rounded or card frame; background color and 1x/2x live on the Plugin detail page |
+| Interactive-page export | The same menu saves every card from the turn as a **single-file HTML** page (renderer and current theme inlined, about 3.4–4.9 MB); open it locally to keep interacting, and `@ToAssistant` copies its message plus a paste-back-into-DSH hint |
 | Local execution | `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` writes a message back |
 | Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
@@ -154,13 +155,15 @@ The Plugin detail page groups its settings into **Availability**, **Answer style
 
 Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It offers a beautification frame — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — and saves every card rendered by that turn as one PNG. Collapsed cards are expanded for the capture and restored afterwards; the image contains the rendered cards only, not the Markdown text around them and not the export control itself.
 
+The menu also offers **Interactive page** at the bottom: it saves every card from that turn as one HTML file (renderer, current theme and card programs inlined; about 3.4–4.9 MB). Open it in a browser to keep using maps, forms, sliders and the other components; `@ToAssistant` does not call DSH but copies the message and shows “Copied — paste it back into DSH to continue.” The file needs no DSH or extra scripts, though networked components such as maps and photos still need the network.
+
 ## Build, test and deploy
 
 ```bash
 npm run build       # build the prompt, Host and Client bundle
 npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
-npm run test:browser # optional: real-browser E2E (style panel + image export; Chrome required)
+npm run test:browser # optional: real-browser E2E (style panel + image export + interactive page; Chrome required)
 ```
 
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
@@ -184,16 +187,17 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - The extension's UI copy follows DSH's UI language; the `/iui` Host replies, the command palette's command description and the README screenshots stay in English (the first two are DSH platform behavior).
 - Image export does not capture sandboxed iframes (`HtmlView` mini-games), so that region is missing from the image; maps are captured through the preserved WebGL drawing buffer, and a browser without WebGL falls back to the map's own place-list presentation.
 - Every card rendered by one turn is combined into one image; the image captures **what is currently rendered**, so it includes the interaction state at export time (checked items, active filters and so on). The export waits for in-card photos and image searches to settle (at most about 12.5 seconds); offline or still-pending photos are recorded from the placeholder state shown on the page.
+- The interactive-page export inlines the renderer, the current theme and every card into one HTML file (about 3.4–4.9 MB), so it is large but install-free; maps, photos and other components still need the network. `@ToAssistant` in that page tries the clipboard and shows a toast; when the clipboard is unavailable the toast keeps the message for manual copying.
 - The browser half requires a deployment that composes `dsh-client-locale` (included by default in DSH Web 0.2.1); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. Global enable/style and free-form layout only change the prompt and page shape; no model is guaranteed to follow them perfectly, and session style overrides still rely on the Host-injected prompt.
 
 ## Documentation
 
-- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language, image export flow and the Agent Skill.
+- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language, image and interactive-page export flows, and the Agent Skill.
 - [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch and the release layout.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
 - [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.
 
 ## License
 
-This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT). Full notices and license texts are in `NOTICE` and `licenses/`.
+This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT); the standalone interactive-page bundle also inlines React / React DOM (MIT). Full notices and license texts are in `NOTICE` and `licenses/`.

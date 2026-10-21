@@ -84,6 +84,24 @@ export const EXPORT_BACKGROUND_PATTERN = /^#[0-9a-f]{6}$/i
 /** Fallback scale when the settings document provides none. */
 export const DEFAULT_EXPORT_SCALE: ExportScale = '2x'
 
+/** Same-origin route that serves the standalone renderer script for HTML export. */
+export const EXPORT_STANDALONE_JS_PATH = '/api/intelligent-ui/export/standalone.js'
+
+/** Same-origin route that serves the standalone renderer stylesheet. */
+export const EXPORT_STANDALONE_CSS_PATH = '/api/intelligent-ui/export/standalone.css'
+
+/** One rendered card carried into a standalone HTML export. */
+export interface ExportPageCard {
+  /** The complete OpenUI Lang program. */
+  readonly program: string
+  /** Display title shown by the card header. */
+  readonly title?: string
+  /** Recorded answer style. */
+  readonly style?: 'card' | 'article'
+  /** Stable identity used to scope article anchors across cards. */
+  readonly callId?: string
+}
+
 /** Beautification frames offered when exporting one rendered answer as an image. */
 export const BEAUTIFY_STYLES = ['raw', 'rounded', 'card'] as const
 

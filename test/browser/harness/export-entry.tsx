@@ -17,6 +17,7 @@ import { OpenUIRenderer } from '../../../src/lib/render.tsx'
 import { ExportAction } from '../../../src/client/ExportAction.tsx'
 import type { ExportChatSnapshot } from '../../../src/client/export-data.ts'
 import { fallbackT } from '../../../src/shared/locales.ts'
+import { EXPORT_STANDALONE_CSS_PATH, EXPORT_STANDALONE_JS_PATH } from '../../../src/shared/intelligent-ui.ts'
 import '../../../src/client/index.css'
 
 const PHOTO = `${location.origin}/photo.svg`
@@ -59,11 +60,19 @@ const realFetch = window.fetch.bind(window)
 function jsonResponse(data: unknown): Response {
   return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } })
 }
+const STANDALONE_JS = 'window.mountIUI = function (element, cards, options) { window.__standaloneMount = { hasElement: element !== null, cards: cards.length, lang: options.lang } }'
+const STANDALONE_CSS = '.dsh-iui-card{--standalone-css:true}'
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   if (url.includes('/api/rest_v1/page/summary/')) return jsonResponse({ thumbnail: { source: PHOTO } })
   if (url.includes('/api/rest_v1/page/media-list/')) return jsonResponse({ items: [] })
   if (url.includes('/w/api.php')) return jsonResponse({ query: { pages: [] } })
+  if (url.endsWith(EXPORT_STANDALONE_JS_PATH)) {
+    return new Response(STANDALONE_JS, { status: 200, headers: { 'content-type': 'text/javascript' } })
+  }
+  if (url.endsWith(EXPORT_STANDALONE_CSS_PATH)) {
+    return new Response(STANDALONE_CSS, { status: 200, headers: { 'content-type': 'text/css' } })
+  }
   return realFetch(input, init)
 }
 

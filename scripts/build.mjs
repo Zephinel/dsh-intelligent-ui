@@ -106,6 +106,52 @@ ${js}
 `
 }
 
+/**
+ * Build the standalone renderer served for interactive HTML export.
+ *
+ * The script and stylesheet stay separate on disk so the Host can serve them
+ * same-origin; the browser export fetches both and inlines them into one
+ * downloaded HTML document.
+ */
+async function buildStandalone() {
+  await mkdir(lib, { recursive: true })
+  const result = await build({
+    entryPoints: [resolve(root, 'src/standalone/index.tsx')],
+    bundle: true,
+    platform: 'browser',
+    format: 'iife',
+    target: 'es2022',
+    jsx: 'automatic',
+    jsxImportSource: 'react',
+    outdir: lib,
+    entryNames: 'standalone',
+    write: false,
+    sourcemap: false,
+    minify: true,
+    legalComments: 'none',
+    define: { 'process.env.NODE_ENV': '"production"' },
+    loader: ASSET_LOADERS,
+    logLevel: 'warning',
+  })
+  let js = ''
+  let css = ''
+  for (const file of result.outputFiles) {
+    if (file.path.endsWith('.js')) js = file.text
+    else if (file.path.endsWith('.css')) css += file.text
+  }
+  if (js === '') throw new Error('standalone build emitted no JavaScript output')
+  // KaTeX lists woff2, woff and ttf for every math font; inlining all three
+  // bloats the exported page. Modern browsers all take the woff2 source, so
+  // drop the legacy fallbacks from the standalone stylesheet.
+  css = css
+    .replace(/,url\(data:[^)]*\) format\("woff"\)/g, '')
+    .replace(/,url\(data:[^)]*\) format\("truetype"\)/g, '')
+    .replace(/,url\(data:[^)]*\) format\("embedded-opentype"\)/g, '')
+  await writeFile(resolve(lib, 'standalone.js'), js, 'utf8')
+  await writeFile(resolve(lib, 'standalone.css'), css, 'utf8')
+  console.log(`page    lib/standalone.js + lib/standalone.css  ${formatBytes(Buffer.byteLength(js))} + ${formatBytes(Buffer.byteLength(css))}`)
+}
+
 async function buildClient() {
   await mkdir(lib, { recursive: true })
   const result = await build({
@@ -140,6 +186,7 @@ async function buildClient() {
 }
 
 if (which === 'all' || which === 'host') await buildHost()
+if (which === 'all' || which === 'client') await buildStandalone()
 if (which === 'all' || which === 'client') await buildClient()
 
 // The browser loader addresses a plugin by its package name, and the emitted

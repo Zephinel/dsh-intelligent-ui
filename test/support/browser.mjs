@@ -112,7 +112,7 @@ export async function connectCdp(port) {
   for (let attempt = 0; attempt < 100 && target === undefined; attempt += 1) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-      target = list.find(entry => entry.type === 'page' && entry.url.startsWith('http://127.0.0.1:'))
+      target = list.find(entry => entry.type === 'page' && (entry.url.startsWith('http://127.0.0.1:') || entry.url.startsWith('file://')))
     } catch { /* Chrome is still starting */ }
     if (target === undefined) await new Promise(resolve => setTimeout(resolve, 100))
   }

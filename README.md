@@ -48,6 +48,7 @@
 |---|---|
 | 交互页面 | 地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图 |
 | 导出图片 | 回答底部操作栏右侧的「导出」药丸按钮可把渲染结果保存为一张 PNG：原始 / 圆角 / 卡片三种美化；背景色与 1x/2x 在插件详情页设置 |
+| 导出交互页面 | 同一个导出菜单可把该轮所有卡片导出为**单文件 HTML**（内联渲染器与当前主题，约 3.4–4.9 MB）；直接打开即可离线交互，页面里的 `@ToAssistant` 会复制文案并提示回到 DSH 粘贴继续 |
 | 本地执行 | `$变量`、`@Set`、`@functions` 在浏览器运行；只有 `@ToAssistant` 回写消息 |
 | 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；Auto / Card / Article 三档样式 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
@@ -154,13 +155,15 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 回答渲染完成后，消息底部操作栏的**最右侧**会出现一个带「导出」字样的**药丸按钮**（与复制/点赞/分支等自带图标控件区分开）；只有扩展渲染的回答才有这个按钮。点开后可选择图片的美化样式——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影），把该轮的全部渲染结果保存为一张 PNG。导出前会临时展开折叠的卡片，完成后恢复原状；图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字，也不包含导出按钮本身。
 
+菜单底部还有一个 **交互页面** 选项：把该轮全部卡片导出为一个单文件 HTML（内联渲染器、当前主题与卡片程序，约 3.4–4.9 MB）。直接在浏览器里打开就能继续操作地图、表单、滑杆等组件；`@ToAssistant` 不会调用 DSH，而是复制消息并提示「已复制，可回到 DSH 粘贴继续」。单文件不依赖 DSH 或额外脚本，但地图/照片等组件仍要联网。
+
 ## 构建、测试与部署
 
 ```bash
 npm run build       # 生成 prompt、Host 与 Client bundle
 npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
 npm run pack:check  # 检查 npm pack 的最终文件清单
-npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出，需要本机 Chrome）
+npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面，需要本机 Chrome）
 ```
 
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
@@ -184,16 +187,17 @@ npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导�
 - 扩展 UI 文案随 DSH 界面语言切换；但 `/iui` 的 Host 返回文案、命令面板里的命令描述与 README 截图仍是英文（前两者是 DSH 平台行为）。
 - 导出图片时，沙盒 iframe（`HtmlView` 里的小游戏）不会被截入图片，图片中该区域会缺失；地图通过保留 WebGL 绘制缓冲入图，禁用 WebGL 的浏览器会按地图自身的降级逻辑显示地点列表。
 - 同一轮回复渲染出的多张卡片会合并成一张图片；导出的是**当前屏幕上渲染出的内容**，因此导出的图片会包含当时的交互状态（勾选项、筛选结果等）。导出会等待卡片内的图片加载和图片搜索完成（最多约 12.5 秒）；离线或仍未就绪时按页面上的占位状态导出。
+- 交互页面导出会把渲染器、当前主题与全部卡片内联进一个 HTML（约 3.4–4.9 MB），因此文件较大但无需安装；地图、照片等组件仍依赖网络。页面里的 `@ToAssistant` 会尝试写入剪贴板并弹出提示；剪贴板不可用时提示会保留原消息供手动复制。
 - 浏览器半边要求部署组合 `dsh-client-locale`（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载，Host 工具与提示词仍可用。
 - 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。全局启用/样式与自由布局只改变提示词与页面形态，不保证每个模型都完全遵守；会话样式覆盖仍以 Host 注入的提示词为准。
 
 ## 文档
 
-- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、图片导出流程、Agent Skill。
+- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、图片与交互页面导出流程、Agent Skill。
 - [开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)：安装与卸载、开发命令、改名/重建后的重启提示、Host/Client 版本错位、发布物布局。
 - [验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)：端到端验证、测试与打包结果（历史记录）。
 - [变更日志](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)：按版本记录新增、变更与修复（英文）。
 
 ## 许可证
 
-本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）。完整声明与许可证全文见 `NOTICE` 与 `licenses/`。
+本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）；交互页面的独立 bundle 还内联 React / React DOM（MIT）。完整声明与许可证全文见 `NOTICE` 与 `licenses/`。
