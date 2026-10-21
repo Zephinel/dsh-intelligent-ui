@@ -21,29 +21,15 @@
  * Skips with exit code 0 when no Chrome binary is available.
  */
 import { build } from 'esbuild'
-import { execFileSync } from 'node:child_process'
-import { createServer } from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { dirname, extname, join, resolve } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { chromeExists, connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const outDir = join(root, 'test/renderer/.build/typography-check')
-const chrome = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const port = 9410 + Math.floor(Math.random() * 400)
-
-async function chromeExists() {
-  try {
-    await readFile(chrome)
-    return true
-  } catch {
-    return false
-  }
-}
-
 if (!(await chromeExists())) {
-  console.log(`typography-check: skipped (no Chrome at ${chrome}; set CHROME_BIN to run it)`)
+  console.log(`typography-check: skipped (no Chrome at ${process.env.CHROME_BIN ?? 'the default path'}; set CHROME_BIN to run it)`)
   process.exit(0)
 }
 
@@ -110,85 +96,33 @@ await writeFile(join(bundleDir, 'index.html'), `<!doctype html>
 <link rel="stylesheet" href="app.css">
 </head><body><div id="wide"></div><div id="narrow"></div><script type="module" src="app.js"></script></body></html>`)
 
-const server = createServer(async (req, res) => {
-  try {
-    const path = join(bundleDir, decodeURIComponent(new URL(req.url, 'http://x').pathname === '/' ? '/index.html' : new URL(req.url, 'http://x').pathname))
-    const body = await readFile(path)
-    const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }
-    res.writeHead(200, { 'content-type': types[extname(path)] ?? 'application/octet-stream' })
-    res.end(body)
-  } catch {
-    res.writeHead(404)
-    res.end()
-  }
-})
-await new Promise((resolveReady) => server.listen(0, '127.0.0.1', resolveReady))
-const pageUrl = `http://127.0.0.1:${server.address().port}/`
-
-const profile = await mkdtemp(join(tmpdir(), 'dsh-typography-check-'))
-const { spawn } = await import('node:child_process')
-const chromeProcess = spawn(chrome, [
-  '--headless=new',
-  '--disable-gpu',
-  '--no-first-run',
-  '--no-default-browser-check',
-  '--disable-sync',
-  '--disable-extensions',
-  '--window-size=1200,1200',
-  `--remote-debugging-port=${port}`,
-  '--remote-allow-origins=*',
-  `--user-data-dir=${profile}`,
-  pageUrl,
-], { stdio: 'ignore' })
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const cleanup = async () => {
-  chromeProcess.kill('SIGKILL')
+const server = await startStaticServer(bundleDir)
+const sleep = (ms) => new Promise((resolveReady) => setTimeout(resolveReady, ms))
+const browser = await launchChrome({ url: server.url, width: 1200, height: 1200 })
+if (browser === null) {
+  console.log('typography-check: skipped (Chrome not found; set CHROME_BIN)')
   server.close()
-  await rm(profile, { recursive: true, force: true }).catch(() => {})
+  process.exit(0)
 }
-process.on('exit', () => { try { chromeProcess.kill('SIGKILL') } catch {} })
-
-let target
-for (let i = 0; i < 60; i++) {
-  try {
-    const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-    target = list.find((entry) => entry.type === 'page' && entry.url.startsWith('http://127.0.0.1:'))
-    if (target) break
-  } catch {}
-  await sleep(250)
+const cdp = await connectCdp(browser.port)
+const cleanup = async () => {
+  cdp.close()
+  await browser.cleanup()
+  server.close()
 }
-if (!target) {
-  await cleanup()
-  console.error('typography-check: Chrome did not expose the page target')
-  process.exit(1)
-}
-
-const ws = new WebSocket(target.webSocketDebuggerUrl)
-let seq = 0
-const pending = new Map()
-ws.addEventListener('message', (event) => {
-  const msg = JSON.parse(event.data)
-  if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id) }
-})
-await new Promise((resolveReady, reject) => { ws.addEventListener('open', resolveReady); ws.addEventListener('error', reject) })
-const send = (method, params = {}) => new Promise((resolveReady) => { const id = ++seq; pending.set(id, resolveReady); ws.send(JSON.stringify({ id, method, params })) })
-const evaluate = async (expression) => {
-  const res = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
-  if (res.result?.exceptionDetails) throw new Error(res.result.exceptionDetails.exception?.description ?? res.result.exceptionDetails.text ?? 'evaluate failed')
-  return res.result?.result?.value
-}
+process.on('exit', () => { try { browser.process.kill('SIGKILL') } catch { /* ignore */ } })
 
 // Both renderers parse in effects; wait until the text is on screen.
 let ready = false
 for (let i = 0; i < 80; i++) {
-  ready = await evaluate(`!!document.body && document.body.innerText.includes('手冲咖啡配方计算器') && document.body.innerText.includes('A very long badge label')`)
+  ready = await cdp.evaluate(`!!document.body && document.body.innerText.includes('手冲咖啡配方计算器') && document.body.innerText.includes('A very long badge label')`)
   if (ready) break
   await sleep(250)
 }
-if (!ready) { ws.close(); await cleanup(); console.error('typography-check: fixture did not render'); process.exit(1) }
+if (!ready) { await cleanup(); console.error('typography-check: fixture did not render'); process.exit(1) }
 await sleep(500)
 
-const results = await evaluate(`(() => {
+const results = await cdp.evaluate(`(() => {
   const checks = []
   const check = (name, ok, detail) => checks.push({ name, ok: !!ok, detail })
   const wide = document.getElementById('wide')
@@ -263,6 +197,5 @@ for (const result of results) {
   if (!result.ok) failed++
 }
 console.log(`typography-check: ${results.length - failed}/${results.length} checks passed`)
-ws.close()
 await cleanup()
 if (failed > 0) process.exit(1)

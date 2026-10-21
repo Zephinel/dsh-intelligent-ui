@@ -24,9 +24,9 @@
 
 ## 组件一览
 
-渲染器不是把一段文字包进聊天气泡，而是一套完整的组件库：**55 个组件、73 个函数、5 种动作**。下面三张卡片都是扩展的真实渲染结果——同一套渲染器、同一套 DSH 主题 token，没有设计稿：
+渲染器不是把一段文字包进聊天气泡，而是一套完整的组件库：**57 个组件、73 个函数、5 种动作**。下面三张卡片都是扩展的真实渲染结果——同一套渲染器、同一套 DSH 主题 token，没有设计稿：
 
-![布局与排版：Col、Row、Box、Grid、Card、Carousel、Popover、Divider、Spacer 与 12 个文本组件](assets/intelligent-ui-components-layout.webp)
+![布局与排版：57 组件总览，Col、Row、Box、Grid、Card、Carousel、Popover、Divider、Spacer、Section、Toc 与 12 个文本组件](assets/intelligent-ui-components-layout.webp)
 
 ![输入、媒体与数据：13 个表单控件，以及照片、表格、图表、地图与 YouTube](assets/intelligent-ui-components-inputs.webp)
 
@@ -48,10 +48,10 @@
 |---|---|
 | 交互页面 | 地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图 |
 | 本地执行 | `$变量`、`@Set`、`@functions` 在浏览器运行；只有 `@ToAssistant` 回写消息 |
-| 三档开关 | 默认关闭；「仅本会话」/「全部会话」；输入框 UI 控件或 `/iui` 命令 |
+| 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；Auto / Card / Article 三档样式 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
 | Agent Skill | 随插件注册 `intelligent-ui`，模型按需加载完整语法、示例与排障 |
-| 插件详情页 | 插件 → 智能 UI 详情页：自由布局开关；默认使用设计规范，开启后模型按内容自行组织版式 |
+| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（Auto / Card / Article）、编排方式（自由布局） |
 | 可重放 | 生成程序作为工具参数进入会话日志，随历史重放 |
 
 ## 获取代码
@@ -67,8 +67,8 @@ cd dsh-intelligent-ui
 
 ## 前置条件
 
-- **DSH 0.2.1**（[`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)）：Host/Client 与插件协议按这个版本开发；实际验证版本是 `0.2.1-rc.2`，更晚版本未验证。
-- **Node.js 24**：构建、测试与 `npm pack` 都在 Node 24 下验证；Host 产物编译目标是 Node 22（`target: 'node22'`），仓库没有 `engines` 或 `.nvmrc` 版本锁，使用更低版本前请自行验证。
+- **DSH 0.2.1**（[`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)）：Host/Client 与插件协议按这个版本开发；实际验证版本是 `0.2.1-rc.2`，更晚版本未验证。安装：`npm install -g @deepseek-ai/dsh`。
+- **[Node.js 24](https://nodejs.org/en/download)**：构建、测试与 `npm pack` 都在 Node 24 下验证；Host 产物编译目标是 Node 22（`target: 'node22'`），仓库没有 `engines` 或 `.nvmrc` 版本锁，使用更低版本前请自行验证。
 - **`@deepseek-ai/dsh-client-locale`**：浏览器半边要求部署组合了它；DSH Web 0.2.1 默认包含，缺少时开关和卡片不会挂载（Host 工具与提示词仍可用）。
 
 确认工具存在：
@@ -115,7 +115,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 > [!IMPORTANT]
 > 改了包名或重建 `lib/client.js` 后，只刷新页面可能拿到旧 revision；先重启承载 Web UI 的 DSH 进程，再打开页面。
 
-然后在输入框右侧点 **UI** 控件，选择「仅本会话」或「全部会话」（或 `/iui session` / `/iui global`），直接提问，例如：
+然后在输入框右侧点 **UI** 控件，选择「仅本会话」（或 `/iui on`），需要时在同一面板里设置本会话的 Auto / Card / Article 样式，直接提问，例如：
 
 ```text
 帮我排一个上海两日游，要能勾选和调整
@@ -123,13 +123,16 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 卸载、开发与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
 
-## 三档开关
+## 开关与回答样式
 
-![输入框右侧的 UI 控件：点击后弹出「关闭 / 仅本会话 / 全部会话」菜单（截图为英文界面）](assets/intelligent-ui-toggle.png)
+![输入框右侧的 UI 控件：Off / This session only / Follow global](assets/intelligent-ui-toggle.png)
 
-- **关闭**（默认）：所有会话的请求里都没有 `render_ui` schema，约 8.5K tokens 的生成提示词展开为空。
-- **仅本会话** / **全部会话**：控制当前会话或所有会话（包括之后新开的会话）；输入框 **UI** 控件与 `/iui off|session|global` 等价。
-- 状态原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`，刷新、DSH 重启后保留；完整语义（投影、跨标签同步、服务依赖）见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
+![选择「仅本会话」后的样式面板：本会话 Auto / Card / Article 与跟随全局](assets/intelligent-ui-style-panel.webp)
+
+- **全局默认**：插件详情页里的「在所有会话中启用」决定新会话是否默认开启；「回答样式」里的「Display style」决定默认的 Auto / Card / Article。
+- **会话覆盖**：输入框 **UI** 控件只改当前会话，选择「仅本会话」后打开样式面板；`/iui on|off|inherit` 与 `/iui style auto|card|article|inherit` 等价。
+- **Auto** 由模型按请求选择：交互/结构化用紧凑 Card，详尽/深入/长文用 Article 阅读页。Article 需要 `Toc`、可折叠 `Section` 和实质正文，不是骨架。
+- 会话状态原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`，刷新、DSH 重启后保留；完整语义（投影、服务依赖）见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
 
 ## 使用
 
@@ -144,7 +147,9 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 如果一定要保证出卡片（或模型仍然回了文字），在开关已打开的会话里用 `/intelligent-ui` 显式调用技能；显式调用会被当作直接指令。也可以说「读取 intelligent-ui skill 然后用 render_ui 做一个…」。
 
-扩展在 **插件 → 智能 UI 的详情页**里还有一个「自由布局」开关：默认关闭，使用扩展的设计规范；开启后，设计规范只作为建议，模型可以按内容自行选择组件与版式（技术硬规则、主题 token 与可读性不变）。该设置持久化在 DSH 的设置文档里，对所有会话生效。
+![插件详情页：可用性、回答样式与编排方式三组设置](assets/intelligent-ui-settings.webp)
+
+插件详情页按 **可用性**、**回答样式** 和 **编排方式** 分组。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。
 
 ## 构建、测试与部署
 
@@ -152,6 +157,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 npm run build       # 生成 prompt、Host 与 Client bundle
 npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
 npm run pack:check  # 检查 npm pack 的最终文件清单
+npm run test:browser # 可选：真实浏览器样式面板 E2E（需要本机 Chrome）
 ```
 
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
@@ -171,14 +177,14 @@ npm run pack:check  # 检查 npm pack 的最终文件清单
 - 模型偶发生成不合法 OpenUI Lang；Host 校验会返回精确错误，通常同一轮内自修（实测 1–2 次）。
 - 地图底图依赖 OpenFreeMap 瓦片，路线依赖 OSRM demo，照片依赖 Wikipedia/Wikimedia；离线时地图降级为地点列表、照片降级为占位块。
 - KaTeX 使用 DSH 壳层已加载的全局样式；若该样式被移除，Math 组件会退化为纯文本。
-- 生成提示词约 8.5K tokens，**只在开关命中该会话时发送**（全部会话，或该会话在白名单里）；关闭时这部分开销为 0（工具 schema 也不出现）。启用后的请求与旧版一致，DSH 缓存命中可抵消大部分成本。
+- 生成提示词约 8.5K tokens，**只在开关命中该会话时发送**（全局开启，或该会话显式开启）；关闭时这部分开销为 0（工具 schema 也不出现）。Article 模式会生成更长的页面，输出 token 与渲染时间相应增加。
 - 扩展 UI 文案随 DSH 界面语言切换；但 `/iui` 的 Host 返回文案、命令面板里的命令描述与 README 截图仍是英文（前两者是 DSH 平台行为）。
 - 浏览器半边要求部署组合 `dsh-client-locale`（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载，Host 工具与提示词仍可用。
-- 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。自由布局开关只改变提示词里设计规范的建议强度，不保证每个模型都完全不受默认规范影响。
+- 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。全局启用/样式与自由布局只改变提示词与页面形态，不保证每个模型都完全遵守；会话样式覆盖仍以 Host 注入的提示词为准。
 
 ## 文档
 
-- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、三档开关的完整语义、界面语言、Agent Skill。
+- [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、Agent Skill。
 - [开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)：安装与卸载、开发命令、改名/重建后的重启提示、Host/Client 版本错位、发布物布局。
 - [验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)：端到端验证、测试与打包结果（历史记录）。
 - [变更日志](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)：按版本记录新增、变更与修复（英文）。

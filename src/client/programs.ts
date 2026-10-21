@@ -10,7 +10,7 @@
  *
  * Tool name and argument contract live in src/shared/intelligent-ui.ts.
  */
-import { RENDER_UI_TOOL, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { RENDER_UI_TOOL, isPageStyle, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 
 /** The subset of `PreparingToolCall` this extractor reads. */
 export interface PreparingToolCall {
@@ -91,9 +91,14 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean): Int
     return undefined
   }
   if (typeof args !== 'object' || args === null) return undefined
-  const { program, title } = args as { program?: unknown; title?: unknown }
+  const { program, title, style } = args as { program?: unknown; title?: unknown; style?: unknown }
   if (typeof program !== 'string' || program.trim() === '') return undefined
-  return typeof title === 'string'
-    ? { callId, program, title, running }
-    : { callId, program, running }
+  const base = {
+    callId,
+    program,
+    ...typeof title === 'string' ? { title } : {},
+    ...isPageStyle(style) ? { style } : {},
+    running,
+  }
+  return base
 }

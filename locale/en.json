@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Intelligent UI",
-    "description": "Intelligent UI for DeepSeek Harness: render OpenUI Lang answers as interactive maps, photos, charts, forms, drawings and working tools inside the Web chat."
+    "description": "Intelligent UI for DeepSeek Harness: render OpenUI Lang answers as interactive maps, photos, charts, forms, drawings, working tools or a reading article inside the Web chat. Global defaults live on the Plugin detail page; the composer overrides enablement and answer style per session."
   }
 }

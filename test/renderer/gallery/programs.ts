@@ -253,4 +253,14 @@ visits = [12, 14, 13, 15, 18, 34, 30, 28, 30, 29, 31, 36, 52, 47, 41, 44, 40, 45
     note: "Lucide names at each size and in a few colors. An unknown name renders nothing.",
     code: `root = Card([Row([Icon("sparkles", "sm"), Icon("map-pin"), Icon("camera", "lg"), Icon("bike", "xl"), Icon("heart", "lg", "danger"), Icon("check-circle", "lg", "success"), Icon("info", "lg", "info"), Icon("alert-triangle", "lg", "warning"), Icon("no-such-icon", "lg")], 4, null, null, true)])`,
   },
+  {
+    id: "article",
+    title: "Article with Sections and Toc",
+    note: "Toc links to Section titles; Section supplies a collapsible heading and a Markdown body.",
+    code: `root = Col([title, toc, s1, s2])
+title = Title("Why rivers made cities", "xl")
+toc = Toc(["一、Water and silt", "二、Coordination"])
+s1 = Section("一、Water and silt", [Markdown("Floodplains offered water, fertile silt and cheap transport. Surplus grain fed specialists.\n\nStorage and records followed the surplus.")])
+s2 = Section("二、Coordination", [Markdown("Canals required labor beyond one village. Temple and palace institutions collected and redistributed the grain.\n\nThe debate over whether irrigation caused the state is still open.")])`,
+  },
 ];

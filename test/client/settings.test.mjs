@@ -1,13 +1,13 @@
 /**
- * Settings-page regressions: the deployment-wide free-composition switch.
+ * Settings-page regressions: global enablement, the default answer style, and
+ * the deployment-wide free-composition switch.
  *
  * Run: node --test test/client/settings.test.mjs
  *
  * The TSX component is bundled with the repo's esbuild devDependency (React
- * stays external) and server-rendered, matching the composer-control harness.
- * The switch write itself is exercised by the Host test (prompt suffix) and by
- * the live settings form; this file asserts the markup contract for every
- * snapshot the page can receive.
+ * stays external) and server-rendered. The writes themselves are exercised by
+ * the Host tests and the live settings form; this file asserts the markup
+ * contract for every snapshot the page can receive.
  */
 import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -58,37 +58,43 @@ function form(overrides = {}) {
 function render(options = {}) {
   return renderToStaticMarkup(createElement(SettingsPage, {
     settingsForm: options.form ?? form(),
-    // Omitted `t` exercises the English fallback used in bare tests.
     t: options.t,
   }))
 }
 
-test('off shows an enabled switch with the default-playbook hint', () => {
+test('off shows every control with its default state', () => {
   const html = render()
-  assert.match(html, /role="switch"/)
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 2)
   assert.match(html, /aria-checked="false"/)
-  assert.match(html, /aria-label="Free composition"/)
+  assert.match(html, /aria-label="Enable in all sessions"/)
+  assert.match(html, /aria-label="Free-form layout"/)
   assert.match(html, /aria-describedby="[^"]+ [^"]+"/)
-  assert.match(html, /Answer layout/)
-  assert.match(html, /Off: the default design playbook/)
-  assert.match(html, /prompt-level preference, not enforcement/)
-  assert.match(html, /invoke \/intelligent-ui explicitly/)
+  assert.match(html, /Global defaults/)
+  assert.match(html, /Off: new sessions start disabled/)
+  assert.match(html, /Off: follow the default layout and typography guidance/)
+  assert.match(html, /data-dsh-iui-style-picker="true"/)
+  assert.match(html, /Card \(compact\)/)
+  assert.match(html, /Article \(detailed\)/)
+  assert.match(html, /Display style: Auto/)
   assert.doesNotMatch(html, /disabled=""/)
 })
 
-test('on flips the switch and its hint', () => {
-  const html = render({ form: form({ value: { freeComposition: true } }) })
-  assert.match(html, /aria-checked="true"/)
-  assert.match(html, /On: free composition/)
+test('on reflects the global enable, style, and free-composition values', () => {
+  const html = render({ form: form({ value: { globalEnabled: true, answerStyle: 'article', freeComposition: true } }) })
+  assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 2)
+  assert.match(html, /On: new sessions start with Intelligent UI enabled/)
+  assert.match(html, /On: the model may choose the page structure/)
+  assert.match(html, /data-active="true"/)
+  assert.match(html, /Display style: Article/)
 })
 
-test('an unavailable namespace disables the switch and explains why', () => {
+test('an unavailable namespace disables the controls and explains why', () => {
   const html = render({ form: form({ status: 'unavailable', writable: false, value: undefined }) })
   assert.match(html, /disabled=""/)
   assert.match(html, /This deployment provides no settings service/)
 })
 
-test('a read-only settings document disables the switch', () => {
+test('a read-only settings document disables the controls', () => {
   const html = render({ form: form({ writable: false }) })
   assert.match(html, /disabled=""/)
   assert.match(html, /These settings are read-only/)
@@ -96,8 +102,10 @@ test('a read-only settings document disables the switch', () => {
 
 test('the Chinese dictionary localizes the page copy', () => {
   const html = render({ t: translate(zh) })
+  assert.match(html, /全局默认/)
+  assert.match(html, /在所有会话中启用/)
+  assert.match(html, /回答样式/)
+  assert.match(html, /卡片（简洁）/)
+  assert.match(html, /文章（详细）/)
   assert.match(html, /自由布局/)
-  assert.match(html, /回答版式/)
-  assert.match(html, /当前：默认设计规范/)
-  assert.match(html, /提示词层的偏好/)
 })

@@ -1,6 +1,6 @@
 # Components, functions and actions
 
-Complete reference for the OpenUI Lang vocabulary this extension ships: **55 components**, **59 library `@functions`**, **14 core `@functions`** (73 callable in total) and **5 action steps**. Signatures and descriptions are generated from `vendor/spec.json`, the build-time source of the component spec that the host validator enforces (the spec is compiled into `lib/index.js`; `vendor/` is not shipped). A component or argument not listed here does not exist at runtime.
+Complete reference for the OpenUI Lang vocabulary this extension ships: **57 components**, **59 library `@functions`**, **14 core `@functions`** (73 callable in total) and **5 action steps**. Signatures and descriptions are generated from `vendor/spec.json`, the build-time source of the component spec that the host validator enforces (the spec is compiled into `lib/index.js`; `vendor/` is not shipped). A component or argument not listed here does not exist at runtime.
 
 > The plugin already injects these signatures into the system prompt. Read this file when you need the grouped notes, an optional argument you have not used, or the full function table in one place.
 
@@ -26,7 +26,7 @@ Complete reference for the OpenUI Lang vocabulary this extension ships: **55 com
 - Never add an argument that is not in the signature: extra arguments are a fatal error (`Text takes 8 arg(s), got 9`).
 - A component used at the root must be a component call, and the convention is `root = Col([...])`.
 
-## Layout (9 components)
+## Layout (11 components)
 
 ### `Col`
 
@@ -115,6 +115,26 @@ Spacer()
 Fills the free space in a Row.
 
 **Notes.** Fills the free space in a Row; put it between items you want pushed apart.
+
+### `Section`
+
+```
+Section(title: string, children: Node[], anchor?: string)
+```
+
+Collapsible article section; starts open. The optional `anchor` is the Toc target; when omitted the title is the target.
+
+**Notes.** Use for article-first pages: one Section per major part, with `Markdown` prose inside. The header is a full-row toggle; `title` is display text and `anchor` is the stable id, so two Sections may share a display title if they use distinct anchors. Section anchors must be unique within one card.
+
+### `Toc`
+
+```
+Toc(items: string[], anchors?: string[])
+```
+
+Compact table of contents linking to Section anchors. `items` are labels; optional parallel `anchors` decouple labels from targets.
+
+**Notes.** Put it near the top of an article page. Each target (the parallel anchor, or the label when anchors are omitted) must exactly match a Section anchor/title. When two labels repeat, pass distinct anchors and the same anchors on both the Toc and the Sections.
 
 ## Text (12 components)
 

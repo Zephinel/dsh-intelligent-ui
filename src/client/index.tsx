@@ -34,8 +34,13 @@ import { IntelligentUICards, type IntelligentUICardsInjected } from './Intellige
 import { RenderUiRow } from './RenderUiRow.tsx'
 import { SettingsPage, type SettingsFormLike, type SettingsPageInjected } from './SettingsPage.tsx'
 import { ToggleControl, type ToggleControlInjected } from './ToggleControl.tsx'
-import { modeCommand, startModeSync } from './toggle.ts'
-import { HOST_ENTRY_ID, PACKAGE_NAME, type IntelligentUIScope } from '../shared/intelligent-ui.ts'
+import { enableCommand, startModeSync, styleCommand } from './commands.ts'
+import {
+  HOST_ENTRY_ID,
+  PACKAGE_NAME,
+  type SessionEnable,
+  type StylePreference,
+} from '../shared/intelligent-ui.ts'
 import { NS, en, zh } from '../shared/locales.ts'
 import './index.css'
 
@@ -54,7 +59,7 @@ const CARD_ID = 'intelligent-ui'
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  // One channel per page; keeps the chip consistent across tabs of this GUI.
+  // One channel per page keeps the chip/style panel consistent across tabs.
   startModeSync()
   // Both dictionaries go in one registration so every slot below can translate
   // through the `t` seat. A later locale switch re-renders the mounted outlets.
@@ -84,25 +89,28 @@ export function apply(ctx: ClientContext): void {
     { name: 'tool.call.toolview', key: 'render_ui', locale: NS },
     RenderUiRow,
   ))
-  // Composer switch: one explicit on/off command per click; the host projection
-  // `intelligent-ui` owns the settled state and the pending fold.
+  // Composer controls: one explicit scope/style command per action; the host
+  // projection `intelligent-ui` owns the settled state and the pending fold.
   ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
     name: 'conversation.input.activity',
     locale: NS,
-    inject: (sessionId: SessionId): ToggleControlInjected => ({
-      sessionId,
-      flip: async (scope: IntelligentUIScope): Promise<string | null> => {
-        const command = modeCommand(scope)
+    inject: (sessionId: SessionId): ToggleControlInjected => {
+      const run = async (command: string): Promise<string | null> => {
         const result = await ctx.remote.commands.execute(sessionId, command, [])
         if (!result.ok) return `${result.error.message} (${result.error.code})`
         if (result.value === undefined) return `unknown command: ${command}`
         return null
-      },
-    }),
+      }
+      return {
+        sessionId,
+        flip: (scope: SessionEnable): Promise<string | null> => run(enableCommand(scope)),
+        setStyle: (style: StylePreference): Promise<string | null> => run(styleCommand(style)),
+      }
+    },
   }, ToggleControl))
-  // Configuration on this bundle's Plugins detail page: one switch persisted as
-  // the Host entry's volatile `freeComposition` field. Optional: a deployment
-  // without the settings domain keeps the composer switch and the card.
+  // Configuration on this bundle's Plugins detail page: global enablement, answer
+  // style and free composition persisted as volatile Host settings fields.
+  // Optional: a deployment without the settings domain keeps the composer control and the card.
   ctx.inject(['configForms'], (child) => {
     const form = child.configForms.get(HOST_ENTRY_ID) as unknown as SettingsFormLike
     child.slots.inject('plugins.bundle.config', () => child.slots.register({

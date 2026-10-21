@@ -36,6 +36,8 @@ Carousel(children: Node[], itemWidth?: number, gap?: number) — Horizontal row 
 Popover(trigger: string | Node[], content: string | Node[]) — Shows content in a small panel when the trigger is clicked: a definition, a source, details behind an Icon("info", "sm").
 Divider()
 Spacer() — Fills the free space in a Row.
+Section(title: string, children: Node[], anchor?: string) — Collapsible article section; starts open. Optional anchor is the Toc target; falls back to the title.
+Toc(items: string[], anchors?: string[]) — Compact table of contents linking to Section anchors. Items are labels; optional parallel anchors decouple labels from targets.
 - gap and padding count 4px steps. Length is px or a CSS length like "50%". Radius is "sm", "md", "lg", "xl", "full" or px.
 - Color is "ink", "muted", "faint", "canvas", "on-ink", "info", "success", "warning", "danger", "purple", "pink", "chart1" to "chart6", or a CSS color. As a background, status colors are soft tints. "surface", "surface-strong" and "border" are surface/paint tokens: use them as backgrounds or SVG fills, never as text, caption or icon colors (they are washes and would disappear). A background of "ink" is an inverted fill and a background of "chart1" to "chart6" is a solid brand fill: in both cases the text and icons switch to a readable color automatically, so leave their color unset unless you need a specific token.
 

@@ -6,13 +6,13 @@ Run from the repo root. Current expected values are dated 2026-10-21; derive the
 
 | Command | Expected (2026-10-21) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js ~586 kB`, `client lib/client.js ~3.23 MB`; tests: 65 total = Host 14 + Client 34 + packaging 17; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 34 files; tarball ~2.21 MB; unpacked ~5.17 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
-| `node --test test/packaging/*.test.mjs` | 17 pass (manifest 9 + reference catalog 4 + guardrails 4) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails and decision policy |
-| `node --test test/packaging/guardrails.test.mjs` | 4 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
+| `npm run check` | build: `host lib/index.js ~595 kB`, `client lib/client.js ~3.27 MB`; tests: 74 total = Host 24 + Client 32 + packaging 18; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run pack:check` | 36 files; tarball ~2.34 MB; unpacked ~5.49 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `node --test test/packaging/*.test.mjs` | 18 pass (manifest 9 + reference catalog 4 + guardrails 5) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails and decision policy |
+| `node --test test/packaging/guardrails.test.mjs` | 5 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 4 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json` |
-| `node --test test/host/*.test.mjs` | 14 pass | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 34 pass = programs 10 + toggle 13 + locales 6 + settings 5 | Client extractor, switch control (incl. Chinese), dictionaries, settings switch |
+| `node --test test/host/*.test.mjs` | 24 pass = mode 8 + skill 3 + tool 13 | Tool contract, switch semantics, embedded skill, settings config |
+| `node --test test/client/*.test.mjs` | 32 pass = programs 11 + toggle 10 + locales 6 + settings 5 | Client extractor, switch control (incl. Chinese), dictionaries, settings switch |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 
 ## README and changelog structural checks
@@ -147,7 +147,7 @@ NODE
 ## Known expected non-bugs (do not "fix")
 
 - `docs/verification.md` / `docs/verification.en.md` is a historical verification record; its past tense claims are not current-state claims.
-- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (34 files) is expected, not a missing shipped file.
+- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (36 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
 - The repository and npm package are public; the README clone and GitHub Issues links are live. The prerelease version `0.2.2-26-10-21` is intentionally tagged `latest`.

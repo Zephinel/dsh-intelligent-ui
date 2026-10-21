@@ -211,3 +211,19 @@ party = Celebration(score == 2)
 ```
 
 ---
+
+## 7. Detailed article: article-first page with Sections and a Toc (7 statements)
+
+Used when the effective style is Article. The main body is prose in `Markdown`;
+`Section` supplies the collapsible heading and the anchor target, and `Toc` links
+to the same titles. The chart is a supplement, not a replacement for the prose. If two Sections share a display title, give them distinct anchors and pass the same anchors to `Toc`, e.g. `Toc(["Notes", "Notes"], ["notes-1", "notes-2"])` with `Section("Notes", [...], "notes-1")` and `Section("Notes", [...], "notes-2")`.
+
+```text
+root = Col([title, intro, toc, s1, s2, chart])
+title = Title("Why cities grew along rivers", "2xl")
+intro = Text("A short guide to the geography behind the first urban civilizations.", "md", "muted")
+toc = Toc(["一、Water, silt and surplus", "二、The cost of coordination"])
+s1 = Section("一、Water, silt and surplus", [Markdown("River floodplains offered three things at once: fresh water, fertile silt renewed every year, and a cheap transport surface. In Mesopotamia the Tigris and Euphrates supported irrigation canals by the fourth millennium BCE; in Egypt the Nile's annual flood made basin farming predictable. Surplus grain could feed specialists — potters, priests, scribes — who did not farm.\n\nSurplus alone did not create a city. Storage, records and a way to move grain across a season were equally necessary, which is why early writing and accounting appear together.")])
+s2 = Section("二、The cost of coordination", [Markdown("Large irrigation works required labor beyond a single village. Canal maintenance, flood control and grain storage created a coordination problem that kinship alone could not solve. Temple and palace institutions emerged as the organizations that collected, stored and redistributed the surplus.\n\nThat solution had costs: labor obligations, surveillance and unequal access to stored grain. The first cities were therefore both a technological achievement and a new political order. The debate over whether irrigation caused the state or the state captured irrigation is still open.")])
+chart = Chart("bar", [{name: "Uruk", people: 40000}, {name: "Mohenjo-daro", people: 35000}, {name: "Memphis", people: 30000}], "name", ["people"])
+```

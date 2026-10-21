@@ -5,11 +5,12 @@
  * complete OpenUI Lang program, validates that program against the vendored
  * component library, and contributes the OpenUI Lang generation prompt as a
  * system-prompt section. Both the tool and the prompt are gated by the
- * per-session switch in ./mode.ts, which is off by default. The browser half
+ * per-session switch and style in ./mode.ts, which are off/auto by default. The browser half
  * (exports["./client"]) renders the recorded programs and hosts the composer
  * switch, which only mirrors the host projection. The browser half also
- * registers the extension's Settings section; its free-composition toggle is
- * persisted as one volatile field in the Host settings document.
+ * registers the extension's Plugin detail page; its global enablement, answer
+ * style and free-composition preferences are volatile fields in the Host
+ * settings document.
  *
  * This file is bundled by scripts/build.mjs into lib/index.js. It imports only
  * `@deepseek-ai/schemastery` (the DSH settings schema) besides Node built-ins,
@@ -23,8 +24,15 @@ import z from '@deepseek-ai/schemastery'
 import { createParser } from '@openuidev/lang-core'
 import librarySpec from '../../vendor/spec.json'
 import promptText from '../generated/prompt.txt'
-import { installModeControl } from './mode.ts'
-import { RENDER_UI_TOOL } from '../shared/intelligent-ui.ts'
+import { installSessionControls, readPreference, type IntelligentUIPreferenceConfig } from './mode.ts'
+import {
+  ANSWER_STYLES,
+  PAGE_STYLES,
+  RENDER_UI_TOOL,
+  isPageStyle,
+} from '../shared/intelligent-ui.ts'
+import type { AnswerStyle, PageStyle } from '../shared/intelligent-ui.ts'
+import { articleAnchorError, collectArticleAnchors, collectComponentTypes } from './program-validation.ts'
 
 export const name = 'intelligent-ui'
 
@@ -35,6 +43,8 @@ export const name = 'intelligent-ui'
  */
 export const Config = z.object({
   freeComposition: z.boolean().default(false).volatile(),
+  globalEnabled: z.boolean().volatile(),
+  answerStyle: z.union([z.const('auto'), z.const('card'), z.const('article')]).volatile(),
 })
 
 /** Host services this plugin consumes; both must exist before apply runs. */
@@ -137,8 +147,16 @@ const PARAMETERS = {
       type: 'string',
       description: 'Optional short label shown above the rendered answer, e.g. "Day in San Francisco".',
     },
+    style: {
+      type: 'string',
+      enum: PAGE_STYLES,
+      description:
+        'Answer presentation style for this page. Pass the style named by the session prompt: '
+        + '"card" for the compact interactive card, "article" for the reading layout, or the card/article '
+        + 'style you chose when the session is in Auto mode.',
+    },
   },
-  required: ['program'],
+  required: ['program', 'style'],
   additionalProperties: false,
 } as const
 
@@ -147,13 +165,18 @@ const OUTPUT = {
   type: 'object',
   properties: {
     statements: { type: 'number', description: 'Number of parsed openui-lang statements.' },
+    style: {
+      type: 'string',
+      enum: PAGE_STYLES,
+      description: 'Resolved answer presentation style recorded with the page.',
+    },
     warnings: {
       type: 'array',
       items: { type: 'string' },
       description: 'Non-fatal parser findings (unreferenced statements, unresolved references).',
     },
   },
-  required: ['statements'],
+  required: ['statements', 'style'],
   additionalProperties: false,
 } as const
 
@@ -165,12 +188,17 @@ interface ParseFinding {
 }
 
 /** Parse one complete program; returns model-readable findings plus statement count. */
-function inspectProgram(program: string): { statements: number; findings: ParseFinding[] } {
+function inspectProgram(program: string): {
+  statements: number
+  findings: ParseFinding[]
+  types: ReadonlySet<string>
+  anchors: { section: string[]; toc: string[]; issues: string[] }
+} {
   let result: ReturnType<typeof parser.parse>
   try {
     result = parser.parse(program)
   } catch (error) {
-    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }] }
+    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }], types: new Set(), anchors: { section: [], toc: [], issues: [] } }
   }
   const meta = result.meta as {
     readonly incomplete?: boolean
@@ -191,7 +219,11 @@ function inspectProgram(program: string): { statements: number; findings: ParseF
   for (const orphaned of meta.orphaned ?? []) {
     findings.push({ message: `Unreferenced statement (will not render): ${String(orphaned)}`, fatal: false })
   }
-  return { statements: meta.statementCount ?? 0, findings }
+  const types = new Set<string>()
+  collectComponentTypes(result.root, types)
+  const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[] }
+  collectArticleAnchors(result.root, anchors.section, anchors.toc, anchors.issues)
+  return { statements: meta.statementCount ?? 0, findings, types, anchors }
 }
 
 /**
@@ -207,26 +239,39 @@ const ENABLED_SESSION_PREFIX =
 
 /** Prompt suffix appended when the deployment enables free composition. */
 const FREE_COMPOSITION_NOTE =
-  '\n\nFree composition is on for this deployment: the layout and typography playbook in the intelligent-ui skill, '
+  '\n\nFree-form layout is on for this deployment: the layout and typography playbook in the intelligent-ui skill, '
   + 'and the design guidance above, are advisory rather than a template. Choose the page shape, hierarchy, density '
   + 'and blocks the content needs, and vary them between answers. The hard rules, the theme tokens and readable text still apply.'
-
-/** Loose shape of the volatile config reference the Host passes to `apply`. */
-interface IntelligentUIConfig {
-  readonly freeComposition?: { get?: () => unknown }
-}
 
 /**
  * Read the free-composition preference from its live config reference.
  * @param config - the plugin Config resolved by the Host, when settings are composed.
  * @returns true only when the deployment opted in; a missing ref means off.
  */
-function isFreeComposition(config: IntelligentUIConfig | undefined): boolean {
-  try {
-    return config?.freeComposition?.get?.() === true
-  } catch {
-    return false
-  }
+function isFreeComposition(config: IntelligentUIPreferenceConfig | undefined): boolean {
+  return readPreference(config?.freeComposition, (value): value is boolean => value === true) === true
+}
+
+/** Answer-style guidance appended to the generation prompt for one session. */
+const STYLE_NOTES: Readonly<Record<AnswerStyle, string>> = {
+  card:
+    '\n\nAnswer style for this session: **Card**. Build a compact, scannable interactive card. '
+    + 'Keep sections tight and do not turn the answer into a long article; when the request is very broad, '
+    + 'cover it with a clear card structure rather than a wall of prose. Pass `style: "card"` to render_ui.',
+  article:
+    '\n\nAnswer style for this session: **Article**. Build an article-first page in the card: '
+    + 'a short coverage summary, a table of contents, and one or more collapsible `Section` components whose body '
+    + 'is substantial prose (use `Markdown` inside a Section). Every major part needs specific facts, causes, '
+    + 'examples or debates — not a one-line bullet. All core content must be present and readable in the initial '
+    + 'render; interactions only add detail or navigation. Do not deliver an outline or a skeleton. '
+    + 'Include a reachable `Toc` and at least one `Section`; the Host rejects an article call without both. '
+    + 'Pass `style: "article"` to render_ui.',
+  auto:
+    '\n\nAnswer style for this session: **Auto**. Choose the style the request needs: use Card for interactive, '
+    + 'structured, visual or computational answers; use Article when the user asks for a detailed, in-depth, '
+    + 'long-form or comprehensive explanation. An Article answer needs a coverage summary, a table of contents, '
+    + 'and substantial `Section` prose, not a skeleton. Pass `style: "card"` or `style: "article"` to render_ui '
+    + 'to record the style you chose.',
 }
 
 /** Register the tool, the switch, the generation prompt, and the embedded Agent Skill. */
@@ -244,11 +289,11 @@ export function apply(ctx: {
   on?: (event: string, handler: (...args: never[]) => unknown) => unknown
   agents?: { list?: () => Iterable<unknown> }
   fiber?: unknown
-}, config?: IntelligentUIConfig): void {
+}, config?: IntelligentUIPreferenceConfig): void {
   // The switch decides whether the prompt section and the tool are visible.
   // A deployment without session projections/commands cannot persist a switch,
   // and `enabledFor` then reports legacy always-on.
-  const mode = installModeControl(ctx as never)
+  const mode = installSessionControls(ctx as never, config as never)
   // The extension ships its own configuration on the Plugins detail page, so ask
   // the Host settings service to suppress its generated form. Optional: minimal deployments without the
   // settings service keep the tool and prompt working.
@@ -270,7 +315,11 @@ export function apply(ctx: {
       const sessionId = context?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) return ''
       const section = isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
-      return `${ENABLED_SESSION_PREFIX}${section}`
+      const note = STYLE_NOTES[mode.styleFor(sessionId)]
+      // Keep the style instruction near the top, before the long DSL reference.
+      return `${ENABLED_SESSION_PREFIX}${note}
+
+${section}`
     },
   })
   registerEmbeddedSkill(ctx as never)
@@ -284,27 +333,40 @@ export function apply(ctx: {
       + 'comparisons, dashboards, step-by-step guides, maps, drawings, forms, planners, games or calculators. '
       + 'Answer in prose only for a single fact or a one-line reply, an explicit text request, content that cannot '
       + 'be shown as a page, or after rendering fails. The user sees the rendered page; do not repeat its content '
-      + 'in prose. Call it at most once per turn, after any brief introductory sentence.',
+      + 'in prose. Pass `style` set to the effective session style (card or article; when the session is in Auto, '
+      + 'the style you chose). Article pages use Toc and collapsible Section blocks; Card pages stay compact. '
+      + 'Call it at most once per turn, after any brief introductory sentence.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT,
-      render: (_args: unknown, value: { statements: number; warnings?: readonly string[] }) => [{
+      render: (_args: unknown, value: { statements: number; style: PageStyle; warnings?: readonly string[] }) => [{
         type: 'text' as const,
         text: value.warnings === undefined || value.warnings.length === 0
-          ? `Interactive UI rendered for the user (${value.statements} statements).`
-          : `Interactive UI rendered for the user (${value.statements} statements). Parser notes: ${value.warnings.join('; ')}`,
+          ? `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style).`
+          : `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style). Parser notes: ${value.warnings.join('; ')}`,
       }],
     },
-    async execute(args: { program: string }, exec?: { agent?: { session?: { id?: string } } }) {
+    async execute(args: { program: string; style?: unknown }, exec?: { agent?: { session?: { id?: string } } }) {
       const sessionId = exec?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) {
         throw new Error(
-          'render_ui is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|session|global.',
+          'render_ui is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|inherit.',
         )
       }
+      const effective = mode.styleFor(sessionId)
+      if (!isPageStyle(args.style)) {
+        const expected = effective === 'auto' ? '"card" or "article"' : `"${effective}"`
+        throw new Error(`render_ui: pass style ${expected} for this session.`)
+      }
+      // Forced styles are enforced on the Host: a stale or guessed style must be
+      // retried, so the recorded page chrome cannot disagree with the setting.
+      if (effective !== 'auto' && args.style !== effective) {
+        throw new Error(`render_ui: this session's answer style is "${effective}"; pass style: "${effective}".`)
+      }
+      const requestedStyle: PageStyle = args.style
       const program = typeof args.program === 'string' ? args.program.trim() : ''
       if (program === '') throw new Error('render_ui: program must be a non-empty openui-lang program.')
-      const { statements, findings } = inspectProgram(program)
+      const { statements, findings, types, anchors } = inspectProgram(program)
       const fatal = findings.filter(finding => finding.fatal)
       if (fatal.length > 0) {
         throw new Error(
@@ -312,7 +374,17 @@ export function apply(ctx: {
           + fatal.map(finding => finding.message).join('; '),
         )
       }
-      return { statements, ...findings.length === 0 ? {} : { warnings: findings.map(finding => finding.message) } }
+      if (requestedStyle === 'article' && (!types.has('Toc') || !types.has('Section'))) {
+        throw new Error(
+          'render_ui: the article style needs a Toc and at least one Section. '
+          + 'Use Toc(["..."]) and Section("...", [Markdown("...")]) for every major part; a plain Markdown program is the card style.',
+        )
+      }
+      // Validate anchors whenever Section/Toc appear, not only for Article: a
+      // duplicate id is invalid DOM regardless of the card chrome.
+      const anchorError = articleAnchorError(anchors, types)
+      if (anchorError !== undefined) throw new Error(anchorError)
+      return { statements, style: requestedStyle, ...findings.length === 0 ? {} : { warnings: findings.map(finding => finding.message) } }
     },
   })
 }

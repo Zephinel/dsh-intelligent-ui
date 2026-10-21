@@ -49,3 +49,11 @@ test('the enabled-session policy is single-sourced and explicit invocation is a 
   assert.match(skill, /Explicit invocation is a directive/i, 'the skill states the explicit-invocation directive')
   assert.doesNotMatch(skill, /## When to answer in prose/, 'the skill no longer duplicates the prose policy')
 })
+
+test('the article style and Section/Toc vocabulary stay documented', () => {
+  assert.match(skill, /## Answer styles/, 'SKILL.md explains Card/Article/Auto')
+  assert.match(skill, /Section`/i, 'SKILL.md names the Section component')
+  assert.match(prompt, /Section\(title: string/, 'the injected prompt carries the Section signature')
+  assert.match(prompt, /Toc\(items: string\[\], anchors\?: string\[\]\)/, 'the injected prompt carries the Toc anchors signature')
+  assert.match(read('skills/intelligent-ui/references/components.md'), /\*\*57 components\*\*/, 'the reference header carries the new component count')
+})

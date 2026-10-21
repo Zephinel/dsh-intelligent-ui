@@ -1,20 +1,14 @@
 /**
- * Composer scope control for the Intelligent UI switch.
+ * Composer control for the Intelligent UI session settings.
  *
- * Registered in the single `conversation.input.activity` seat: a permission-style
- * chip that opens the shell's native `Menu` (the same look and keyboard model as
- * the permission picker) with three mutually exclusive scopes — off, this
- * session, all sessions. The host owns every state decision; a pick forwards one
- * explicit `/iui` command and the next projection frame settles the chip.
- * `onActiveChange` is deliberately not called so the composer toolbar never
- * expands.
+ * The chip opens the scope menu (off, this session, follow global). Choosing
+ * `on` / clicking the already-active session entry opens the answer-style panel:
+ * two previews, Auto/Card/Article slider, and a follow-global switch. The Host
+ * owns every state decision; the control forwards one explicit `/iui` command
+ * and the next projection frame settles the chip.
  */
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import {
-  IconChevronDownOutlineRegular,
-  Menu,
-  type MenuEntry,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the ui-conversation SlotMap / input seat merge.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -23,32 +17,33 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   MODE_PROJECTION_KEY,
   type IntelligentUIModeView,
-  type IntelligentUIScope,
+  type SessionEnable,
+  type StylePreference,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
+import { StylePicker } from './StylePicker.tsx'
+import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
 import {
-  effectiveMode,
-  modeCommand,
+  effectiveView,
   publishMode,
   readSyncedMode,
-  runFlip,
+  resetSyncedMode,
+  runCommand,
+  sameView,
   subscribeSyncedMode,
-  toggleState,
-} from './toggle.ts'
+} from './commands.ts'
 
 /** Business face injected by the plugin registration. */
 export interface ToggleControlInjected {
-  /** Session the control is seated in (needed for the session-only scope). */
+  /** Session the control is seated in, used to match cross-tab views. */
   readonly sessionId: string
-  /**
-   * Execute one explicit scope command for the viewed session.
-   * @param scope - requested scope.
-   * @returns null when the command was admitted, else a user-visible failure line.
-   */
-  readonly flip: (scope: IntelligentUIScope) => Promise<string | null>
+  /** Execute one explicit enable-scope command for this session. */
+  readonly flip: (scope: SessionEnable) => Promise<string | null>
+  /** Execute one explicit answer-style command for this session. */
+  readonly setStyle: (style: StylePreference) => Promise<string | null>
 }
 
-/** Full props: standard Session kit, the composer's locked owner prop, and the injected command. */
+/** Full props: standard Session kit, the composer's locked owner prop, and the injected commands. */
 export type ToggleControlProps =
   & PropsRuntime<'conversation.input.activity'>
   & InjectFace<ToggleControlInjected>
@@ -74,7 +69,7 @@ interface ScopeMeta {
 }
 
 /** Scope order and copy keys shared by the trigger, menu rows, and tests. */
-const SCOPES: Readonly<Record<IntelligentUIScope, ScopeMeta>> = {
+const SCOPES: Readonly<Record<SessionEnable, ScopeMeta>> = {
   off: {
     trigger: 'scope.off.label',
     menu: 'scope.off.menu',
@@ -82,24 +77,24 @@ const SCOPES: Readonly<Record<IntelligentUIScope, ScopeMeta>> = {
     aria: 'scope.off.aria',
     path: 'M8 1.8v6.4M3.9 4.4a6 6 0 1 0 8.2 0',
   },
-  session: {
+  on: {
     trigger: 'scope.session.label',
     menu: 'scope.session.menu',
     description: 'scope.session.description',
     aria: 'scope.session.aria',
     path: 'M8 7.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2ZM2.8 14c.5-2.1 2.5-3.6 5.2-3.6S12.7 11.9 13.2 14',
   },
-  global: {
-    trigger: 'scope.all.label',
-    menu: 'scope.all.menu',
-    description: 'scope.all.description',
-    aria: 'scope.all.aria',
+  inherit: {
+    trigger: 'scope.inherit.label',
+    menu: 'scope.inherit.menu',
+    description: 'scope.inherit.description',
+    aria: 'scope.inherit.aria',
     path: 'M8 14.2c3 0 5.4-2.7 5.4-6.2S11 1.8 8 1.8 2.6 4.5 2.6 8s2.4 6.2 5.4 6.2ZM2.8 8h10.4M8 1.8c1.6 1.7 2.4 3.8 2.4 6.2S9.6 12.5 8 14.2M8 1.8C6.4 3.5 5.6 5.6 5.6 8s.8 4.5 2.4 6.2',
   },
 }
 
 /** One inline scope glyph; the menu renders it at 16px, the chip at 14px. */
-function ScopeIcon({ scope }: { scope: IntelligentUIScope }): ReactNode {
+function ScopeIcon({ scope }: { scope: SessionEnable }): ReactNode {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
       <path
@@ -114,92 +109,302 @@ function ScopeIcon({ scope }: { scope: IntelligentUIScope }): ReactNode {
   )
 }
 
+/** One row in the custom scope menu. */
+interface ScopeMenuItem {
+  readonly id: SessionEnable | 'style'
+  readonly label: string
+  /** Secondary copy for the drill-in style row. */
+  readonly hint?: string
+  readonly icon: ReactNode
+  /** Drill-in rows show a chevron instead of a selected check. */
+  readonly drillIn?: boolean
+}
+
+/** Inline chevron, so the trigger does not depend on a shell icon skin. */
+function ChevronIcon({ open = false }: { readonly open?: boolean }): ReactNode {
+  return (
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" className="dsh-iui-chevron-svg" data-open={open ? 'true' : 'false'}>
+      <path d="M2.5 4.25 6 7.75l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Selected-row check. */
+function CheckIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+      <path d="m2.3 6.2 2.4 2.4 5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Right-pointing chevron for a drill-in row. */
+function DrillIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+      <path d="m4.25 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Three-stop style glyph for the drill-in row. */
+function StyleIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <path d="M3 4.5h10M3 8h7M3 11.5h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="13" cy="11.5" r="1.4" fill="currentColor" />
+    </svg>
+  )
+}
+
+
 /**
- * Render the chip and menu, or nothing on deployments without the host switch
- * (projection key absent).
- * @param props - projection hook, composer lock, session id, injected command, and locale seat.
- * @returns the control with an optional inline failure line, or null.
+ * Render the chip, scope menu, and answer-style panel.
+ * @param props - projection hook, composer lock, injected commands, and locale seat.
+ * @returns the control, or null on deployments without the host switch.
  */
-export function ToggleControl({ useProjection, locked, sessionId, flip, t = fallbackT }: ToggleControlProps): ReactNode {
+export function ToggleControl({
+  useProjection,
+  locked,
+  sessionId,
+  flip,
+  setStyle,
+  t = fallbackT,
+}: ToggleControlProps): ReactNode {
   const readMode = useProjection as unknown as ModeProjectionReader
-  const view = readMode(MODE_PROJECTION_KEY)
-  // A settled flip in another tab wins over our own last projection frame.
+  const projected = readMode(MODE_PROJECTION_KEY)
   const synced = useSyncExternalStore(subscribeSyncedMode, readSyncedMode, readSyncedMode)
+  const view = effectiveView(projected, synced, sessionId)
   const [open, setOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const mode = effectiveMode(view, synced, sessionId)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const sessionEnable = view?.sessionEnable ?? 'inherit'
   const pending = view?.pending === true || busy
   const disabled = locked || pending
+  const enabled = view?.enabled === true
 
-  // The projection can land after the first frame; never keep a popup over a
-  // disappearing or locked composer.
+  // Never keep a popup over a disappearing, locked or disabled composer. A
+  // pending command must not close the style panel: the controls inside it are
+  // disabled until the next projection frame, then it settles in place.
   useEffect(() => {
-    if (view === undefined || disabled) setOpen(false)
-  }, [disabled, view])
+    if (view === undefined || locked || (!view.enabled && !view.pending)) {
+      setOpen(false)
+      setPanelOpen(false)
+    }
+  }, [locked, view])
+
+  // Once a projection frame differs from the base the sender saw, that frame is
+  // authoritative; clear the optimistic cross-tab view even if the command was
+  // rejected or settled differently.
+  useEffect(() => {
+    if (synced === undefined || synced.sessionId !== sessionId || projected === undefined) return
+    if (synced.base === undefined || !sameView(projected, synced.base)) resetSyncedMode()
+  }, [projected, sessionId, synced])
+
+  const closeMenu = useCallback(() => { setOpen(false) }, [])
+  const closePanel = useCallback(() => { setPanelOpen(false) }, [])
+  const menuPlacement = useAnchoredPopup(open, triggerRef, { minWidth: 220, maxWidth: 248 })
+  const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 280, maxWidth: 380, maxHeight: true })
+  const menuVisible = open && menuPlacement !== null
+  const panelVisible = panelOpen && panelPlacement !== null && enabled
+  usePopupDismiss(menuVisible, triggerRef, menuRef, closeMenu, '[data-selected="true"], button')
+  usePopupDismiss(panelVisible, triggerRef, panelRef, closePanel)
 
   // Hooks stay above this return: the projection may land after the first frame.
   if (view === undefined) return null
 
-  const current = SCOPES[mode]
-  const state = toggleState(mode, pending)
+  const current = SCOPES[sessionEnable]
+  const state = pending ? 'pending' : sessionEnable
 
-  const items: MenuEntry[] = (Object.keys(SCOPES) as IntelligentUIScope[]).map(scope => ({
+  const openPanel = (): void => {
+    setOpen(false)
+    setError(null)
+    setPanelOpen(true)
+  }
+
+  const opensStyle = (scope: SessionEnable): boolean =>
+    scope === 'on' || (scope === 'inherit' && view.globalEnabled)
+
+  const choose = (scope: SessionEnable): void => {
+    if (disabled) return
+    // Clicking the active entry opens the style panel instead of re-running a
+    // no-op command. Follow-global also opens it when the global switch is on,
+    // so a session style override does not require changing the enable scope.
+    if (scope === sessionEnable && opensStyle(scope)) {
+      openPanel()
+      return
+    }
+    setOpen(false)
+    setError(null)
+    setBusy(true)
+    void runCommand(flip, scope).then((failure) => {
+      setBusy(false)
+      setError(failure)
+      if (failure === null) {
+        publishMode({
+          ...view,
+          sessionEnable: scope,
+          enabled: scope === 'on' ? true : scope === 'off' ? false : view.globalEnabled,
+          pending: false,
+        }, sessionId, projected)
+        if (opensStyle(scope)) openPanel()
+      }
+    })
+  }
+
+  const chooseStyle = (style: StylePreference): void => {
+    if (disabled) return
+    setError(null)
+    setBusy(true)
+    void runCommand(setStyle, style).then((failure) => {
+      setBusy(false)
+      setError(failure)
+      if (failure === null) {
+        publishMode({
+          ...view,
+          sessionStyle: style,
+          style: style === 'inherit' ? view.globalStyle : style,
+          pending: false,
+        }, sessionId, projected)
+      }
+    })
+  }
+
+  const items: ScopeMenuItem[] = (['off', 'on', 'inherit'] as const).map(scope => ({
     id: scope,
     label: t(SCOPES[scope].menu),
     icon: <ScopeIcon scope={scope} />,
   }))
-
-  const choose = (id: string): void => {
-    setOpen(false)
-    const scope = id as IntelligentUIScope
-    if (scope === mode) return
-    setError(null)
-    setBusy(true)
-    void runFlip(flip, scope).then((failure) => {
-      setBusy(false)
-      setError(failure)
-      if (failure === null) publishMode(scope, scope === 'session' ? sessionId : undefined)
+  if (view.enabled) {
+    items.push({
+      id: 'style',
+      label: t('style.slider.label'),
+      hint: t('style.panel.title'),
+      icon: <StyleIcon />,
+      drillIn: true,
     })
   }
 
+  const panel = panelVisible
+    ? createPortal(
+      <div
+        ref={panelRef}
+        className="dsh-iui-style-panel"
+        role="dialog"
+        aria-label={t('style.panel.title')}
+        style={{ left: panelPlacement.left, bottom: panelPlacement.bottom, width: panelPlacement.width, maxHeight: panelPlacement.maxHeight }}
+        data-dsh-iui-style-panel
+      >
+        <div className="dsh-iui-style-panel-header">
+          <button
+            type="button"
+            className="dsh-iui-style-back"
+            aria-label={t('style.panel.back')}
+            onClick={() => setPanelOpen(false)}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <span className="dsh-iui-style-panel-title">{t('style.panel.title')}</span>
+        </div>
+        <div className="dsh-iui-style-panel-body">
+          <StylePicker
+            value={view.sessionStyle}
+            globalStyle={view.globalStyle}
+            allowInherit
+            disabled={disabled}
+            note={t('style.session.note')}
+            footer={t('style.session.footer')}
+            onChange={chooseStyle}
+            t={t}
+          />
+          {error === null ? null : <p className="dsh-iui-style-error" role="alert">{error}</p>}
+        </div>
+      </div>,
+      document.body,
+    )
+    : null
+
   const trigger = (
     <button
+      ref={triggerRef}
       type="button"
       className="dsh-iui-trigger"
       data-dsh-intelligent-ui="toggle"
       data-dsh-iui-toggle="true"
       data-state={state}
+      data-enabled={enabled ? 'true' : 'false'}
       aria-label={t('chip.aria', { scope: t(current.aria) })}
-      aria-haspopup="menu"
-      aria-expanded={open}
+      aria-haspopup={panelOpen ? 'dialog' : 'menu'}
+      aria-expanded={open || panelOpen}
       title={t('chip.title', { description: t(current.description) })}
       disabled={disabled}
-      onClick={() => { setOpen(!open) }}
+      onClick={() => {
+        setError(null)
+        setPanelOpen(false)
+        setOpen(!open)
+      }}
     >
-      <span className="dsh-iui-trigger-icon" aria-hidden><ScopeIcon scope={mode} /></span>
+      <span className="dsh-iui-trigger-icon" aria-hidden><ScopeIcon scope={sessionEnable} /></span>
       <span className="dsh-iui-trigger-label">{t('chip.label', { scope: t(current.trigger) })}</span>
       <span className="dsh-iui-chevron" data-open={open ? 'true' : 'false'} aria-hidden>
-        <IconChevronDownOutlineRegular />
+        <ChevronIcon open={open} />
       </span>
     </button>
   )
 
   return (
     <>
-      <Menu
-        open={open}
-        items={items}
-        selectedId={mode}
-        onSelect={choose}
-        onClose={() => { setOpen(false) }}
-        side="top"
-        portal
-        anchor={trigger}
-      />
-      {error !== null && (
+      {trigger}
+      {menuVisible
+        ? createPortal(
+          <div
+            ref={menuRef}
+            className="dsh-iui-menu"
+            role="menu"
+            aria-label={t('chip.aria', { scope: t(current.aria) })}
+            style={{ left: menuPlacement.left, bottom: menuPlacement.bottom, width: menuPlacement.width }}
+            data-dsh-iui-menu
+          >
+            {items.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                className="dsh-iui-menu-item"
+                data-selected={item.id === sessionEnable ? 'true' : undefined}
+                onClick={() => {
+                  if (item.id === 'style') {
+                    openPanel()
+                    return
+                  }
+                  choose(item.id)
+                }}
+              >
+                <span className="dsh-iui-menu-icon" aria-hidden>{item.icon}</span>
+                <span className="dsh-iui-menu-copy">
+                  <span className="dsh-iui-menu-label">{item.label}</span>
+                  {item.hint === undefined ? null : <span className="dsh-iui-menu-hint">{item.hint}</span>}
+                </span>
+                {item.drillIn === true
+                  ? <span className="dsh-iui-menu-trailing" aria-hidden><DrillIcon /></span>
+                  : item.id === sessionEnable
+                    ? <span className="dsh-iui-menu-trailing" aria-hidden><CheckIcon /></span>
+                    : null}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )
+        : null}
+      {error !== null && !panelOpen && (
         <span className="dsh-iui-toggle-error" role="status" title={error}>{t('chip.error')}</span>
       )}
+      {panel}
     </>
   )
 }

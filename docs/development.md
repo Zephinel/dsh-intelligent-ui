@@ -45,6 +45,7 @@ npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
 npm run check          # build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
+npm run test:browser   # 可选：真实浏览器样式面板 E2E（需要 Chrome）
 ```
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入。
@@ -53,7 +54,7 @@ npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`）、turn-tail 卡片、`render_ui` 进程行、程序提取器，以及 `ctx.locale` 字典注册。
 - `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）。
-- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`freeComposition`）、内嵌 skill 注册；`mode.ts` 实现三档开关（持久化文件、命令、投影、每 agent 工具可见性）。
+- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition`）、内嵌 skill 注册；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
 
@@ -80,10 +81,10 @@ Failed to load plugins
 
 Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**时由 module loader 重新取当前 `lib/client.js`。所以只刷新不重启时，可能出现「新控件 + 旧 Host」：
 
-- 新控件的菜单发送 `/iui off|session|global`，而旧 Host 只认 `on|off`，于是命令行出现红色的 `Usage: /iui [on|off]`（命令 `kind: 'error'` 的渲染，不是崩溃）；
+- 新控件的菜单发送 `/iui on|off|inherit` 或 `/iui style …`，而旧 Host 只认 `on|off`，于是命令行出现红色的 `Usage: …`（命令 `kind: 'error'` 的渲染，不是崩溃）；
 - 旧 Host 的成功文案也还是旧版本（例如「already off for this session」）。
 
-看到这种混合状态先**重启承载 Web UI 的 DSH 进程**（再刷新页面），两半会一起切到当前构建；`/iui session|global` 随即返回正常成功文案。发布后的插件升级同理：bundle 更新后需要重启宿主，而不是只刷新。
+看到这种混合状态先**重启承载 Web UI 的 DSH 进程**（再刷新页面），两半会一起切到当前构建；`/iui on` 随即返回正常成功文案。发布后的插件升级同理：bundle 更新后需要重启宿主，而不是只刷新。
 
 ## 目录（发布相关）
 
@@ -97,7 +98,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 | `README.md` / `README.en.md` | 中文 / English 文档，顶部互相链接 |
 | `docs/` | 详细文档（架构、开发、验证）；不随 npm 包发布 |
 | `CHANGELOG.md` | 版本变更记录（英文，历史记录，只追加）；不随 npm 包发布 |
-| `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配与输入框开关（WebP + PNG） |
+| `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配、输入框开关/样式面板与插件设置页（WebP + PNG） |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
 | `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod） |

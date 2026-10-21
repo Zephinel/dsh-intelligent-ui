@@ -1,9 +1,9 @@
 /**
- * Host-half regression test: the three-scope Intelligent UI switch.
+ * Host-half regression test: the per-session enable switch and answer style.
  *
- * Scopes are `off`, `session` (only the session that flipped it) and `global`
- * (every session). Mounts use a private temporary DSH_HOME so the real harness
- * home is never touched.
+ * The deployment-wide defaults live in Host settings (`globalEnabled`,
+ * `answerStyle`); the composer persists session overrides in DSH_HOME. Mounts
+ * use a private temporary DSH_HOME so the real harness home is never touched.
  *
  *   node scripts/build.mjs host
  *   node --test test/host/mode.test.mjs
@@ -17,8 +17,11 @@ import { join } from 'node:path'
 const plugin = await import('../../lib/index.js')
 const homes = []
 
-/** Mount the plugin with optional switch services and a private DSH_HOME. */
-function mount({ modeServices = true, persisted } = {}) {
+const VALID = 'root = Col([title])\ntitle = Title("Hello")'
+const ARTICLE = 'root = Col([toc, section])\ntoc = Toc(["一、Intro"])\nsection = Section("一、Intro", [Markdown("Body.")])'
+
+/** Mount the plugin with optional switch services, a fake settings document, and a private DSH_HOME. */
+function mount({ modeServices = true, persisted, settings, useConfig = settings !== undefined } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'iui-mode-'))
   homes.push(home)
   process.env.DSH_HOME = home
@@ -34,6 +37,11 @@ function mount({ modeServices = true, persisted } = {}) {
     disposed: [],
   }
   const agents = []
+  const values = {
+    globalEnabled: settings?.globalEnabled ?? false,
+    answerStyle: settings?.answerStyle ?? 'auto',
+    freeComposition: settings?.freeComposition ?? false,
+  }
   const ctx = {
     tools: { register(definition) { rec.tool = definition } },
     systemPrompt: { section(section) { rec.sections.push(section) } },
@@ -63,8 +71,15 @@ function mount({ modeServices = true, persisted } = {}) {
       })
     },
   }
-  plugin.apply(ctx)
-  return { rec, home, agents }
+  const config = useConfig
+    ? {
+        freeComposition: { get: () => values.freeComposition },
+        globalEnabled: { get: () => values.globalEnabled },
+        answerStyle: { get: () => values.answerStyle },
+      }
+    : undefined
+  plugin.apply(ctx, config)
+  return { rec, home, agents, settings: values }
 }
 
 after(() => {
@@ -90,36 +105,60 @@ function makeAgent(rec, sessionId) {
 /** Prompt resolver context for one session. */
 const promptContext = sessionId => ({ agent: { session: { id: sessionId } } })
 
+/** Project one session's view. */
+const viewOf = (rec, sessionId) => rec.projection.wire.view(rec.projection.init({ id: sessionId }))
+
 test('registers the projection and the /iui command', () => {
-  const { rec } = mount()
+  const { rec } = mount({ settings: {} })
   assert.ok(rec.projection, 'projection registered')
   assert.equal(rec.projection.key, 'intelligent-ui')
-  assert.equal(rec.projection.stateVersion, 3)
-  assert.deepEqual(rec.projection.init({ id: 's1' }), { sessionId: 's1', running: null })
+  assert.equal(rec.projection.stateVersion, 4)
+  assert.deepEqual(rec.projection.init({ id: 's1' }), { sessionId: 's1', command: null })
   assert.ok(rec.command, 'command registered')
   assert.equal(rec.command.name, 'iui')
-  assert.deepEqual(rec.command.input.hint, '[off|session|global]')
+  assert.deepEqual(rec.command.input.hint, '[on|off|inherit] | style [auto|card|article|inherit]')
 })
 
-test('the projection folds the accepted scope only for its pending state', () => {
-  const { rec } = mount()
+test('the projection folds valid commands and exposes the live settings', () => {
+  const { rec, settings } = mount({ settings: { globalEnabled: false, answerStyle: 'card' } })
   const fold = rec.projection.apply
   let state = rec.projection.init({ id: 's1' })
-  state = fold(state, { type: 'command/run', data: { name: 'iui', args: 'session', commandId: 'c1' } })
-  assert.deepEqual(state.running, { commandId: 'c1', scope: 'session' })
-  assert.deepEqual(rec.projection.wire.view(state), { mode: 'off', pending: true })
+  assert.deepEqual(viewOf(rec, 's1'), {
+    sessionEnable: 'inherit',
+    sessionStyle: 'inherit',
+    globalEnabled: false,
+    globalStyle: 'card',
+    enabled: false,
+    style: 'card',
+    pending: false,
+  })
+
+  state = fold(state, { type: 'command/run', data: { name: 'iui', args: 'on', commandId: 'c1' } })
+  assert.deepEqual(state.command, { commandId: 'c1', kind: 'scope' })
+  assert.deepEqual(rec.projection.wire.view(state), {
+    sessionEnable: 'inherit', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'card', enabled: false, style: 'card', pending: true,
+  })
   state = fold(state, { type: 'command/done', data: { commandId: 'c1', kind: 'success' } })
-  assert.deepEqual(rec.projection.wire.view(state), { mode: 'off', pending: false })
-  // Bare status and invalid arguments never enter the pending state.
-  assert.equal(fold(state, { type: 'command/run', data: { name: 'iui', args: '', commandId: 'c2' } }), state)
-  assert.equal(fold(state, { type: 'command/run', data: { name: 'iui', args: 'maybe', commandId: 'c3' } }), state)
-  // `on` is the legacy spelling of global.
-  const on = fold(state, { type: 'command/run', data: { name: 'iui', args: 'on', commandId: 'c4' } })
-  assert.equal(on.running.scope, 'global')
+  assert.equal(rec.projection.wire.view(state).pending, false)
+
+  state = fold(state, { type: 'command/run', data: { name: 'iui', args: 'style article', commandId: 'c2' } })
+  assert.deepEqual(state.command, { commandId: 'c2', kind: 'style' })
+  state = fold(state, { type: 'command/done', data: { commandId: 'c2', kind: 'success' } })
+
+  // Status, invalid input, and a global attempt never enter pending.
+  assert.equal(fold(state, { type: 'command/run', data: { name: 'iui', args: '', commandId: 'c3' } }), state)
+  assert.equal(fold(state, { type: 'command/run', data: { name: 'iui', args: 'maybe', commandId: 'c4' } }), state)
+  assert.equal(fold(state, { type: 'command/run', data: { name: 'iui', args: 'global', commandId: 'c5' } }), state)
+
+  settings.globalEnabled = true
+  settings.answerStyle = 'article'
+  const view = viewOf(rec, 's1')
+  assert.equal(view.globalEnabled, true)
+  assert.equal(view.globalStyle, 'article')
 })
 
-test('off hides prompt and tool; session scope admits only that session', async () => {
-  const { rec, home, agents } = mount()
+test('the session switch gates prompt and tool visibility', async () => {
+  const { rec, agents, settings } = mount({ settings: { globalEnabled: false } })
   const s1 = makeAgent(rec, 's1')
   agents.push(s1)
 
@@ -127,58 +166,107 @@ test('off hides prompt and tool; session scope admits only that session', async 
   rec.handlers['agent/created']({ agent: s1 })
   assert.deepEqual(rec.restrictions, [{ deny: ['render_ui'] }])
   await assert.rejects(
-    () => rec.tool.execute({ program: 'root = Col([title])\ntitle = Title("x")' }, { agent: s1 }),
+    () => rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 }),
     /render_ui is disabled/,
   )
 
-  // Session scope: only s1 is admitted.
-  const session = rec.command.handler({ agent: s1, rawInput: 'session' })
-  assert.equal(session.kind, 'success')
-  assert.match(session.text, /this session only/)
-  assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')), { global: false, sessions: ['s1'] })
+  const on = rec.command.handler({ agent: s1, rawInput: 'on' })
+  assert.equal(on.kind, 'success')
+  assert.match(on.text, /on for this session/)
   assert.ok(rec.sections[0].text(promptContext('s1')).length > 10_000)
-  assert.equal(rec.sections[0].text(promptContext('s2')), '')
-  assert.deepEqual(rec.projection.wire.view(rec.projection.init({ id: 's1' })), { mode: 'session', pending: false })
-  assert.deepEqual(rec.projection.wire.view(rec.projection.init({ id: 's2' })), { mode: 'off', pending: false })
-  const value = await rec.tool.execute({ program: 'root = Col([title])\ntitle = Title("Hello")' }, { agent: s1 })
+  assert.deepEqual(viewOf(rec, 's1'), {
+    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false,
+  })
+  assert.equal(rec.disposed.length, 1)
+  const value = await rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 })
   assert.equal(value.statements, 2)
-  await assert.rejects(
-    () => rec.tool.execute({ program: 'root = Col([title])\ntitle = Title("Hello")' }, { agent: { session: { id: 's2' } } }),
-    /render_ui is disabled/,
-  )
+  assert.equal(value.style, 'card')
 
-  // Global scope: s1 and s2 are both admitted.
-  const global = rec.command.handler({ agent: s1, rawInput: 'global' })
-  assert.match(global.text, /all sessions/)
-  assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')), { global: true, sessions: [] })
-  assert.ok(rec.sections[0].text(promptContext('s2')).length > 10_000)
-  assert.deepEqual(rec.projection.wire.view(rec.projection.init({ id: 's2' })), { mode: 'global', pending: false })
-
-  // Off clears every override.
   const off = rec.command.handler({ agent: s1, rawInput: 'off' })
-  assert.match(off.text, /off for every session/)
-  assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')), { global: false, sessions: [] })
+  assert.match(off.text, /off for this session/)
   assert.equal(rec.sections[0].text(promptContext('s1')), '')
-  assert.deepEqual(rec.restrictions.at(-1), { deny: ['render_ui'] })
 
-  // Status/idempotence/validation.
-  assert.match(rec.command.handler({ agent: s1, rawInput: '' }).text, /Intelligent UI is off/)
-  assert.match(rec.command.handler({ agent: s1, rawInput: 'off' }).text, /already off/)
-  assert.equal(rec.command.handler({ agent: s1, rawInput: 'nope' }).kind, 'error')
-  assert.match(rec.command.handler({ agent: s1, rawInput: 'nope' }).text, /Usage: \/iui \[off\|session\|global\]/)
+  // Inherit follows the global switch.
+  rec.command.handler({ agent: s1, rawInput: 'inherit' })
+  assert.equal(rec.sections[0].text(promptContext('s1')), '')
+  settings.globalEnabled = true
+  assert.ok(rec.sections[0].text(promptContext('s1')).length > 10_000)
+  assert.equal(viewOf(rec, 's1').enabled, true)
+  assert.equal(viewOf(rec, 's1').sessionEnable, 'inherit')
+
+  // Global on plus a session off override disables only that session.
+  rec.command.handler({ agent: s1, rawInput: 'off' })
+  assert.equal(rec.sections[0].text(promptContext('s1')), '')
+  assert.ok(rec.sections[0].text(promptContext('s2')).length > 10_000)
 })
 
-test('persisted scopes load at startup, including the legacy file', () => {
-  const sessionMount = mount({ persisted: { global: false, sessions: ['s9'] } })
-  assert.deepEqual(sessionMount.rec.projection.wire.view(sessionMount.rec.projection.init({ id: 's9' })), { mode: 'session', pending: false })
-  assert.equal(sessionMount.rec.sections[0].text(promptContext('s9')).length > 10_000, true)
-  assert.equal(sessionMount.rec.sections[0].text(promptContext('s10')), '')
+test('style overrides are persisted and forced styles are enforced on the tool', async () => {
+  const { rec, home } = mount({ settings: { globalEnabled: true, answerStyle: 'card' } })
+  const s1 = makeAgent(rec, 's1')
 
-  const globalMount = mount({ persisted: { global: true, sessions: [] } })
-  assert.deepEqual(globalMount.rec.projection.wire.view(globalMount.rec.projection.init({ id: 'any' })), { mode: 'global', pending: false })
+  assert.equal(viewOf(rec, 's1').style, 'card')
+  const style = rec.command.handler({ agent: s1, rawInput: 'style article' })
+  assert.equal(style.kind, 'success')
+  assert.match(style.text, /article/)
+  assert.equal(viewOf(rec, 's1').style, 'article')
+  assert.match(rec.sections[0].text(promptContext('s1')), /Answer style for this session: \*\*Article\*\*/)
+  assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')).styles, { s1: 'article' })
 
-  const legacyMount = mount({ persisted: { enabled: true } })
-  assert.deepEqual(legacyMount.rec.projection.wire.view(legacyMount.rec.projection.init({ id: 'any' })), { mode: 'global', pending: false })
+  await assert.rejects(
+    () => rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 }),
+    /this session's answer style is "article"/,
+  )
+  const value = await rec.tool.execute({ program: ARTICLE, style: 'article' }, { agent: s1 })
+  assert.equal(value.style, 'article')
+
+  rec.command.handler({ agent: s1, rawInput: 'style inherit' })
+  assert.equal(viewOf(rec, 's1').style, 'card')
+  await assert.rejects(
+    () => rec.tool.execute({ program: VALID }, { agent: s1 }),
+    /pass style "card"/,
+  )
+  const inherited = await rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 })
+  assert.equal(inherited.style, 'card')
+})
+
+test('auto style accepts a chosen card/article style and records it', async () => {
+  const { rec } = mount({ settings: { globalEnabled: true, answerStyle: 'auto' } })
+  const s1 = makeAgent(rec, 's1')
+  assert.equal((await rec.tool.execute({ program: ARTICLE, style: 'article' }, { agent: s1 })).style, 'article')
+  await assert.rejects(
+    () => rec.tool.execute({ program: ARTICLE, style: 'auto' }, { agent: s1 }),
+    /pass style "card" or "article"/,
+  )
+  assert.equal((await rec.tool.execute({ program: ARTICLE, style: 'article' }, { agent: s1 })).style, 'article')
+})
+
+test('status, idempotence and validation are readable', () => {
+  const { rec } = mount({ settings: { globalEnabled: false } })
+  const s1 = makeAgent(rec, 's1')
+  assert.match(rec.command.handler({ agent: s1, rawInput: '' }).text, /Intelligent UI is off via the global switch/)
+  assert.match(rec.command.handler({ agent: s1, rawInput: 'off' }).text, /off for this session/)
+  assert.match(rec.command.handler({ agent: s1, rawInput: 'off' }).text, /already off for this session/)
+  assert.equal(rec.command.handler({ agent: s1, rawInput: 'nope' }).kind, 'error')
+  assert.match(rec.command.handler({ agent: s1, rawInput: 'global' }).text, /Global enabling moved/)
+  assert.match(rec.command.handler({ agent: s1, rawInput: 'style nope' }).text, /Usage: \/iui style/)
+})
+
+test('persisted session overrides load at startup', () => {
+  const mount1 = mount({
+    settings: { globalEnabled: false },
+    persisted: { sessions: ['s9'], offSessions: ['s8'], styles: { s9: 'article' } },
+  })
+  const v9 = viewOf(mount1.rec, 's9')
+  assert.equal(v9.sessionEnable, 'on')
+  assert.equal(v9.sessionStyle, 'article')
+  assert.equal(v9.style, 'article')
+  const v8 = viewOf(mount1.rec, 's8')
+  assert.equal(v8.sessionEnable, 'off')
+  assert.equal(v8.enabled, false)
+
+  const legacy = mount({ persisted: { enabled: true } })
+  assert.equal(viewOf(legacy.rec, 'any').globalEnabled, true)
+  assert.equal(viewOf(legacy.rec, 'any').enabled, true)
 })
 
 test('a host without the switch services stays always-on', async () => {
@@ -186,6 +274,7 @@ test('a host without the switch services stays always-on', async () => {
   assert.equal(rec.projection, undefined)
   assert.equal(rec.command, undefined)
   assert.equal(rec.sections[0].text(promptContext('s1')).length > 10_000, true)
-  const value = await rec.tool.execute({ program: 'root = Col([title])\ntitle = Title("Hello")' })
+  const value = await rec.tool.execute({ program: VALID, style: 'card' })
   assert.equal(value.statements, 2)
+  assert.equal(value.style, 'card')
 })

@@ -45,6 +45,7 @@ npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run check          # build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
+npm run test:browser   # optional real-browser style-panel E2E (Chrome required)
 ```
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads.
@@ -53,7 +54,7 @@ npm run pack:check     # npm pack --dry-run, checks the final published file lis
 - `src/lib/**`: the port of the upstream component library and 59 library `@functions`; `src/lib/render.tsx` is the DSH wrapper (theme isolation, error boundary, `@ToAssistant` backfill), and `src/lib/i18n.tsx` gives renderer components their `t` seat plus the English fallback.
 - `src/client/**`: DSH Slot registrations (the composer UI switch and the Plugin detail page `plugins.bundle.config`), the turn-tail card, the `render_ui` process line, the program extractor, and the `ctx.locale` dictionary registration.
 - `src/shared/**`: Host/Client protocol constants (`intelligent-ui.ts`) and the bilingual UI dictionaries (`locales.ts`).
-- `src/host/**`: tool registration, program validation, the system prompt section, the settings Config (`freeComposition`), and embedded skill registration; `mode.ts` implements the three-state switch (persistence file, commands, projection, per-agent tool visibility).
+- `src/host/**`: tool registration, program validation, the system prompt section, the settings Config (`globalEnabled` / `answerStyle` / `freeComposition`), and embedded skill registration; `mode.ts` implements the global defaults + session overrides for the switch and style (persistence file, commands, projection, per-agent tool visibility).
 - `skills/intelligent-ui/**`: the Agent Skill shipped with the package.
 - `vendor/`: upstream source (components/functions/generated artifacts) and licenses.
 
@@ -80,10 +81,10 @@ The packaging test in `npm run check` verifies that the registration id in `lib/
 
 The Host half loads only at **process start**; the browser half is re-fetched from the current `lib/client.js` by the module loader on **page refresh**. So refreshing without restarting can produce "new control + old Host":
 
-- the new control's menu sends `/iui off|session|global`, while the old Host only understands `on|off`, so a red `Usage: /iui [on|off]` appears in the command line (the rendering of a command with `kind: 'error'`, not a crash);
+- the new control sends `/iui on|off|inherit` or `/iui style …`, while the old Host only understands `on|off`, so a red `Usage: …` appears in the command line (the rendering of a command with `kind: 'error'`, not a crash);
 - the old Host's success messages are also the old ones (for example "already off for this session").
 
-When you see this mixed state, first **restart the DSH process that serves the Web UI** (then refresh the page) so both halves switch to the current build; `/iui session|global` then returns the normal success message. The same applies to plugin upgrades after release: after a bundle update the host must be restarted, not merely refreshed.
+When you see this mixed state, first **restart the DSH process that serves the Web UI** (then refresh the page) so both halves switch to the current build; `/iui on` then returns the normal success message. The same applies to plugin upgrades after release: after a bundle update the host must be restarted, not merely refreshed.
 
 ## Layout (release-related)
 
@@ -97,7 +98,7 @@ When you see this mixed state, first **restart the DSH process that serves the W
 | `README.md` / `README.en.md` | Chinese / English docs, linked to each other at the top |
 | `docs/` | detailed docs (architecture, development, verification); not shipped in the npm package |
 | `CHANGELOG.md` | release changelog (English, historical, append-only); not shipped in the npm package |
-| `assets/` | README screenshots: itinerary, three component tours, dashboard and quiz examples, narrow screen and the composer switch (WebP + PNG) |
+| `assets/` | README screenshots: itinerary, three component tours, dashboard and quiz examples, narrow screen, the composer switch/style panel and the plugin settings page (WebP + PNG) |
 | `icon.svg` | plugin card icon |
 | `skills/intelligent-ui/` | the embedded Agent Skill that also ships with the package |
 | `licenses/` | full text of third-party licenses (Open Intelligent UI, OpenUI, lucide, KaTeX, MapLibre, zod) |

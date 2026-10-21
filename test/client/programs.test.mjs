@@ -105,3 +105,17 @@ test('invocation order is preserved and an absent node list is empty', () => {
   assert.deepEqual(programsFromToolNodes(undefined), [])
   assert.deepEqual(programsFromToolNodes([]), [])
 })
+
+test('a valid style is kept and an invalid style is dropped', () => {
+  assert.deepEqual(programsFromToolNodes([
+    started('call-18', { program: PROGRAM, style: 'article' }),
+    settled('call-19', { program: PROGRAM, style: 'card' }),
+    started('call-20', { program: PROGRAM, style: 'huge' }),
+    started('call-21', { program: PROGRAM, style: 'auto' }),
+  ]), [
+    { callId: 'call-18', program: PROGRAM, style: 'article', running: true },
+    { callId: 'call-19', program: PROGRAM, style: 'card', running: false },
+    { callId: 'call-20', program: PROGRAM, running: true },
+    { callId: 'call-21', program: PROGRAM, running: true },
+  ])
+})

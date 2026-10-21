@@ -1,10 +1,10 @@
 /**
- * Tests for the composer three-scope Intelligent UI control.
+ * Tests for the composer Intelligent UI control.
  *
  * Run: node --test test/client/toggle.test.mjs
  *
- * The pure transitions import as TypeScript source (Node >= 22.18 strips type
- * annotations). The TSX component cannot be loaded that way, so this test
+ * The pure command helpers import as TypeScript source (Node >= 22.18 strips
+ * type annotations). The TSX component cannot be loaded that way, so this test
  * bundles it with the repo's existing esbuild devDependency — React stays
  * external and resolves from the repo's node_modules — then server-renders it
  * to assert the markup contract. No new dependencies.
@@ -18,15 +18,16 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { build } from 'esbuild'
 import {
-  effectiveMode,
-  modeCommand,
+  effectiveView,
+  enableCommand,
   publishMode,
   readSyncedMode,
   resetSyncedMode,
-  runFlip,
+  runCommand,
+  startModeSync,
+  styleCommand,
   subscribeSyncedMode,
-  toggleState,
-} from '../../src/client/toggle.ts'
+} from '../../src/client/commands.ts'
 import { translate, zh } from '../../src/shared/locales.ts'
 
 const root = join(import.meta.dirname, '..', '..')
@@ -41,23 +42,7 @@ await build({
   platform: 'node',
   jsx: 'automatic',
   target: 'node22',
-  external: ['react'],
-  plugins: [{
-    name: 'primitives-stub',
-    setup(build) {
-      build.onResolve({ filter: /^@deepseek-ai\/dsh-client-ui-primitives$/ }, () => ({ path: 'primitives', namespace: 'stub' }))
-      build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-        loader: 'js',
-        contents: `
-          import { createElement } from 'react'
-          export const Menu = ({ open, anchor, items = [] }) => open
-            ? createElement('div', { role: 'menu' }, items.map(item => createElement('div', { key: item.id, role: 'menuitem' }, item.label)))
-            : anchor
-          export const IconChevronDownOutlineRegular = () => createElement('svg')
-        `,
-      }))
-    },
-  }],
+  external: ['react', 'react-dom'],
   logLevel: 'silent',
 })
 const { ToggleControl } = await import(pathToFileURL(outfile).href)
@@ -66,25 +51,36 @@ after(async () => {
   await rm(outDir, { recursive: true, force: true })
 })
 
+/** One projection view with sensible defaults. */
+const view = (overrides = {}) => ({
+  sessionEnable: 'inherit',
+  sessionStyle: 'inherit',
+  globalEnabled: true,
+  globalStyle: 'auto',
+  enabled: true,
+  style: 'auto',
+  pending: false,
+  ...overrides,
+})
+
 /**
  * Server-render the control for one projection view.
- * @param {import('../../src/shared/intelligent-ui.ts').IntelligentUIModeView | undefined} view
- * @param {{ locked?: boolean, sessionId?: string, flip?: (scope: string) => Promise<string | null>, t?: (key: string, params?: Record<string, string | number>) => string }} [options]
+ * @param {import('../../src/shared/intelligent-ui.ts').IntelligentUIModeView | undefined} projection
+ * @param {{ locked?: boolean, sessionId?: string, flip?: (scope: string) => Promise<string | null>, setStyle?: (style: string) => Promise<string | null>, t?: (key: string, params?: Record<string, string | number>) => string }} [options]
  * @returns {{ html: string, projectionKeys: string[] }}
  */
-function render(view, options = {}) {
+function render(projection, options = {}) {
   resetSyncedMode()
   const projectionKeys = []
   const html = renderToStaticMarkup(createElement(ToggleControl, {
     useProjection: (key) => {
       projectionKeys.push(key)
-      return view
+      return projection
     },
     locked: options.locked ?? false,
-    onActiveChange: () => undefined,
     sessionId: options.sessionId ?? 'session-1',
     flip: options.flip ?? (async () => null),
-    // Omitted `t` exercises the component's English fallback used in bare tests.
+    setStyle: options.setStyle ?? (async () => null),
     t: options.t,
   }))
   return { html, projectionKeys }
@@ -96,8 +92,8 @@ test('an absent projection renders nothing (deployment without the switch)', () 
   assert.deepEqual(projectionKeys, ['intelligent-ui'])
 })
 
-test('off renders the chip closed, with the off glyph and command hint', () => {
-  const { html } = render({ mode: 'off', pending: false })
+test('off renders the closed chip with its own command hint', () => {
+  const { html } = render(view({ sessionEnable: 'off', globalEnabled: false, enabled: false }))
   assert.match(html, /data-dsh-iui-toggle="true"/)
   assert.match(html, /data-state="off"/)
   assert.match(html, /aria-label="Intelligent UI: off"/)
@@ -110,109 +106,80 @@ test('off renders the chip closed, with the off glyph and command hint', () => {
 })
 
 test('session scope labels the chip Session and hints the session command', () => {
-  const { html } = render({ mode: 'session', pending: false })
-  assert.match(html, /data-state="session"/)
+  const { html } = render(view({ sessionEnable: 'on' }))
+  assert.match(html, /data-state="on"/)
   assert.match(html, /aria-label="Intelligent UI: this session only"/)
   assert.match(html, />UI: Session</)
-  assert.match(html, /\/iui session/)
+  assert.match(html, /\/iui on/)
   assert.doesNotMatch(html, /disabled=""/)
 })
 
-test('global scope labels the chip All and hints the global command', () => {
-  const { html } = render({ mode: 'global', pending: false })
-  assert.match(html, /data-state="global"/)
-  assert.match(html, /aria-label="Intelligent UI: all sessions"/)
-  assert.match(html, />UI: All</)
-  assert.match(html, /\/iui global/)
+test('inherit labels the chip Global and hints the inherit command', () => {
+  const { html } = render(view({ sessionEnable: 'inherit' }))
+  assert.match(html, /data-state="inherit"/)
+  assert.match(html, /aria-label="Intelligent UI: follow global"/)
+  assert.match(html, />UI: Follow global</)
+  assert.match(html, /\/iui inherit/)
   assert.doesNotMatch(html, /disabled=""/)
 })
 
 test('a Chinese locale seat translates the chip, aria label and tooltip', () => {
   const t = translate(zh)
-  const { html } = render({ mode: 'session', pending: false }, { t })
-  assert.match(html, /data-state="session"/)
+  const { html } = render(view({ sessionEnable: 'on' }), { t })
+  assert.match(html, /data-state="on"/)
   assert.match(html, /aria-label="Intelligent UI：仅本会话"/)
   assert.match(html, />UI：本会话</)
-  assert.match(html, /title="Intelligent UI 仅在本会话开启（\/iui session） — 点击更改"/)
-  assert.match(html, /\/iui session/)
-})
-
-test('the Chinese locale covers every scope label', () => {
-  const t = translate(zh)
-  const expected = {
-    off: { chip: 'UI：关闭', aria: 'Intelligent UI：关闭' },
-    session: { chip: 'UI：本会话', aria: 'Intelligent UI：仅本会话' },
-    global: { chip: 'UI：全部', aria: 'Intelligent UI：全部会话' },
-  }
-  for (const [mode, copy] of Object.entries(expected)) {
-    const { html } = render({ mode, pending: false }, { t })
-    assert.match(html, new RegExp(`>${copy.chip}<`), `${mode} chip`)
-    assert.match(html, new RegExp(`aria-label="${copy.aria}"`), `${mode} aria label`)
-  }
+  assert.match(html, /title="Intelligent UI 在本会话开启（\/iui on） — 点击更改"/)
 })
 
 test('pending disables the chip and reports the pending state', () => {
-  for (const view of [{ mode: 'off', pending: true }, { mode: 'session', pending: true }, { mode: 'global', pending: true }]) {
-    const { html } = render(view)
+  for (const sessionEnable of ['off', 'on', 'inherit']) {
+    const { html } = render(view({ sessionEnable, pending: true }))
     assert.match(html, /data-state="pending"/)
     assert.match(html, /disabled=""/)
   }
 })
 
 test('a locked composer disables the chip without changing its state', () => {
-  const { html } = render({ mode: 'global', pending: false }, { locked: true })
-  assert.match(html, /data-state="global"/)
-  assert.match(html, />UI: All</)
+  const { html } = render(view({ sessionEnable: 'inherit' }), { locked: true })
+  assert.match(html, /data-state="inherit"/)
+  assert.match(html, />UI: Follow global</)
   assert.match(html, /disabled=""/)
 })
 
-test('modeCommand spells the host slash command for all three scopes', () => {
-  assert.equal(modeCommand('off'), '/iui off')
-  assert.equal(modeCommand('session'), '/iui session')
-  assert.equal(modeCommand('global'), '/iui global')
+test('the command helpers spell the host command for every value', () => {
+  assert.equal(enableCommand('off'), '/iui off')
+  assert.equal(enableCommand('on'), '/iui on')
+  assert.equal(enableCommand('inherit'), '/iui inherit')
+  assert.equal(styleCommand('auto'), '/iui style auto')
+  assert.equal(styleCommand('card'), '/iui style card')
+  assert.equal(styleCommand('article'), '/iui style article')
+  assert.equal(styleCommand('inherit'), '/iui style inherit')
 })
 
-test('effectiveMode prefers a live cross-tab scope for the right session', () => {
-  assert.equal(effectiveMode({ mode: 'off', pending: false }, undefined, 's1'), 'off')
-  assert.equal(effectiveMode(undefined, { mode: 'global' }, 's1'), 'global')
-  assert.equal(effectiveMode({ mode: 'off', pending: false }, { mode: 'session', sessionId: 's1' }, 's1'), 'session')
-  assert.equal(effectiveMode({ mode: 'session', pending: false }, { mode: 'session', sessionId: 's2' }, 's1'), 'off')
-  assert.equal(effectiveMode({ mode: 'session', pending: false }, { mode: 'off' }, 's1'), 'off')
+test('runCommand normalizes both failure channels', async () => {
+  assert.equal(await runCommand(async () => null, 'on'), null)
+  assert.equal(await runCommand(async () => 'permission denied (E_DENIED)', 'off'), 'permission denied (E_DENIED)')
+  assert.equal(await runCommand(async () => { throw new Error('transport closed') }, 'inherit'), 'transport closed')
+  assert.equal(await runCommand(async () => { throw 'nope' }, 'style card'), 'nope')
 })
 
-test('toggleState reports pending before the settled scope', () => {
-  assert.equal(toggleState('off', false), 'off')
-  assert.equal(toggleState('session', false), 'session')
-  assert.equal(toggleState('global', false), 'global')
-  assert.equal(toggleState('global', true), 'pending')
-})
 
-test('the cross-tab store publishes scopes and notifies subscribers', () => {
+test('cross-tab views publish, subscribe, and stop overriding once cleared', () => {
   resetSyncedMode()
+  startModeSync()
   const seen = []
-  const unsubscribe = subscribeSyncedMode(() => { seen.push(readSyncedMode()) })
-  assert.equal(readSyncedMode(), undefined)
-  publishMode('global')
-  assert.deepEqual(readSyncedMode(), { mode: 'global' })
-  assert.deepEqual(seen, [{ mode: 'global' }])
-  publishMode('session', 's1')
-  assert.deepEqual(readSyncedMode(), { mode: 'session', sessionId: 's1' })
+  const unsubscribe = subscribeSyncedMode(() => seen.push(readSyncedMode()))
+  const base = view()
+  const optimistic = view({ sessionEnable: 'on', enabled: true })
+  publishMode(optimistic, 'session-1', base)
+  assert.deepEqual(readSyncedMode(), { sessionId: 'session-1', view: optimistic, base })
+  assert.equal(seen.length, 1)
+  assert.deepEqual(effectiveView(undefined, readSyncedMode(), 'session-1'), optimistic)
+  assert.equal(effectiveView(undefined, readSyncedMode(), 'session-2'), undefined)
   unsubscribe()
-  publishMode('off')
-  assert.equal(readSyncedMode().mode, 'off')
-  assert.equal(seen.length, 2, 'unsubscribed listeners stop receiving updates')
+  publishMode(view(), 'session-2', base)
+  assert.equal(seen.length, 1, 'unsubscribed listeners stop receiving updates')
   resetSyncedMode()
   assert.equal(readSyncedMode(), undefined)
-})
-
-test('runFlip forwards the scope and normalizes both failure channels', async () => {
-  const calls = []
-  assert.equal(await runFlip(async (scope) => {
-    calls.push(scope)
-    return null
-  }, 'session'), null)
-  assert.deepEqual(calls, ['session'])
-  assert.equal(await runFlip(async () => 'permission denied (E_DENIED)', 'off'), 'permission denied (E_DENIED)')
-  assert.equal(await runFlip(async () => { throw new Error('transport closed') }, 'global'), 'transport closed')
-  assert.equal(await runFlip(async () => { throw 'nope' }, 'off'), 'nope')
 })

@@ -10,13 +10,13 @@ whenToUse: "A visual, interactive or computed answer would serve better than pro
 
 ## Before you start: is the session enabled?
 
-The extension is opt-in; the host switch has three scopes — **Off**, **This session only**, **All sessions**. You cannot see the composer, so infer the state from the request:
+The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **Follow global**, and **Auto** / **Card** / **Article**. You cannot see the composer, so infer the state from the request:
 
 - **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; a page is the default answer format.
-- **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) or **All sessions** (全部会话) in the **UI** chip on the right side of the composer, or run `/iui session` / `/iui global`. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
+- **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) in the **UI** chip on the right side of the composer, run `/iui on`, or enable the extension for all sessions on the Plugin detail page. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
 - **Explicit invocation is a directive:** the user invoked `/intelligent-ui`, or asked you to build the page with this skill → render; prose only when the user also asked for text or the tool is unavailable.
 
-A deployment may also enable **Free composition** on the extension's Plugin detail page (Plugins → Intelligent UI). When the injected prompt says "Free composition is on for this deployment", the design playbook below is advisory rather than a template.
+A deployment may also enable **Free-form layout** on the extension's Plugin detail page (Plugins → Intelligent UI). When the injected prompt says "Free-form layout is on for this deployment", the design playbook below is advisory rather than a template.
 
 ## Decide the format
 
@@ -34,11 +34,26 @@ Two consequences matter in practice:
 - **A knowledge or explainer topic is not a prose signal.** If the answer would have parts (eras, stages, factors, examples, dynasties, events), make the page — timeline, cards or an explorer — instead of a long text answer.
 - **A page is never faked.** If the switch is off or the tool is missing, say so once and answer in prose; never simulate a card with HTML or a fenced block.
 
+## Answer styles
+
+The injected prompt owns the effective style decision and appends it to the session prompt; this section only explains how to build each shape. Apply the style you were given:
+
+- **Card** — compact, scannable interactive page. Keep cards tight; do not turn a broad request into a long article.
+- **Article** — article-first reading page inside the card: a short coverage summary, a `Toc`, and one `Section` per major part whose body is substantial `Markdown` prose. All core content must be readable without clicking; interactions are optional supplements. The Host rejects an article-style call that has no reachable `Toc` and `Section`, so include both. Keep Section anchors unique within one card. `Section(title, children, anchor?)` lets `anchor` be the stable id while `title` stays display text; `Toc(items, anchors?)` takes the matching parallel anchors. Without anchors the title is the target.
+- **Auto** — choose per request: Card for interactive, structured, visual or computational answers; Article for 详尽/深入/全面/长文/报告/综述 requests.
+
+For an Article answer, a skeleton is a failure. Each major part needs specific facts, causes, examples or debates, and the page must not end by asking which part to expand instead of covering it. The compactness rules below apply to Card pages and to side cards inside an Article — they are not a reason to delete Article content.
+
 ## Workflow
+
+### 0. Outline the content first
+
+For an Article answer, write the outline before choosing components: every major part, the 2–5 points each must teach, and one concrete example, cause or debate that makes it specific. Completion: you can name every section and its substance without writing code. For a Card answer, this step can be a short list of the blocks and the fact each carries.
+
 
 ### 1. Choose the medium
 
-Pick **one to three hero blocks** that carry the idea, then supporting blocks. Name them before writing: "map + timeline + checklist", "KPI row + trend + region donut + top-orders table". Completion: you can say what the page is for and which block answers the question, without writing any code yet.
+For a **Card** page, pick **one to three hero blocks** that carry the idea, then supporting blocks. For an **Article** page, the main body is one readable column: a summary, a `Toc`, and `Section`s with prose; visual blocks are supplements. Name the shape before writing: "map + timeline + checklist" or "summary + toc + sections + one chart". Completion: you can say what the page is for and which block carries the answer, without writing any code yet.
 
 Choosing rules of thumb:
 
@@ -69,9 +84,9 @@ Completion: the program satisfies the hard rules below, and the pre-flight check
 
 ### 4. Call the tool
 
-Call `render_ui({ program: <the complete program>, title: "Short noun phrase" })`. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
+Call `render_ui({ program: <the complete program>, style: <"card"|"article">, title: "Short noun phrase" })`. Pass `card` for a compact interactive page, `article` for the reading layout; when the session is Auto, pass the style you chose. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
 
-**The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 11 carries the full version.
+**The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 13 carries the full version.
 
 ### 5. Handle the result
 
@@ -85,7 +100,7 @@ Call `render_ui({ program: <the complete program>, title: "Short noun phrase" })
 1. One program, one statement per line: `name = expression`. It starts with `root`; `root` must evaluate to a component, conventionally `Col`.
 2. Arguments are **positional**. Omit optional arguments from the end; skip a middle one with `null`. Named syntax (`children: [...]`) is rejected.
 3. Every referenced name is declared, and every non-root statement is reachable from `root`. Violations are warnings that silently drop content.
-4. Use only the shipped vocabulary: 55 components, 14 core + 59 library `@functions`, 5 action steps — exact names, case-sensitive. Do not invent `@If`, `@Map`, `@Length` or components.
+4. Use only the shipped vocabulary: 57 components, 14 core + 59 library `@functions`, 5 action steps — exact names, case-sensitive. Do not invent `@If`, `@Map`, `@Length` or components.
 5. `$` state is declared with literal defaults. Inputs bind their first argument to a `$` variable; only actions mutate state (`@Set`, `@Reset`).
 6. No control flow: `cond ? a : b` picks values or components, `null` hides a block, `@Each` repeats. No user-defined functions, no string interpolation — concatenate with `+`.
 7. `@Each(array, "x", template)`: the loop variable exists only inside the template. Inline the template.
@@ -98,8 +113,11 @@ Exact signatures, argument order, enums and function list: [references/component
 
 ## Design playbook
 
-**Free composition.** When the injected prompt says "Free composition is on for this deployment", this playbook is advisory, not a template: choose the page shape and blocks the content needs, and vary them between answers. The hard rules above and the theme/readability guidance below still apply.
+**Free-form layout.** When the injected prompt says "Free-form layout is on for this deployment", this playbook is advisory, not a template: choose the page shape and blocks the content needs, and vary them between answers. The hard rules above and the theme/readability guidance below still apply.
 
+The compactness bullets below describe **Card** pages and side cards inside an Article. An Article page follows the Article layout bullet instead: prose is the main content, and a wall of text is not a defect when the user asked for depth.
+
+- **Article layout.** One column, readable measure. `Title` (xl/2xl), a short `Text` summary, a `Toc`, then `Section` blocks. Put `Markdown` prose inside each Section; use a chart, map or table as a supplement between sections, not as a substitute for the prose. All sections always start open; the reader can collapse them. Do not use a `Carousel` as the only way to read core content.
 - **Compose a page, not a form letter.** A `Title` (`xl`/`2xl`), one short `Text`, then 2–4 mixed blocks. Group related blocks in `Card`s; do not wrap the whole page in one card.
 - **Spacing is a system.** `gap`/`padding` count 4px steps: inner 1–2, group 3–4, section 5–6. Leave `gap` unset on the page root and on card contents (the app applies the article rhythm); set a gap on `Row`/`Grid` only.
 - **Cards stay compact.** Card title `md`/`sm`; inside a `Card` the display sizes are capped (`lg` 18 → `xl` 22 → `2xl` 26 → `3xl` 30px), so `xl` is for one KPI number, never for the card heading. Body `sm`, at most one short paragraph, then facts as `Badge`s or label/value rows. Cards side by side in a `Grid` carry the same blocks in the same order so they line up.
@@ -109,7 +127,7 @@ Exact signatures, argument order, enums and function list: [references/component
 - **Make it work on its own.** Every control changes what is rendered; every list, budget or total is computed from state or inline data with `@functions`; nothing waits for another message. `@ToAssistant` is only for what the page cannot compute (form submit, "plan another day").
 - **Guard arithmetic.** Number inputs are empty or zero: read them as `@Clamp(@Default($people, 1), 1, 50)` and guard divisions with a `$n > 0 ? … : 1` ternary. `@Avg` of an empty list is `0`.
 - **Format for humans.** `@Format(value, "currency", 0, "USD")`, `@Format(value, "percent", 1)`, `@Plural(n, "guest")`, `@FormatDate(date, "long")`. Units belong in the label or unit argument, not in the number.
-- **Data stays inline and modest.** A few dozen rows in a literal array is fine; summarize with `@GroupBy`/`@Bucket` and show the top rows in a `Table`. Typical page: 20–80 statements; past ~120, cut blocks rather than shrink everything.
+- **Data stays inline and modest for Card pages.** A few dozen rows in a literal array is fine; summarize with `@GroupBy`/`@Bucket` and show the top rows in a `Table`. Typical Card page: 20–80 statements; past ~120, cut blocks rather than shrink everything. An Article page is content-driven: it may be much longer, and content must not be deleted to satisfy a statement budget. Use one `Markdown` block per section when that keeps the program manageable.
 - **Theme with tokens.** `Color` tokens and CSS colors adapt to DSH dark/light automatically. Use raw hexes only for illustration (`Svg` fills, heatmap scales via `@MixColor`), and make sure text stays readable in both themes.
 
 ## DSH specifics
@@ -132,7 +150,9 @@ Exact signatures, argument order, enums and function list: [references/component
 8. **Numbers where strings are required** — `Title($n)` fails; write `$n + ""` or `@Format`.
 9. **Too much page** — more than four block types, lg+ titles inside cards, or a wall of prose in a card. Choose fewer, bigger ideas.
 10. **Program pasted into prose** — the tool carries the program; the reply stays a sentence.
-11. **Preflighting by editing the plugin** — a scratch harness written into the extension checkout shows the user a spurious file diff in a repository you were not asked to change. Call `render_ui` and use its findings; keep drafts outside the tree.
+11. **Article page that is only a skeleton** — sections of one-line bullets, cards in place of paragraphs, or a closing "tell me which part to expand". Article needs substantive prose, a `Toc`, and `Section`s; follow up only after a complete answer.
+12. **Interaction instead of information** — a carousel showing one item at a time, or a quiz, cannot substitute for content the user asked to read. Lead with readable content; add controls only when they add depth, sources or comparison.
+13. **Preflighting by editing the plugin** — a scratch harness written into the extension checkout shows the user a spurious file diff in a repository you were not asked to change. Call `render_ui` and use its findings; keep drafts outside the tree.
 
 ## Pre-flight checklist
 
@@ -144,8 +164,9 @@ Before the call, verify:
 4. Component names, argument order, optional-argument `null`s and enum values match the reference.
 5. Values are derived with `@functions`, formatted for display, and safe against empty/zero input.
 6. The program is complete and self-running: no placeholders, no dependence on a follow-up message.
-7. No file was created or edited outside the requested deliverable — in particular, nothing in the extension checkout was touched to test the program.
-8. The reply around the call is one intro sentence and, after success, at most one closing sentence.
+7. For an Article answer: every major part is present, each has substantive prose (not only bullets), the core content is readable without interaction, and the page does not claim to be a skeleton.
+8. No file was created or edited outside the requested deliverable — in particular, nothing in the extension checkout was touched to test the program.
+9. The reply around the call is one intro sentence and, after success, at most one closing sentence.
 
 ## Reference index
 
@@ -153,9 +174,9 @@ Read these when the task needs more than the injected prompt:
 
 | File | Read it when |
 | --- | --- |
-| [references/components.md](references/components.md) | You need an exact signature, default, enum, optional argument position, or the full list of 55 components, 73 functions and 5 action steps. |
+| [references/components.md](references/components.md) | You need an exact signature, default, enum, optional argument position, or the full list of 57 components, 73 functions and 5 action steps. |
 | [references/language.md](references/language.md) | You are unsure about syntax, hoisting, `$` state, actions, `@Each`, comments, coercion, or want wrong-vs-right snippets. |
-| [references/examples.md](references/examples.md) | You want a complete validated program to adapt: itinerary, calculator, SVG tutorial, dashboard, form, quiz + HtmlView game. |
+| [references/examples.md](references/examples.md) | You want a complete validated program to adapt: itinerary, calculator, SVG tutorial, dashboard, form, quiz + HtmlView game, detailed article. |
 | [references/troubleshooting.md](references/troubleshooting.md) | A call failed, the result carried warnings, the card rendered wrong, or media/map/HtmlView degraded. Contains the verbatim host error strings and the retry loop. |
 | [references/integration.md](references/integration.md) | The user is installing or adopting the extension, `render_ui` is missing, the skill is missing from the catalog, or you need the tool contract and limits. |
 

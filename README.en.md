@@ -24,9 +24,9 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 
 ## Component tour
 
-The renderer is not a chat bubble around a paragraph — it is a full component library: **55 components, 73 functions, 5 action steps**. The three cards below are real renders from the extension: same renderer, same DSH theme tokens, no mockups:
+The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The three cards below are real renders from the extension: same renderer, same DSH theme tokens, no mockups:
 
-![Layout and typography: Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer and 12 text components](assets/intelligent-ui-components-layout.webp)
+![Layout and typography: the 57-component tour, Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer, Section, Toc and 12 text components](assets/intelligent-ui-components-layout.webp)
 
 ![Inputs, media and data: 13 form controls plus photos, tables, charts, maps and YouTube](assets/intelligent-ui-components-inputs.webp)
 
@@ -48,10 +48,10 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 |---|---|
 | Interactive pages | Maps, photos, charts, checklists, forms, SVG drawings and mini-games are real components, not screenshots |
 | Local execution | `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` writes a message back |
-| Three-state switch | Off by default; "This session only" / "All sessions"; composer UI control or `/iui` commands |
+| Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
-| Plugin detail page | Plugins → Intelligent UI detail page: a Free composition switch; the default playbook, or a model-chosen layout when on |
+| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), and Composition (Free-form layout) |
 | Replayable | The generated program enters the session log as a tool argument and replays with history |
 
 ## Getting the code
@@ -67,8 +67,8 @@ You can also install it from npm without a checkout (next section).
 
 ## Prerequisites
 
-- **DSH 0.2.1** (the [`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified.
-- **Node.js 24**: build, tests and `npm pack` are verified on Node 24; the Host bundle targets Node 22 (`target: 'node22'`), and the repository has no `engines` or `.nvmrc` pin, so verify a lower version yourself before using one.
+- **DSH 0.2.1** (the [`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified. Install with `npm install -g @deepseek-ai/dsh`.
+- **[Node.js 24](https://nodejs.org/en/download)**: build, tests and `npm pack` are verified on Node 24; the Host bundle targets Node 22 (`target: 'node22'`), and the repository has no `engines` or `.nvmrc` pin, so verify a lower version yourself before using one.
 - **`@deepseek-ai/dsh-client-locale`**: the browser half requires a deployment that composes it; DSH Web 0.2.1 includes it by default, and without it the switch and card do not mount (the Host tool and prompt keep working).
 
 Confirm the tools are present:
@@ -115,7 +115,7 @@ node scripts/install.mjs  # writes $DSH_HOME/profiles/web/cordis.patch.yml (auto
 > [!IMPORTANT]
 > After renaming the package or rebuilding `lib/client.js`, a page refresh may keep the old revision; restart the DSH process that serves the Web UI, then reopen the page.
 
-Then click the **UI** control, choose "This session only" or "All sessions" (or `/iui session` / `/iui global`), and ask, for example:
+Then click the **UI** control, choose "This session only" (or `/iui on`), set the session Auto / Card / Article style in the same panel if needed, and ask, for example:
 
 ```text
 Plan two days in Shanghai, with checkboxes and adjustments
@@ -123,13 +123,16 @@ Plan two days in Shanghai, with checkboxes and adjustments
 
 See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall, development and troubleshooting.
 
-## Three-state switch
+## Switch and answer style
 
-![The UI control on the right side of the composer: clicking it opens an "Off / This session only / All sessions" menu (screenshot from the English UI)](assets/intelligent-ui-toggle.png)
+![The composer UI control: Off / This session only / Follow global](assets/intelligent-ui-toggle.png)
 
-- **Off** (default): no `render_ui` schema in any session's request, and the ~8.5K-token generation prompt expands to nothing.
-- **This session only** / **All sessions**: scopes the current session or every session (including ones opened later); the **UI** control is equivalent to `/iui off|session|global`.
-- State is written atomically to `<DSH_HOME>/dsh-intelligent-ui.json` and survives a refresh or DSH restart; see [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full semantics (projection, cross-tab sync, service requirements).
+![The This-session style panel: Auto / Card / Article for this session, or follow the global choice](assets/intelligent-ui-style-panel.webp)
+
+- **Global defaults:** the Plugin detail page's **Enable in all sessions** decides whether new sessions start on; the **Display style** control under **Answer style** sets the default Auto / Card / Article.
+- **Session overrides:** the composer **UI** control changes only the current session; choosing **This session only** opens the style panel. `/iui on|off|inherit` and `/iui style auto|card|article|inherit` are equivalent.
+- **Auto** lets the model choose: compact Card for interactive/structured answers, Article for detailed/in-depth/long-form ones. Article pages need a `Toc`, collapsible `Section`s and substantive prose, not a skeleton.
+- Session state is written atomically to `<DSH_HOME>/dsh-intelligent-ui.json` and survives a refresh or DSH restart; see [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full semantics.
 
 ## Usage
 
@@ -144,7 +147,9 @@ Once enabled, **any answer with structure defaults to a card** — including exp
 
 To guarantee a card (or when the model still replies in text), invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on; explicit invocation is treated as a direct instruction. You can also say "read the intelligent-ui skill and then build ... with render_ui".
 
-The extension also adds a **Free composition** switch on the **Plugins → Intelligent UI detail page**: off by default (the extension's design playbook); when on, the playbook is advisory and the model may choose components and layout for the content (the hard rules, theme tokens and readability still apply). The choice persists in the DSH settings document and applies to every session.
+![Plugin detail page: availability, answer style and composition](assets/intelligent-ui-settings.webp)
+
+The Plugin detail page groups its settings into **Availability**, **Answer style** and **Composition**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style.
 
 ## Build, test and deploy
 
@@ -152,6 +157,7 @@ The extension also adds a **Free composition** switch on the **Plugins → Intel
 npm run build       # build the prompt, Host and Client bundle
 npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
+npm run test:browser # optional: real-browser style-panel E2E (Chrome required)
 ```
 
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
@@ -171,14 +177,14 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - The model occasionally generates invalid OpenUI Lang; Host validation returns precise errors, and it usually repairs them within the same turn (1–2 attempts in testing).
 - The map basemap relies on OpenFreeMap tiles, routes on the OSRM demo, and photos on Wikipedia/Wikimedia; when offline, maps degrade to a list of places and photos to placeholder blocks.
 - KaTeX uses global styles already loaded by the DSH shell; if those styles are removed, the Math component degrades to plain text.
-- The generation prompt is about 8.5K tokens and is **sent only when the switch covers that session** (all sessions, or the session is on the allowlist); when off, that cost is zero (the tool schema is absent too). Enabled requests are the same as the previous version, so DSH cache hits offset most of the cost.
+- The generation prompt is about 8.5K tokens and is **sent only when the switch covers that session** (global on, or the session explicitly on); when off, that cost is zero (the tool schema is absent too). Article mode produces longer pages, so output tokens and render time increase accordingly.
 - The extension's UI copy follows DSH's UI language; the `/iui` Host replies, the command palette's command description and the README screenshots stay in English (the first two are DSH platform behavior).
 - The browser half requires a deployment that composes `dsh-client-locale` (included by default in DSH Web 0.2.1); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
-- The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. The free-composition switch only changes how strongly the prompt recommends the design playbook; it cannot guarantee every model ignores the defaults entirely.
+- The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. Global enable/style and free-form layout only change the prompt and page shape; no model is guaranteed to follow them perfectly, and session style overrides still rely on the Host-injected prompt.
 
 ## Documentation
 
-- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full three-state switch semantics, UI language and the Agent Skill.
+- [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language and the Agent Skill.
 - [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch and the release layout.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
 - [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.

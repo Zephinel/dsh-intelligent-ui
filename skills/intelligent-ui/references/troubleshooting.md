@@ -22,16 +22,16 @@
 ## The switch does not admit this session
 
 ```text
-render_ui is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|session|global.
+render_ui is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|inherit.
 ```
 
-**Cause.** This is a tool-admission error, not a validator error: the program never reached the parser. The host switch is **Off**, or scoped to **This session only** for a different session, or the `/iui` command that flips it has not settled.
+**Cause.** This is a tool-admission error, not a validator error: the program never reached the parser. The session override is **Off**, the session follows a globally disabled switch, or the `/iui` command that flips it has not settled.
 
-**Fix.** Open the **UI** chip in the composer and pick **This session only** or **All sessions** (「仅本会话」/「全部会话」 in a Chinese UI; or run `/iui session` / `/iui global`), then retry in the same turn. If the chip already shows a scope that includes this session, the host half may be stale — restart the DSH host (next section). Never emulate the card with HTML or a fenced block.
+**Fix.** Open the **UI** chip in the composer and pick **This session only** (「仅本会话」 in a Chinese UI; or run `/iui on`), or enable the extension globally on the Plugin detail page, then retry in the same turn. If the chip already shows a scope that includes this session, the host half may be stale — restart the DSH host (next section). Never emulate the card with HTML or a fenced block.
 
 ## Red `/iui` rows or a missing UI control
 
-- A red command row reading `Usage: /iui [on|off]` while the **UI** menu offers **This session only** / **All sessions**（「仅本会话」/「全部会话」）means the browser half is newer than the host half: the new menu sends `session`/`global`, the old host only accepts `on|off`. Restart the process serving the DSH Web UI, then refresh the page. This is version skew, not a program error.
+- A red command row reading `Usage: /iui [on|off|inherit]` while the **UI** menu offers a **Follow global** entry means the browser half is newer than the host half: restart the process serving the DSH Web UI, then refresh the page. This is version skew, not a program error.
 - If the **UI** chip is absent, the profile lacks the `sessionProjections` + `commands` services or the browser half did not load. In that deployment the extension is always-on, so a missing `render_ui` points at the plugin itself — see [integration.md](integration.md#troubleshooting-a-missing-render_ui).
 - A `Switch failed`（「切换失败」）inline label means the command request failed before it reached the switch; retry once, then report the exact failure line.
 

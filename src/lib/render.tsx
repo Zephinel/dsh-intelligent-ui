@@ -25,6 +25,7 @@ import {
   type OpenUIError,
 } from '@openuidev/react-lang'
 import { runLibraryAction } from './actions'
+import { ArticleScope } from './components/article'
 // Scoped upstream globals reset; must be evaluated before the library sheets.
 import './components/reset.css'
 import { webUrl } from './components/style'
@@ -35,6 +36,8 @@ import { fallbackT, type Translate } from '../shared/locales.ts'
 export interface OpenUIRendererProps {
   readonly program: string
   readonly title?: string
+  /** Stable card identity used to scope Section/Toc anchors across cards. */
+  readonly scopeId?: string
   readonly onToAssistant?: (message: string) => void
   /** DSH locale seat; omitted in tests and standalone embeds (English copy). */
   readonly t?: Translate
@@ -115,7 +118,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, onToAssistant, t = fallbackT }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT }: OpenUIRendererProps): ReactElement {
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
   // Warnings still render; only real errors get the fallback note.
@@ -124,6 +127,7 @@ export function OpenUIRenderer({ program, onToAssistant, t = fallbackT }: OpenUI
 
   return (
     <I18nProvider t={t}>
+      <ArticleScope.Provider value={scopeId}>
       <div className="dsh-iui-host dsh-iui-root">
         <RendererBoundary program={program}>
           {empty ? (
@@ -147,6 +151,7 @@ export function OpenUIRenderer({ program, onToAssistant, t = fallbackT }: OpenUI
           )}
         </RendererBoundary>
       </div>
+      </ArticleScope.Provider>
     </I18nProvider>
   )
 }

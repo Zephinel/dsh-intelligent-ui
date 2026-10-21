@@ -420,3 +420,37 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 :is(.iui-title-md, .iui-title-lg, .iui-title-xl, .iui-title-2xl, .iui-title-3xl).iui-title-cjk.iui-title,
 .iui-md-h.iui-title-cjk,
 .iui-flashcard-word.iui-flashcard-word-cjk { letter-spacing: normal; }
+
+/* Article reading: collapsible sections and the linked table of contents.
+   Section chrome stays quiet: a rule between sections, a full-row toggle and a
+   chevron; the body uses the normal Markdown rhythm. */
+.iui-section { display: flex; flex-direction: column; min-width: 0; padding-top: 6px; border-top: 1px solid var(--iui-border); }
+.iui-section-heading { margin: 0; font: inherit; }
+.iui-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 2px;
+  border: 0;
+  border-radius: var(--iui-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.iui-section-header:hover { background: var(--iui-surface); }
+.iui-section-header:focus-visible { outline: 2px solid var(--iui-focus); outline-offset: 2px; }
+.iui-section-title { flex: 1 1 auto; min-width: 0; color: var(--iui-content-ink); font-size: 19px; line-height: 1.35; font-weight: 640; letter-spacing: -0.3px; overflow-wrap: anywhere; }
+.iui-section-chevron { flex: none; color: var(--iui-content-muted); transition: transform 140ms ease; }
+.iui-section-chevron.is-open { transform: rotate(180deg); }
+.iui-section-body { padding: 2px 2px 16px; }
+.iui-section-body[hidden] { display: none; }
+
+.iui-toc { padding: 14px 16px; border: 1px solid var(--iui-border); border-radius: var(--iui-radius-lg); background: var(--iui-surface); }
+.iui-toc ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px 20px; margin: 0; padding-left: 1.4em; }
+.iui-toc li { min-width: 0; }
+.iui-toc a { color: var(--iui-content-ink); font-size: 13px; line-height: 1.5; text-decoration: none; overflow-wrap: anywhere; }
+.iui-toc a:hover { text-decoration: underline; text-underline-offset: 3px; }

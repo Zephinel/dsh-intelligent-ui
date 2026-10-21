@@ -220,6 +220,14 @@
     "HtmlView": {
       "signature": "HtmlView(html: string, height?: number, title?: string)",
       "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set."
+    },
+    "Section": {
+      "signature": "Section(title: string, children: Node[], anchor?: string)",
+      "description": "Collapsible article section; starts open. Optional anchor is the Toc target; falls back to the title."
+    },
+    "Toc": {
+      "signature": "Toc(items: string[], anchors?: string[])",
+      "description": "Compact table of contents linking to Section anchors. Items are labels; the optional parallel anchors array decouples labels from targets."
     }
   },
   "componentGroups": [
@@ -234,7 +242,9 @@
         "Carousel",
         "Popover",
         "Divider",
-        "Spacer"
+        "Spacer",
+        "Section",
+        "Toc"
       ],
       "notes": [
         "- gap and padding count 4px steps. Length is px or a CSS length like \"50%\". Radius is \"sm\", \"md\", \"lg\", \"xl\", \"full\" or px.",
@@ -729,6 +739,12 @@
       },
       "HtmlView": {
         "$ref": "#/$defs/HtmlView"
+      },
+      "Section": {
+        "$ref": "#/$defs/Section"
+      },
+      "Toc": {
+        "$ref": "#/$defs/Toc"
       }
     },
     "required": [
@@ -786,7 +802,9 @@
       "Polygon",
       "G",
       "SvgText",
-      "HtmlView"
+      "HtmlView",
+      "Section",
+      "Toc"
     ],
     "additionalProperties": false,
     "$defs": {
@@ -2449,6 +2467,49 @@
         ],
         "additionalProperties": false,
         "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set."
+      },
+      "Section": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "children": {
+            "type": "array",
+            "items": {}
+          },
+          "anchor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "children"
+        ],
+        "additionalProperties": false,
+        "description": "Collapsible article section; starts open. Optional anchor is the Toc target; falls back to the title."
+      },
+      "Toc": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "Compact table of contents linking to Section anchors. Items are labels; the optional parallel anchors array decouples labels from targets."
       }
     },
     "functions": {

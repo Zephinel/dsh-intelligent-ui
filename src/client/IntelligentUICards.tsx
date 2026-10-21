@@ -81,11 +81,13 @@ function IntelligentUICard({ program, onToAssistant, t }: IntelligentUICardProps
   const [collapsed, setCollapsed] = useState(false)
   const bodyId = useId()
   const title = program.title !== undefined && program.title.trim() !== '' ? program.title : t('card.title')
+  const style = program.style === 'article' ? 'article' : 'card'
   return (
     <section
       className="dsh-iui-card"
       data-dsh-intelligent-ui="card"
       data-dsh-iui-call-id={program.callId}
+      data-dsh-iui-style={style}
       data-dsh-iui-running={program.running ? 'true' : undefined}
       data-dsh-iui-collapsed={collapsed ? 'true' : undefined}
     >
@@ -103,7 +105,9 @@ function IntelligentUICard({ program, onToAssistant, t }: IntelligentUICardProps
       </button>
       <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed}>
         <RendererBoundary t={t}>
-          <OpenUIRenderer program={program.program} title={program.title} onToAssistant={onToAssistant} t={t} />
+          <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
+            <OpenUIRenderer program={program.program} title={program.title} scopeId={program.callId} onToAssistant={onToAssistant} t={t} />
+          </div>
         </RendererBoundary>
       </div>
     </section>

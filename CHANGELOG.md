@@ -7,6 +7,29 @@ been published yet.
 
 ## [Unreleased]
 
+### Added
+
+- **Answer styles:** sessions can render as a compact `Card` or an `Article` reading page. Article mode adds a `Toc` component and a collapsible `Section` component, plus a single-column reading layout in the card.
+- **Global defaults:** the Plugin detail page now owns **Enable in all sessions**, the global Auto / Card / Article style, and the **Free-form layout** switch.
+- **Session overrides:** the composer UI control is now Off / This session only / Follow global, and opening the session entry shows the answer-style panel with two previews, Auto/Card/Article slider, and Follow global. `/iui on|off|inherit` and `/iui style auto|card|article|inherit` are the command equivalents.
+- **Style metadata:** `render_ui` now takes a required `style` argument; the Host validates it against the effective session style and records it with the card.
+- **Browser E2E:** `npm run test:browser` drives the composer menu, Follow-global style entry, custom slider and focus/escape flow in headless Chrome.
+
+### Changed
+
+- The composer no longer offers **All sessions**; global enablement and the global style moved to the Plugin detail page. Session state is stored as `sessions`, `offSessions` and `styles` in `dsh-intelligent-ui.json`; legacy `global`/`enabled` files remain readable.
+- The Plugin detail page is grouped into **Availability**, **Answer style** and **Composition**; the former **Free composition** setting is now labelled **Free-form layout**, with clearer on/off hints in both languages.
+- Every extension-owned surface (settings page, composer chip/menu, style panel and slider) now uses custom borderless rounded cards and a custom range control instead of shell menu/range defaults.
+- The Agent Skill and injected prompt now carry the Card/Article/Auto guidance, the article-first content contract, and the `Section`/`Toc` vocabulary.
+
+### Fixed
+
+- Article Section/Toc anchors now decouple display titles from stable ids (`Section(title, children, anchor?)`, `Toc(items, anchors?)`); duplicate effective anchors and empty anchors are rejected or normalized consistently by the Host and renderer.
+
+### Documentation
+
+- Regenerated the 57-component layout, composer menu, style-panel and Plugin settings screenshots; the settings copy and hints are bilingual.
+
 ## [0.2.2-26-10-21] - 2026-10-21
 
 ### Fixed
