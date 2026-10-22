@@ -144,7 +144,11 @@ git tag v0.4.0
 git push origin main --follow-tags
 ```
 
+5. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.4.0 — 2026-10-22`) with a short summary. npm publish is triggered by the tag; the Release page is created separately.
+
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check`, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. Verify afterwards with `npm view @zephinel/dsh-intelligent-ui version dist-tags`.
+
+> Version convention: production releases use stable semver (for example `0.4.0`, tag `v0.4.0`), and the GitHub Release title carries the date. Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
 

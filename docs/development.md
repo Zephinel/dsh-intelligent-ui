@@ -144,7 +144,11 @@ git tag v0.4.0
 git push origin main --follow-tags
 ```
 
+5. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.4.0 — 2026-10-22`），正文概述该版本变更；npm publish 由 tag 触发，Release 页面需单独创建。
+
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，跑 `npm run check`，再用 OIDC + `--provenance` 发布到 npm；不需要 `NODE_AUTH_TOKEN`。发布后用 `npm view @zephinel/dsh-intelligent-ui version dist-tags` 校验。
+
+> 版本号约定：正式版使用稳定 semver（如 `0.4.0`，tag `v0.4.0`），GitHub Release 标题带日期。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。
 
 > 旧的 granular token 直接发布方式将在 2027-01 移除；这个流程不依赖长期 token。
 
