@@ -91,8 +91,9 @@ test('on reflects the global enable, style, and free-composition values', () => 
 test('image export shows its defaults: white background and 2x', () => {
   const html = render()
   assert.match(html, /Defaults and options for image and interactive-page export/)
-  assert.match(html, /type="color"/)
-  assert.match(html, /value="#ffffff"/)
+  assert.match(html, /data-dsh-iui-export-background/)
+  assert.match(html, />#ffffff</)
+  assert.doesNotMatch(html, /type="color"/)
   assert.match(html, />1x</)
   assert.match(html, />2x</)
   assert.match(html, /aria-pressed="true"[^>]*>2x</)
@@ -104,7 +105,7 @@ test('image export shows its defaults: white background and 2x', () => {
 
 test('image export reflects stored background and scale', () => {
   const html = render({ form: form({ value: { exportBackground: '#112233', exportScale: '1x' } }) })
-  assert.match(html, /value="#112233"/)
+  assert.match(html, />#112233</)
   assert.match(html, /aria-pressed="true"[^>]*>1x</)
   assert.doesNotMatch(html, /aria-pressed="true"[^>]*>2x</)
 })

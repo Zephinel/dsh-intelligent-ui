@@ -9,7 +9,7 @@
  * session. When the Host serves no settings namespace (or the document is
  * read-only), the controls stay disabled and the page says why.
  */
-import { useCallback, useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the settings client `configForms` service and its wire types.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -19,10 +19,12 @@ import {
   ANSWER_STYLE_FIELD,
   EXPORT_BACKGROUND_FIELD,
   EXPORT_SCALES,
+  EXPORT_BACKGROUND_PRESETS,
   EXPORT_SCALE_FIELD,
   EXPORT_TO_ASSISTANT_FIELD,
   FREE_COMPOSITION_FIELD,
   GLOBAL_ENABLED_FIELD,
+  isExportBackground,
   isAnswerStyle,
   readImageExportSettings,
   type AnswerStyle,
@@ -135,9 +137,12 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   const answerStyle: AnswerStyle = isAnswerStyle(storedStyle) ? storedStyle : 'auto'
   const free = snapshot.value?.freeComposition === true
   const exportSettings = readImageExportSettings(snapshot.value)
-  // The native color input streams changes while the user drags; stage the
-  // draft locally, then commit it on blur or shortly after the chooser settles.
-  const [colorDraft, setColorDraft] = useState<string | null>(null)
+  // Custom background picker: a preset palette plus a hex field, no native
+  // browser color dialog. It opens under the row and dismisses on outside click.
+  const [colorOpen, setColorOpen] = useState(false)
+  const [hexDraft, setHexDraft] = useState(exportSettings.background)
+  const colorTrigger = useRef<HTMLButtonElement>(null)
+  const colorPanel = useRef<HTMLDivElement>(null)
   const ready = snapshot.status === 'ready'
   const disabled = !ready || !snapshot.writable || pending !== null
 
@@ -154,16 +159,33 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
     }
   }
 
-  const commitColor = (next: string | null): void => {
-    setColorDraft(null)
-    if (next !== null && next !== exportSettings.background) void save(EXPORT_BACKGROUND_FIELD, next)
-  }
+  useEffect(() => {
+    if (disabled) setColorOpen(false)
+  }, [disabled])
 
   useEffect(() => {
-    if (colorDraft === null || disabled) return
-    const timer = window.setTimeout(() => { commitColor(colorDraft) }, 400)
-    return () => { window.clearTimeout(timer) }
-  }, [colorDraft, disabled, exportSettings.background])
+    if (!colorOpen) return
+    const onPointer = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (target !== null && (colorTrigger.current?.contains(target) || colorPanel.current?.contains(target))) return
+      setColorOpen(false)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setColorOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer, true)
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [colorOpen])
+
+  const commitHex = (): void => {
+    const next = hexDraft.trim().startsWith('#') ? hexDraft.trim().toLowerCase() : `#${hexDraft.trim().toLowerCase()}`
+    if (isExportBackground(next)) void save(EXPORT_BACKGROUND_FIELD, next)
+    setColorOpen(false)
+  }
 
   const note = failed
     ? t('settings.error')
@@ -258,20 +280,64 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
             <div className="dsh-iui-settings-label">{t('settings.export.background.label')}</div>
             <p className="dsh-iui-settings-hint">{t('settings.export.background.hint')}</p>
           </div>
-          <label className="dsh-iui-color">
-            <input
-              type="color"
-              className="dsh-iui-color-input"
-              value={colorDraft ?? exportSettings.background}
-              disabled={disabled}
-              aria-label={t('settings.export.background.label')}
+          <div className="dsh-iui-color-field">
+            <button
+              ref={colorTrigger}
+              type="button"
+              className="dsh-iui-color-trigger"
               data-dsh-iui-export-background
-              onChange={(event) => { setColorDraft(event.target.value) }}
-              onBlur={() => { commitColor(colorDraft) }}
-            />
-            <span className="dsh-iui-color-value" aria-hidden="true">{colorDraft ?? exportSettings.background}</span>
-          </label>
+              aria-label={t('settings.export.background.label')}
+              aria-haspopup="dialog"
+              aria-expanded={colorOpen}
+              disabled={disabled}
+              onClick={() => {
+                setHexDraft(exportSettings.background)
+                setColorOpen(value => !value)
+              }}
+            >
+              <span className="dsh-iui-color-swatch" style={{ background: exportSettings.background }} aria-hidden="true" />
+              <span className="dsh-iui-color-hex">{exportSettings.background}</span>
+            </button>
+          </div>
         </div>
+        {colorOpen ? (
+          <div ref={colorPanel} className="dsh-iui-color-panel" role="dialog" aria-label={t('settings.export.background.label')}>
+            <span className="dsh-iui-color-panel-label">{t('settings.export.background.presets')}</span>
+            <div className="dsh-iui-color-swatches" role="group" aria-label={t('settings.export.background.presets')}>
+              {EXPORT_BACKGROUND_PRESETS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  className="dsh-iui-color-option"
+                  style={{ background: color }}
+                  aria-label={color}
+                  aria-pressed={color.toLowerCase() === exportSettings.background.toLowerCase()}
+                  onClick={() => {
+                    setColorOpen(false)
+                    void save(EXPORT_BACKGROUND_FIELD, color)
+                  }}
+                />
+              ))}
+            </div>
+            <label className="dsh-iui-color-hex-row">
+              <span>{t('settings.export.background.hex')}</span>
+              <input
+                type="text"
+                className="dsh-iui-color-hex-input"
+                value={hexDraft}
+                maxLength={7}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(event) => { setHexDraft(event.target.value) }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commitHex()
+                  if (event.key === 'Escape') setColorOpen(false)
+                }}
+                onBlur={commitHex}
+              />
+            </label>
+          </div>
+        ) : null}
         <div className="dsh-iui-settings-row">
           <div className="dsh-iui-settings-copy">
             <div className="dsh-iui-settings-label">{t('settings.export.scale.label')}</div>

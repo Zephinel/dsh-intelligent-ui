@@ -163,7 +163,7 @@ The menu also offers **Interactive page** at the bottom: it saves every card fro
 npm run build       # build the prompt, Host and Client bundle
 npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
-npm run test:browser # optional: real-browser E2E (style panel + image export + interactive page + Article spacing; Chrome required)
+npm run test:browser # optional: real-browser E2E (style panel + image export + interactive page + Article spacing + custom color picker; Chrome required)
 ```
 
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.

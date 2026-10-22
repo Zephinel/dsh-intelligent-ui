@@ -49,7 +49,7 @@
     "pack:check": "npm pack --dry-run --json",
     "prepare": "node scripts/build.mjs",
     "check:theme": "node test/renderer/theme-torture.mjs",
-    "test:browser": "node test/browser/style-panel.e2e.mjs && node test/browser/export-image.e2e.mjs && node test/browser/standalone-page.e2e.mjs && node test/browser/article-layout.e2e.mjs"
+    "test:browser": "node test/browser/style-panel.e2e.mjs && node test/browser/export-image.e2e.mjs && node test/browser/standalone-page.e2e.mjs && node test/browser/article-layout.e2e.mjs && node test/browser/settings-picker.e2e.mjs"
   },
   "keywords": [
     "deepseek-harness",

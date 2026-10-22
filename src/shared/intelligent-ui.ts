@@ -81,6 +81,12 @@ export type ExportScale = (typeof EXPORT_SCALES)[number]
 /** Fallback background when the settings document provides none. */
 export const DEFAULT_EXPORT_BACKGROUND = '#ffffff'
 
+/** Curated backgrounds offered by the custom export color picker. */
+export const EXPORT_BACKGROUND_PRESETS = [
+  '#ffffff', '#f7f8fa', '#f1f5f9', '#e7edf5', '#eef4ff', '#f5f3ff',
+  '#fef3c7', '#ecfdf5', '#fff1f2', '#111827', '#0f172a', '#1e293b',
+] as const
+
 /** The stored background must be a 6-digit hex colour. */
 export const EXPORT_BACKGROUND_PATTERN = /^#[0-9a-f]{6}$/i
 

@@ -1,18 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Zephinel">
+  <style>
+    .tile { fill: #f4f7fb; }
+    .edge { stroke: #d6e0ec; }
+    .spark { fill: #111a26; }
+    .line-one { fill: #111a26; fill-opacity: 0.82; }
+    .line-two { fill: #111a26; fill-opacity: 0.38; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #101622; }
+      .edge { stroke: #ffffff; stroke-opacity: 0.12; }
+      .spark { fill: #ffffff; }
+      .line-one { fill: #ffffff; fill-opacity: 0.82; }
+      .line-two { fill: #ffffff; fill-opacity: 0.4; }
+    }
+  </style>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#101622"/>
-      <stop offset="1" stop-color="#1d2b3a"/>
-    </linearGradient>
     <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#5aa9ff"/>
       <stop offset="1" stop-color="#38d6a4"/>
     </linearGradient>
   </defs>
-  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bg)"/>
-  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="1.5"/>
-  <path d="M26 15.5c0 5.9 3.6 9.5 9.5 9.5-5.9 0-9.5 3.6-9.5 9.5 0-5.9-3.6-9.5-9.5-9.5 5.9 0 9.5-3.6 9.5-9.5Z" fill="#ffffff"/>
+  <rect class="tile" x="2" y="2" width="60" height="60" rx="16"/>
+  <rect class="edge" x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" fill="none" stroke-width="1.5"/>
+  <path class="spark" d="M26 15.5c0 5.9 3.6 9.5 9.5 9.5-5.9 0-9.5 3.6-9.5 9.5 0-5.9-3.6-9.5-9.5-9.5 5.9 0 9.5-3.6 9.5-9.5Z"/>
   <path d="M43.5 24c0 3.6 2.2 5.8 5.8 5.8-3.6 0-5.8 2.2-5.8 5.8 0-3.6-2.2-5.8-5.8-5.8 3.6 0 5.8-2.2 5.8-5.8Z" fill="url(#accent)"/>
-  <rect x="15" y="40" width="24" height="3.4" rx="1.7" fill="#ffffff" fill-opacity="0.82"/>
-  <rect x="15" y="46.4" width="15" height="3.4" rx="1.7" fill="#ffffff" fill-opacity="0.4"/>
+  <rect class="line-one" x="15" y="40" width="24" height="3.4" rx="1.7"/>
+  <rect class="line-two" x="15" y="46.4" width="15" height="3.4" rx="1.7"/>
 </svg>
