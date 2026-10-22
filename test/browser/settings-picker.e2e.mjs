@@ -63,9 +63,14 @@ try {
   const panel = await cdp.evaluate(`(() => ({
     options: document.querySelectorAll('.dsh-iui-color-option').length,
     swatch: document.querySelector('.dsh-iui-color-panel .dsh-iui-color-option[aria-pressed="true"]')?.getAttribute('aria-label'),
+    controlled: document.querySelector('[data-dsh-iui-export-background]').getAttribute('aria-controls'),
+    panelId: document.querySelector('.dsh-iui-color-panel').id,
+    focusInHex: document.activeElement === document.querySelector('.dsh-iui-color-hex-input'),
   }))()`)
   assert.equal(panel.options, 12, 'the preset palette is rendered')
   assert.equal(panel.swatch, '#ffffff')
+  assert.equal(panel.controlled, panel.panelId, 'the trigger points at the dialog panel')
+  assert.equal(panel.focusInHex, true, 'opening the picker focuses the hex field')
 
   await cdp.evaluate('document.querySelector(".dsh-iui-color-option[aria-label=\\"#111827\\"]").click()')
   await cdp.waitFor('window.__calls.length === 1', 'preset commit')
@@ -132,6 +137,13 @@ try {
   await cdp.waitFor('window.__calls.length === 4', 'outside click commits the draft')
   assert.equal((await cdp.evaluate('window.__calls[3].value')), '#00aa00')
   await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes after outside commit')
+
+  // Escape closes the dialog and returns focus to its trigger.
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-export-background]").click()')
+  await cdp.waitFor('!!document.querySelector(".dsh-iui-color-panel")', 'color panel for Escape')
+  await cdp.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes on Escape')
+  assert.equal(await cdp.evaluate('document.activeElement.hasAttribute("data-dsh-iui-export-background")'), true, 'focus returns to the trigger')
 
   console.log('settings-picker E2E: OK')
 } finally {

@@ -145,6 +145,7 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   const colorPanel = useRef<HTMLDivElement>(null)
   const skipColorBlur = useRef(false)
   const hexInput = useRef<HTMLInputElement>(null)
+  const colorPanelId = useId()
   const commitHexRef = useRef<() => void>(() => undefined)
   const ready = snapshot.status === 'ready'
   const disabled = !ready || !snapshot.writable || pending !== null
@@ -165,6 +166,12 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   useEffect(() => {
     if (disabled) setColorOpen(false)
   }, [disabled])
+
+  useEffect(() => {
+    if (!colorOpen) return
+    hexInput.current?.focus()
+    return () => { colorTrigger.current?.focus() }
+  }, [colorOpen])
 
   useEffect(() => {
     if (!colorOpen) return
@@ -301,7 +308,11 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
               aria-label={t('settings.export.background.label')}
               aria-haspopup="dialog"
               aria-expanded={colorOpen}
+              aria-controls={colorPanelId}
               disabled={disabled}
+              onPointerDown={(event) => {
+                if (colorOpen) event.preventDefault()
+              }}
               onClick={() => {
                 setHexDraft(exportSettings.background)
                 setColorOpen(value => !value)
@@ -313,7 +324,7 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
           </div>
         </div>
         {colorOpen ? (
-          <div ref={colorPanel} className="dsh-iui-color-panel" role="dialog" aria-label={t('settings.export.background.label')}>
+          <div ref={colorPanel} id={colorPanelId} className="dsh-iui-color-panel" role="dialog" aria-label={t('settings.export.background.label')}>
             <span className="dsh-iui-color-panel-label">{t('settings.export.background.presets')}</span>
             <div className="dsh-iui-color-swatches" role="group" aria-label={t('settings.export.background.presets')}>
               {EXPORT_BACKGROUND_PRESETS.map(color => (

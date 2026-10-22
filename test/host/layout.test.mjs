@@ -35,6 +35,7 @@ test('a clean article flow produces no layout warnings', () => {
         title: 'One',
         children: [
           element('Markdown', { text: 'Prose.' }),
+          element('Box', { direction: 'row', gap: 0, children: [element('Text', { text: 'left' }), element('Spacer', {}), element('Text', { text: 'right' })] }),
           element('Grid', { columns: 2, children: [element('Card', { children: [element('Title', { text: 'A' })] })] }),
         ],
       }),

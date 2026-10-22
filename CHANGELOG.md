@@ -36,7 +36,8 @@ been published yet.
 - The composer chip's chevron rotated twice on open (the inner SVG repeated the outer span's 180°), so an open menu still pointed down; only the outer element rotates now.
 - Image export normalizes the card for snapshot rasterization: CSS transitions and animations are frozen, the flashcard's two 3D faces are flattened to the face the reader currently sees (they previously stacked and rendered mirrored text), and the export waits for in-card photos and `SearchImage` lookups to settle so photos no longer export as empty boxes. The card frame also reserves the shadow bleed around its background so the soft shadow is actually painted instead of being clipped at the canvas edge.
 
-- Follow-up removal now marks only bare labels and explicit `@ToAssistant` actions, so `@OpenUrl`/`@Set` buttons are no longer removed. When a follow-up has no Card/Form/Row around it, only the control is hidden (never a root column or the page), and the standalone page rescans after portaled popovers or state changes. The custom color picker now keeps a preset selection made while the hex field is focused and commits a valid draft when clicking outside.
+- Follow-up removal now marks only bare labels and explicit `@ToAssistant` actions, so `@OpenUrl`/`@Set` buttons are no longer removed. When a follow-up has no Card/Form/Row around it, only the control is hidden (never a root column or the page), and the standalone page rescans after portaled popovers or state changes. The custom color picker now keeps a preset selection made while the hex field is focused, commits a valid draft when clicking outside, focuses its hex field when opened and returns focus to its trigger when closed. Legacy `exportToAssistant` values are migrated to the inverted switch.
+- Layout warnings no longer flag a horizontal `Box` for its `Spacer` or `gap: 0`; the Skill examples and the prompt sample now follow the root-gap/Card-gap contract.
 
 ### Documentation
 

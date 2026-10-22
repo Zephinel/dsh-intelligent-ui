@@ -144,6 +144,8 @@ export interface IntelligentUISettings {
   readonly exportScale?: ExportScale
   /** Whether exports remove the whole @ToAssistant follow-up block. */
   readonly removeFollowUps?: boolean
+  /** Legacy keep/remove switch from before the setting was inverted. */
+  readonly exportToAssistant?: boolean
 }
 
 /** Type guard for a settings-provided export background. */
@@ -161,11 +163,18 @@ export function isExportScale(value: unknown): value is ExportScale {
  * @param settings - last accepted Host settings section, when available.
  * @returns valid stored values with defaults for everything else.
  */
+/** Migrate the old keep/remove field without surprising an explicit choice. */
+function readRemoveFollowUps(settings: IntelligentUISettings | undefined): boolean {
+  if (settings?.removeFollowUps !== undefined) return settings.removeFollowUps
+  if (settings?.exportToAssistant !== undefined) return !settings.exportToAssistant
+  return true
+}
+
 export function readImageExportSettings(settings: IntelligentUISettings | undefined): ImageExportSettings {
   return {
     background: isExportBackground(settings?.exportBackground) ? settings.exportBackground : DEFAULT_EXPORT_BACKGROUND,
     scale: isExportScale(settings?.exportScale) ? settings.exportScale : DEFAULT_EXPORT_SCALE,
-    removeFollowUps: settings?.removeFollowUps !== false,
+    removeFollowUps: readRemoveFollowUps(settings),
   }
 }
 

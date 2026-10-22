@@ -20,7 +20,7 @@ How to use them:
 
 
 ```openui
-root = Col([head, photos, facts, Grid([mapCard, timelineCard], 2, 300, 4), checklistCard, budgetCard, prefs], 5)
+root = Col([head, photos, facts, Grid([mapCard, timelineCard], 2, 300, 4), checklistCard, budgetCard, prefs])
 $done = []
 $selected = "外滩晨走"
 $pace = "轻松"
@@ -57,7 +57,7 @@ prefs = Card([Title("按你的节奏再排一次", "sm"), Form([SegmentedControl
 
 
 ```openui
-root = Col([title, intro, controls, figures, poursCard, timerCard, stepsCard, footer, party], 5)
+root = Col([title, intro, controls, figures, poursCard, timerCard, stepsCard, footer, party])
 $cups = 2
 $strength = "平衡"
 $left = 30
@@ -94,7 +94,7 @@ party = Celebration($left == 0)
 
 
 ```openui
-root = Col([head, materials, viewer, strip, tip, footer, party], 5)
+root = Col([head, materials, viewer, strip, tip, footer, party])
 $step = 0
 materials = Row([Badge("A4 纸 1 张", "info"), Badge("不用剪刀"), Badge("约 3 分钟", "success")], 2, null, null, true)
 head = Col([Title("十分钟折一架飞得远的纸飞机", "2xl"), Text("换一种画风：这一页全是 Svg 手绘步骤图，没有照片和地图。点缩略图或按钮切步骤，看完最后一步会撒花。", "md", "muted")], 2)
@@ -104,7 +104,7 @@ s1 = Svg([Rect(76, 20, 88, 156, "surface", "ink", 2), Polygon("76,20 120,20 120,
 s2 = Svg([Polygon("120,20 164,20 120,84", "#e7f0fc", "ink", 1.5), Polygon("120,20 76,20 120,84", "surface", "ink", 1.5), Line(120, 84, 120, 168, "ink", 1.5), SvgText("再折一次", 120, 190, 11, "muted", "middle")], "0 0 240 204")
 s3 = Svg([Polygon("120,26 62,96 120,154", "surface", "ink", 2), Polygon("120,26 178,96 120,154", "#e7f0fc", "ink", 2), Line(120, 26, 120, 154, "muted", 1), Line(62, 96, 178, 96, "muted", 1), Line(16, 56, 44, 70, "info", 2), Line(10, 88, 38, 94, "info", 2), SvgText("完成 · 试飞", 120, 176, 11, "info", "middle")], "0 0 240 192")
 drawings = [s0, s1, s2, s3]
-viewer = Card([Row([Badge("步骤 " + ($step + 1) + " / 4", "info"), Spacer(), Caption(@Percent($step + 1, 4) + "% 完成")], 2), Box([drawings[$step]], null, null, 3, "surface", "lg"), Title(steps[$step].title, "md"), Text(steps[$step].text, "sm"), Row([Button("上一步", @Set($step, @Clamp($step - 1, 0, 3)), "outline", null, null, "arrow-left", $step == 0), Spacer(), Button("下一步", @Set($step, @Clamp($step + 1, 0, 3)), "solid", null, null, "arrow-right", $step == 3)], 2)], null, 4, 3)
+viewer = Card([Row([Badge("步骤 " + ($step + 1) + " / 4", "info"), Spacer(), Caption(@Percent($step + 1, 4) + "% 完成")], 2), Box([drawings[$step]], null, null, 3, "surface", "lg"), Title(steps[$step].title, "md"), Text(steps[$step].text, "sm"), Row([Button("上一步", @Set($step, @Clamp($step - 1, 0, 3)), "outline", null, null, "arrow-left", $step == 0), Spacer(), Button("下一步", @Set($step, @Clamp($step + 1, 0, 3)), "solid", null, null, "arrow-right", $step == 3)], 2)], null, 4)
 strip = Grid(@Each(@Range(0, 4), "i", Pressable([drawings[i], Caption((i + 1) + ". " + steps[i].title)], @Set($step, i), i == $step, 2)), 4, 96, 2)
 tip = Card([Row([Icon("lightbulb", "sm"), Text("机翼后缘向上折 3 mm，飞机就会爬升；重心太靠后会打转，把机头捏紧一点。", "sm")], 2)], "soft")
 footer = Row([Button("复制折法", @CopyToClipboard("纸飞机：对折出中线 → 两顶角折向中线 → 再折一次 → 对折机身 → 折出机翼（后缘上折 3 mm）"), "outline", null, "sm", "copy"), Button("再教我折一架", @ToAssistant("再教我折一架飞得更远的纸飞机，每一步配 Svg 图。"), "soft", null, "sm", "sparkles")], 2)
@@ -123,7 +123,7 @@ party = Celebration($step == 3)
 
 
 ```openui
-root = Col([head, kpis, Grid([trendCard, regionCard], 2, 300, 4), tableCard, note], 5)
+root = Col([head, kpis, Grid([trendCard, regionCard], 2, 300, 4), tableCard, note])
 $region = "全部"
 orders = [{date: "2026-07-03", region: "North", product: "Espresso machine", amount: 1290}, {date: "2026-07-06", region: "South", product: "Grinder", amount: 420}, {date: "2026-07-11", region: "East", product: "Espresso machine", amount: 1180}, {date: "2026-07-15", region: "North", product: "Milk pitcher", amount: 85}, {date: "2026-07-19", region: "South", product: "Filter brewer", amount: 560}, {date: "2026-07-24", region: "East", product: "Grinder", amount: 460}, {date: "2026-07-28", region: "North", product: "Espresso machine", amount: 1420}, {date: "2026-08-02", region: "South", product: "Espresso machine", amount: 1330}, {date: "2026-08-06", region: "East", product: "Scale", amount: 130}, {date: "2026-08-10", region: "North", product: "Grinder", amount: 480}, {date: "2026-08-13", region: "South", product: "Filter brewer", amount: 620}, {date: "2026-08-18", region: "East", product: "Espresso machine", amount: 1490}, {date: "2026-08-21", region: "North", product: "Milk pitcher", amount: 95}, {date: "2026-08-25", region: "South", product: "Scale", amount: 140}, {date: "2026-08-28", region: "East", product: "Grinder", amount: 520}, {date: "2026-08-31", region: "North", product: "Espresso machine", amount: 1610}]
 filtered = $region == "全部" ? orders : @Filter(orders, "region", "==", $region)
@@ -160,7 +160,7 @@ note = Text("数据是演示用的静态数组；筛选、分组和汇总全部�
 
 
 ```openui
-root = Col([head, formCard, previewCard, note], 5)
+root = Col([head, formCard, previewCard, note])
 $name = ""
 $people = 4
 $date = "2026-11-08"
@@ -191,7 +191,7 @@ note = Text("提交按钮只把这一句请求发回助手；页面上的预览�
 
 
 ```openui
-root = Col([head, cards, quizCard, resultCard, gameCard, footer, party], 5)
+root = Col([head, cards, quizCard, resultCard, gameCard, footer, party])
 $a1 = ""
 $a2 = ""
 head = Col([Title("咖啡冲煮小测", "2xl"), Text("先点开三张翻面卡复习，再答两道题。答对两题会撒花；页面底部还有一个 15 秒的接豆子小游戏。", "md", "muted")], 2)

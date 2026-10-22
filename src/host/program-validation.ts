@@ -135,22 +135,23 @@ function childrenOf(props: unknown): unknown[] {
  */
 export function layoutWarnings(root: unknown): string[] {
   const warnings = new Set<string>()
-  const walk = (node: unknown, parentType: string | undefined): void => {
+  const walk = (node: unknown, parentType: string | undefined, parentProps?: unknown): void => {
     if (Array.isArray(node)) {
-      for (const child of node) walk(child, parentType)
+      for (const child of node) walk(child, parentType, parentProps)
       return
     }
     if (node === null || typeof node !== 'object') return
     const record = node as { typeName?: unknown; props?: unknown }
     const typeName = typeof record.typeName === 'string' ? record.typeName : undefined
     const children = childrenOf(record.props)
+    const parentRow = parentType === 'Row' || (parentType === 'Box' && (parentProps as { direction?: unknown } | undefined)?.direction === 'row')
     if (typeName === 'Col' && parentType === undefined) {
       const gap = (record.props as { gap?: unknown } | null)?.gap
       if (gap !== undefined && gap !== null) {
         warnings.add('The page root Col should omit `gap`: the renderer applies the page rhythm, and an explicit gap overrides or doubles it.')
       }
     }
-    if (typeName === 'Spacer' && parentType !== 'Row') {
+    if (typeName === 'Spacer' && !parentRow) {
       warnings.add('`Spacer()` outside a `Row` does not create vertical space; remove it and let the flow rhythm space the blocks.')
     }
     if (typeName === 'Section' && children.length === 0) {
@@ -164,11 +165,12 @@ export function layoutWarnings(root: unknown): string[] {
     }
     if ((typeName === 'Col' || typeName === 'Box') && children.filter(isBlock).length > 1) {
       const gap = (record.props as { gap?: unknown } | null)?.gap
-      if (gap === 0) {
+      const row = typeName === 'Box' && (record.props as { direction?: unknown } | null)?.direction === 'row'
+      if (gap === 0 && !row) {
         warnings.add('A `Col`/`Box` with `gap: 0` and several blocks removes the vertical rhythm; omit `gap` so the flow spaces them.')
       }
     }
-    for (const child of children) walk(child, typeName)
+    for (const child of children) walk(child, typeName, record.props)
   }
   walk(root, undefined)
   return [...warnings]
