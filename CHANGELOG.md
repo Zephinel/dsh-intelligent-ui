@@ -43,6 +43,7 @@ been published yet.
 
 - Regenerated the 57-component layout, composer menu, style-panel and Plugin settings screenshots; the settings screenshot now includes the **Export** group, and the settings copy and hints are bilingual.
 - Re-shot the component-tour layout and Plugin settings screenshots at 2x: the layout tour now carries the same card header as its sibling tour shots, and the settings capture paints the on-state switch track correctly.
+- Added `scripts/capture-screenshots.mjs` to rebuild the component-tour and settings captures at 2x from the real renderer and settings harness with a fixed light-theme token set, so a running DSH is not required; the two assets are reproducible instead of hand-edited.
 - **README restructure:** the README pair now opens with a one-command install tip, keeps end-user steps in Quick start while the local-checkout development loop moved to `docs/development*.md`, condenses the duplicated export walkthrough into one paragraph linked to the architecture doc, and adds a three-question FAQ plus a maintainer line; the screenshot alt text now matches the pictured component groups.
 - Both READMEs now document the interactive-page export's `webServer` dependency; the Chinese README quotes the actual Chinese label 「显示样式」 and no longer calls the exported page usable offline.
 

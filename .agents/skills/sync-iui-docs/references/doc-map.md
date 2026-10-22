@@ -20,7 +20,7 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 | `package.json` | As-built manifest: description, version, keywords, scripts, `files`, `exports`, `dsh`, publishability | `test/packaging/manifest.test.mjs`; `npm run pack:check` for the shipped list/sizes |
 | `locale/en.json`, `locale/zh.json` | As-built plugin display metadata. The zh title/description must be translated (`智能 UI`, description in Chinese) | `test/packaging/manifest.test.mjs` (key parity, zh CJK, descriptions differ) |
 | `cordis.patch.yml` | As-built bundle-install comment and row | `test/packaging/manifest.test.mjs` (row id + package name) |
-| `assets/*` | README screenshots (WebP card captures + the PNG composer switch); English-UI captures | `test/packaging/manifest.test.mjs` (each exists, is referenced by both READMEs, and no README references a missing asset) |
+| `assets/*` | README screenshots (WebP card captures + the PNG composer switch); English-UI captures | `test/packaging/manifest.test.mjs` (each exists, is referenced by both READMEs, and no README references a missing asset); the component-tour and settings captures rebuild via `scripts/capture-screenshots.mjs` |
 
 ## Generated / vendored / legal (never hand-edit)
 
