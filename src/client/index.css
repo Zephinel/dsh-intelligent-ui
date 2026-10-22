@@ -863,10 +863,6 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-iui-article .iui-flow {
-  gap: 18px;
-}
-
 .dsh-iui-article .iui-markdown {
   font-size: 16px;
   line-height: 1.8;
@@ -886,7 +882,21 @@
 }
 
 .dsh-iui-article .iui-section {
+  padding-top: 4px;
   scroll-margin-top: 64px;
+}
+
+/* Section bodies are nested flows: use the group rhythm, not the page rhythm. */
+.dsh-iui-article .iui-section-body {
+  padding-bottom: 10px;
+}
+
+.dsh-iui-article .iui-section-body > * + * {
+  margin-top: var(--iui-space-group-lg);
+}
+
+.dsh-iui-article .iui-section-body > .iui-title + * {
+  margin-top: var(--iui-space-group);
 }
 
 .dsh-iui-article .iui-toc {

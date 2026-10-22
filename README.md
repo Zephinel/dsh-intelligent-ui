@@ -163,7 +163,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 npm run build       # 生成 prompt、Host 与 Client bundle
 npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
 npm run pack:check  # 检查 npm pack 的最终文件清单
-npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面，需要本机 Chrome）
+npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面 + Article 间距，需要本机 Chrome）
 ```
 
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。

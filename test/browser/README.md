@@ -1,6 +1,6 @@
 # Browser E2E
 
-Three focused suites boot a temporary HTTP server (or a local file) + headless
+Four focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
@@ -18,6 +18,9 @@ events but not the full DSH Web integration.
   fallback and dismissal on scroll. Two `ExportAction` entries are mounted; the one whose Chat selector
   reports no rendered UI must not add a trigger.
 
+- `article-layout.e2e.mjs` renders a small Article fixture and measures the
+  computed rhythm: Section bodies are nested flows with 12–16px block gaps, and
+  the page-level flow does not add a second flex gap before sections.
 - `standalone-page.e2e.mjs` assembles the real single-file page from
   `lib/standalone.js` / `lib/standalone.css` plus two recorded cards, opens it
   in Chrome, and checks the inline-only assets, both mounted card bodies (no

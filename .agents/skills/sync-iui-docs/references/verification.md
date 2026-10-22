@@ -13,7 +13,7 @@ Run from the repo root. Current expected values are dated 2026-10-22; derive the
 | `node --test test/packaging/references.test.mjs` | 4 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json` |
 | `node --test test/host/*.test.mjs` | 25 pass = mode 8 + skill 3 + tool 13 + export-routes 1 | Tool contract, switch semantics, embedded skill, settings config |
 | `node --test test/client/*.test.mjs` | 51 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 + export-html-plan 4 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
-| `npm run test:browser` | three suites: style-panel, image export and the standalone interactive page (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
+| `npm run test:browser` | four suites: style-panel, image export, the standalone interactive page and Article layout spacing (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 
 ## README and changelog structural checks

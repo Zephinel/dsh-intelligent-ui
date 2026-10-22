@@ -48,7 +48,7 @@ export const Section = defineComponent({
             <ChevronDown className={cx("iui-section-chevron", open && "is-open")} size={16} aria-hidden />
           </button>
         </h2>
-        <div id={bodyId} className="iui-section-body" hidden={!open}>
+        <div id={bodyId} className="iui-section-body iui-col iui-flow" hidden={!open}>
           {renderNode(props.children)}
         </div>
       </section>
