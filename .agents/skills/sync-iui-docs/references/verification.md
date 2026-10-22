@@ -7,7 +7,7 @@ Run from the repo root. Current expected values are dated 2026-10-22; derive the
 | Command | Expected (2026-10-22) | What it proves |
 | --- | --- | --- |
 | `npm run check` | build: `host lib/index.js 624.7 KiB`, `client lib/client.js 3.59 MiB`, `lib/standalone.js 3.27 MiB + lib/standalone.css 500.7 KiB`; tests: 179 total = Host 77 + Client 81 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 43 files; tarball 4,036,212 bytes (~4.04 MB); unpacked 10,216,123 bytes (~10.22 MB); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run pack:check` | 43 files; tarball 4,036,061 bytes (~4.04 MB); unpacked 10,216,623 bytes (~10.22 MB); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
@@ -155,7 +155,7 @@ NODE
 - `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (43 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
-- The repository and npm package are public; the README clone and GitHub Issues links are live. The stable version `0.4.1` is intentionally tagged `latest`.
+- The repository and npm package are public; the README clone and GitHub Issues links are live. The stable version `0.4.2` is intentionally tagged `latest`.
 - Host/Client version-skew passages quote old Host strings (`Usage: /iui [on|off]`, "already off for this session") on purpose.
 - Screenshots under `assets/` are English-UI captures (card-level, captured from the real renderer with DSH theme tokens); the READMEs say so. A Chinese capture needs a live Chinese session.
 - Model-facing English text (tool description, generation prompt, Agent Skill body) and the `/iui` Host replies / command-palette description are English by design.

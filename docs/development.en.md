@@ -13,10 +13,10 @@ Requires DSH 0.2.1 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.4.1
+# npm; current latest is 0.4.2
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.1
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.2
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -140,15 +140,15 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 4. create and push a tag that matches the version:
 
 ```bash
-git tag v0.4.1
+git tag v0.4.2
 git push origin main --follow-tags
 ```
 
-5. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.4.1 — 2026-10-22`) with a short summary. npm publish is triggered by the tag; the Release page is created separately.
+5. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.4.2 — 2026-10-22`) with a short summary. npm publish is triggered by the tag; the Release page is created separately.
 
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check`, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. Verify afterwards with `npm view @zephinel/dsh-intelligent-ui version dist-tags`.
 
-> Version convention: production releases use stable semver (for example `0.4.1`, tag `v0.4.1`), and the GitHub Release title carries the date. Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds.
+> Version convention: production releases use stable semver (for example `0.4.2`, tag `v0.4.2`), and the GitHub Release title carries the date. Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
 

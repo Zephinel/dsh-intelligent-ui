@@ -7,6 +7,12 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-22
+
+### Fixed
+
+- Audited the extension surfaces that relied on `bg-layer-2` in light mode: the style-panel back button and scope chip, On-demand example and retry chips, temporary badge, template actions and the export color panel now use the DSH module surface with a layer-2 fallback, so their fills and rounded corners are visible in both themes. The On-demand hint states and Plugin detail page were included in the audit.
+
 ## [0.4.1] - 2026-10-22
 
 ### Fixed
