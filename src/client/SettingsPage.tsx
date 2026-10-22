@@ -21,7 +21,7 @@ import {
   EXPORT_SCALES,
   EXPORT_BACKGROUND_PRESETS,
   EXPORT_SCALE_FIELD,
-  EXPORT_TO_ASSISTANT_FIELD,
+  EXPORT_REMOVE_FOLLOWUPS_FIELD,
   FREE_COMPOSITION_FIELD,
   GLOBAL_ENABLED_FIELD,
   isExportBackground,
@@ -81,7 +81,7 @@ type PendingField =
   | typeof FREE_COMPOSITION_FIELD
   | typeof EXPORT_BACKGROUND_FIELD
   | typeof EXPORT_SCALE_FIELD
-  | typeof EXPORT_TO_ASSISTANT_FIELD
+  | typeof EXPORT_REMOVE_FOLLOWUPS_FIELD
 
 /** One labelled switch row; the three settings in this page share this shape. */
 function SwitchRow({
@@ -360,13 +360,13 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
           </div>
         </div>
         <SwitchRow
-          label={t('settings.export.toAssistant.label')}
-          hint={t('settings.export.toAssistant.hint')}
-          idPrefix={`${idPrefix}-to-assistant`}
-          checked={exportSettings.toAssistant}
+          label={t('settings.export.removeFollowUps.label')}
+          hint={t('settings.export.removeFollowUps.hint')}
+          idPrefix={`${idPrefix}-remove-followups`}
+          checked={exportSettings.removeFollowUps}
           disabled={disabled}
-          describedBy={`${idPrefix}-to-assistant ${noteId}`}
-          onToggle={() => { void save(EXPORT_TO_ASSISTANT_FIELD, !exportSettings.toAssistant) }}
+          describedBy={`${idPrefix}-remove-followups ${noteId}`}
+          onToggle={() => { void save(EXPORT_REMOVE_FOLLOWUPS_FIELD, !exportSettings.removeFollowUps) }}
         />
       </div>
 

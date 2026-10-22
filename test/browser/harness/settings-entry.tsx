@@ -10,7 +10,7 @@ const base = {
   freeComposition: false,
   exportBackground: '#ffffff',
   exportScale: '2x' as const,
-  exportToAssistant: true,
+  removeFollowUps: true,
 }
 
 const calls: { field: string; value: unknown }[] = []

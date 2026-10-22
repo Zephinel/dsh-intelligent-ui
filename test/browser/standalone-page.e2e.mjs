@@ -39,7 +39,7 @@ try {
     colorScheme: 'light',
     title: 'Standalone harness',
     lang: 'en',
-    toAssistant: true,
+    removeFollowUps: false,
   })
   assert.ok(!/<script[^>]+src=/i.test(html), 'the page has no external script')
   assert.ok(!/<link[^>]+rel=["']?stylesheet/i.test(html), 'the page has no external stylesheet')
@@ -53,7 +53,7 @@ try {
     colorScheme: 'light',
     title: 'Standalone harness',
     lang: 'en',
-    toAssistant: false,
+    removeFollowUps: true,
   })
   await writeFile(join(temp, 'hidden.html'), hiddenHtml)
 

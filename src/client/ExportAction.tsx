@@ -186,7 +186,7 @@ export function ExportAction({
         scale: preferences.scale,
         beautify: style,
         title: programs[0]?.title,
-        hideToAssistant: !preferences.toAssistant,
+        hideToAssistant: preferences.removeFollowUps,
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {
@@ -226,7 +226,7 @@ export function ExportAction({
         cards,
         title: programs[0]?.title,
         lang: document.documentElement.lang || 'en',
-        toAssistant: settings().toAssistant,
+        removeFollowUps: settings().removeFollowUps,
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {

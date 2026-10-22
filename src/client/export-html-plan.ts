@@ -25,8 +25,8 @@ export interface StandalonePageInput {
   readonly title: string
   /** UI language for card chrome and the copy fallback. */
   readonly lang: string
-  /** Whether the page keeps @ToAssistant follow-up controls. */
-  readonly toAssistant: boolean
+  /** Whether the export removes the @ToAssistant follow-up block. */
+  readonly removeFollowUps: boolean
 }
 
 /** Escape text for an HTML text node or quoted attribute. */
@@ -69,7 +69,7 @@ export function buildStandaloneHtml(input: StandalonePageInput): string {
 <body>
 <div id="iui-root"></div>
 <script data-iui-renderer>${inlineSafe(input.js, 'script')}</script>
-<script>window.mountIUI(document.getElementById("iui-root"), ${scriptJson(input.cards)}, {lang:${scriptJson(lang)}, hideToAssistant:${input.toAssistant ? 'false' : 'true'}});</script>
+<script>window.mountIUI(document.getElementById("iui-root"), ${scriptJson(input.cards)}, {lang:${scriptJson(lang)}, hideToAssistant:${input.removeFollowUps ? 'true' : 'false'}});</script>
 </body>
 </html>
 `

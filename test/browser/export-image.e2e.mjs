@@ -209,9 +209,9 @@ try {
     assert.match(page.text, /"callId":"call-1"/)
     assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
 
-    // With the follow-up switch off, the image capture removes the whole
+    // With the remove-follow-ups switch on, the image capture removes the whole
     // follow-up card instead of just its button.
-    await cdp.evaluate('window.setExportToAssistant(false)')
+    await cdp.evaluate('window.setExportRemoveFollowUps(true)')
     await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed before follow-up export')
     await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
     await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'follow-up export menu')

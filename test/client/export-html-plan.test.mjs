@@ -29,7 +29,7 @@ test('one document carries every card, the theme, the renderer and the mount cal
     colorScheme: 'dark',
     title: 'Two-day Shanghai',
     lang: 'zh-CN',
-    toAssistant: true,
+    removeFollowUps: false,
   })
   assert.match(html, /^<!doctype html>/)
   assert.match(html, /<html lang="zh-CN">/)
@@ -54,7 +54,7 @@ test('the page can omit the follow-up controls', () => {
     colorScheme: 'light',
     title: 'No follow-ups',
     lang: 'en',
-    toAssistant: false,
+    removeFollowUps: true,
   })
   assert.match(html, /hideToAssistant:true/)
 })
@@ -68,7 +68,7 @@ test('embedded source cannot close its script or style element early', () => {
     colorScheme: 'light',
     title: '<Two & "One">',
     lang: 'en',
-    toAssistant: true,
+    removeFollowUps: false,
   })
   assert.equal((html.match(/<\/script>/g) ?? []).length, 2, 'only the two real script closers remain')
   assert.match(html, /<\\\/script>/)

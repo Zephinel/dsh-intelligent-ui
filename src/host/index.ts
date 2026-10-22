@@ -31,7 +31,7 @@ import {
   EXPORT_BACKGROUND_PATTERN,
   EXPORT_SCALES,
   DEFAULT_EXPORT_SCALE,
-  DEFAULT_EXPORT_TO_ASSISTANT,
+  DEFAULT_EXPORT_REMOVE_FOLLOWUPS,
   EXPORT_STANDALONE_CSS_PATH,
   EXPORT_STANDALONE_JS_PATH,
   PAGE_STYLES,
@@ -56,7 +56,7 @@ export const Config = z.object({
   // therefore stays out of the settings document.
   exportBackground: z.string().pattern(EXPORT_BACKGROUND_PATTERN).default(DEFAULT_EXPORT_BACKGROUND).volatile(),
   exportScale: z.union(EXPORT_SCALES.map(scale => z.const(scale))).default(DEFAULT_EXPORT_SCALE).volatile(),
-  exportToAssistant: z.boolean().default(DEFAULT_EXPORT_TO_ASSISTANT).volatile(),
+  removeFollowUps: z.boolean().default(DEFAULT_EXPORT_REMOVE_FOLLOWUPS).volatile(),
 })
 
 /** Host services this plugin consumes; both must exist before apply runs. */

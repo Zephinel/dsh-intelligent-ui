@@ -69,8 +69,8 @@ export const EXPORT_BACKGROUND_FIELD = 'exportBackground'
 /** Volatile enum field with the image-export pixel scale. */
 export const EXPORT_SCALE_FIELD = 'exportScale'
 
-/** Volatile boolean field controlling whether exported pages keep @ToAssistant follow-ups. */
-export const EXPORT_TO_ASSISTANT_FIELD = 'exportToAssistant'
+/** Volatile boolean field controlling whether exports remove @ToAssistant follow-up blocks. */
+export const EXPORT_REMOVE_FOLLOWUPS_FIELD = 'removeFollowUps'
 
 /** Pixel scales an exported image can record. */
 export const EXPORT_SCALES = ['1x', '2x'] as const
@@ -93,8 +93,8 @@ export const EXPORT_BACKGROUND_PATTERN = /^#[0-9a-f]{6}$/i
 /** Fallback scale when the settings document provides none. */
 export const DEFAULT_EXPORT_SCALE: ExportScale = '2x'
 
-/** Fallback for the exported-page follow-up switch. */
-export const DEFAULT_EXPORT_TO_ASSISTANT = true
+/** Fallback for the export follow-up-removal switch. */
+export const DEFAULT_EXPORT_REMOVE_FOLLOWUPS = true
 
 /** Same-origin route that serves the standalone renderer script for HTML export. */
 export const EXPORT_STANDALONE_JS_PATH = '/api/intelligent-ui/export/standalone.js'
@@ -126,8 +126,8 @@ export interface ImageExportSettings {
   readonly background: string
   /** Output pixel scale. */
   readonly scale: ExportScale
-  /** Whether the interactive page keeps @ToAssistant follow-up controls. */
-  readonly toAssistant: boolean
+  /** Whether exports remove the whole @ToAssistant follow-up block. */
+  readonly removeFollowUps: boolean
 }
 
 /** Wire shape of this extension's settings namespace. */
@@ -142,8 +142,8 @@ export interface IntelligentUISettings {
   readonly exportBackground?: string
   /** Pixel scale for exported images. */
   readonly exportScale?: ExportScale
-  /** Whether the interactive page keeps @ToAssistant follow-up controls. */
-  readonly exportToAssistant?: boolean
+  /** Whether exports remove the whole @ToAssistant follow-up block. */
+  readonly removeFollowUps?: boolean
 }
 
 /** Type guard for a settings-provided export background. */
@@ -165,7 +165,7 @@ export function readImageExportSettings(settings: IntelligentUISettings | undefi
   return {
     background: isExportBackground(settings?.exportBackground) ? settings.exportBackground : DEFAULT_EXPORT_BACKGROUND,
     scale: isExportScale(settings?.exportScale) ? settings.exportScale : DEFAULT_EXPORT_SCALE,
-    toAssistant: settings?.exportToAssistant !== false,
+    removeFollowUps: settings?.removeFollowUps !== false,
   }
 }
 

@@ -55,7 +55,7 @@ npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` 进程行、程序提取器、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册。
 - `src/standalone/**`：交互页面的独立入口与页面 chrome（卡片标题/折叠、`@ToAssistant` 复制兜底、主题样式）；由 `npm run build` 打成 `lib/standalone.*`，Host 通过 same-origin 路由提供给导出流程。
 - `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）。
-- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale` / `exportToAssistant`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
+- `src/host/**`：工具注册、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale` / `removeFollowUps`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
 

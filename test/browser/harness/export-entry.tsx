@@ -52,7 +52,7 @@ const SNAPSHOT = {
 } as unknown as ExportChatSnapshot
 
 const PROGRAMS = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', running: false }]
-const SETTINGS: { background: string; scale: '1x' | '2x'; toAssistant: boolean } = { background: '#ffffff', scale: '1x', toAssistant: true }
+const SETTINGS: { background: string; scale: '1x' | '2x'; removeFollowUps: boolean } = { background: '#ffffff', scale: '1x', removeFollowUps: false }
 
 // The SearchImage component searches Wikipedia for its photo. Keep the E2E
 // offline and deterministic while still exercising the real debounce, pending
@@ -162,8 +162,8 @@ function transitionsFrozen(element: Element | null | undefined): boolean {
 ;(window as unknown as { setExportScale: (scale: '1x' | '2x') => void }).setExportScale = (scale) => {
   SETTINGS.scale = scale
 }
-;(window as unknown as { setExportToAssistant: (value: boolean) => void }).setExportToAssistant = (value) => {
-  SETTINGS.toAssistant = value
+;(window as unknown as { setExportRemoveFollowUps: (value: boolean) => void }).setExportRemoveFollowUps = (value) => {
+  SETTINGS.removeFollowUps = value
 }
 ;(window as unknown as { captureProbes: unknown[] }).captureProbes = []
 const originalToCanvas = snapdom.toCanvas.bind(snapdom)

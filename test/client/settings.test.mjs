@@ -99,7 +99,8 @@ test('image export shows its defaults: white background and 2x', () => {
   assert.match(html, /aria-pressed="true"[^>]*>2x</)
   assert.match(html, /Background color/)
   assert.match(html, /Resolution/)
-  assert.match(html, /Keep follow-up actions/)
+  assert.match(html, /Remove follow-up actions/)
+  assert.match(html, /Remove follow-up actions<\/div>[\s\S]*?aria-checked="true"/, 'removing follow-ups is the default')
   assert.equal((html.match(/role="switch"/g) ?? []).length, 3, 'the export group adds the follow-up switch')
 })
 
