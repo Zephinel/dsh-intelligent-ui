@@ -45,7 +45,7 @@ npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
 npm run check          # build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
-npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导出，需要 Chrome）
+npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面 + Article 间距 + 选色器，需要 Chrome）
 ```
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。

@@ -45,7 +45,7 @@ npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run check          # build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
-npm run test:browser   # optional real-browser E2E (style panel + image export; Chrome required)
+npm run test:browser   # optional real-browser E2E (style panel + image export + interactive page + Article spacing + color picker; Chrome required)
 ```
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.

@@ -143,6 +143,9 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   const [hexDraft, setHexDraft] = useState(exportSettings.background)
   const colorTrigger = useRef<HTMLButtonElement>(null)
   const colorPanel = useRef<HTMLDivElement>(null)
+  const skipColorBlur = useRef(false)
+  const hexInput = useRef<HTMLInputElement>(null)
+  const commitHexRef = useRef<() => void>(() => undefined)
   const ready = snapshot.status === 'ready'
   const disabled = !ready || !snapshot.writable || pending !== null
 
@@ -168,7 +171,10 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
     const onPointer = (event: PointerEvent): void => {
       const target = event.target as Node | null
       if (target !== null && (colorTrigger.current?.contains(target) || colorPanel.current?.contains(target))) return
-      setColorOpen(false)
+      // Clicking outside leaves the field before React handles the blur; commit
+      // the valid draft here so a typed hex value is not silently discarded.
+      if (document.activeElement === hexInput.current) commitHexRef.current()
+      else setColorOpen(false)
     }
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setColorOpen(false)
@@ -182,10 +188,16 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
   }, [colorOpen])
 
   const commitHex = (): void => {
+    if (skipColorBlur.current) {
+      skipColorBlur.current = false
+      return
+    }
     const next = hexDraft.trim().startsWith('#') ? hexDraft.trim().toLowerCase() : `#${hexDraft.trim().toLowerCase()}`
     if (isExportBackground(next)) void save(EXPORT_BACKGROUND_FIELD, next)
     setColorOpen(false)
   }
+
+  commitHexRef.current = commitHex
 
   const note = failed
     ? t('settings.error')
@@ -312,6 +324,13 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
                   style={{ background: color }}
                   aria-label={color}
                   aria-pressed={color.toLowerCase() === exportSettings.background.toLowerCase()}
+                  onPointerDown={(event) => {
+                    // Keep the hex field focused long enough for the preset click below;
+                    // suppress the stale blur commit while the preset takes over.
+                    event.preventDefault()
+                    skipColorBlur.current = true
+                    window.setTimeout(() => { skipColorBlur.current = false }, 0)
+                  }}
                   onClick={() => {
                     setColorOpen(false)
                     void save(EXPORT_BACKGROUND_FIELD, color)
@@ -322,6 +341,7 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
             <label className="dsh-iui-color-hex-row">
               <span>{t('settings.export.background.hex')}</span>
               <input
+                ref={hexInput}
                 type="text"
                 className="dsh-iui-color-hex-input"
                 value={hexDraft}

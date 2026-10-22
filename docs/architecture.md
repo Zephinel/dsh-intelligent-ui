@@ -14,7 +14,7 @@ Host  lib/index.js（Node）
 │   └─ @openuidev/lang-core 按组件库 spec 校验；错误精确回传，模型同一轮自修
 ├─ 会话开关 + 回答样式（全局默认 + 会话覆盖）   # /iui 命令 + 投影 + 每 agent 工具可见性
 ├─ ctx.systemPrompt.section(...)          # 开关打开时才注入 OpenUI Lang 生成提示词
-├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale (volatile)  # 插件详情页写入；prompt 每次请求读取实时值
+├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale / removeFollowUps (volatile)  # 插件详情页写入；prompt 每次请求读取实时值
 ├─ webServer 路由（可选注入）                # /api/intelligent-ui/export/standalone.{js,css}，供交互页面导出读取
 └─ ctx.skills.register(intelligent-ui)    # 内嵌 Agent Skill（skills/intelligent-ui/SKILL.md）
 

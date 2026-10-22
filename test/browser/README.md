@@ -25,9 +25,9 @@ events but not the full DSH Web integration.
   custom export-background picker: native color input is gone, presets commit,
   the hex field commits on Enter and the panel closes.
 - `standalone-page.e2e.mjs` assembles the real single-file page from
-  `lib/standalone.js` / `lib/standalone.css` plus two recorded cards, opens it
+  `lib/standalone.js` / `lib/standalone.css` plus three recorded cards, opens it
   in Chrome, and checks the inline-only assets, both mounted card bodies (no
-  header/collapse chrome), the inlined theme, the `@ToAssistant` copy toast, and the hidden variant that omits the follow-up controls.
+  header/collapse chrome), the inlined theme, the `@ToAssistant` copy toast, and the hidden variant that removes the follow-up Card plus a root-level follow-up control.
   Run `npm run build` first so the standalone artifacts exist.
 
 ```bash

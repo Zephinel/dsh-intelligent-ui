@@ -149,7 +149,7 @@ Once enabled, **any answer with structure defaults to a card** — including exp
 
 To guarantee a card (or when the model still replies in text), invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on; explicit invocation is treated as a direct instruction. You can also say "read the intelligent-ui skill and then build ... with render_ui".
 
-![Plugin detail page: availability, answer style, composition and image export](assets/intelligent-ui-settings.webp)
+![Plugin detail page: availability, answer style, composition and export](assets/intelligent-ui-settings.webp)
 
 The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
 

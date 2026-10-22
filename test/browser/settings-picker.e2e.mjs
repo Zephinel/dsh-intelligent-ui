@@ -90,6 +90,49 @@ try {
   assert.equal(hex.value, '#123456')
   await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes after Enter')
 
+  // A real mouse click on a preset while the hex field has focus must save the
+  // preset, not the stale draft. This covers blur-before-click ordering.
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-export-background]").click()')
+  await cdp.waitFor('!!document.querySelector(".dsh-iui-color-panel")', 'color panel for mouse preset')
+  await cdp.evaluate(`(() => {
+    const input = document.querySelector('.dsh-iui-color-hex-input')
+    input.focus()
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(input, '#abcdef')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })()`)
+  const presetPoint = await cdp.evaluate(`(() => {
+    const element = document.querySelector('.dsh-iui-color-option[aria-label="#111827"]')
+    const rect = element.getBoundingClientRect()
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+  })()`)
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: presetPoint.x, y: presetPoint.y, button: 'left', clickCount: 1 })
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: presetPoint.x, y: presetPoint.y, button: 'left', clickCount: 1 })
+  await cdp.waitFor('window.__calls.length === 3', 'mouse preset commit')
+  assert.equal((await cdp.evaluate('window.__calls[2].value')), '#111827', 'the preset wins over the focused hex draft')
+  await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes after mouse preset')
+
+  // Clicking outside while the hex field holds a valid draft commits it
+  // instead of discarding it with the unmounted panel.
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-export-background]").click()')
+  await cdp.waitFor('!!document.querySelector(".dsh-iui-color-panel")', 'color panel for outside commit')
+  await cdp.evaluate(`(() => {
+    const input = document.querySelector('.dsh-iui-color-hex-input')
+    input.focus()
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(input, '#00aa00')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })()`)
+  const outsidePoint = await cdp.evaluate(`(() => {
+    const rect = document.querySelector('.dsh-iui-settings-title').getBoundingClientRect()
+    return { x: rect.left + 4, y: rect.top + rect.height / 2 }
+  })()`)
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: outsidePoint.x, y: outsidePoint.y, button: 'left', clickCount: 1 })
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: outsidePoint.x, y: outsidePoint.y, button: 'left', clickCount: 1 })
+  await cdp.waitFor('window.__calls.length === 4', 'outside click commits the draft')
+  assert.equal((await cdp.evaluate('window.__calls[3].value')), '#00aa00')
+  await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes after outside commit')
+
   console.log('settings-picker E2E: OK')
 } finally {
   await cleanup()

@@ -62,18 +62,8 @@ interface CardProps {
  * card header and its collapse control: it carries content, not chat chrome.
  */
 function CardBody({ card, t, onToAssistant, hideToAssistant }: CardProps): ReactElement {
-  const host = useRef<HTMLElement>(null)
-  useLayoutEffect(() => {
-    const element = host.current
-    if (!hideToAssistant || element === null) return
-    const apply = (): void => { hideToAssistantBlocks(element) }
-    apply()
-    const observer = new MutationObserver(apply)
-    observer.observe(element, { childList: true, subtree: true })
-    return () => { observer.disconnect() }
-  }, [hideToAssistant])
   return (
-    <section ref={host} className="dsh-iui-standalone-card" data-dsh-intelligent-ui="card" data-dsh-iui-style={card.style ?? 'card'}>
+    <section className="dsh-iui-standalone-card" data-dsh-intelligent-ui="card" data-dsh-iui-style={card.style ?? 'card'}>
       <div className={card.style === 'article' ? 'dsh-iui-article' : undefined}>
         <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} onToAssistant={hideToAssistant ? undefined : onToAssistant} t={t} />
       </div>
@@ -89,6 +79,14 @@ function Page({ cards, lang, hideToAssistant }: { readonly cards: readonly Expor
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current)
   }, [])
+  useLayoutEffect(() => {
+    if (!hideToAssistant) return
+    const apply = (): void => { hideToAssistantBlocks(document.body) }
+    apply()
+    const observer = new MutationObserver(apply)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => { observer.disconnect() }
+  }, [hideToAssistant])
   const onToAssistant = useCallback((message: string): void => {
     void copyText(message).then(copied => {
       // On failure, keep the message visible so the reader can copy it by hand.

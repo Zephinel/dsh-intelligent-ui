@@ -322,7 +322,7 @@ export function apply(ctx: {
     name: 'tool:intelligent-ui',
     order: 3100,
     // Resolved per request: empty while the user keeps the switch off, so the
-    // ~8.5k-token generation prompt costs nothing in a disabled session. The
+    // ~9.5k-token generation prompt costs nothing in a disabled session. The
     // free-composition preference is read live from its volatile config ref.
     text: (context) => {
       const sessionId = context?.agent?.session?.id

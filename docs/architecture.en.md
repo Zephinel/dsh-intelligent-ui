@@ -14,7 +14,7 @@ Host  lib/index.js (Node)
 │   └─ @openuidev/lang-core validates against the component library spec; errors are returned precisely, and the model repairs them in the same turn
 ├─ session switch + answer style (global defaults + session overrides)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
-├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale (volatile)  # written by the plugin detail page; the prompt reads them live per request
+├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale / removeFollowUps (volatile)  # written by the plugin detail page; the prompt reads them live per request
 ├─ webServer routes (optional injection)     # /api/intelligent-ui/export/standalone.{js,css} for the interactive-page export
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
