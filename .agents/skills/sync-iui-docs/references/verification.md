@@ -6,13 +6,13 @@ Run from the repo root. Current expected values are dated 2026-10-22; derive the
 
 | Command | Expected (2026-10-22) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js ~598 kB`, `client lib/client.js ~3.55 MB`, `lib/standalone.js 3.26 MB + lib/standalone.css 496 kB`; tests: 97 total = Host 27 + Client 51 + packaging 19; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run check` | build: `host lib/index.js ~598 kB`, `client lib/client.js ~3.55 MB`, `lib/standalone.js 3.26 MB + lib/standalone.css 496 kB`; tests: 98 total = Host 27 + Client 52 + packaging 19; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
 | `npm run pack:check` | 40 files; tarball ~3.70 MB; unpacked ~9.78 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 19 pass (manifest 9 + reference catalog 4 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails and decision policy |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 4 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json` |
 | `node --test test/host/*.test.mjs` | 27 pass = mode 8 + skill 3 + tool 13 + export-routes 1 + layout 2 | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 51 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 + export-html-plan 4 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
+| `node --test test/client/*.test.mjs` | 52 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 + export-html-plan 5 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
 | `npm run test:browser` | four suites: style-panel, image export, the standalone interactive page and Article layout spacing (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 

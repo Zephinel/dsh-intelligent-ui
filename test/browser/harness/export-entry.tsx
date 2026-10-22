@@ -51,7 +51,7 @@ const SNAPSHOT = {
 } as unknown as ExportChatSnapshot
 
 const PROGRAMS = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', running: false }]
-const SETTINGS: { background: string; scale: '1x' | '2x' } = { background: '#ffffff', scale: '1x' }
+const SETTINGS: { background: string; scale: '1x' | '2x'; toAssistant: boolean } = { background: '#ffffff', scale: '1x', toAssistant: true }
 
 // The SearchImage component searches Wikipedia for its photo. Keep the E2E
 // offline and deterministic while still exercising the real debounce, pending

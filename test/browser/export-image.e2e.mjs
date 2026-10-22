@@ -207,6 +207,7 @@ try {
     assert.match(page.text, /--standalone-css:true/, 'the fetched stylesheet is inlined')
     assert.match(page.text, /"program":"root = Col/, 'the recorded card program is embedded')
     assert.match(page.text, /"callId":"call-1"/)
+    assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
 
     const probesAfterAll = await cdp.evaluate('window.captureProbes')
     assert.equal(probesAfterAll.length, 3, 'the three image exports rasterized the card')

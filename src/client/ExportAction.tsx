@@ -225,6 +225,7 @@ export function ExportAction({
         cards,
         title: programs[0]?.title,
         lang: document.documentElement.lang || 'en',
+        toAssistant: settings().toAssistant,
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {

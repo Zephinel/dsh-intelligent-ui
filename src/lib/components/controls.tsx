@@ -12,6 +12,7 @@ import {
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { z } from "zod/v4";
 import { useT } from "../i18n";
+import { useHideToAssistant } from "../to-assistant";
 import { Glyph } from "./glyph";
 import { bg, children, color, onColor, cx, option, radius, radiusSchema, space, textOf, toOption, type Option } from "./style";
 
@@ -65,7 +66,9 @@ export const Button = defineComponent({
   component: ({ props }) => {
     const run = useRunAction();
     const streaming = useIsStreaming();
+    const hidden = useHideToAssistant(props.action, true);
     const label = String(props.label ?? "");
+    if (hidden) return null;
     return (
       <button
         type="button"
@@ -98,7 +101,9 @@ export const IconButton = defineComponent({
   component: ({ props }) => {
     const run = useRunAction();
     const streaming = useIsStreaming();
+    const hidden = useHideToAssistant(props.action);
     const label = props.label || String(props.icon ?? "");
+    if (hidden) return null;
     return (
       <button
         type="button"
@@ -128,6 +133,7 @@ export const Pressable = defineComponent({
   component: function PressableView({ props, renderNode }) {
     const run = useRunAction();
     const streaming = useIsStreaming();
+    const hidden = useHideToAssistant(props.action);
     const ref = useRef<HTMLDivElement>(null);
     const press = () => {
       if (!streaming) run(textOf(ref.current), props.action, false);
@@ -142,6 +148,7 @@ export const Pressable = defineComponent({
       event.preventDefault();
       press();
     };
+    if (hidden) return null;
     return (
       <div
         ref={ref}

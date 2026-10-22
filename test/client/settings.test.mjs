@@ -64,7 +64,7 @@ function render(options = {}) {
 
 test('off shows every control with its default state', () => {
   const html = render()
-  assert.equal((html.match(/role="switch"/g) ?? []).length, 2)
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 3)
   assert.match(html, /aria-checked="false"/)
   assert.match(html, /aria-label="Enable in all sessions"/)
   assert.match(html, /aria-label="Free-form layout"/)
@@ -81,7 +81,7 @@ test('off shows every control with its default state', () => {
 
 test('on reflects the global enable, style, and free-composition values', () => {
   const html = render({ form: form({ value: { globalEnabled: true, answerStyle: 'article', freeComposition: true } }) })
-  assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 2)
+  assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 3)
   assert.match(html, /On: new sessions start with Intelligent UI enabled/)
   assert.match(html, /On: the model may choose the page structure/)
   assert.match(html, /data-active="true"/)
@@ -90,7 +90,7 @@ test('on reflects the global enable, style, and free-composition values', () => 
 
 test('image export shows its defaults: white background and 2x', () => {
   const html = render()
-  assert.match(html, /Image export/)
+  assert.match(html, /Defaults and options for image and interactive-page export/)
   assert.match(html, /type="color"/)
   assert.match(html, /value="#ffffff"/)
   assert.match(html, />1x</)
@@ -98,6 +98,8 @@ test('image export shows its defaults: white background and 2x', () => {
   assert.match(html, /aria-pressed="true"[^>]*>2x</)
   assert.match(html, /Background color/)
   assert.match(html, /Resolution/)
+  assert.match(html, /Keep follow-up actions/)
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 3, 'the export group adds the follow-up switch')
 })
 
 test('image export reflects stored background and scale', () => {
@@ -127,7 +129,7 @@ test('the Chinese dictionary localizes the page copy', () => {
   assert.match(html, /卡片（简洁）/)
   assert.match(html, /文章（详细）/)
   assert.match(html, /自由布局/)
-  assert.match(html, /图片导出/)
+  assert.match(html, /图片与交互页面导出的默认外观和选项/)
   assert.match(html, /背景颜色/)
   assert.match(html, /分辨率/)
 })

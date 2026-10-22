@@ -20,6 +20,8 @@ import './standalone.css'
 interface StandaloneOptions {
   /** UI language for the copy toast and renderer fallbacks. */
   readonly lang?: string
+  /** Hide controls that would continue the conversation. */
+  readonly hideToAssistant?: boolean
 }
 
 /** Copy text with a legacy fallback for file:// pages without the async API. */
@@ -51,30 +53,32 @@ interface CardProps {
   readonly card: ExportPageCard
   readonly t: Translate
   readonly onToAssistant: (message: string) => void
+  readonly hideToAssistant: boolean
 }
 
 /**
  * Render only the answer body. The exported page deliberately drops the DSH
  * card header and its collapse control: it carries content, not chat chrome.
  */
-function CardBody({ card, t, onToAssistant }: CardProps): ReactElement {
+function CardBody({ card, t, onToAssistant, hideToAssistant }: CardProps): ReactElement {
   return (
     <section className="dsh-iui-standalone-card" data-dsh-intelligent-ui="card" data-dsh-iui-style={card.style ?? 'card'}>
       <div className={card.style === 'article' ? 'dsh-iui-article' : undefined}>
-        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} onToAssistant={onToAssistant} t={t} />
+        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} onToAssistant={hideToAssistant ? undefined : onToAssistant} hideToAssistant={hideToAssistant} t={t} />
       </div>
     </section>
   )
 }
 
 /** Render the exported cards plus the copy fallback toast. */
-function Page({ cards, lang }: { readonly cards: readonly ExportPageCard[]; readonly lang: string }): ReactElement {
+function Page({ cards, lang, hideToAssistant }: { readonly cards: readonly ExportPageCard[]; readonly lang: string; readonly hideToAssistant: boolean }): ReactElement {
   const t = lang.toLowerCase().startsWith('zh') ? translate(zh) : translate(en)
   const [toast, setToast] = useState<string | null>(null)
   const timer = useRef<number | null>(null)
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current)
   }, [])
+  const toAssistant = hideToAssistant !== true
   const onToAssistant = useCallback((message: string): void => {
     void copyText(message).then(copied => {
       // On failure, keep the message visible so the reader can copy it by hand.
@@ -91,7 +95,7 @@ function Page({ cards, lang }: { readonly cards: readonly ExportPageCard[]; read
     <div className="dsh-iui-standalone-page">
       <div className="dsh-iui-cards dsh-iui-standalone-cards" data-dsh-intelligent-ui-list>
         {cards.map((card, index) => (
-          <CardBody key={card.callId ?? `${index}-${card.title ?? ''}`} card={card} t={t} onToAssistant={onToAssistant} />
+          <CardBody key={card.callId ?? `${index}-${card.title ?? ''}`} card={card} t={t} onToAssistant={onToAssistant} hideToAssistant={hideToAssistant} />
         ))}
       </div>
       {toast === null ? null : <div className="dsh-iui-standalone-toast" role="status">{toast}</div>}
@@ -106,5 +110,5 @@ declare global {
 }
 
 window.mountIUI = (element, cards, options = {}) => {
-  createRoot(element).render(<Page cards={cards} lang={options.lang ?? 'en'} />)
+  createRoot(element).render(<Page cards={cards} lang={options.lang ?? 'en'} hideToAssistant={options.hideToAssistant === true} />)
 }

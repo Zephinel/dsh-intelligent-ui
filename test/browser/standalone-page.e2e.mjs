@@ -39,11 +39,23 @@ try {
     colorScheme: 'light',
     title: 'Standalone harness',
     lang: 'en',
+    toAssistant: true,
   })
   assert.ok(!/<script[^>]+src=/i.test(html), 'the page has no external script')
   assert.ok(!/<link[^>]+rel=["']?stylesheet/i.test(html), 'the page has no external stylesheet')
   assert.ok(Buffer.byteLength(html) > 3.4 * 1024 * 1024, 'the page inlines the full renderer (>= 3.4 MB)')
   await writeFile(join(temp, 'index.html'), html)
+  const hiddenHtml = buildStandaloneHtml({
+    cards,
+    js,
+    css,
+    tokens: PAGE_TOKENS,
+    colorScheme: 'light',
+    title: 'Standalone harness',
+    lang: 'en',
+    toAssistant: false,
+  })
+  await writeFile(join(temp, 'hidden.html'), hiddenHtml)
 
   server = await startStaticServer(temp)
   browser = await launchChrome({ url: server.url + 'index.html', width: 900, height: 1200 })
@@ -88,6 +100,17 @@ try {
   const toast = await cdp.evaluate('document.querySelector(".dsh-iui-standalone-toast").textContent')
   assert.match(toast, /Copied|paste it back/i, 'the @ToAssistant fallback reports a copied message')
 
+  await cdp.send('Page.navigate', { url: server.url + 'hidden.html' })
+  await cdp.waitFor('document.readyState === "complete"', 'hidden page load', { timeout: 60000 })
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 2', 'hidden page cards', { timeout: 60000 })
+  const hidden = await cdp.evaluate(`(() => ({
+    cards: document.querySelectorAll('.dsh-iui-standalone-card').length,
+    buttons: document.querySelectorAll('button').length,
+    text: document.body.innerText,
+  }))()`)
+  assert.equal(hidden.cards, 2, 'card content still renders without follow-up controls')
+  assert.equal(hidden.buttons, 0, 'the ToAssistant controls are omitted from the hidden page')
+  assert.match(hidden.text, /Standalone harness/)
   console.log('standalone-page E2E: OK')
 } finally {
   await cleanup()

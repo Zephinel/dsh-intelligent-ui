@@ -53,7 +53,7 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
-| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), Composition (Free-form layout) and Image export (background color, resolution) |
+| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), Composition (Free-form layout) and Export (background color, resolution, interactive-page follow-up switch) |
 | Replayable | The generated program enters the session log as a tool argument and replays with history |
 
 ## Getting the code
@@ -151,11 +151,11 @@ To guarantee a card (or when the model still replies in text), invoke the skill 
 
 ![Plugin detail page: availability, answer style, composition and image export](assets/intelligent-ui-settings.webp)
 
-The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Image export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Image export** stores the default background color and 1x/2x resolution for exported images.
+The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether interactive pages keep `@ToAssistant` follow-up controls.
 
 Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It offers a beautification frame — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — and saves every card rendered by that turn as one PNG. Collapsed cards are expanded for the capture and restored afterwards; the image contains the rendered cards only, not the Markdown text around them and not the export control itself.
 
-The menu also offers **Interactive page** at the bottom: it saves every card from that turn as one HTML file (renderer, current theme and card programs inlined; about 3.4–4.9 MB). Open it in a browser to keep using maps, forms, sliders and the other components; `@ToAssistant` does not call DSH but copies the message and shows “Copied — paste it back into DSH to continue.” The file needs no DSH or extra scripts, though networked components such as maps and photos still need the network.
+The menu also offers **Interactive page** at the bottom: it saves every card from that turn as one HTML file (renderer, current theme and card programs inlined; about 3.4–4.9 MB). Open it in a browser to keep using maps, forms, sliders and the other components; `@ToAssistant` does not call DSH but copies the message and shows “Copied — paste it back into DSH to continue.” Turn off **Keep follow-up actions** in the **Export** group on the Plugin detail page to remove those buttons from the page. The file needs no DSH or extra scripts, though networked components such as maps and photos still need the network.
 
 ## Build, test and deploy
 

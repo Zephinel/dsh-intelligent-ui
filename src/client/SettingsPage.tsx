@@ -20,6 +20,7 @@ import {
   EXPORT_BACKGROUND_FIELD,
   EXPORT_SCALES,
   EXPORT_SCALE_FIELD,
+  EXPORT_TO_ASSISTANT_FIELD,
   FREE_COMPOSITION_FIELD,
   GLOBAL_ENABLED_FIELD,
   isAnswerStyle,
@@ -78,6 +79,7 @@ type PendingField =
   | typeof FREE_COMPOSITION_FIELD
   | typeof EXPORT_BACKGROUND_FIELD
   | typeof EXPORT_SCALE_FIELD
+  | typeof EXPORT_TO_ASSISTANT_FIELD
 
 /** One labelled switch row; the three settings in this page share this shape. */
 function SwitchRow({
@@ -291,6 +293,15 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
             ))}
           </div>
         </div>
+        <SwitchRow
+          label={t('settings.export.toAssistant.label')}
+          hint={t('settings.export.toAssistant.hint')}
+          idPrefix={`${idPrefix}-to-assistant`}
+          checked={exportSettings.toAssistant}
+          disabled={disabled}
+          describedBy={`${idPrefix}-to-assistant ${noteId}`}
+          onToggle={() => { void save(EXPORT_TO_ASSISTANT_FIELD, !exportSettings.toAssistant) }}
+        />
       </div>
 
       <p id={noteId} className="dsh-iui-settings-note">{t('settings.note')}</p>

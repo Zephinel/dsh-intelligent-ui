@@ -29,6 +29,7 @@ test('one document carries every card, the theme, the renderer and the mount cal
     colorScheme: 'dark',
     title: 'Two-day Shanghai',
     lang: 'zh-CN',
+    toAssistant: true,
   })
   assert.match(html, /^<!doctype html>/)
   assert.match(html, /<html lang="zh-CN">/)
@@ -41,6 +42,21 @@ test('one document carries every card, the theme, the renderer and the mount cal
   assert.match(html, /"callId":"call-1"/)
   assert.match(html, /"callId":"call-2"/)
   assert.match(html, /lang:"zh-CN"/)
+  assert.match(html, /hideToAssistant:false/)
+})
+
+test('the page can omit the follow-up controls', () => {
+  const html = buildStandaloneHtml({
+    cards: [],
+    js: '',
+    css: '',
+    tokens: ':root{}',
+    colorScheme: 'light',
+    title: 'No follow-ups',
+    lang: 'en',
+    toAssistant: false,
+  })
+  assert.match(html, /hideToAssistant:true/)
 })
 
 test('embedded source cannot close its script or style element early', () => {
@@ -52,6 +68,7 @@ test('embedded source cannot close its script or style element early', () => {
     colorScheme: 'light',
     title: '<Two & "One">',
     lang: 'en',
+    toAssistant: true,
   })
   assert.equal((html.match(/<\/script>/g) ?? []).length, 2, 'only the two real script closers remain')
   assert.match(html, /<\\\/script>/)

@@ -20,6 +20,8 @@ export interface ExportPageOptions {
   readonly title?: string | undefined
   /** UI language for the standalone card chrome. */
   readonly lang: string
+  /** Whether the exported page keeps @ToAssistant follow-up controls. */
+  readonly toAssistant: boolean
 }
 
 /**
@@ -110,6 +112,6 @@ export async function exportCardsHtml(options: ExportPageOptions): Promise<void>
   const title = options.title !== undefined && options.title.trim() !== ''
     ? options.title
     : options.lang.toLowerCase().startsWith('zh') ? '交互页面' : 'Interactive page'
-  const html = buildStandaloneHtml({ cards: options.cards, js, css, tokens, colorScheme, title, lang: options.lang })
+  const html = buildStandaloneHtml({ cards: options.cards, js, css, tokens, colorScheme, title, lang: options.lang, toAssistant: options.toAssistant })
   await downloadHtml(html, pageFileName(options.title, new Date()))
 }

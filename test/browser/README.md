@@ -24,7 +24,7 @@ events but not the full DSH Web integration.
 - `standalone-page.e2e.mjs` assembles the real single-file page from
   `lib/standalone.js` / `lib/standalone.css` plus two recorded cards, opens it
   in Chrome, and checks the inline-only assets, both mounted card bodies (no
-  header/collapse chrome), the inlined theme and the `@ToAssistant` copy toast.
+  header/collapse chrome), the inlined theme, the `@ToAssistant` copy toast, and the hidden variant that omits the follow-up controls.
   Run `npm run build` first so the standalone artifacts exist.
 
 ```bash

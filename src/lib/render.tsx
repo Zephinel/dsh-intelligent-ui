@@ -31,6 +31,7 @@ import './components/reset.css'
 import { webUrl } from './components/style'
 import { library } from './library'
 import { I18nProvider, useT } from './i18n'
+import { ToAssistantHiddenContext } from './to-assistant'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
 export interface OpenUIRendererProps {
@@ -39,6 +40,8 @@ export interface OpenUIRendererProps {
   /** Stable card identity used to scope Section/Toc anchors across cards. */
   readonly scopeId?: string
   readonly onToAssistant?: (message: string) => void
+  /** Drop controls whose action would continue the conversation (standalone pages). */
+  readonly hideToAssistant?: boolean
   /** DSH locale seat; omitted in tests and standalone embeds (English copy). */
   readonly t?: Translate
 }
@@ -118,7 +121,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, hideToAssistant = false, t = fallbackT }: OpenUIRendererProps): ReactElement {
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
   // Warnings still render; only real errors get the fallback note.
@@ -127,6 +130,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT 
 
   return (
     <I18nProvider t={t}>
+      <ToAssistantHiddenContext.Provider value={hideToAssistant}>
       <ArticleScope.Provider value={scopeId}>
       <div className="dsh-iui-host dsh-iui-root">
         <RendererBoundary program={program}>
@@ -138,7 +142,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT 
                 response={program}
                 library={library}
                 isStreaming={false}
-                onAction={(event) => handleAction(event as ActionEvent, onToAssistant)}
+                onAction={(event) => handleAction(event as ActionEvent, hideToAssistant ? undefined : onToAssistant)}
                 onError={onError}
               />
               {fatal.length > 0 && (
@@ -152,6 +156,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT 
         </RendererBoundary>
       </div>
       </ArticleScope.Provider>
+      </ToAssistantHiddenContext.Provider>
     </I18nProvider>
   )
 }
