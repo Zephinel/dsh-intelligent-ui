@@ -39,8 +39,8 @@ const THEME = `:root{
   --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --dsw-alias-bg-base: #fff;
   --dsw-alias-bg-layer-1: #fff;
-  --dsw-alias-bg-layer-2: #fff;
-  --dsw-alias-bg-layer-3: #fff;
+  --dsw-alias-bg-layer-2: #f5f5f5;
+  --dsw-alias-bg-layer-3: #ededed;
   --dsw-alias-border-l1: #0000000a;
   --dsw-alias-border-l2: #0000001a;
   --dsw-alias-border-l3: #0000001f;
