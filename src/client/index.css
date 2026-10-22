@@ -387,7 +387,7 @@
   padding: 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
 }
 
 .dsh-iui-color-panel-label {
@@ -693,7 +693,7 @@
 }
 
 .dsh-iui-style-follow-button:hover:not(:disabled) {
-  background: var(--dsw-alias-bg-layer-3);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .dsh-iui-style-follow-button:focus-visible {
@@ -799,7 +799,7 @@
   padding: 0;
   border: 0;
   border-radius: 9px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 18px;
@@ -808,7 +808,7 @@
 }
 
 .dsh-iui-style-back:hover {
-  background: var(--dsw-alias-bg-layer-3);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .dsh-iui-style-back:focus-visible {
@@ -1267,7 +1267,7 @@
 .dsh-iui-style-panel-scope {
   padding: 3px 8px;
   border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 16px;
@@ -1361,10 +1361,10 @@
   cursor: pointer;
 }
 
-.dsh-iui-on-demand-examples button { background: var(--dsw-alias-bg-layer-2); }
+.dsh-iui-on-demand-examples button { background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2)); }
 .dsh-iui-on-demand-cancel { margin-left: auto; }
 .dsh-iui-on-demand-actions { display: flex; gap: 4px; margin-left: auto; }
-.dsh-iui-on-demand-actions .dsh-iui-on-demand-retry { background: var(--dsw-alias-bg-layer-2); }
+.dsh-iui-on-demand-actions .dsh-iui-on-demand-retry { background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2)); }
 .dsh-iui-on-demand-entry:hover:not(:disabled),
 .dsh-iui-on-demand-hint button:hover:not(:disabled),
 .dsh-iui-result-actions button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
@@ -1382,7 +1382,7 @@
   flex: none;
   padding: 1px 6px;
   border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 18px;
@@ -1405,7 +1405,7 @@
 .dsh-iui-custom-item .dsh-iui-preview-caption { padding-right: 24px; }
 .dsh-iui-template-more {
   position: absolute; right: 5px; bottom: 8px; width: 28px; height: 28px;
-  border: 0; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-1);
+  border: 0; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-label-primary); font: inherit; cursor: pointer;
 }
 .dsh-iui-style-popover {
@@ -1430,7 +1430,7 @@
 .dsh-iui-template-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .dsh-iui-template-buttons button, .dsh-iui-template-menu button {
   padding: 6px 10px; border: 0; border-radius: var(--dsw-radius-sm); font: inherit;
-  color: inherit; background: var(--dsw-alias-bg-layer-2); cursor: pointer;
+  color: inherit; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2)); cursor: pointer;
 }
 .dsh-iui-template-menu { width: 196px; padding: 5px; }
 .dsh-iui-template-menu button { display: block; width: 100%; background: transparent; text-align: left; }
