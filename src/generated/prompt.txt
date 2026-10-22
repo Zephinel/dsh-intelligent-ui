@@ -272,6 +272,16 @@ drawings = [s0, s1, s2, s3]
 viewer = Card([Row([Badge("Step " + ($step + 1) + " of 4", "info"), Spacer(), Caption(@Percent($step + 1, 4) + "% done")], 2), Box([drawings[$step]], null, null, 3, "surface", "lg"), Title(steps[$step].title, "md"), Text(steps[$step].text, "sm"), Row([Button("Back", @Set($step, @Clamp($step - 1, 0, 3)), "outline", null, null, "arrow-left", $step == 0), Spacer(), Button("Next step", @Set($step, @Clamp($step + 1, 0, 3)), "solid", null, null, "arrow-right", $step == 3)], 2)], null, 4, 3)
 strip = Grid(@Each(@Range(0, 4), "i", Pressable([drawings[i], Caption((i + 1) + ". " + steps[i].title)], @Set($step, i), i == $step, 2)), 4, 110, 2)
 
+## Layout and spacing contract
+
+The renderer owns the vertical rhythm; a page is one readable column.
+
+- Leave `gap` unset on the page root `Col`, on the children of a `Section`, and on `Card` contents. The renderer already applies section/group spacing; an explicit gap there overrides it or doubles the blank space.
+- Use an explicit `gap` only on `Row`, `Grid`, `Carousel`, and small compact control stacks: 1–2 for inner pairs, 3–4 for grouped blocks (4px steps). Do not use a gap of 5–6 on a nested `Col` to imitate page spacing.
+- Never create vertical space with `Spacer()`, an empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, or a `Divider` used as a blank. Group related blocks in a `Card` or let the flow space them.
+- A `Section` body is a sequence of blocks: prose (`Markdown`/`Text`) first, then at most a couple of supplemental blocks (`Grid`, `Table`, `Chart`, `Code`, `Quote`). Do not wrap the whole body in a `Col` with a manual gap.
+- Keep one page measure; do not put a whole page side by side. Use `Grid` only for genuinely parallel blocks.
+
 ## Important Rules
 - Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)
 

@@ -23,7 +23,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Session switch and answer style
 
-The extension costs ~8.5k prompt tokens, so access is opt-in. The deployment-wide defaults live on the Plugin detail page; the composer can override them for one session. A fresh install starts **off** globally, and session state survives refresh and DSH restarts.
+The extension costs ~9.5k prompt tokens, so access is opt-in. The deployment-wide defaults live on the Plugin detail page; the composer can override them for one session. A fresh install starts **off** globally, and session state survives refresh and DSH restarts.
 
 - **Global defaults (Plugin detail page):** **Enable in all sessions**, the global **Auto / Card / Article** style, and the existing **Free-form layout** switch.
 - **Session overrides (composer UI chip):** **Off / This session only / Follow global** for enablement; `/iui on|off|inherit`. The **This session only** entry opens a style panel: two previews, an Auto/Card/Article slider, and **Follow global**; `/iui style auto|card|article|inherit`.
@@ -183,7 +183,7 @@ Work top-down; each step rules out one layer:
 
 - The card appears at the **end of the turn** (turn-tail), never inline mid-answer; during generation the process row reads the localized "Interactive answer" (「交互式回答」 in a Chinese UI).
 - Model-authored programs occasionally fail validation; the host returns exact errors and the model is expected to self-repair in the same turn. Repeated failures are a prompt/model issue, not a host issue.
-- The generation prompt is about 8.5K tokens and is sent **only for a session the switch admits**; otherwise the prompt section is empty and the tool schema is hidden. Prompt caching absorbs most of the cost while on.
+- The generation prompt is about 9.5K tokens and is sent **only for a session the switch admits**; otherwise the prompt section is empty and the tool schema is hidden. Prompt caching absorbs most of the cost while on.
 - Photos, map tiles and routing are third-party services with offline fallbacks (see [troubleshooting.md](troubleshooting.md#runtime-fallbacks-valid-program-degraded-media)).
 - `Math` relies on the host's global KaTeX styles; if a future DSH shell drops them, formulas degrade to text.
 - This extension is web-only: profiles without a browser surface register the tool but have no card to render into.

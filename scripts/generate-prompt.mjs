@@ -9,10 +9,10 @@
  * program travels inside the `render_ui` tool call, so the model must be told
  * when to call it and that the normal Markdown reply stays available.
  *
- * The decision policy is owned here, in one place: this section is injected only
- * when the switch admits the session, so an enabled session defaults to a page
- * and the prose exceptions are deliberately bounded (single fact, explicit text
- * request, non-visual content, two failed calls). The Agent Skill points at this
+ * The decision policy and the layout/spacing contract are owned here: this
+ * section is injected only when the switch admits the session, so an enabled
+ * session defaults to a page and the prose exceptions are deliberately bounded
+ * (single fact, explicit text request, non-visual content, two failed calls). The Agent Skill points at this
  * policy instead of restating it, so the model cannot find a second opinion.
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
@@ -56,10 +56,26 @@ if (!rest.includes(knowledgeLine)) {
 }
 const rewritten = rest.replace(knowledgeLine, knowledgeReplacement)
 
+/** Layout and spacing contract: the renderer owns the rhythm, the model owns the block sequence. */
+const layoutContract = [
+  '## Layout and spacing contract',
+  '',
+  'The renderer owns the vertical rhythm; a page is one readable column.',
+  '',
+  '- Leave `gap` unset on the page root `Col`, on the children of a `Section`, and on `Card` contents. The renderer already applies section/group spacing; an explicit gap there overrides it or doubles the blank space.',
+  '- Use an explicit `gap` only on `Row`, `Grid`, `Carousel`, and small compact control stacks: 1–2 for inner pairs, 3–4 for grouped blocks (4px steps). Do not use a gap of 5–6 on a nested `Col` to imitate page spacing.',
+  '- Never create vertical space with `Spacer()`, an empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, or a `Divider` used as a blank. Group related blocks in a `Card` or let the flow space them.',
+  '- A `Section` body is a sequence of blocks: prose (`Markdown`/`Text`) first, then at most a couple of supplemental blocks (`Grid`, `Table`, `Chart`, `Code`, `Quote`). Do not wrap the whole body in a `Col` with a manual gap.',
+  '- Keep one page measure; do not put a whole page side by side. Use `Grid` only for genuinely parallel blocks.',
+].join('\n')
+
+const withLayout = rewritten.replace('\n## Important Rules\n', `\n${layoutContract}\n\n## Important Rules\n`)
+if (!withLayout.includes(layoutContract)) throw new Error('generate-prompt: could not place the layout contract before Important Rules')
+
 const toolResponseLine = `
 
 After a successful \`render_ui\` call the page is already on screen: the closing Markdown reply, when present, is one short sentence only.`
 
 await mkdir(dirname(target), { recursive: true })
-await writeFile(target, `${preamble}${rewritten.trimEnd()}${toolResponseLine}\n`, 'utf8')
+await writeFile(target, `${preamble}${withLayout.trimEnd()}${toolResponseLine}\n`, 'utf8')
 console.log(`generate-prompt: wrote ${target}`)

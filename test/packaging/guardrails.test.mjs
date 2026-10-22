@@ -50,6 +50,14 @@ test('the enabled-session policy is single-sourced and explicit invocation is a 
   assert.doesNotMatch(skill, /## When to answer in prose/, 'the skill no longer duplicates the prose policy')
 })
 
+test('the layout and spacing contract is single-sourced in the prompt and skill', () => {
+  assert.match(prompt, /## Layout and spacing contract/, 'the injected prompt carries the layout contract')
+  assert.match(prompt, /Leave `gap` unset on the page root/, 'the contract names the root gap rule')
+  assert.match(prompt, /Never create vertical space with `Spacer\(\)`/, 'the contract forbids manual vertical spacers')
+  assert.match(skill, /Layout and spacing contract/, 'the Agent Skill carries the same contract')
+  assert.match(skill, /Host warns about root gaps/, 'the skill points at the Host warnings')
+})
+
 test('the article style and Section/Toc vocabulary stay documented', () => {
   assert.match(skill, /## Answer styles/, 'SKILL.md explains Card/Article/Auto')
   assert.match(skill, /Section`/i, 'SKILL.md names the Section component')

@@ -38,7 +38,7 @@ import {
   isPageStyle,
 } from '../shared/intelligent-ui.ts'
 import type { AnswerStyle, PageStyle } from '../shared/intelligent-ui.ts'
-import { articleAnchorError, collectArticleAnchors, collectComponentTypes } from './program-validation.ts'
+import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
 
 export const name = 'intelligent-ui'
 
@@ -233,6 +233,7 @@ function inspectProgram(program: string): {
   collectComponentTypes(result.root, types)
   const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[] }
   collectArticleAnchors(result.root, anchors.section, anchors.toc, anchors.issues)
+  for (const message of layoutWarnings(result.root)) findings.push({ message, fatal: false })
   return { statements: meta.statementCount ?? 0, findings, types, anchors }
 }
 

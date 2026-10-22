@@ -43,6 +43,13 @@ With the switch off there is no trace of this tool on the model side; only after
 - The session command log folds into the `intelligent-ui` projection, which carries the current enable/style view and pending state; the composer control only mirrors the projection, and the Host owns every state decision. The control broadcasts its optimistic view to other tabs over BroadcastChannel; the projection wins once it arrives. The scope menu and the export menu share the same `MenuItem`/`MenuDivider` rows (content-based width with a 208px minimum, one vertical rhythm, consistent selected/hover/disabled states); the scope menu right-aligns with the chip; the Display style row is always visible, disabled while off, with an inset hairline above it; the style panel is a second level, and its back button returns to the scope menu instead of dismissing every popup.
 - The switch requires a deployment that composes both `sessionProjections` and `commands` (DSH Web has both by default). If either service is missing, the session controls cannot be displayed or persisted, and the extension falls back to **always on**.
 
+## Layout and spacing contract
+
+- **The renderer owns the vertical rhythm**: the page root `Col`, `Section` bodies and `Card` contents are flow-spaced (page 24px, group 12px, inner 8px). The model should not pass `gap` there; an explicit gap overrides or doubles the rhythm.
+- **Explicit gaps are for rows and compact groups**: `Row`, `Grid`, `Carousel` and small control stacks may use 1–2 (inner) or 3–4 (group); do not use a nested `Col` with 5–6 to imitate page spacing.
+- **No manual blank space**: `Spacer()`, empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, and a `Divider` used as a blank create uncontrolled blank bands; group with a `Card`, otherwise let the flow space the blocks.
+- **Fallback chain**: the generation prompt and the Agent Skill carry the same contract; the Host's `layoutWarnings` returns non-fatal warnings for root gaps, vertical Spacers, empty Sections/Text and `gap: 0` block stacks so the model can repair them in the same turn; the renderer itself guarantees Section bodies are nested flows and the Article root keeps a single page gap.
+
 ## Decision policy
 
 The switch only makes the capability visible; the policy that decides whether a turn gets a card and which style it uses lives in one place — the injected `tool:intelligent-ui` prompt section (the Host also prefixes it with "Intelligent UI is enabled for this session" and appends the effective style note). Because it is injected together with the switch, an enabled session behaves as follows:

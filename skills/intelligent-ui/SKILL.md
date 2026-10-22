@@ -117,9 +117,9 @@ Exact signatures, argument order, enums and function list: [references/component
 
 The compactness bullets below describe **Card** pages and side cards inside an Article. An Article page follows the Article layout bullet instead: prose is the main content, and a wall of text is not a defect when the user asked for depth.
 
-- **Article layout.** One column, readable measure. `Title` (xl/2xl), a short `Text` summary, a `Toc`, then `Section` blocks. Put `Markdown` prose inside each Section; use a chart, map or table as a supplement between sections, not as a substitute for the prose. All sections always start open; the reader can collapse them. Do not use a `Carousel` as the only way to read core content.
+- **Article layout.** One column, readable measure. `Title` (xl/2xl), a short `Text` summary, a `Toc`, then `Section` blocks. Put `Markdown` prose inside each Section; use a chart, map or table as a supplement between sections, not as a substitute for the prose. A Section body is a flow: prose first, then at most a couple of supplemental blocks; no blank spacer or divider blocks. All sections always start open; the reader can collapse them. Do not use a `Carousel` as the only way to read core content.
 - **Compose a page, not a form letter.** A `Title` (`xl`/`2xl`), one short `Text`, then 2–4 mixed blocks. Group related blocks in `Card`s; do not wrap the whole page in one card.
-- **Spacing is a system.** `gap`/`padding` count 4px steps: inner 1–2, group 3–4, section 5–6. Leave `gap` unset on the page root and on card contents (the app applies the article rhythm); set a gap on `Row`/`Grid` only.
+- **Layout and spacing contract.** The renderer owns the vertical rhythm; a page is one readable column. Leave `gap` unset on the page root `Col`, on `Section` children and on `Card` contents — the app already spaces them (section 24 / group 12 / inner 8). Set `gap` only on `Row`, `Grid`, `Carousel` and small compact control stacks: 1–2 for inner pairs, 3–4 for grouped blocks. Never create vertical space with `Spacer()`, an empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, or a `Divider` used as a blank; group related blocks in a `Card` or let the flow space them. Do not wrap a whole Section body in a `Col` with a manual gap, and do not put a whole page side by side. The Host warns about root gaps, vertical Spacers, empty Sections/Text and `gap: 0` block stacks.
 - **Cards stay compact.** Card title `md`/`sm`; inside a `Card` the display sizes are capped (`lg` 18 → `xl` 22 → `2xl` 26 → `3xl` 30px), so `xl` is for one KPI number, never for the card heading. Body `sm`, at most one short paragraph, then facts as `Badge`s or label/value rows. Cards side by side in a `Grid` carry the same blocks in the same order so they line up.
 - **Media rows beat walls of text.** A photo beside copy: `Row([Box([SearchImage("Sonoma Plaza", 1.33)], null, null, null, null, "lg", null, 120), Col([Title("Sonoma", "md"), Row([Badge("1 h drive", null, "car"), Badge("Wine country", "purple")], 1, null, null, true), Text("A slow plaza and quiet back roads.", "sm")], 2)], 4, "start")`. Give the image box an explicit width so the row is stable; top-align the text.
 - **SearchImage for every thing with a look** — place, dish, product, animal, building. Name the exact subject (`"Belém Tower Lisbon"`, not `"Europe trip"`). A photo shows what a thing looks like; `Svg` shows how it works, so how-to answers often need drawings even when photos are present.
@@ -153,6 +153,8 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 11. **Article page that is only a skeleton** — sections of one-line bullets, cards in place of paragraphs, or a closing "tell me which part to expand". Article needs substantive prose, a `Toc`, and `Section`s; follow up only after a complete answer.
 12. **Interaction instead of information** — a carousel showing one item at a time, or a quiz, cannot substitute for content the user asked to read. Lead with readable content; add controls only when they add depth, sources or comparison.
 13. **Preflighting by editing the plugin** — a scratch harness written into the extension checkout shows the user a spurious file diff in a repository you were not asked to change. Call `render_ui` and use its findings; keep drafts outside the tree.
+14. **Manual vertical spacing** — `Spacer()`, an empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, or a `Divider` used as a blank. The renderer already owns the rhythm; these produce odd blank bands (and Host warnings).
+15. **Gap on a block stack** — explicit `gap` on the page root, Section contents or Card body overrides the app rhythm and can double the blank space. Keep gaps on `Row`/`Grid`/`Carousel` and compact control groups only.
 
 ## Pre-flight checklist
 
@@ -167,6 +169,7 @@ Before the call, verify:
 7. For an Article answer: every major part is present, each has substantive prose (not only bullets), the core content is readable without interaction, and the page does not claim to be a skeleton.
 8. No file was created or edited outside the requested deliverable — in particular, nothing in the extension checkout was touched to test the program.
 9. The reply around the call is one intro sentence and, after success, at most one closing sentence.
+10. The layout follows the spacing contract: no root/Section/Card gap, no manual vertical spacer or empty blank block, and every stack is left to the renderer's flow rhythm.
 
 ## Reference index
 

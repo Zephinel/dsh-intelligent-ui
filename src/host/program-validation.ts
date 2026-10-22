@@ -101,3 +101,75 @@ export function articleAnchorError(anchors: ArticleAnchors, types: ReadonlySet<s
   }
   return undefined
 }
+
+/** Block-level components: a stack of these needs vertical rhythm. */
+const BLOCK_TYPES = new Set([
+  'Title', 'Text', 'Markdown', 'Quote', 'Code', 'Table', 'Chart', 'List', 'Grid',
+  'Card', 'Section', 'Carousel', 'Map', 'Image', 'SearchImage', 'Svg', 'Form',
+  'Timer', 'Flashcard', 'Celebration', 'HtmlView', 'Col', 'Box',
+])
+
+/** Whether an AST child is a block-level component. */
+function isBlock(node: unknown): boolean {
+  if (node === null || typeof node !== 'object') return false
+  const typeName = (node as { typeName?: unknown }).typeName
+  return typeof typeName === 'string' && BLOCK_TYPES.has(typeName)
+}
+
+/** Read the element children from one AST props record. */
+function childrenOf(props: unknown): unknown[] {
+  if (props === null || typeof props !== 'object') return []
+  const children = (props as { children?: unknown }).children
+  return Array.isArray(children) ? children : []
+}
+
+/**
+ * Find layout/spacing mistakes the renderer should not have to absorb.
+ *
+ * These are warnings, not fatal: the renderer owns normal block rhythm, and a
+ * model that follows the injected layout contract should not hit them. They
+ * still give the model a chance to remove manual gaps, blank spacers and empty
+ * containers before the page reaches the user.
+ * @param root - the parsed program AST.
+ * @returns unique model-readable warning strings.
+ */
+export function layoutWarnings(root: unknown): string[] {
+  const warnings = new Set<string>()
+  const walk = (node: unknown, parentType: string | undefined): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child, parentType)
+      return
+    }
+    if (node === null || typeof node !== 'object') return
+    const record = node as { typeName?: unknown; props?: unknown }
+    const typeName = typeof record.typeName === 'string' ? record.typeName : undefined
+    const children = childrenOf(record.props)
+    if (typeName === 'Col' && parentType === undefined) {
+      const gap = (record.props as { gap?: unknown } | null)?.gap
+      if (gap !== undefined && gap !== null) {
+        warnings.add('The page root Col should omit `gap`: the renderer applies the page rhythm, and an explicit gap overrides or doubles it.')
+      }
+    }
+    if (typeName === 'Spacer' && parentType !== 'Row') {
+      warnings.add('`Spacer()` outside a `Row` does not create vertical space; remove it and let the flow rhythm space the blocks.')
+    }
+    if (typeName === 'Section' && children.length === 0) {
+      warnings.add('A `Section` with no children renders as an empty block; add its prose or remove the Section.')
+    }
+    if (typeName === 'Text' || typeName === 'Markdown') {
+      const text = (record.props as { text?: unknown } | null)?.text
+      if (typeof text === 'string' && text.trim() === '') {
+        warnings.add(`An empty \`${typeName}("")\` renders as blank space; remove it.`)
+      }
+    }
+    if ((typeName === 'Col' || typeName === 'Box') && children.filter(isBlock).length > 1) {
+      const gap = (record.props as { gap?: unknown } | null)?.gap
+      if (gap === 0) {
+        warnings.add('A `Col`/`Box` with `gap: 0` and several blocks removes the vertical rhythm; omit `gap` so the flow spaces them.')
+      }
+    }
+    for (const child of children) walk(child, typeName)
+  }
+  walk(root, undefined)
+  return [...warnings]
+}
