@@ -34,6 +34,8 @@
 
 - **0.4.0 发布**：把自定义样式模板、聊天内按需生成及其生命周期/内容接地修复作为 0.4.0 发布；tag `v0.4.0`（annotated）指向发布提交 `3a3d6a8`，触发 [run 39850727142](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39850727142)（44 s，success）。registry `latest` = `0.4.0`，`gitHead` = `3a3d6a8`；临时目录安装后 `npm audit signatures` 报告 4 个包 registry signature、2 个包 attestation 验证通过。本地 `npm run check` 179 tests，`npm pack` 43 个文件（4,036,212 字节 / 解包 10,216,123 字节）。registry 元数据在 publish 后约 2–3 分钟才显示 `0.4.0`，属传播延迟，不是发布失败。
 
+- **0.4.1 发布**：修复 0.4.0 中样式预览仍显示白色的缺陷——真实 DSH 浅色主题的 `--dsw-alias-bg-layer-2` 是 `#fff`，因此改用 `--dsw-alias-bg-module-platform`（`#f5f6f7`，含 layer-2 回退），composer 的内置样式卡片、按需生成入口和插件详情页分组行现在都是浅色圆角 surface；截图 fixture 也同步真实分层 token。tag `v0.4.1` 指向 `bb38b4a`，触发 [run 39854292035](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39854292035)（44 s，success）。registry `latest` = `0.4.1`，`gitHead` = `bb38b4a`；GitHub Release：[0.4.1 — 2026-10-22](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.4.1)。临时目录安装后 `npm audit signatures` 验证 4 个 registry signature、2 个 attestation。本地 `npm run check` 179 tests，`npm pack` 43 个文件（4,036,212 字节 / 解包 10,216,123 字节）。
+
 ## 2026-10-22 — R4 自定义模板与聊天内按需生成
 
 本条是当前未提交工作区的增量文档/截图同步，不是发布验收。基于 HEAD `155585c9afcc943b98e7fb5b36a2a2f0e4b51c49` 加既有 R1–R3 改动；本阶段未更改 src、依赖、版本或计划/审查历史，也未提交/发布。环境：Node v24.22.0、npm 11.19.1、Google Chrome 155.0.8059.86。
