@@ -137,20 +137,29 @@ export function ExportAction({
       resizeObserver?.disconnect()
     }
   }, [menuVisible, close])
-  // The anchored menu opens above its trigger. Flip to a top clamp when the
-  // action row itself sits near the top of the viewport.
-  const [menuTop, setMenuTop] = useState<number | null>(null)
+  // Default: above the trigger. When the action row is too close to the top,
+  // flip below the button instead of clamping on top of it.
+  const [menuBelowTop, setMenuBelowTop] = useState<number | null>(null)
   useEffect(() => () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current)
   }, [])
   useLayoutEffect(() => {
-    if (!menuVisible || placement === null || menuRef.current === null) {
-      setMenuTop(null)
+    if (!menuVisible || placement === null || menuRef.current === null || triggerRef.current === null) {
+      setMenuBelowTop(null)
       return
     }
-    const top = window.innerHeight - placement.bottom - menuRef.current.offsetHeight
-    setMenuTop(top < 8 ? 8 : null)
-  }, [menuVisible, placement])
+    const viewport = window.innerHeight
+    const margin = 8
+    const gap = 8
+    const height = menuRef.current.offsetHeight
+    const rect = triggerRef.current.getBoundingClientRect()
+    const aboveTop = viewport - placement.bottom - height
+    if (aboveTop >= margin) {
+      setMenuBelowTop(null)
+      return
+    }
+    setMenuBelowTop(Math.min(rect.bottom + gap, Math.max(margin, viewport - margin - height)))
+  }, [menuVisible, placement, status])
 
   if (!visible) return null
 
@@ -273,7 +282,7 @@ export function ExportAction({
             style={{
               ...placement.right === undefined ? {} : { right: placement.right },
               ...placement.maxWidth === undefined ? {} : { maxWidth: placement.maxWidth },
-              ...menuTop === null ? { bottom: placement.bottom } : { top: menuTop },
+              ...menuBelowTop === null ? { bottom: placement.bottom } : { top: menuBelowTop },
             }}
             data-dsh-iui-export-menu
           >

@@ -20,8 +20,13 @@ body {
 .dsh-iui-standalone-cards {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 32px;
   width: min(100%, 760px);
+  min-width: 0;
+}
+
+/* Content only: no card border, header or collapse chrome. */
+.dsh-iui-standalone-card {
   min-width: 0;
 }
 

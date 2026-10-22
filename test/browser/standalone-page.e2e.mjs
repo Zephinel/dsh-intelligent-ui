@@ -65,27 +65,21 @@ try {
     // Older Chrome: the copy path still has its selection fallback.
   }
   await cdp.waitFor('document.readyState === "complete"', 'load', { timeout: 60000 })
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-card").length === 2', 'exported cards', { timeout: 60000 })
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 2', 'exported cards', { timeout: 60000 })
 
   const mounted = await cdp.evaluate(`(() => {
-    const cards = [...document.querySelectorAll('.dsh-iui-card')]
     return {
-      cards: cards.length,
-      titles: [...document.querySelectorAll('.dsh-iui-title')].map(node => node.textContent),
+      cards: document.querySelectorAll('.dsh-iui-standalone-card').length,
+      headers: document.querySelectorAll('.dsh-iui-header').length,
+      text: document.body.innerText,
       background: getComputedStyle(document.body).backgroundColor,
-      firstBodyHidden: cards[0].querySelector('.dsh-iui-body').hidden,
     }
   })()`)
   assert.equal(mounted.cards, 2, 'both recorded cards render')
-  assert.deepEqual(mounted.titles, ['First card', 'Second card'])
+  assert.equal(mounted.headers, 0, 'the exported page drops the collapsible card header')
+  assert.match(mounted.text, /Standalone harness/)
+  assert.match(mounted.text, /Second card body/)
   assert.equal(mounted.background, 'rgb(255, 255, 255)', 'the inlined theme sets the page background')
-  assert.equal(mounted.firstBodyHidden, false)
-
-  // Card chrome still collapses locally.
-  await cdp.evaluate('document.querySelector(".dsh-iui-card .dsh-iui-header").click()')
-  await cdp.waitFor('document.querySelector(".dsh-iui-card .dsh-iui-body").hidden === true', 'card collapsed')
-  await cdp.evaluate('document.querySelector(".dsh-iui-card .dsh-iui-header").click()')
-  await cdp.waitFor('document.querySelector(".dsh-iui-card .dsh-iui-body").hidden === false', 'card expanded')
 
   // A bare Button sends its label to the assistant; the standalone page must
   // copy it and toast instead of calling a DSH host.

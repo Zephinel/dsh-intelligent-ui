@@ -1057,28 +1057,25 @@
   gap: 5px;
   margin-left: auto;
   height: 26px;
-  padding: 0 10px 0 8px;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+  padding: 0 12px 0 10px;
+  border: 0;
   border-radius: 999px;
-  corner-shape: round;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   cursor: pointer;
-  transition: background-color 110ms ease, border-color 110ms ease, color 110ms ease;
+  transition: background-color 110ms ease, color 110ms ease;
 }
 
 .dsh-iui-export-trigger:hover {
-  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 32%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 13%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
   color: var(--dsw-alias-label-primary);
 }
 
 /* A dismissed menu must not swallow a failed export: the pill keeps the error
    state until the next open. */
 .dsh-iui-export-trigger[data-status='error'] {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 38%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
   color: var(--dsw-alias-state-error-primary);
 }
 

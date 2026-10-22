@@ -78,12 +78,14 @@ try {
         order: getComputedStyle(button).order,
         rightGap: Math.round(rowRect.right - rect.right),
         radius: getComputedStyle(button).borderRadius,
+        borderWidth: getComputedStyle(button).borderTopWidth,
       }
     })()`)
     assert.match(trigger.label, /Export/, 'the trigger carries a visible label')
     assert.equal(trigger.order, '1', 'the export pill is ordered after the native action cluster')
     assert.ok(trigger.rightGap >= 0 && trigger.rightGap <= 1, 'the export pill sits at the far right of the action row')
     assert.equal(trigger.radius, '999px', 'the trigger uses the distinct pill treatment')
+    assert.equal(trigger.borderWidth, '0px', 'the export pill is borderless')
 
     // Flip the card, open the real entry's menu and export immediately: the
     // capture must show the back face flat and wait for the still-loading photo.
@@ -102,11 +104,14 @@ try {
       return {
         rightGap: Math.round(buttonRect.right - menuRect.right),
         width: Math.round(menuRect.width),
+        menuTop: Math.round(menuRect.top),
+        buttonBottom: Math.round(buttonRect.bottom),
         wraps: rows.some(row => row.scrollWidth > row.clientWidth + 1),
       }
     })()`)
     assert.equal(menuLayout.rightGap, 0, 'the menu right edge aligns with the export pill')
     assert.ok(menuLayout.width > 0 && menuLayout.width < 320, 'the menu width follows its longest row')
+    assert.ok(menuLayout.menuTop >= menuLayout.buttonBottom, 'a short top edge flips the menu below the trigger')
     assert.equal(menuLayout.wraps, false, 'menu labels and hints stay on one line')
     await cdp.evaluate('document.querySelector("[data-export-style=\\"raw\\"]").click()')
     await cdp.waitFor('window.downloads.length === 1', 'download', { timeout: 30000 })

@@ -14,14 +14,14 @@ events but not the full DSH Web integration.
   the capture must see the flattening scope, frozen transitions, eager/loaded
   photos, an expanded/restored collapsed card, a map readiness signal (fake map
   fixture), the raw, card and rounded-2x frames, and the card frame's shadow
-  bleed. It also checks the menu's right alignment, content width and dismissal
-  on scroll. Two `ExportAction` entries are mounted; the one whose Chat selector
+  bleed. It also checks the menu's right alignment, content width, below-trigger
+  fallback and dismissal on scroll. Two `ExportAction` entries are mounted; the one whose Chat selector
   reports no rendered UI must not add a trigger.
 
 - `standalone-page.e2e.mjs` assembles the real single-file page from
   `lib/standalone.js` / `lib/standalone.css` plus two recorded cards, opens it
-  in Chrome, and checks the inline-only assets, both mounted cards, the
-  collapsible chrome, the inlined theme and the `@ToAssistant` copy toast.
+  in Chrome, and checks the inline-only assets, both mounted card bodies (no
+  header/collapse chrome), the inlined theme and the `@ToAssistant` copy toast.
   Run `npm run build` first so the standalone artifacts exist.
 
 ```bash
