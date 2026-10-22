@@ -79,6 +79,7 @@ try {
     const divider = root.querySelector('.dsh-iui-menu-divider')?.getBoundingClientRect()
     const chip = document.querySelector('[data-dsh-iui-toggle]')
     const chipRect = chip.getBoundingClientRect()
+    const chipStyle = getComputedStyle(chip)
     const chevron = chip.querySelector('.dsh-iui-chevron')
     return {
       width: Math.round(rect.width),
@@ -89,6 +90,9 @@ try {
         insetLeft: Math.round(divider.left - rect.left),
         insetRight: Math.round(rect.right - divider.right),
       },
+      chipRadius: chipStyle.borderRadius,
+      chipBackground: chipStyle.backgroundColor,
+      chipColor: chipStyle.color,
       chevronOpen: chevron.dataset.open,
       chevronRotation: (() => {
         const matrix = new DOMMatrix(getComputedStyle(chevron).transform)
@@ -104,6 +108,9 @@ try {
   assert.ok(layout.rowHeights.every(height => height >= 40), 'menu rows keep the shared vertical rhythm')
   assert.ok(layout.divider !== null, 'a divider separates the Display style row')
   assert.ok(layout.divider.insetLeft >= 8 && layout.divider.insetRight >= 8, 'the divider is inset from the menu edges')
+  assert.equal(layout.chipRadius, '6px', 'the chip uses the native composer radius token')
+  assert.equal(layout.chipBackground, 'rgb(46, 46, 46)', 'the open chip uses the native hover fill')
+  assert.equal(layout.chipColor, 'rgb(184, 184, 184)', 'the chip label uses the native secondary label color')
   assert.equal(layout.chevronOpen, 'true', 'the open chip reports an open chevron')
   assert.ok(Math.abs(layout.chevronRotation) > 170, 'the open chip points its chevron up once (180deg)')
   assert.equal(layout.wraps, false, 'menu labels and hints stay on one line')

@@ -133,30 +133,31 @@
  * selector. Geometry mirrors the sibling permission chip (28px tall, transparent
  * until hover) because the popup itself is the shell's native Menu surface.
  */
+/* Match the native composer controls: radius-sm, 13px/400 label, transparent
+   at rest, and the shared interactive hover fill when hovered or expanded. */
 .dsh-iui-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 28px;
-  padding: 0 9px;
+  padding: 0 4px 0 8px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-sm);
   outline: none;
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 72%, transparent);
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 20px;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-.dsh-iui-trigger:hover:not(:disabled) {
-  background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-primary);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+.dsh-iui-trigger:hover:not(:disabled),
+.dsh-iui-trigger[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .dsh-iui-trigger:focus-visible {
@@ -170,18 +171,10 @@
   cursor: default;
 }
 
-.dsh-iui-trigger[data-state='on'] {
-  color: var(--dsw-alias-state-business-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, var(--dsw-alias-bg-layer-3));
-}
-.dsh-iui-trigger[data-enabled='true'] {
-  color: var(--dsw-alias-state-business-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, var(--dsw-alias-bg-layer-3));
-}
-
 .dsh-iui-trigger-icon {
   display: inline-flex;
   flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
 }
 
 .dsh-iui-trigger-icon svg {
