@@ -13,10 +13,10 @@
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.2.2-26-10-21
+# npm；当前 latest 为 0.3.0-26-10-22
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.2-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -135,7 +135,7 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 4. 创建并推送与版本一致的 tag：
 
 ```bash
-git tag v0.2.2-26-10-21
+git tag v0.3.0-26-10-22
 git push origin main --follow-tags
 ```
 

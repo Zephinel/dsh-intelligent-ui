@@ -7,6 +7,8 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.3.0-26-10-22] - 2026-10-22
+
 ### Added
 
 - **Answer styles:** sessions can render as a compact `Card` or an `Article` reading page. Article mode adds a `Toc` component and a collapsible `Section` component, plus a single-column reading layout in the card.
@@ -38,6 +40,11 @@ been published yet.
 
 - Follow-up removal now marks only bare labels and explicit `@ToAssistant` actions, so `@OpenUrl`/`@Set` buttons are no longer removed. When a follow-up has no Card/Form/Row around it, only the control is hidden (never a root column or the page), and the standalone page rescans after portaled popovers or state changes. The custom color picker now keeps a preset selection made while the hex field is focused, commits a valid draft when clicking outside, focuses its hex field when opened and returns focus to its trigger when closed. Legacy `exportToAssistant` values are migrated to the inverted switch.
 - Layout warnings no longer flag a horizontal `Box` for its `Spacer` or `gap: 0`; the Skill examples and the prompt sample now follow the root-gap/Card-gap contract.
+- The shipped Agent Skill references now describe the real `render_ui` contract again: `style` is required in the arguments and in the success value, the model-visible result line carries the resolved style, the slot-registration count and the shipped tarball file count are correct, and the troubleshooting examples quote the current result string.
+
+### Documentation
+
+- The verification record's `npm pack` sizes now match the shipped artifact (3.63 MB tarball, 9.45 MB unpacked).
 
 ### Documentation
 

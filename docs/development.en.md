@@ -13,10 +13,10 @@ Requires DSH 0.2.1 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.2.2-26-10-21
+# npm; current latest is 0.3.0-26-10-22
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.2-26-10-21
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -135,7 +135,7 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 4. create and push a tag that matches the version:
 
 ```bash
-git tag v0.2.2-26-10-21
+git tag v0.3.0-26-10-22
 git push origin main --follow-tags
 ```
 

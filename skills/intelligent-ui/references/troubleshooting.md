@@ -174,8 +174,8 @@ Unreferenced statement (will not render): extra
 The tool result on success is:
 
 ```text
-Interactive UI rendered for the user (23 statements).
-Interactive UI rendered for the user (23 statements). Parser notes: Unreferenced statement (will not render): extra
+Interactive UI rendered for the user (23 statements, card style).
+Interactive UI rendered for the user (23 statements, card style). Parser notes: Unreferenced statement (will not render): extra
 ```
 
 ### The tool is missing entirely

@@ -6,11 +6,11 @@ Run from the repo root. Current expected values are dated 2026-10-22; derive the
 
 | Command | Expected (2026-10-22) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js ~598 kB`, `client lib/client.js ~3.56 MB`, `lib/standalone.js 3.26 MB + lib/standalone.css 497 kB`; tests: 100 total = Host 27 + Client 54 + packaging 19; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 40 files; tarball ~3.61 MB; unpacked ~9.71 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
-| `node --test test/packaging/*.test.mjs` | 19 pass (manifest 9 + reference catalog 4 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails and decision policy |
+| `npm run check` | build: `host lib/index.js ~598 kB`, `client lib/client.js ~3.56 MB`, `lib/standalone.js 3.26 MB + lib/standalone.css 497 kB`; tests: 102 total = Host 27 + Client 54 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run pack:check` | 40 files; tarball ~3.63 MB; unpacked ~9.45 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
-| `node --test test/packaging/references.test.mjs` | 4 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json` |
+| `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
 | `node --test test/host/*.test.mjs` | 27 pass = mode 8 + skill 3 + tool 13 + export-routes 1 + layout 2 | Tool contract, switch semantics, embedded skill, settings config |
 | `node --test test/client/*.test.mjs` | 54 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 + export-html-plan 5 + follow-ups 2 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
 | `npm run test:browser` | five suites: style-panel, image export, the standalone interactive page, Article layout spacing and the custom color picker (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
@@ -142,16 +142,16 @@ NODE
 
 ## Examples and vocabulary
 
-- Requirement: complete fenced programs (`root = …`) across `skills/intelligent-ui/references/*.md` must parse against the library. The 2026-10-20 audit parsed 15/15; if examples change, re-run that ad-hoc parse (bundle `src/lib/library.ts` with esbuild, `createParser(library.toJSONSchema())`, parse every fenced block that starts with `root =`). If it becomes routine, promote it to a renderer test.
+- Requirement: complete fenced programs (`root = …`) across `skills/intelligent-ui/references/*.md` must parse against the library. The 2026-10-20 audit parsed 15/15 and the 2026-10-22 audit parsed 16/16; if examples change, re-run that ad-hoc parse (bundle `src/lib/library.ts` with esbuild, `createParser(library.toJSONSchema())`, parse every fenced block that starts with `root =`). If it becomes routine, promote it to a renderer test.
 - Vocabulary: `node --test test/packaging/references.test.mjs` is the guard for component/function/action names and counts. Update `references/components.md` and `SKILL.md` together with `vendor/spec.json` changes.
 
 ## Known expected non-bugs (do not "fix")
 
 - `docs/verification.md` / `docs/verification.en.md` is a historical verification record; its past tense claims are not current-state claims.
-- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (36 files) is expected, not a missing shipped file.
+- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (40 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
-- The repository and npm package are public; the README clone and GitHub Issues links are live. The prerelease version `0.2.2-26-10-21` is intentionally tagged `latest`.
+- The repository and npm package are public; the README clone and GitHub Issues links are live. The prerelease version `0.3.0-26-10-22` is intentionally tagged `latest`.
 - Host/Client version-skew passages quote old Host strings (`Usage: /iui [on|off]`, "already off for this session") on purpose.
 - Screenshots under `assets/` are English-UI captures (card-level, captured from the real renderer with DSH theme tokens); the READMEs say so. A Chinese capture needs a live Chinese session.
 - Model-facing English text (tool description, generation prompt, Agent Skill body) and the `/iui` Host replies / command-palette description are English by design.

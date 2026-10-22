@@ -9,7 +9,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Current status
 
-**Published.** `@zephinel/dsh-intelligent-ui@0.2.2-26-10-21` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published.** `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ Use `/iui off` (session override) to stop paying the prompt cost for that sessio
 The browser half follows DSH's UI language and needs no configuration:
 
 - `src/shared/locales.ts` holds one flat dictionary per built-in locale (`zh` is the key-set source of truth, `en` is type-checked against it, `{name}` placeholders are interpolated at lookup). `src/client/index.tsx` registers both with `ctx.locale.register('intelligent-ui', { zh, en })`.
-- All four slot registrations declare `locale: 'intelligent-ui'`, so the slot system hands each component the `t` seat; switching the language in Settings re-renders the composer chip, its menu, the card chrome, the Plugin detail page and the renderer's component chrome (map controls, copy button, timer, fallbacks) without a reload.
+- All five slot registrations (turn tail, assistant actions, `tool.call.toolview`, composer activity and the Plugins detail config form) declare `locale: 'intelligent-ui'`, so the slot system hands each component the `t` seat; switching the language in Settings re-renders the composer chip, its menu, the card chrome, the Plugin detail page and the renderer's component chrome (map controls, copy button, timer, fallbacks) without a reload.
 - The renderer library is also mounted outside DSH by the self-checks and standalone embeds, so `src/lib/render.tsx` accepts the seat as a prop, publishes it through React context, and falls back to English when none is given.
 - Model-facing text is out of scope: the tool description, the generation prompt and the Agent Skill stay in English, and so do the `/iui` Host replies (DSH's locale service covers browser UI only). The plugin's display title and description come from `locale/en.json` / `locale/zh.json`, a separate `PluginLocalizedMeta` mechanism.
 
@@ -51,9 +51,9 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm (current latest: 0.2.2-26-10-21)
+# npm (current latest: 0.3.0-26-10-22)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.2.2-26-10-21   # pin a version
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22   # pin a version
 # or GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
@@ -64,7 +64,7 @@ DSH Desktop installs the same bundle from the app instead of the CLI: **Plugins*
 
 Packaging behavior that matters when publishing:
 
-- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (36 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
+- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (40 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
 - A Git checkout installs from source: pnpm runs the package's `prepare` build, so the install may ask for **build-script approval** and needs the toolchain. A registry tarball has nothing to build.
 - Without `dsh.bundle`, the manager would install the package as a plain dependency with the warning `declares no dsh.bundle — installed as a plain dependency, not a profile layer`, and nothing would load. This package declares it, so that warning means the wrong spec or an old tarball.
 
@@ -72,7 +72,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.2.2-26-10-21 --dsh-version 0.2.1-rc.2 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.3.0-26-10-22 --dsh-version 0.2.1-rc.2 --accept-risk
 ```
 
 Remove it with the mirror command:
@@ -151,11 +151,12 @@ Filesystem discovery is only a **manual fallback** for an environment where the 
 | Aspect | Contract |
 | --- | --- |
 | Name | `render_ui` |
-| Arguments | `{ "program": string, "title"?: string }`, `additionalProperties: false` |
+| Arguments | `{ "program": string, "style": "card"|"article", "title"?: string }`, `required: ["program", "style"]`, `additionalProperties: false` |
 | `program` | One complete OpenUI Lang program, statement per line, `root` first. Passed verbatim by the model; persisted as the tool call's arguments and replayed from history. |
 | `title` | Optional short card label, e.g. "Day in San Francisco". When omitted the client uses the localized default ("Interactive answer" / 「交互式回答」). |
-| Success value | `{ "statements": number, "warnings"?: string[] }` — the parsed statement count and any non-fatal findings (`Unresolved reference: …`, `Unreferenced statement (will not render): …`). |
-| Model-visible result | `Interactive UI rendered for the user (<n> statements).` plus ` Parser notes: <warnings joined by "; ">` when warnings exist. |
+| `style` | `"card"` or `"article"`; required. In a session forced to Card or Article the Host rejects any other value, so pass the effective style the prompt states. In Auto pass the style you chose. |
+| Success value | `{ "statements": number, "style": "card"|"article", "warnings"?: string[] }` — the parsed statement count, the resolved style recorded with the page, and any non-fatal findings (`Unresolved reference: …`, `Unreferenced statement (will not render): …`). |
+| Model-visible result | `Interactive UI rendered for the user (<n> statements, <style> style).` plus ` Parser notes: <warnings joined by "; ">` when warnings exist. |
 | Empty/failed validation | Throws `Error: render_ui: …`; the model sees the message as a tool error and is expected to fix and retry in the same turn. |
 | Validation | `createParser(componentSpecSchema, "Col")` from `@openuidev/lang-core`; the spec is generated from `vendor/spec.json` at build time and compiled into `lib/index.js`. Fatal findings are parser errors, `incomplete: true`, and an unresolved root. Warnings never block rendering. |
 | Rendering | Client-side only. The card is appended at the end of the turn that called the tool; multiple calls in one turn render multiple cards, but the tool guidance asks for one. |
@@ -190,4 +191,4 @@ Work top-down; each step rules out one layer:
 - The browser half requires the client locale service (`dsh-client-locale`); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - Interactive pages are self-contained but large (about 3.4–4.9 MB) and keep only the exporting theme; their photos, maps and routing still use the same third-party services as inside DSH.
 - The `/iui` Host replies and the command palette's command description stay English even in a Chinese UI; both are DSH platform behavior, and the command palette localizes only first-party commands by identity.
-- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
+- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.

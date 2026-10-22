@@ -64,15 +64,15 @@ Check each as-built claim against its truth source from [`references/doc-map.md`
 
 Claim groups for this extension:
 
-- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.1 (validated on 0.2.1-rc.2), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.2.2-26-10-21`), no `engines.dsh`.
+- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.1 (validated on 0.2.1-rc.2), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.3.0-26-10-22`), no `engines.dsh`.
 - **Tool contract**: `render_ui` name, `{ program, title? }`, success `{ statements, warnings? }`, model-visible result line, exact error strings.
 - **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria.
 - **UI copy**: zh/en labels and menu text from `src/shared/locales.ts`; zh docs quote zh labels, English docs quote English labels.
 - **Vocabulary and counts**: 57 components, 73 functions (14 core + 59 library), 5 action steps; component signatures; prompt size (~9.5K tokens, approximate).
-- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 27 / Client 54 / packaging 19, total 100), renderer 41/41 parse and render, typography 22/22, i18n 4 programs, pack 40 files (~3.61 MB tarball, ~9.71 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
+- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 27 / Client 54 / packaging 21, total 102), renderer 41/41 parse and render, typography 22/22, i18n 4 programs, pack 40 files (~3.63 MB tarball, ~9.45 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
 - **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, UI language and Agent Skill; `docs/development*.md` expands install/uninstall, development commands, restart tips, the release layout and the tag-driven Trusted Publishing release flow. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
 - **Repository and contribution**: the README clone URL is the HTTPS equivalent of `git config remote.origin.url`; GitHub Issues is the contribution channel; `npm run check` is the local gate (there is no PR CI); releases are published by the tag-triggered GitHub Actions Trusted Publishing workflow (`.github/workflows/publish.yml`, OIDC + provenance); docs changes follow `.agents/skills/sync-iui-docs/SKILL.md`.
-- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
+- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
 - **Release history**: `CHANGELOG.md` (English-only) mirrors the published versions (`package.json` version plus npm publish time); `Unreleased` collects the current main-branch delta; released sections are append-only, and the file is repo-only (not in `package.json` `files`).
 
 Completion criterion: every audited claim is verified, corrected, or listed unresolved; full audits state which docs and claim groups were not covered.
