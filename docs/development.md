@@ -29,7 +29,14 @@ Web 端也可以在 **Plugins** 页面安装并启用。DSH Desktop 同样在应
 
 ### 本地 checkout（开发）
 
-修改扩展本身时从本地 checkout 安装，命令见 [README 快速开始](../README.md#快速开始)：脚本写入 `$DSH_HOME/profiles/web/cordis.patch.yml`（自动备份），重启后页面会断开，用新打印的 URL 重新打开。卸载：
+修改扩展本身时从本地 checkout 安装。扩展**没有独立的开发服务器**——它运行在 DSH 里。开发回路是：构建 → 安装进 profile → 重启 DSH Web → 打开它打印的 URL；输入框右侧出现 **UI** 控件即成功。没有 watch 模式，改完重新 `npm run build` 并重启。
+
+```bash
+npm install && npm run build
+node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自动备份）
+```
+
+重启后页面会断开，用新打印的 URL 重新打开。卸载：
 
 ```bash
 node scripts/install.mjs --uninstall   # 然后同样重启 DSH Web 进程

@@ -14,6 +14,9 @@
 > [!NOTE]
 > **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`**（`latest`）。
 
+> [!TIP]
+> **想先跑起来？** 安装只需一条命令：`dsh plugin --profile web add @zephinel/dsh-intelligent-ui`；重启承载 Web UI 的 DSH 进程后，在输入框右侧的 **UI** 控件里选择「仅本会话」即可开启。完整步骤见[快速开始](#快速开始)。
+
 ## 效果
 
 ![上海两日行程：照片、地图、时间线、清单、预算与可交互控件都由 OpenUI Lang 渲染](assets/intelligent-ui-itinerary.webp)
@@ -26,11 +29,11 @@
 
 渲染器不是把一段文字包进聊天气泡，而是一套完整的组件库：**57 个组件、73 个函数、5 种动作**。下面三张卡片都是扩展的真实渲染结果——同一套渲染器、同一套 DSH 主题 token，没有设计稿：
 
-![布局与排版：57 组件总览，Col、Row、Box、Grid、Card、Carousel、Popover、Divider、Spacer、Section、Toc 与 12 个文本组件](assets/intelligent-ui-components-layout.webp)
+![一切可渲染的内容：57 个组件、73 个函数、5 类动作，以及布局（11 个）与文本（12 个）组件分组](assets/intelligent-ui-components-layout.webp)
 
-![输入、媒体与数据：13 个表单控件，以及照片、表格、图表、地图与 YouTube](assets/intelligent-ui-components-inputs.webp)
+![输入、媒体与数据：13 个输入组件，以及照片、表格、图表、地图与 YouTube](assets/intelligent-ui-components-inputs.webp)
 
-![交互与绘制：翻面卡、撒花开关、Svg 十种图元与沙盒 iframe 小游戏](assets/intelligent-ui-components-drawing.webp)
+![交互与绘制：翻面卡、撒花开关、十个 Svg 绘图组件与沙盒 iframe 小游戏](assets/intelligent-ui-components-drawing.webp)
 
 ## 更多示例
 
@@ -40,15 +43,15 @@
 
 窄屏下卡片自动切为单列，地图与图表按卡片宽度自适应；图表分类标签过长时会截断而不是溢出（约 380 px 宽）：
 
-![窄屏下的手冲咖啡计算器：单列卡片、无横向溢出](assets/intelligent-ui-responsive.webp)
+![窄屏下的手冲咖啡计算器：单列布局、无横向溢出](assets/intelligent-ui-responsive.webp)
 
 ## 核心能力
 
 | 能力 | 说明 |
 |---|---|
 | 交互页面 | 地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图 |
-| 导出图片 | 回答底部操作栏右侧的「导出」药丸按钮可把渲染结果保存为一张 PNG：原始 / 圆角 / 卡片三种美化；背景色与 1x/2x 在插件详情页设置 |
-| 导出交互页面 | 同一个导出菜单可把该轮所有卡片导出为**单文件 HTML**（内联渲染器与当前主题，约 3.4–4.9 MB）；直接打开即可离线交互，页面里的 `@ToAssistant` 会复制文案并提示回到 DSH 粘贴继续 |
+| 导出图片 | 把该轮渲染结果保存为一张 PNG：原始 / 圆角 / 卡片三种美化；背景色与 1x/2x 在插件详情页设置 |
+| 导出交互页面 | 把该轮全部卡片导出为单个 HTML 文件，浏览器打开后继续交互；`@ToAssistant` 改为复制文案并提示回 DSH 粘贴 |
 | 本地执行 | `$变量`、`@Set`、`@functions` 在浏览器运行；只有 `@ToAssistant` 回写消息 |
 | 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；Auto / Card / Article 三档样式 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
@@ -65,7 +68,7 @@ git clone https://github.com/Zephinel/dsh-intelligent-ui.git
 cd dsh-intelligent-ui
 ```
 
-也可以直接从 npm 安装，不需要 checkout（见下一节）。
+也可以直接从 npm 安装，不需要 checkout（见[快速开始](#快速开始)）。
 
 ## 前置条件
 
@@ -106,24 +109,13 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。
 
-本地开发时从 checkout 安装。扩展**没有独立的开发服务器**——它运行在 DSH 里。开发回路是：构建 → 安装进 profile → 重启 DSH Web → 打开它打印的 URL；输入框右侧出现 **UI** 控件即成功。没有 watch 模式，改完重新 `npm run build`，并按下面的缓存提示重启。
-
-```bash
-cd /path/to/dsh-intelligent-ui
-npm install && npm run build
-node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自动备份）
-```
-
-> [!IMPORTANT]
-> 改了包名或重建 `lib/client.js` 后，只刷新页面可能拿到旧 revision；先重启承载 Web UI 的 DSH 进程，再打开页面。
-
 然后在输入框右侧点 **UI** 控件，选择「仅本会话」（或 `/iui on`），需要时在同一面板里设置本会话的 Auto / Card / Article 样式，直接提问，例如：
 
 ```text
 帮我排一个上海两日游，要能勾选和调整
 ```
 
-卸载、开发与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
+本地开发（从 checkout 构建并安装）、卸载与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)；扩展没有独立的开发服务器。
 
 ## 开关与回答样式
 
@@ -131,7 +123,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 ![选择「仅本会话」后的样式面板：本会话 Auto / Card / Article 与跟随全局](assets/intelligent-ui-style-panel.webp)
 
-- **全局默认**：插件详情页里的「在所有会话中启用」决定新会话是否默认开启；「回答样式」里的「Display style」决定默认的 Auto / Card / Article。
+- **全局默认**：插件详情页里的「在所有会话中启用」决定新会话是否默认开启；「回答样式」里的「显示样式」决定默认的 Auto / Card / Article。
 - **会话覆盖**：输入框 **UI** 控件只改当前会话，选择「仅本会话」后打开样式面板；`/iui on|off|inherit` 与 `/iui style auto|card|article|inherit` 等价。
 - **Auto** 由模型按请求选择：交互/结构化用紧凑 Card，详尽/深入/长文用 Article 阅读页。Article 需要 `Toc`、可折叠 `Section` 和实质正文，不是骨架。
 - 会话状态原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`，刷新、DSH 重启后保留；完整语义（投影、服务依赖）见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
@@ -153,9 +145,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 
 插件详情页按 **可用性**、**回答样式**、**编排方式** 和 **导出** 分组。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**导出** 保存图片的默认背景色、1x/2x 分辨率，以及图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除）。
 
-回答渲染完成后，消息底部操作栏的**最右侧**会出现一个带「导出」字样的**药丸按钮**（与复制/点赞/分支等自带图标控件区分开）；只有扩展渲染的回答才有这个按钮。点开后可选择图片的美化样式——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影），把该轮的全部渲染结果保存为一张 PNG。导出前会临时展开折叠的卡片，完成后恢复原状；图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字，也不包含导出按钮本身。
-
-菜单底部还有一个 **交互页面** 选项：把该轮全部卡片导出为一个单文件 HTML（内联渲染器、当前主题与卡片程序，约 3.4–4.9 MB）。直接在浏览器里打开就能继续操作地图、表单、滑杆等组件；`@ToAssistant` 不会调用 DSH，而是复制消息并提示「已复制，可回到 DSH 粘贴继续」；插件详情页 **导出** 分组的「移除追问操作」默认开启，导出图片和交互页面时会移除包含追问的整个区块；想保留追问内容时关闭该开关即可。单文件不依赖 DSH 或额外脚本，但地图/照片等组件仍要联网。
+回答渲染完成后，消息底部操作栏的**最右侧**会出现带「导出」字样的**药丸按钮**（只有扩展渲染的回答才有）。点开后可把该轮全部卡片保存为一张 PNG——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影）；也可以导出为单文件 HTML，直接在浏览器打开即可继续交互，页面里的 `@ToAssistant` 改为复制消息并提示回到 DSH 粘贴。导出的图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字或导出按钮本身。完整流程见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
 
 ## 构建、测试与部署
 
@@ -168,7 +158,7 @@ npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导�
 
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
 
-发布物是一个 DSH bundle；部署就是把插件安装进目标 DSH profile。卸载、本地开发与版本注意事项见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
+发布物是一个 DSH bundle；部署就是把插件安装进目标 DSH profile。卸载与版本注意事项见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
 
 ## 贡献
 
@@ -176,6 +166,7 @@ npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导�
 - 提交前运行 `npm run check`；仓库没有 PR CI，以本地命令结果为准。发布由 GitHub Actions 的 Trusted Publishing 工作流执行（推送与 `package.json` 版本一致的 `v*` tag）。
 - 行为、文案或计数变化时，中英 README、`CHANGELOG.md` 与 `docs/` 对应文档要一起更新；同步规则见 `.agents/skills/sync-iui-docs/SKILL.md`（开发环境使用，不随 npm 包发布）。
 - 仓库内的维护技能与文档同步规则在 `.agents/skills/`（不随 npm 包发布）；AI 协作代理同样以 `npm run check` 作为提交前门槛。
+- 维护者：[@Zephinel](https://github.com/Zephinel)。
 
 ## 已知限制
 
@@ -190,6 +181,15 @@ npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导�
 - 交互页面导出会把渲染器、当前主题与全部卡片内联进一个 HTML（约 3.4–4.9 MB），因此文件较大但无需安装；地图、照片等组件仍依赖网络。页面里的 `@ToAssistant` 会尝试写入剪贴板并弹出提示；剪贴板不可用时提示会保留原消息供手动复制。
 - 浏览器半边要求部署组合 `dsh-client-locale`（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载，Host 工具与提示词仍可用。
 - 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。全局启用/样式与自由布局只改变提示词与页面形态，不保证每个模型都完全遵守；会话样式覆盖仍以 Host 注入的提示词为准。
+- 交互页面导出需要部署提供 `webServer` 服务（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时无法导出交互页面，图片导出不受影响。
+
+## 常见问题
+
+**为什么回答只有文字、没有卡片？** 先确认该会话的开关已打开（输入框右侧 **UI** 控件，或 `/iui on`）；开启后模型仍可能把单个事实、一两句话或明确的文字/代码请求当作有界例外。想强制出卡片时，在开关已打开的会话里用 `/intelligent-ui` 显式调用技能。详见[使用](#使用)。
+
+**回答底部为什么没有「导出」按钮？** 只有扩展渲染出的回答才有这个药丸按钮；开关关闭、模型用文字回答或渲染失败时都不会出现。详见[使用](#使用)与[已知限制](#已知限制)。
+
+**重建插件后 UI 没变化或报错？** 只刷新页面可能拿到旧 revision：先重启承载 Web UI 的 DSH 进程，再打开页面。具体错误信息与处理方式见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
 
 ## 文档
 

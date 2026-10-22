@@ -29,7 +29,14 @@ On the Web side you can also install and enable it from the **Plugins** page. DS
 
 ### Local checkout (development)
 
-When changing the extension itself, install from a local checkout; the commands are in [README Quick start](../README.en.md#quick-start): the script writes `$DSH_HOME/profiles/web/cordis.patch.yml` (automatic backup), and the page disconnects after the restart; reopen it with the newly printed URL. To uninstall:
+When changing the extension itself, install from a local checkout. The extension has **no development server of its own** — it runs inside DSH. The loop is: build → install into the profile → restart DSH Web → open the URL it prints; the **UI** control on the right of the composer means it worked. There is no watch mode: rebuild with `npm run build` and restart.
+
+```bash
+npm install && npm run build
+node scripts/install.mjs  # writes $DSH_HOME/profiles/web/cordis.patch.yml (automatic backup)
+```
+
+The page disconnects after the restart; reopen it with the newly printed URL. To uninstall:
 
 ```bash
 node scripts/install.mjs --uninstall   # then restart the DSH Web process the same way

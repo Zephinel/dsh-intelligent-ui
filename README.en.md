@@ -14,6 +14,9 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 > [!NOTE]
 > **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.2.2-26-10-21`** (`latest`).
 
+> [!TIP]
+> **Want to try it now?** Install with one command: `dsh plugin --profile web add @zephinel/dsh-intelligent-ui`; restart the DSH process that serves the Web UI, then choose **This session only** from the **UI** control in the composer. See [Quick start](#quick-start) for the full path.
+
 ## What it looks like
 
 ![Two days in Shanghai: photos, map, timeline, checklist, budget and interactive controls all rendered by OpenUI Lang](assets/intelligent-ui-itinerary.webp)
@@ -26,11 +29,11 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 
 The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The three cards below are real renders from the extension: same renderer, same DSH theme tokens, no mockups:
 
-![Layout and typography: the 57-component tour, Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer, Section, Toc and 12 text components](assets/intelligent-ui-components-layout.webp)
+![Everything you can render: 57 components, 73 functions and 5 actions, plus the layout (11) and text (12) component groups](assets/intelligent-ui-components-layout.webp)
 
-![Inputs, media and data: 13 form controls plus photos, tables, charts, maps and YouTube](assets/intelligent-ui-components-inputs.webp)
+![Inputs, media and data: 13 input components plus photos, tables, charts, maps and YouTube](assets/intelligent-ui-components-inputs.webp)
 
-![Play and drawing: flip cards, the confetti trigger, ten SVG shape primitives and a sandboxed iframe game](assets/intelligent-ui-components-drawing.webp)
+![Play and drawing: flip cards, the confetti trigger, ten SVG drawing components and a sandboxed iframe game](assets/intelligent-ui-components-drawing.webp)
 
 ## More examples
 
@@ -40,15 +43,15 @@ The renderer is not a chat bubble around a paragraph — it is a full component 
 
 On a narrow screen (about 380 px) the card switches to a single column, and maps and charts fit the card width; over-long chart category labels are trimmed instead of overflowing:
 
-![The pour-over coffee calculator on a narrow screen: single-column cards, no horizontal overflow](assets/intelligent-ui-responsive.webp)
+![The pour-over coffee calculator on a narrow screen: single-column layout, no horizontal overflow](assets/intelligent-ui-responsive.webp)
 
 ## Capabilities
 
 | Capability | What it gives you |
 |---|---|
 | Interactive pages | Maps, photos, charts, checklists, forms, SVG drawings and mini-games are real components, not screenshots |
-| Image export | The labeled export pill at the right of an answer's action strip saves the rendered result as one PNG with a raw, rounded or card frame; background color and 1x/2x live on the Plugin detail page |
-| Interactive-page export | The same menu saves every card from the turn as a **single-file HTML** page (renderer and current theme inlined, about 3.4–4.9 MB); open it locally to keep interacting, and `@ToAssistant` copies its message plus a paste-back-into-DSH hint |
+| Image export | Saves the rendered result as one PNG with a raw, rounded or card frame; background color and 1x/2x live on the Plugin detail page |
+| Interactive-page export | Saves every card from the turn as a single-file HTML page; open it in a browser to keep interacting, and `@ToAssistant` copies its message plus a paste-back-into-DSH hint |
 | Local execution | `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` writes a message back |
 | Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
@@ -65,7 +68,7 @@ git clone https://github.com/Zephinel/dsh-intelligent-ui.git
 cd dsh-intelligent-ui
 ```
 
-You can also install it from npm without a checkout (next section).
+You can also install it from npm without a checkout (see [Quick start](#quick-start)).
 
 ## Prerequisites
 
@@ -106,24 +109,13 @@ Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, th
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
 
-For local development, install from a checkout. The extension has **no development server of its own** — it runs inside DSH. The loop is: build → install into the profile → restart DSH Web → open the URL it prints; the **UI** control appears when it worked. There is no watch mode: rebuild with `npm run build` and restart per the cache note below.
-
-```bash
-cd /path/to/dsh-intelligent-ui
-npm install && npm run build
-node scripts/install.mjs  # writes $DSH_HOME/profiles/web/cordis.patch.yml (automatic backup)
-```
-
-> [!IMPORTANT]
-> After renaming the package or rebuilding `lib/client.js`, a page refresh may keep the old revision; restart the DSH process that serves the Web UI, then reopen the page.
-
 Then click the **UI** control, choose "This session only" (or `/iui on`), set the session Auto / Card / Article style in the same panel if needed, and ask, for example:
 
 ```text
 Plan two days in Shanghai, with checkboxes and adjustments
 ```
 
-See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall, development and troubleshooting.
+See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for the local-checkout development loop, uninstall and troubleshooting; the extension has no development server of its own.
 
 ## Switch and answer style
 
@@ -153,9 +145,7 @@ To guarantee a card (or when the model still replies in text), invoke the skill 
 
 The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
 
-Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It offers a beautification frame — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — and saves every card rendered by that turn as one PNG. Collapsed cards are expanded for the capture and restored afterwards; the image contains the rendered cards only, not the Markdown text around them and not the export control itself.
-
-The menu also offers **Interactive page** at the bottom: it saves every card from that turn as one HTML file (renderer, current theme and card programs inlined; about 3.4–4.9 MB). Open it in a browser to keep using maps, forms, sliders and the other components; `@ToAssistant` does not call DSH but copies the message and shows “Copied — paste it back into DSH to continue.” The **Remove follow-up actions** switch in the **Export** group on the Plugin detail page is on by default and removes the whole follow-up block from both images and pages; turn it off to keep the copy fallback. The file needs no DSH or extra scripts, though networked components such as maps and photos still need the network.
+Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It can save every card from that turn as one PNG — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — or export them as a single-file HTML page, which opens in a browser with the interactions intact; in that page `@ToAssistant` copies the message and shows the paste-back-into-DSH hint instead of calling DSH. The image contains the rendered cards only, not the Markdown text around them and not the export control itself. See [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full flow.
 
 ## Build, test and deploy
 
@@ -168,7 +158,7 @@ npm run test:browser # optional: real-browser E2E (style panel + image export + 
 
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
 
-The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall, local development and version notes.
+The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall and version notes.
 
 ## Contributing
 
@@ -176,6 +166,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - Run `npm run check` before submitting; there is no PR CI, so the local command is the gate. Releases are published by the GitHub Actions Trusted Publishing workflow (push a `v*` tag that matches `package.json`).
 - When behavior, copy or counts change, update the Chinese and English READMEs, `CHANGELOG.md`, and the matching documents under `docs/`; the sync rules live in `.agents/skills/sync-iui-docs/SKILL.md` (development-only, not shipped in the npm package).
 - Repository maintenance skills and doc-sync rules live under `.agents/skills/` (not shipped); AI coding agents also use `npm run check` as the pre-submit gate.
+- Maintainer: [@Zephinel](https://github.com/Zephinel).
 
 ## Known limitations
 
@@ -190,6 +181,15 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - The interactive-page export inlines the renderer, the current theme and every card into one HTML file (about 3.4–4.9 MB), so it is large but install-free; maps, photos and other components still need the network. `@ToAssistant` in that page tries the clipboard and shows a toast; when the clipboard is unavailable the toast keeps the message for manual copying.
 - The browser half requires a deployment that composes `dsh-client-locale` (included by default in DSH Web 0.2.1); a minimal custom profile without it will not mount the switch or the card, while the Host tool and prompt keep working.
 - The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. Global enable/style and free-form layout only change the prompt and page shape; no model is guaranteed to follow them perfectly, and session style overrides still rely on the Host-injected prompt.
+- The interactive-page export needs the `webServer` service (included by default in DSH Web 0.2.1); a minimal custom profile without it cannot build the exported page, while image export is unaffected.
+
+## FAQ
+
+**Why does an answer come back as plain text with no card?** First check that the switch is on for that session (the **UI** control in the composer, or `/iui on`). Even then the model may treat a single fact, a one- or two-sentence reply, or an explicit text/code request as a bounded exception. To force a card, invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on. See [Usage](#usage).
+
+**Why is there no export pill under an answer?** Only answers rendered by the extension have it; it is absent when the switch is off, the model replies in text, or rendering fails. See [Usage](#usage) and [Known limitations](#known-limitations).
+
+**Why did the UI not change (or show an error) after rebuilding the plugin?** A page refresh may still load the old revision: restart the DSH process that serves the Web UI, then reopen the page. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for the exact errors and handling.
 
 ## Documentation
 
