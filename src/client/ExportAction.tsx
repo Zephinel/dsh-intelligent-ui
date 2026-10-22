@@ -186,6 +186,7 @@ export function ExportAction({
         scale: preferences.scale,
         beautify: style,
         title: programs[0]?.title,
+        hideToAssistant: !preferences.toAssistant,
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {

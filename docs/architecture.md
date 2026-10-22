@@ -36,7 +36,7 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ![输入框右侧的 UI 控件：三档开关与分隔线下的 Display style](../assets/intelligent-ui-toggle.png)
 
-- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article）、「自由布局」开关，以及导出的默认值（图片背景色、1x/2x、交互页面是否保留 `@ToAssistant` 追问）。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **编排方式** / **导出** 分组。
+- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article）、「自由布局」开关，以及导出的默认值（图片背景色、1x/2x、图片/交互页面是否保留 `@ToAssistant` 追问区块）。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **编排方式** / **导出** 分组。
 - **会话覆盖**：输入框 UI 控件只改当前会话。`/iui on` / `off` / `inherit` 设置启用覆盖；`/iui style auto|card|article|inherit` 设置样式覆盖。会话覆盖优先于全局，`inherit` 跟随全局。
 - **答案样式**：`Card` 为紧凑交互卡片；`Article` 为 `render_ui` 卡片内的阅读版式（`Toc` + 可折叠 `Section` + 长 Markdown 正文）；`Auto` 由模型按请求选择。Article 的 `Section` 正文是一个嵌套 flow，块间距使用 group 级节奏；页面级 flow 只靠 margin 排版，不再叠加 flex gap，避免 section 前后出现双倍留白。
 - 状态：全局启用/样式/自由布局在 Host 设置文档；会话启用、关闭与样式覆盖原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`（`sessions`、`offSessions`、`styles`）。旧版 `{ "global": true, "sessions": [...] }` 仍可读取为全局/会话迁移值。
@@ -73,7 +73,7 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 - **入口**：与图片导出共用操作栏的「导出」药丸与菜单；菜单底部用分割线与三个图片框分开的一项是 **交互页面**。
 - **资产供应**：`scripts/build.mjs` 额外构建 `lib/standalone.js` / `lib/standalone.css`（React + 渲染器 + KaTeX/MapLibre 样式）。Host 通过可选注入的 `webServer` 注册两个 same-origin 精确路由（`/api/intelligent-ui/export/standalone.js` 与 `.../standalone.css`）并在请求时读取这两个构建产物；部署没有 `webServer` 时路由不注册，客户端会报页面构建失败。
 - **生成**：浏览器在点击时并行拉取两个资产，扫描当前页面样式表收集自定义属性并用计算值拼出主题快照，再由 `export-html-plan.ts` 把卡片程序、资产与主题内联进一个 HTML；页面大小约 3.4–4.9 MB。下载文件名带回答标题与本地时间。
-- **页面运行时**：`src/standalone/index.tsx` 只渲染真实 `OpenUIRenderer` 的卡片正文（不导出 DSH 的标题栏与折叠控件），因此地图、图表、表单等交互与 DSH 内一致；`@OpenUrl` 照常打开链接，`@ToAssistant` 退化为「复制消息 + toast 提示回到 DSH 粘贴继续」，剪贴板失败时 toast 保留原消息；若在插件详情页关闭「保留追问操作」，这些追问控件会在导出时被移除。页面只保存导出时的主题（当前 light/dark），不跟随之后的 DSH 主题切换。
+- **页面运行时**：`src/standalone/index.tsx` 只渲染真实 `OpenUIRenderer` 的卡片正文（不导出 DSH 的标题栏与折叠控件），因此地图、图表、表单等交互与 DSH 内一致；`@OpenUrl` 照常打开链接，`@ToAssistant` 退化为「复制消息 + toast 提示回到 DSH 粘贴继续」，剪贴板失败时 toast 保留原消息；若在插件详情页关闭「保留追问操作」，导出图片和页面时会移除包含追问的整个区块。页面只保存导出时的主题（当前 light/dark），不跟随之后的 DSH 主题切换。
 
 ## 界面语言
 

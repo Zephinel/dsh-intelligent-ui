@@ -209,8 +209,25 @@ try {
     assert.match(page.text, /"callId":"call-1"/)
     assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
 
+    // With the follow-up switch off, the image capture removes the whole
+    // follow-up card instead of just its button.
+    await cdp.evaluate('window.setExportToAssistant(false)')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed before follow-up export')
+    await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'follow-up export menu')
+    await cdp.evaluate('document.querySelector("[data-export-style=\\"raw\\"]").click()')
+    await cdp.waitFor('window.downloads.length === 5', 'follow-up-hidden download', { timeout: 30000 })
+    const noFollow = await cdp.evaluate(`(async () => {
+      const probe = window.captureProbes[3]
+      const blob = window.exportedBlobs[4]
+      const bitmap = await createImageBitmap(blob)
+      return { hidden: probe.hiddenFollowUps, width: bitmap.width, height: bitmap.height }
+    })()`)
+    assert.ok(noFollow.hidden >= 1, 'the image capture hides the whole follow-up block')
+    assert.ok(noFollow.height < raw.height, 'the hidden follow-up block is not part of the PNG')
+
     const probesAfterAll = await cdp.evaluate('window.captureProbes')
-    assert.equal(probesAfterAll.length, 3, 'the three image exports rasterized the card')
+    assert.equal(probesAfterAll.length, 4, 'the four image exports rasterized the card')
     console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {

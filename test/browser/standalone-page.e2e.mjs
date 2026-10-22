@@ -24,7 +24,7 @@ let cdp
 
 const PAGE_TOKENS = `:root{color-scheme:light;--dsw-alias-bg-base:#ffffff;--dsw-alias-bg-layer-1:#ffffff;--dsw-alias-bg-layer-2:#f6f6f6;--dsw-alias-border-l1:#e6e6e6;--dsw-alias-border-l2:#d9d9d9;--dsw-alias-label-primary:#111111;--dsw-alias-label-secondary:#555555;--dsw-alias-label-tertiary:#888888;--dsw-alias-label-caption:#8a8a8a;--dsw-alias-label-primary-foreground:#ffffff;--dsw-alias-interactive-bg-hover:#eeeeee;--dsw-alias-state-business-primary:#4176e6;--dsw-alias-state-error-primary:#d93333;--dsw-brand-primary:#111111;--dsw-radius-sm:6px;--dsw-radius-md:10px;--dsw-radius-lg:14px;--dsw-focus-ring-width:2px;--dsw-focus-ring-color:#4176e6;--dsw-font-family:system-ui,-apple-system,"PingFang SC",sans-serif}`
 const cards = [
-  { program: 'root = Col([Title("Standalone harness", "xl"), Text("Interactive page body"), Button("Continue")], 2)', title: 'First card', style: 'card', callId: 'call-1' },
+  { program: 'root = Col([Card([Title("Standalone harness", "xl"), Text("Interactive page body"), Button("Continue")])], 2)', title: 'First card', style: 'card', callId: 'call-1' },
   { program: 'root = Title("Second card body")', title: 'Second card', style: 'card', callId: 'call-2' },
 ]
 
@@ -104,13 +104,14 @@ try {
   await cdp.waitFor('document.readyState === "complete"', 'hidden page load', { timeout: 60000 })
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 2', 'hidden page cards', { timeout: 60000 })
   const hidden = await cdp.evaluate(`(() => ({
-    cards: document.querySelectorAll('.dsh-iui-standalone-card').length,
-    buttons: document.querySelectorAll('button').length,
+    blocks: document.querySelectorAll('[data-iui-followup-hidden]').length,
+    visibleButtons: [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0).length,
     text: document.body.innerText,
   }))()`)
-  assert.equal(hidden.cards, 2, 'card content still renders without follow-up controls')
-  assert.equal(hidden.buttons, 0, 'the ToAssistant controls are omitted from the hidden page')
-  assert.match(hidden.text, /Standalone harness/)
+  assert.equal(hidden.blocks, 1, 'the whole follow-up card is hidden')
+  assert.equal(hidden.visibleButtons, 0, 'no follow-up control remains visible')
+  assert.doesNotMatch(hidden.text, /Standalone harness/, 'the hidden block contributes no text')
+  assert.match(hidden.text, /Second card body/, 'other cards stay visible')
   console.log('standalone-page E2E: OK')
 } finally {
   await cleanup()

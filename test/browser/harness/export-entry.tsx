@@ -21,9 +21,10 @@ import { EXPORT_STANDALONE_CSS_PATH, EXPORT_STANDALONE_JS_PATH } from '../../../
 import '../../../src/client/index.css'
 
 const PHOTO = `${location.origin}/photo.svg`
-const PROGRAM = `root = Col([quizCard, photoCard], 3)
+const PROGRAM = `root = Col([quizCard, photoCard, followCard], 3)
 quizCard = Flashcard("front question", "back answer")
 photoCard = SearchImage("harness search photo", 1.35)
+followCard = Card([Title("Follow-up card", "sm"), Text("This card should disappear when follow-ups are off.", "sm", "muted"), Button("Continue")])
 `
 
 /** Answer both export entries look up: Turn 1 rendered UI, Turn 2 did not. */
@@ -161,6 +162,9 @@ function transitionsFrozen(element: Element | null | undefined): boolean {
 ;(window as unknown as { setExportScale: (scale: '1x' | '2x') => void }).setExportScale = (scale) => {
   SETTINGS.scale = scale
 }
+;(window as unknown as { setExportToAssistant: (value: boolean) => void }).setExportToAssistant = (value) => {
+  SETTINGS.toAssistant = value
+}
 ;(window as unknown as { captureProbes: unknown[] }).captureProbes = []
 const originalToCanvas = snapdom.toCanvas.bind(snapdom)
 ;(snapdom as unknown as { toCanvas: typeof snapdom.toCanvas }).toCanvas = (async (element: Element, options?: Parameters<typeof snapdom.toCanvas>[1]) => {
@@ -178,6 +182,7 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
     animationsFrozen: card !== null && card !== undefined && getComputedStyle(card).animationName === 'none',
     expandedAtCapture: body !== null && body !== undefined && !body.hidden,
     mapReadyAtCapture: element.querySelector<HTMLElement>('[data-iui-map]')?.dataset.iuiMapReady === 'true',
+    hiddenFollowUps: element.querySelectorAll('[data-iui-followup-hidden]').length,
     photoEager: photo?.loading === 'eager',
     photoComplete: photo?.complete === true && (photo?.naturalWidth ?? 0) > 0,
   })

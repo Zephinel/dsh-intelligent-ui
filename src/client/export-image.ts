@@ -16,6 +16,7 @@
  * waits for search results and image loads first).
  */
 import { snapdom } from '@zumer/snapdom'
+import { hideToAssistantBlocks } from '../lib/to-assistant.ts'
 import { beautifyPlan, canvasFits, composeBox, exportScaleFactor, imageFileName, type BeautifyPlan } from './export-image-plan.ts'
 import type { BeautifyStyle, ExportScale } from '../shared/intelligent-ui.ts'
 
@@ -40,6 +41,8 @@ export interface ExportCardsOptions {
   readonly scale: ExportScale
   /** Chosen beautification frame. */
   readonly beautify: BeautifyStyle
+  /** Remove blocks that only carry @ToAssistant follow-ups. */
+  readonly hideToAssistant: boolean
   /** Answer title, used only for the download name. */
   readonly title?: string | undefined
 }
@@ -223,6 +226,7 @@ export async function exportCardsImage(trigger: HTMLElement, options: ExportCard
   const plan = beautifyPlan(options.beautify, factor)
   await document.fonts?.ready
   const restoreExpanded = await expandCards(container)
+  const restoreFollowUps = options.hideToAssistant ? hideToAssistantBlocks(container) : (): void => undefined
   let restorePhotos = (): void => undefined
   try {
     // Photos can grow the card and trigger a map resize, so settle them first
@@ -252,6 +256,7 @@ export async function exportCardsImage(trigger: HTMLElement, options: ExportCard
     await downloadCanvas(composed, imageFileName(title, new Date()))
   } finally {
     restorePhotos()
+    restoreFollowUps()
     restoreExpanded()
   }
 }

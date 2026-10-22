@@ -1123,6 +1123,11 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Export setting: remove the whole block that carries a follow-up control. */
+[data-iui-followup-hidden] {
+  display: none !important;
+}
+
 /* Snapshot flattening: SVG rasterization does not honour backface-visibility,
    so a flashcard's front and back faces would stack on top of each other in the
    exported image. While one capture runs, motion is frozen and the flip is
