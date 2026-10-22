@@ -7,6 +7,12 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
+### Fixed
+
+- Composer style previews, the On-demand UI entry and Plugin detail page rows now use the DSH default module surface (`--dsw-alias-bg-module-platform`, falling back to layer-2). The live light theme keeps layer-2 white, so the previous layer-2 tiles looked unchanged; the new surface is light, rounded and consistent across the composer and detail page. Screenshot fixtures now mirror the live layered theme.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
