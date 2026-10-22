@@ -7,6 +7,8 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 ### Added
 
 - Custom style templates with reusable display preferences and controlled light/dark visual themes (palette, font, radius, density and shadow).
@@ -17,9 +19,11 @@ been published yet.
 
 ### Changed
 
+- Documented community marketplace maintenance: npm `latest` updates, repository-owned screenshots and listing corrections.
 - Replaced the answer-style slider with built-in preview cards, saved Custom styles and a bottom On-demand UI entry; settings explains composer generation and manages persistent defaults/templates.
 - Interactive-page export freezes each result's resolved theme and scheme at export time, including catalog-independent temporary snapshots.
-- Updated bilingual documentation, Agent Skill contracts, reproducible 2x screenshots and documentation guards; expanded Node and browser coverage. Real-model DSH E2E for this rework remains pending.
+- Built-in style previews and the On-demand UI entry now use the same light default surface in the composer and on the Plugin detail page; the deterministic screenshot theme mirrors the real layered backgrounds.
+- Updated bilingual documentation, Agent Skill contracts, reproducible 2x screenshots and documentation guards; expanded Node and browser coverage. The on-demand main path, free-form clarification and grounded render were validated with the real model in an isolated DSH Web instance; chained adjustments, multi-tab, restart replay and real media/export remain manual.
 
 ### Fixed
 
@@ -28,8 +32,6 @@ been published yet.
 - On-demand UI status: keep the composer hint visible while the result is generating or a question is pending; if the model ends a turn with text but no render (for example to request missing content), automatically re-arm the same intent with a continue hint. The hint now clears only after a temporary result renders or the user cancels, and the generic spinner was replaced with a refined inline SVG indicator.
 - Content grounding: on-demand requests now require grounding data, figures, dates and sources in the conversation or tool results; missing content must be asked about with a free-form question (no options) so users can paste text, a path or a link. Never fabricate placeholder datasets or sources. Verified with the real model: it refused to invent data, asked for the analysis, then rendered from a real public source.
 - Terminal guidance: failed and interrupted on-demand turns now keep a composer hint with a reason summary, Retry (re-arm) and Dismiss actions instead of silently reverting to a plain composer.
-
-### Fixed after review
 
 - Declare the optional `resume` flag in the published projection schema (it was rejected by DSH wire validation) and clear it when the next message binds.
 - Preserve `kind: adjust` and `parentResultId` when retrying a failed/interrupted adjustment instead of downgrading it to a fresh generate.

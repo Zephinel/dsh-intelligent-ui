@@ -13,10 +13,10 @@
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.3.0-26-10-22
+# npm；当前 latest 为 0.4.0
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.0
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -112,6 +112,7 @@ DSH 0.2.1 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 | `docs/` | 详细文档（架构、开发、验证）；不随 npm 包发布 |
 | `CHANGELOG.md` | 版本变更记录（英文，历史记录，只追加）；不随 npm 包发布 |
 | `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配、输入框开关/样式面板与插件设置页（WebP + PNG） |
+| `screenshots.json` | 社区市场精选截图清单，路径相对于仓库根目录；不随 npm 包发布 |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
 | `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod、SnapDOM、React） |
@@ -139,10 +140,18 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 4. 创建并推送与版本一致的 tag：
 
 ```bash
-git tag v0.3.0-26-10-22
+git tag v0.4.0
 git push origin main --follow-tags
 ```
 
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，跑 `npm run check`，再用 OIDC + `--provenance` 发布到 npm；不需要 `NODE_AUTH_TOKEN`。发布后用 `npm view @zephinel/dsh-intelligent-ui version dist-tags` 校验。
 
 > 旧的 granular token 直接发布方式将在 2027-01 移除；这个流程不依赖长期 token。
+
+## 插件市场维护
+
+收录完成后，日常开发和发版沿用上面的发布流程，无需为每个新版本重新申请收录。
+
+- **版本同步**：正式版本发布到 npm 的 `latest` 标签，并用上面的 `npm view` 命令确认。awesome / dsh-market 会自动关联指向本仓库的 npm 包，Open Plugin Market 当前条目未固定版本，默认跟随 `latest`；各市场按自己的构建周期刷新。保持 npm 包的 `repository` 指向本仓库，并保留 GitHub 的 `dsh-plugin` topic，供自动索引发现。[awesome 收录规则](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market 维护规则](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
+- **截图更新**：更新本仓库的 `screenshots.json` 和对应图片，再推送到默认分支即可；清单保留 1 到 8 张截图，使用仓库内有效的相对路径。市场在后续构建时采集，无需单独向市场提 PR，也无需仅为市场截图重发 npm 包。[截图规则](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#screenshots--截图optional-recommended--可选推荐)
+- **资料更正**：包名、仓库地址、分类改变，或市场介绍明显过时时，再更新对应市场的条目。awesome 只修改自己的 `data/plugins/Zephinel__dsh-intelligent-ui.yml`；Open Plugin Market 可在原[收录申请](https://github.com/polang233/dsh-plugin-index/issues/40)补充信息，或提交资料更正申请。

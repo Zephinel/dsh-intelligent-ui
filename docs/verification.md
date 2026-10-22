@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项，2026-10-22 R4）: `npm run check`：179/179（Host 77 + Client 81 + packaging 21）；renderer 解析 41/41、SSR 41/41、contrast OK、i18n 4 个程序、typography 22/22；`npm run pack:check`：43 个文件，tarball 4,036,213 字节，解包 10,215,858 字节。下方旧浏览器/模型记录保留为历史，当前证据与边界见末尾 R4 记录。
+- 测试（实时子项，2026-10-22 R4）: `npm run check`：179/179（Host 77 + Client 81 + packaging 21）；renderer 解析 41/41、SSR 41/41、contrast OK、i18n 4 个程序、typography 22/22；`npm run pack:check`：43 个文件，tarball 4,036,017 字节，解包 10,215,182 字节。下方旧浏览器/模型记录保留为历史，当前证据与边界见末尾 R4 记录。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -42,7 +42,7 @@
 | --- | --- |
 | `npm run check` | PASS；179/179 Node 测试 = Host 77 + Client 81 + packaging 21，0 失败、0 跳过 |
 | renderer（包含于 check） | 解析 41/41、SSR 41/41（使用现有 `/tmp/oiui/src/app/gallery` fixture）；contrast OK；i18n 4 个程序（zh/en fallback）；typography 22/22，Chrome 实际执行 |
-| `npm run pack:check` | PASS；43 个文件；tarball **4,036,213 字节**（4.04 MB），解包 **10,215,858 字节**（10.22 MB） |
+| `npm run pack:check` | PASS；43 个文件；tarball **4,036,017 字节**（4.04 MB），解包 **10,215,182 字节**（10.22 MB） |
 | 构建产物 | `lib/index.js` 637,813 字节；`lib/client.js` 3,763,748 字节；`lib/standalone.js` 3,426,892 字节；`lib/standalone.css` 511,833 字节 |
 | `npm run test:browser` | PASS，7/7 套件：on-demand（85 断言）、style-panel、style-theme、export-image、standalone-page、article-layout、settings-picker；均非跳过 |
 | `node --test test/packaging/*.test.mjs` | PASS，21/21；manifest 9 + references 6 + guardrails 6；13 个 assets 均被两份 README 引用，locale meta key 一致 |

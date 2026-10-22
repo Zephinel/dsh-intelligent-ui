@@ -14,7 +14,7 @@
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`** (`latest`). Custom styles and on-demand generation described below are **Unreleased** changes in the current checkout and have not been published.
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.4.0`** (`latest`). Custom styles, on-demand generation and the on-demand lifecycle/content-grounding fixes described below are all included in 0.4.0.
 
 > [!TIP]
 > **Want to try it now?** Install with one command: `dsh plugin --profile web add @zephinel/dsh-intelligent-ui`; restart the DSH process that serves the Web UI, then choose **This session only** from the **UI** control in the composer. See [Quick start](#quick-start) for the full path.
@@ -98,7 +98,7 @@ Install from npm (prerequisites are in the previous section):
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 
 # pin the current version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.0
 
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
@@ -109,7 +109,7 @@ Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, th
 **DSH Desktop** needs no terminal command — install it inside the app:
 
 1. Open **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**).
-2. Enter `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22` (or just the package name for the latest), then click **Install**.
+2. Enter `@zephinel/dsh-intelligent-ui@0.4.0` (or just the package name for the latest), then click **Install**.
 3. When the install finishes, click **Enable now**; if the **UI** control does not appear, quit and reopen DSH Desktop.
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
@@ -237,7 +237,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 ## Documentation
 
 - [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language, image and interactive-page export flows, and the Agent Skill.
-- [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch and the release layout.
+- [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch, release layout and community marketplace maintenance.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
 - [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.
 

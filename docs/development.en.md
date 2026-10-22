@@ -13,10 +13,10 @@ Requires DSH 0.2.1 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.3.0-26-10-22
+# npm; current latest is 0.4.0
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.3.0-26-10-22
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.0
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -112,6 +112,7 @@ DSH 0.2.1's `dsh-tools` accepts only `type` / `oneOf` / `properties` / `required
 | `docs/` | detailed docs (architecture, development, verification); not shipped in the npm package |
 | `CHANGELOG.md` | release changelog (English, historical, append-only); not shipped in the npm package |
 | `assets/` | README screenshots: itinerary, three component tours, dashboard and quiz examples, narrow screen, the composer switch/style panel and the plugin settings page (WebP + PNG) |
+| `screenshots.json` | curated screenshots for community markets, with paths relative to the repository root; not shipped in the npm package |
 | `icon.svg` | plugin card icon |
 | `skills/intelligent-ui/` | the embedded Agent Skill that also ships with the package |
 | `licenses/` | full text of third-party licenses (Open Intelligent UI, OpenUI, lucide, KaTeX, MapLibre, zod, SnapDOM, React) |
@@ -139,10 +140,18 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 4. create and push a tag that matches the version:
 
 ```bash
-git tag v0.3.0-26-10-22
+git tag v0.4.0
 git push origin main --follow-tags
 ```
 
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check`, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. Verify afterwards with `npm view @zephinel/dsh-intelligent-ui version dist-tags`.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
+
+## Community marketplace maintenance
+
+Once listed, continue developing and releasing through the workflow above. Each new version does not need a new listing request.
+
+- **Version updates**: publish production releases to npm's `latest` tag and confirm it with the `npm view` command above. awesome / dsh-market automatically associates the npm package that points to this repository; the current Open Plugin Market entry has no version pin and follows `latest`. Each market refreshes on its own build schedule. Keep the npm package's `repository` pointing here and retain the GitHub `dsh-plugin` topic for automatic discovery. [awesome listing rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market maintenance rules](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
+- **Screenshots**: update this repository's `screenshots.json` and the corresponding images, then push to the default branch. Keep 1-8 screenshots with valid repository-relative paths. Markets pick them up in a later build; no separate market PR or npm release is needed just to update marketplace screenshots. [Screenshot rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#screenshots--截图optional-recommended--可选推荐)
+- **Listing corrections**: update the relevant market entry when the package name, repository URL or category changes, or the description becomes outdated. For awesome, edit only `data/plugins/Zephinel__dsh-intelligent-ui.yml`; for Open Plugin Market, add details to the original [listing request](https://github.com/polang233/dsh-plugin-index/issues/40) or submit a correction request.
