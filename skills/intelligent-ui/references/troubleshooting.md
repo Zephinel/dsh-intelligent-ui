@@ -4,7 +4,7 @@
 
 ## The retry loop
 
-1. **Read the error text.** The host prefixes every rejection with `render_ui: the program is not valid openui-lang and was not shown. Fix it and call render_ui again. ` and then lists one or more findings separated by `; `. Fix **all** findings, not just the first.
+1. **Read the error text.** Fatal program-validation errors use `render_ui: the program is not valid openui-lang and was not shown. Fix it and call render_ui again. ` and then list one or more findings separated by `; `. Fix **all** findings, not just the first.
 2. **Locate the statement.** The finding names a field path (`/text`, `/children`, `/size`), a component (`Unknown component "Baz"`), a function (`Unknown function "@Magic"`) or a signature. Match it to the offending statement.
 3. **Fix the smallest thing.** A rejected program is never partially rendered, so there is no advantage in rewriting the whole page. Change the argument, the name or the missing reference.
 4. **Call `render_ui` again in the same turn.** Two or three attempts are normal; the validator errors are precise. If the same finding comes back twice, the fix did not apply — re-read the program rather than rephrasing the message.
@@ -13,7 +13,7 @@
 
 ## Preflight: call the tool, do not build a harness
 
-`render_ui` is the supported preflight, and retrying is cheap: a rejected program is never partially rendered, and a successful result that carries `Parser notes:` tells you exactly what was dropped. Do not validate a program by adding scratch scripts, tests, fixtures or build output to the extension's own checkout — not even inside a gitignored directory such as `test/renderer/.build/`. The user sees those writes as changes in a repository you were not asked to touch.
+`render_ui` is the supported preflight, and retrying is cheap: a rejected program is never partially rendered, and a successful result that carries `Notes:` tells you exactly what was dropped. Do not validate a program by adding scratch scripts, tests, fixtures or build output to the extension's own checkout — not even inside a gitignored directory such as `test/renderer/.build/`. The user sees those writes as changes in a repository you were not asked to touch.
 
 - Write any draft program to a temporary file (for example under `$TMPDIR` or `/tmp`) if it must exist on disk.
 - Treat the extension source tree as read-only while answering; the only exception is a request that explicitly asks you to change the extension itself.
@@ -36,6 +36,56 @@ render_ui is disabled for this session. Turn on Intelligent UI with the composer
 - A `Switch failed`（「切换失败」）inline label means the command request failed before it reached the switch; retry once, then report the exact failure line.
 
 ## Host error strings (verbatim) and fixes
+
+### Temporary style and operation errors
+
+These messages are copied from the current Host. Authorization and schema failures happen before program parsing.
+
+```text
+render_ui: styleId and temporaryStyle are mutually exclusive.
+render_ui: temporaryStyle requires a bound, running on-demand operation and its current tool call. The model cannot authorize one.
+render_ui: invalid temporaryStyle snapshot; use schemaVersion 1, a baseLayout, reusable directives and controlled theme tokens.
+render_ui: temporaryStyle.baseLayout must match style.
+render_ui: on-demand operation was cancelled or replaced before completion.
+render_ui: this turn is an on-demand UI request; pass a complete temporaryStyle with a matching style (omit styleId), or ask the user a clarifying question first.
+```
+
+Use only one style source. A temporary snapshot needs a Host-armed operation bound to the human message and current observed `render_ui` call; the model cannot self-authorize. Ask the user to re-arm in the composer after expiry, cancellation or restart. A text-only fallback turn keeps the operation pending (resume) so the next message can continue without re-arming; retry is offered for failed/interrupted turns. A structured question still awaiting an answer blocks rendering; wait for the built-in `ask_user_question` answer first. Match `baseLayout` and `style`, use only schemaVersion 1/controlled theme tokens and bounded reusable directives; omit styleId.
+
+For the light ink pair, the exact contrast error is below; the same format uses `dark` and/or `accent` for the other pairs:
+
+```text
+render_ui: temporaryStyle light ink/canvas contrast must be at least 3:1.
+```
+
+Raise the named pair's contrast in the named palette, targeting 4.5:1. Ratios from 3:1 to below 4.5:1 succeed with a `Temporary style … contrast is …:1; 4.5:1 is recommended.` warning.
+
+Selected-template errors identify the required template/base layout; for example:
+
+```text
+render_ui: this session uses custom style "Ocean notes"; pass styleId: "cs_ocean01" and style: "card".
+```
+
+Follow that exact id/layout outside an authorized on-demand call. If the template is gone, let the user select another style; do not fabricate it.
+
+Command and result-save failures include:
+
+```text
+Enable Intelligent UI for this session before arming on-demand UI (/iui on).
+Usage: /iui on-demand [off|<client-instance-token> [adjust <resultId>]]
+Invalid session or client instance token.
+Invalid on-demand adjustment parent result id.
+An on-demand UI operation is already running in this session; wait for it to finish or cancel it first.
+Too many active on-demand operations. Cancel one and retry.
+This result snapshot is no longer available.
+A style with this name already exists.
+The style library has reached its scope limit.
+The session must match the result.
+This template no longer exists.
+Could not save the style. Check its name, scope and theme, then retry.
+```
+
+The result registry retains only 200 records; eviction can prevent saving while recorded arguments still replay. Save from the result's extension action rather than asking the model to write templates. Re-arming replaces the previous active operation. Keep other tabs from sending in that session while armed: the hint is tab-specific, but the Host binds the next human session message.
 
 ### The program is empty
 
@@ -161,7 +211,7 @@ The program is incomplete.
 
 ### Warnings that are not fatal
 
-These do **not** throw; they come back in the success value and, in the UI, as the `Parser notes:` suffix in the tool result:
+These do **not** throw; they come back in the success value and, in the UI, as the `Notes:` suffix in the tool result:
 
 ```text
 Unresolved reference: missing
@@ -175,7 +225,7 @@ The tool result on success is:
 
 ```text
 Interactive UI rendered for the user (23 statements, card style).
-Interactive UI rendered for the user (23 statements, card style). Parser notes: Unreferenced statement (will not render): extra
+Interactive UI rendered for the user (23 statements, card style). Notes: Unreferenced statement (will not render): extra
 ```
 
 ### The tool is missing entirely
@@ -211,7 +261,7 @@ These are not errors to fix in the program; they are how the card behaves when t
 
 No error appears, yet the page is not what you intended. Check these in order:
 
-1. **Warnings** — did the success result include `Parser notes:`? Unresolved references silently null out content.
+1. **Warnings** — did the success result include `Notes:`? Unresolved references silently null out content.
 2. **Bindings not bound** — a `$` variable that no component references never changes anything visible; a control that writes an unused variable is a dead input.
 3. **Chart keys** — `Chart` needs `x` to name a key that exists in every row and `series` to name number keys. Mismatched keys render an empty plot. `@GroupBy`/`@Bucket` rows use `key` and `value`.
 4. **Map coordinates** — `MapMarker(label, lat, lng)`, in that order; swapped values put the pin in the ocean.

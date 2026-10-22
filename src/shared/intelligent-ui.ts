@@ -2,6 +2,7 @@
  * Shared contract between the Host tool half and the browser renderer half.
  * No runtime code here beyond literal constants, so both faces can import it.
  */
+import { isStyleId, type StyleId, type StyleSnapshot } from './style-templates.ts'
 
 /** Tool name the model calls; the client card keys off this exact wire name. */
 export const RENDER_UI_TOOL = 'render_ui'
@@ -22,7 +23,7 @@ export const SESSION_ENABLES = ['inherit', 'on', 'off'] as const
 export type SessionEnable = (typeof SESSION_ENABLES)[number]
 
 /** A session's style override; `inherit` follows the global answer style. */
-export type StylePreference = 'inherit' | AnswerStyle
+export type StylePreference = 'inherit' | StyleId
 
 /** One interactive answer as recorded by the tool call arguments. */
 export interface IntelligentUIProgram {
@@ -34,6 +35,11 @@ export interface IntelligentUIProgram {
   readonly title?: string
   /** Presentation style recorded with the call; absent for older calls. */
   readonly style?: PageStyle
+  /** Custom template recorded with the call, when selected by the session. */
+  readonly styleId?: string
+  /** Inline result-owned style; independent of the saved-template catalog. */
+  readonly temporaryStyle?: StyleSnapshot
+  readonly styleSource?: 'builtin' | 'template' | 'temporary'
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
 }
@@ -43,6 +49,9 @@ export interface RenderUiArgs {
   readonly program?: unknown
   readonly title?: unknown
   readonly style?: unknown
+  readonly styleId?: unknown
+  readonly temporaryStyle?: unknown
+  readonly styleSource?: unknown
 }
 
 /** Slash-command name that switches the extension on/off or changes the session style. */
@@ -60,7 +69,7 @@ export const FREE_COMPOSITION_FIELD = 'freeComposition'
 /** Volatile boolean field enabling Intelligent UI in every session by default. */
 export const GLOBAL_ENABLED_FIELD = 'globalEnabled'
 
-/** Volatile enum field with the deployment-wide default answer style. */
+/** Volatile string field with the deployment-wide default answer style. */
 export const ANSWER_STYLE_FIELD = 'answerStyle'
 
 /** Volatile string field with the image-export background color. */
@@ -112,6 +121,9 @@ export interface ExportPageCard {
   readonly style?: 'card' | 'article'
   /** Stable identity used to scope article anchors across cards. */
   readonly callId?: string
+  /** Resolved tokens for the exporting scheme, independent of a live catalog. */
+  readonly themeStyle?: Record<string, string>
+  readonly scheme?: 'light' | 'dark'
 }
 
 /** Beautification frames offered when exporting one rendered answer as an image. */
@@ -137,7 +149,7 @@ export interface IntelligentUISettings {
   /** Whether every session starts enabled; a session override still wins. */
   readonly globalEnabled?: boolean
   /** Deployment-wide default answer style; a session override still wins. */
-  readonly answerStyle?: AnswerStyle
+  readonly answerStyle?: StyleId
   /** Background color for exported images. */
   readonly exportBackground?: string
   /** Pixel scale for exported images. */
@@ -190,19 +202,32 @@ export interface IntelligentUIModeView {
   /** Deployment-wide enable switch. */
   readonly globalEnabled: boolean
   /** Deployment-wide default answer style. */
-  readonly globalStyle: AnswerStyle
+  readonly globalStyle: StyleId
   /** Effective enable state after applying the session override. */
   readonly enabled: boolean
   /** Effective answer style after applying the session override. */
-  readonly style: AnswerStyle
+  readonly style: StyleId
   /** Whether a switch/style command is still waiting for its result. */
   readonly pending: boolean
+  readonly onDemand: OnDemandView | null
+}
+
+/** Small, transient projection of the latest operation; never part of settings. */
+export interface OnDemandView {
+  readonly kind: 'generate' | 'adjust'
+  readonly parentResultId?: string
+  readonly status: 'armed' | 'running' | 'clarifying' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  readonly operationId: string
+  readonly clientInstanceId?: string
+  readonly resultIds: readonly string[]
+  /** Armed again after a text-only turn (usually a request for missing content). */
+  readonly resume?: boolean
 }
 
 /** One pending `/iui` command in the projection fold. */
 export interface IntelligentUIModeRunning {
   readonly commandId: string
-  readonly kind: 'scope' | 'style'
+  readonly kind: 'scope' | 'style' | 'on-demand'
 }
 
 /** One fold state of the switch command lifecycle for one session. */
@@ -225,5 +250,5 @@ export function isPageStyle(value: unknown): value is PageStyle {
 
 /** Type guard for a session style preference. */
 export function isStylePreference(value: unknown): value is StylePreference {
-  return value === 'inherit' || isAnswerStyle(value)
+  return value === 'inherit' || isStyleId(value)
 }

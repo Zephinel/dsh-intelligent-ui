@@ -12,6 +12,7 @@
  */
 import {
   Component,
+  type CSSProperties,
   type ErrorInfo,
   type ReactElement,
   type ReactNode,
@@ -35,6 +36,9 @@ import { fallbackT, type Translate } from '../shared/locales.ts'
 
 export interface OpenUIRendererProps {
   readonly program: string
+  /** Optional controlled template tokens scoped to this renderer host. */
+  readonly themeStyle?: CSSProperties
+  readonly scheme?: 'light' | 'dark'
   readonly title?: string
   /** Stable card identity used to scope Section/Toc anchors across cards. */
   readonly scopeId?: string
@@ -118,7 +122,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT }: OpenUIRendererProps): ReactElement {
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
   // Warnings still render; only real errors get the fallback note.
@@ -128,7 +132,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, t = fallbackT 
   return (
     <I18nProvider t={t}>
       <ArticleScope.Provider value={scopeId}>
-      <div className="dsh-iui-host dsh-iui-root">
+      <div className="dsh-iui-host dsh-iui-root" style={themeStyle} data-iui-scheme={scheme}>
         <RendererBoundary program={program}>
           {empty ? (
             <ProgramFallback message={t('fallback.noProgram')} program="" />

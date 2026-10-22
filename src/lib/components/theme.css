@@ -105,7 +105,8 @@
 /* DSH publishes the resolved light/dark mode as body[data-ds-dark-theme].
    Neutrals already flip through the theme aliases above, so this block only
    retunes colors that do not follow the neutrals. */
-body[data-ds-dark-theme] .dsh-iui-host {
+body[data-ds-dark-theme] .dsh-iui-host:not([data-iui-scheme='light']),
+.dsh-iui-host[data-iui-scheme='dark'] {
   color-scheme: dark;
   --iui-shadow: 0 4px 20px rgb(0 0 0 / 35%);
   --iui-shadow-sm: 0 1px 3px rgb(0 0 0 / 30%);

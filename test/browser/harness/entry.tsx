@@ -1,6 +1,8 @@
 import { createElement, useState, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ToggleControl } from '../../../src/client/ToggleControl.tsx'
+import { createStyleCatalog } from '../../../src/client/styles.ts'
+import { templates } from './style-fixtures.ts'
 import type { IntelligentUIModeView } from '../../../src/shared/intelligent-ui.ts'
 
 const base: IntelligentUIModeView = {
@@ -11,8 +13,18 @@ const base: IntelligentUIModeView = {
   enabled: true,
   style: 'auto',
   pending: false,
+  onDemand: null,
 }
 
+const state = window as unknown as {
+  __catalogReads: number
+  __applyFailure: boolean
+}
+Object.assign(state, { __catalogReads: 0, __applyFailure: false })
+const styles = createStyleCatalog({ fetch: async () => {
+  state.__catalogReads++
+  return new Response(JSON.stringify({ templates }))
+} })
 const calls: string[] = []
 ;(window as unknown as { __calls: string[] }).__calls = calls
 
@@ -25,9 +37,10 @@ function Harness(): ReactElement {
   return createElement(ToggleControl, {
     useProjection: () => view,
     locked: false,
+    styles,
     sessionId: 'e2e-session',
     flip: async (scope: string) => { calls.push(`enable:${scope}`); return null },
-    setStyle: async (style: string) => { calls.push(`style:${style}`); return null },
+    setStyle: async (style: string) => { calls.push(`style:${style}`); return state.__applyFailure ? 'Fixture apply failed' : null },
   } as never)
 }
 

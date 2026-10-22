@@ -35,7 +35,12 @@ import { ExportAction, type ExportActionInjected } from './ExportAction.tsx'
 import { RenderUiRow } from './RenderUiRow.tsx'
 import { SettingsPage, type SettingsFormLike, type SettingsPageInjected } from './SettingsPage.tsx'
 import { ToggleControl, type ToggleControlInjected } from './ToggleControl.tsx'
-import { enableCommand, startModeSync, styleCommand } from './commands.ts'
+import { enableCommand, onDemandCommand, startModeSync, styleCommand } from './commands.ts'
+import { clientToken } from './client-token.ts'
+import { OnDemandHint, type OnDemandHintInjected } from './OnDemandHint.tsx'
+import type { ComposerAccess } from './composer.ts'
+import { styleCatalog } from './styles.ts'
+import { styleActions } from './style-actions.ts'
 import { programsForMessage, type ExportChatSnapshot } from './export-data.ts'
 import {
   HOST_ENTRY_ID,
@@ -51,7 +56,7 @@ import './index.css'
 export const name = 'intelligent-ui'
 
 /** Services this plugin reads: locale, slots, Session bindings, and command RPC. */
-export const inject = ['locale', 'sessions', 'slots', 'uiConversation', 'remote', 'remote.commands']
+export const inject = ['locale', 'sessions', 'slots', 'uiConversation', 'conversation', 'remote', 'remote.commands']
 
 /** Stable list id for the Turn-tail contribution. */
 const CARD_ID = 'intelligent-ui'
@@ -69,6 +74,24 @@ let settingsForm: SettingsFormLike | undefined
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const token = clientToken()
+  const run = async (sessionId: SessionId, command: string): Promise<string | null> => {
+    const result = await ctx.remote.commands.execute(sessionId, command, [])
+    if (!result.ok) return `${result.error.message} (${result.error.code})`
+    if (result.value === undefined) return `unknown command: ${command}`
+    const execution = result.value as { result?: { kind?: string; text?: string } }
+    if (execution.result?.kind === 'error') return execution.result.text ?? 'Command failed'
+    return null
+  }
+  const composerFor = (sessionId: SessionId): ComposerAccess => {
+    const binding = ctx.sessions.binding(sessionId)
+    if (binding === undefined) throw new Error(`intelligent-ui: unknown session "${sessionId}"`)
+    const input = () => ctx.conversation.input.for(binding.ctx)
+    return {
+      readInput: () => input().state.getSnapshot(),
+      focusComposer: () => { input().focus() },
+    }
+  }
   // One channel per page keeps the chip/style panel consistent across tabs.
   startModeSync()
   // Both dictionaries go in one registration so every slot below can translate
@@ -87,6 +110,11 @@ export function apply(ctx: ClientContext): void {
     inject: (sessionId: SessionId): IntelligentUICardsInjected => {
       const chat = chatFor(sessionId)
       return {
+        sessionId,
+        styles: styleCatalog,
+        styleActions,
+        ...composerFor(sessionId),
+        adjustStyle: program => run(sessionId, onDemandCommand('adjust', token, program.callId)),
         keyedHooks: {
           programs: (turn: string) => {
             const snapshot = chat.getSnapshot()
@@ -113,6 +141,8 @@ export function apply(ctx: ClientContext): void {
           const snapshot = chat.getSnapshot()
           return snapshot === undefined ? [] : programsForMessage(snapshot as unknown as ExportChatSnapshot, messageId)
         },
+        styles: styleCatalog,
+        sessionId,
         settings: () => readImageExportSettings(settingsForm?.getSnapshot().value),
       }
     },
@@ -129,19 +159,30 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.input.activity',
     locale: NS,
     inject: (sessionId: SessionId): ToggleControlInjected => {
-      const run = async (command: string): Promise<string | null> => {
-        const result = await ctx.remote.commands.execute(sessionId, command, [])
-        if (!result.ok) return `${result.error.message} (${result.error.code})`
-        if (result.value === undefined) return `unknown command: ${command}`
-        return null
-      }
       return {
         sessionId,
-        flip: (scope: SessionEnable): Promise<string | null> => run(enableCommand(scope)),
-        setStyle: (style: StylePreference): Promise<string | null> => run(styleCommand(style)),
+        styles: styleCatalog,
+        styleActions,
+        focusComposer: composerFor(sessionId).focusComposer,
+        armOnDemand: clientInstanceId => run(sessionId, onDemandCommand('arm', clientInstanceId)),
+        flip: (scope: SessionEnable): Promise<string | null> => run(sessionId, enableCommand(scope)),
+        setStyle: (style: StylePreference): Promise<string | null> => run(sessionId, styleCommand(style)),
       }
     },
   }, ToggleControl))
+  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+    name: 'conversation.input.overlay',
+    id: 'intelligent-ui-on-demand',
+    locale: NS,
+    inject: (sessionId: SessionId): OnDemandHintInjected => ({
+      clientInstanceId: token,
+      ...composerFor(sessionId),
+      armOnDemand: (clientInstanceId, options) => run(sessionId, options?.kind === 'adjust' && options.parentResultId !== undefined
+        ? onDemandCommand('adjust', clientInstanceId, options.parentResultId)
+        : onDemandCommand('arm', clientInstanceId)),
+      cancelOnDemand: () => run(sessionId, onDemandCommand('cancel')),
+    }),
+  }, OnDemandHint))
   // Configuration on this bundle's Plugins detail page: global enablement, answer
   // style, free composition and the image-export defaults persisted as volatile
   // Host settings fields. Optional: a deployment without the settings domain
@@ -153,7 +194,7 @@ export function apply(ctx: ClientContext): void {
       name: 'plugins.bundle.config',
       key: PACKAGE_NAME,
       locale: NS,
-      inject: (): SettingsPageInjected => ({ settingsForm: form }),
+      inject: (): SettingsPageInjected => ({ settingsForm: form, styles: styleCatalog, styleActions }),
     }, SettingsPage))
   })
 }

@@ -6,7 +6,20 @@
  *   node --test test/host/export-routes.test.mjs
  */
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const originalHome = process.env.DSH_HOME
+const home = mkdtempSync(join(tmpdir(), 'iui-export-routes-'))
+process.env.DSH_HOME = home
+after(() => {
+  rmSync(home, { recursive: true, force: true })
+  if (originalHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = originalHome
+})
+
 const plugin = await import('../../lib/index.js')
 import {
   EXPORT_STANDALONE_CSS_PATH,

@@ -1,9 +1,10 @@
 /**
  * Composer control for the Intelligent UI session settings.
  *
- * The chip opens the scope menu (off, this session, follow global). Choosing
+ * The chip opens the scope menu (off, this session, all sessions). Choosing
  * `on` / clicking the already-active session entry opens the answer-style panel:
- * two previews, Auto/Card/Article slider, and a follow-global switch. The Host
+ * built-in and custom tiles, and a follow-global switch. All sessions retains
+ * the existing inherit semantics; it does not write the global switch. The Host
  * owns every state decision; the control forwards one explicit `/iui` command
  * and the next projection frame settles the chip.
  */
@@ -23,7 +24,10 @@ import {
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { MenuDivider, MenuItem } from './Menu.tsx'
 import { StylePicker } from './StylePicker.tsx'
+import type { StyleCatalog } from './styles.ts'
+import type { StyleActions } from './style-actions.ts'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
+import { clientToken } from './client-token.ts'
 import {
   effectiveView,
   publishMode,
@@ -38,10 +42,14 @@ import {
 export interface ToggleControlInjected {
   /** Session the control is seated in, used to match cross-tab views. */
   readonly sessionId: string
+  readonly styles: StyleCatalog
+  readonly styleActions?: StyleActions
   /** Execute one explicit enable-scope command for this session. */
   readonly flip: (scope: SessionEnable) => Promise<string | null>
   /** Execute one explicit answer-style command for this session. */
   readonly setStyle: (style: StylePreference) => Promise<string | null>
+  readonly armOnDemand?: (clientToken: string) => Promise<string | null>
+  readonly focusComposer?: () => void
 }
 
 /** Full props: standard Session kit, the composer's locked owner prop, and the injected commands. */
@@ -150,7 +158,7 @@ function DrillIcon(): ReactNode {
   )
 }
 
-/** Three-stop style glyph for the drill-in row. */
+/** Style glyph for the drill-in row. */
 function StyleIcon(): ReactNode {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
@@ -170,8 +178,12 @@ export function ToggleControl({
   useProjection,
   locked,
   sessionId,
+  styles,
+  styleActions,
   flip,
   setStyle,
+  armOnDemand,
+  focusComposer,
   t = fallbackT,
 }: ToggleControlProps): ReactNode {
   const readMode = useProjection as unknown as ModeProjectionReader
@@ -186,6 +198,9 @@ export function ToggleControl({
   const panelRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const focusStyleRef = useRef(false)
+  const focusComposerRef = useRef(false)
+  const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
+  useEffect(() => { void styles.ensure(sessionId).then(() => { if (panelOpen) return styles.refresh() }) }, [styles, sessionId, panelOpen])
 
   const sessionEnable = view?.sessionEnable ?? 'inherit'
   const pending = view?.pending === true || busy
@@ -209,11 +224,10 @@ export function ToggleControl({
     if (synced === undefined || synced.sessionId !== sessionId || projected === undefined) return
     if (synced.base === undefined || !sameView(projected, synced.base)) resetSyncedMode()
   }, [projected, sessionId, synced])
-
   const closeMenu = useCallback(() => { setOpen(false) }, [])
   const closePanel = useCallback(() => { setPanelOpen(false) }, [])
   const menuPlacement = useAnchoredPopup(open, triggerRef, { minWidth: 0, maxWidth: 320, alignEnd: true }, menuRef)
-  const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 280, maxWidth: 380, maxHeight: true })
+  const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 340, maxWidth: 460, maxHeight: true })
   const menuVisible = open && menuPlacement !== null
   const panelVisible = panelOpen && panelPlacement !== null && enabled
   usePopupDismiss(
@@ -224,6 +238,13 @@ export function ToggleControl({
     focusStyleRef.current ? '[data-style-entry="true"]' : '[data-selected="true"], button',
   )
   usePopupDismiss(panelVisible, triggerRef, panelRef, closePanel)
+  // Popup cleanup restores the chip first; return focus through the DSH facade afterwards.
+  useEffect(() => {
+    if (!panelVisible && focusComposerRef.current) {
+      focusComposerRef.current = false
+      focusComposer?.()
+    }
+  })
 
   // Hooks stay above this return: the projection may land after the first frame.
   if (view === undefined) return null
@@ -294,6 +315,21 @@ export function ToggleControl({
     })
   }
 
+  const arm = (): void => {
+    if (disabled || !enabled || armOnDemand === undefined) return
+    setError(null)
+    setBusy(true)
+    void runCommand(armOnDemand, clientToken()).then(failure => {
+      setBusy(false)
+      setError(failure === null ? null : t('onDemand.armError', { error: failure }))
+      if (failure === null) {
+        focusComposerRef.current = true
+        setPanelOpen(false)
+        setOpen(false)
+      }
+    })
+  }
+
   const items: ScopeMenuItem[] = (['off', 'on', 'inherit'] as const).map(scope => ({
     id: scope,
     label: t(SCOPES[scope].menu),
@@ -304,8 +340,8 @@ export function ToggleControl({
   // three scope rows above.
   items.push({
     id: 'style',
-    label: t('style.slider.label'),
-    hint: t('style.panel.title'),
+    label: t('style.panel.title'),
+    hint: t('style.panel.scope'),
     icon: <StyleIcon />,
     drillIn: true,
     disabled: !view.enabled,
@@ -331,16 +367,26 @@ export function ToggleControl({
             <span aria-hidden="true">‹</span>
           </button>
           <span className="dsh-iui-style-panel-title">{t('style.panel.title')}</span>
+          <span className="dsh-iui-style-panel-scope">{t('style.panel.scope')}</span>
         </div>
         <div className="dsh-iui-style-panel-body">
           <StylePicker
             value={view.sessionStyle}
             globalStyle={view.globalStyle}
+            templates={catalog.templates.filter(template => template.scope === 'global' || template.sessionId === sessionId)}
+            catalogStatus={catalog.status}
             allowInherit
             disabled={disabled}
             note={t('style.session.note')}
             footer={t('style.session.footer')}
             onChange={chooseStyle}
+            management={{ styles, actions: styleActions, onDeleted: async id => {
+              if (view.sessionStyle !== id) return
+              const failure = await runCommand(setStyle, 'auto')
+              if (failure !== null) throw new Error(failure)
+              publishMode({ ...view, sessionStyle: 'auto', style: 'auto', pending: false }, sessionId, projected)
+            } }}
+            onDemand={armOnDemand === undefined ? undefined : arm}
             t={t}
           />
           {error === null ? null : <p className="dsh-iui-style-error" role="alert">{error}</p>}
@@ -426,6 +472,7 @@ export function ToggleControl({
         <span className="dsh-iui-toggle-error" role="status" title={error}>{t('chip.error')}</span>
       )}
       {panel}
+
     </>
   )
 }

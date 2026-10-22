@@ -145,6 +145,76 @@ try {
   await cdp.waitFor('!document.querySelector(".dsh-iui-color-panel")', 'panel closes on Escape')
   assert.equal(await cdp.evaluate('document.activeElement.hasAttribute("data-dsh-iui-export-background")'), true, 'focus returns to the trigger')
 
+  // The settings picker persists saved global ids, and filters session-only templates.
+  await cdp.waitFor(`document.querySelectorAll('.dsh-iui-custom-card').length === 2`, 'global styles catalog')
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-style-id="cs_session3"]') === null`), true)
+  await cdp.waitFor(`!document.querySelector('[data-style-id="cs_ocean01"]').disabled`, 'settings picker enabled')
+  await cdp.evaluate(`document.querySelector('[data-style-id="cs_ocean01"]').click()`)
+  await cdp.waitFor(`document.querySelector('[data-style-id="cs_ocean01"]').getAttribute('aria-pressed') === 'true'`, 'custom global default saved')
+  assert.deepEqual(await cdp.evaluate('window.__calls.at(-1)'), { field: 'answerStyle', value: 'cs_ocean01' })
+  await cdp.waitFor(`!document.querySelector('[data-style-id="article"]').disabled`, 'custom write settled')
+  await cdp.evaluate(`document.querySelector('[data-style-id="article"]').click()`)
+  await cdp.waitFor(`document.querySelector('[data-style-id="article"]').getAttribute('aria-pressed') === 'true'`, 'built-in global default saved')
+  assert.deepEqual(await cdp.evaluate('window.__calls.at(-1)'), { field: 'answerStyle', value: 'article' })
+
+  // Settings has management only, global templates only, and shares the composer menus.
+  const read = expression => cdp.evaluate(expression)
+  const wait = expression => cdp.waitFor(expression, expression)
+  const click = selector => read(`document.querySelector(${JSON.stringify(selector)}).click()`)
+  const dialog = '.dsh-iui-style-popover[role=dialog]'
+  const popupButton = label => read(`[...document.querySelectorAll('.dsh-iui-style-popover button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`)
+  const setField = (selector, value) => read(`(() => {
+    const el=document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  })()`)
+  const manage = '[data-dsh-iui-manage=cs_ocean01]'
+  const menu = async () => { await read(`document.querySelector('${manage}').scrollIntoView({block:'center'})`); await click(manage); await wait('!!document.querySelector(".dsh-iui-template-menu")') }
+  assert.equal(await read('!!document.querySelector("[data-dsh-iui-on-demand-entry], [data-dsh-iui-save-result]")'), false, 'no generation workbench')
+  await read('window.__readonly(true)')
+  await wait(`document.querySelector('${manage}').disabled`)
+  assert.equal(await read('document.querySelectorAll("[data-dsh-iui-manage]:not(:disabled)").length'), 0)
+  await read('window.__readonly(false)'); await wait(`!document.querySelector('${manage}').disabled`)
+  await menu(); await popupButton('Use as global default')
+  await wait('document.querySelector("[data-style-id=cs_ocean01]").getAttribute("aria-pressed")==="true"')
+  assert.deepEqual(await read('window.__calls.at(-1)'), { field: 'answerStyle', value: 'cs_ocean01' })
+  await menu(); await popupButton('Rename'); await wait(`!!document.querySelector('${dialog} input')`)
+  await setField(`${dialog} input`, 'Ocean renamed')
+  await read('window.__styleError="duplicate_name"')
+  await popupButton('Save'); await wait(`!!document.querySelector('${dialog} [role=alert]')`)
+  assert.match(await read(`document.querySelector('${dialog} [role=alert]').textContent`), /already exists/)
+  await read('window.__styleError=""')
+  await popupButton('Save'); await wait(`!document.querySelector('${dialog}')`)
+  assert.equal(await read('document.querySelector("[data-style-id=cs_ocean01]").getAttribute("aria-pressed")'), 'true')
+  assert.match(await read('document.querySelector("[data-style-id=cs_ocean01]").textContent'), /Ocean renamed/)
+  await menu(); await popupButton('Edit preferences'); await wait(`!!document.querySelector('${dialog} textarea')`)
+  await setField(`${dialog} textarea`, 'Updated description')
+  await setField(`${dialog} textarea[maxlength="2000"]`, 'Prefer readable hierarchy.')
+  await popupButton('Save'); await wait(`!document.querySelector('${dialog}')`)
+  assert.deepEqual(await read('window.__stylePosts.at(-1)'), { op: 'update', id: 'cs_ocean01', patch: { description: 'Updated description', directives: 'Prefer readable hierarchy.' } })
+  await read(`window.__downloads=[];window.__blobs=[];URL.createObjectURL=blob=>{window.__blobs.push(blob);return 'blob:template'};
+    HTMLAnchorElement.prototype.click=function(){window.__downloads.push(this.download)}`)
+  await menu(); await popupButton('Export JSON')
+  assert.deepEqual(await read('window.__downloads'), ['cs_ocean01.json'])
+  const exported = await read('window.__blobs[0].text().then(JSON.parse)')
+  assert.equal(exported.name, 'Ocean renamed')
+  assert.equal(exported.directives, 'Prefer readable hierarchy.')
+  assert.equal(exported.theme.light.canvas, '#edf7ff')
+  await menu(); await popupButton('Delete'); await wait(`!!document.querySelector('${dialog}')`)
+  await popupButton('Cancel'); await wait(`!document.querySelector('${dialog}')`)
+  assert.equal(await read('!!document.querySelector("[data-style-id=cs_ocean01]")'), true)
+  await menu(); await popupButton('Delete'); await wait(`!!document.querySelector('${dialog}')`)
+  await read('window.__settingsFail=true')
+  await popupButton('Delete'); await wait(`!!document.querySelector('${dialog} [role=alert]')`)
+  const deleteCount = await read('window.__stylePosts.filter(p=>p.op==="delete").length')
+  await read('window.__settingsFail=false')
+  await popupButton('Delete'); await wait('!document.querySelector("[data-style-id=cs_ocean01]")')
+  assert.equal(await read('window.__stylePosts.filter(p=>p.op==="delete").length'), deleteCount)
+  assert.deepEqual(await read('window.__calls.at(-1)'), { field: 'answerStyle', value: 'auto' })
+  assert.match(await read('document.querySelector(".dsh-iui-settings").textContent'), /global default is now Auto/)
+  await read('window.__unavailable()')
+  await wait('document.querySelectorAll("[data-dsh-iui-manage]:not(:disabled)").length===0')
+
   console.log('settings-picker E2E: OK')
 } finally {
   await cleanup()

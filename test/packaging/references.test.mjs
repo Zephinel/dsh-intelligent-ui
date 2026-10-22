@@ -80,7 +80,7 @@ const contractRow = (label) => {
 }
 
 /** `required: [...]` arrays declared in the host tool schemas, in INPUT/OUTPUT order. */
-const hostRequired = [...hostSource.matchAll(/required: \[([^\]]*)\]/g)]
+const hostRequired = [...hostSource.slice(hostSource.indexOf('const PARAMETERS =')).matchAll(/^  required: \[([^\]]*)\]/gm)]
   .map((match) => [...match[1].matchAll(/'([^']+)'/g)].map((field) => field[1]))
   .filter((fields) => fields.length > 0)
 
@@ -91,12 +91,18 @@ test('the shipped integration reference matches the host render_ui schemas', () 
   const argumentsRow = contractRow('Arguments')
   for (const field of hostRequired[0]) assert.match(argumentsRow, new RegExp(`"${field}"`), `Arguments row names ${field}`)
   assert.match(argumentsRow, /additionalProperties: false/)
+  for (const field of ['styleId', 'temporaryStyle']) assert.match(argumentsRow, new RegExp(field), `Arguments row names ${field}`)
 
   const successRow = contractRow('Success value')
   for (const field of hostRequired[1]) assert.match(successRow, new RegExp(`"${field}"`), `Success value row names ${field}`)
 
+  assert.match(successRow, /styleSource/)
+  assert.match(contractRow('`temporaryStyle`'), /Host-authorized/)
+  assert.match(contractRow('`styleId`'), /Mutually exclusive/)
+
   const resultRow = contractRow('Model-visible result')
   assert.match(resultRow, /<n> statements, <style> style/, 'result row quotes the current host line')
+  assert.match(resultRow, / Notes:/, 'result row quotes the current warnings prefix')
   assert.doesNotMatch(resultRow, /\(<n> statements\)\./, 'result row drops the pre-style line')
 })
 

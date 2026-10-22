@@ -119,3 +119,30 @@ test('a valid style is kept and an invalid style is dropped', () => {
     { callId: 'call-21', program: PROGRAM, running: true },
   ])
 })
+
+test('only valid custom styleIds survive recorded argument extraction', () => {
+  for (const make of [started, settled]) {
+    for (const styleId of ['cs_abcdef', 'cs_0123456789abcdef', 'card', 'auto', 'cs_BADBAD', 'cs_short', '', null, 12, {}]) {
+      const [program] = programsFromToolNodes([make('styled', { program: PROGRAM, style: 'card', styleId })])
+      assert.equal(program.styleId, ['cs_abcdef', 'cs_0123456789abcdef'].includes(styleId) ? styleId : undefined)
+      assert.equal(program.style, 'card')
+    }
+  }
+})
+
+test('inline snapshots survive recorded argument replay without catalog access', async () => {
+  const { THEME } = await import('../host/style-fixtures.mjs')
+  const temporaryStyle = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups.', theme: THEME }
+  for (const make of [started, settled]) {
+    const [program] = programsFromToolNodes([make('temp-result', { program: PROGRAM, style: 'card', temporaryStyle })])
+    assert.deepEqual(program.temporaryStyle, temporaryStyle)
+    assert.equal(program.styleSource, 'temporary')
+    assert.equal(program.styleId, undefined)
+  }
+  for (const args of [{ temporaryStyle: {} }, { temporaryStyle, style: 'article' }, { temporaryStyle, styleId: 'cs_abcdef' }]) {
+    assert.deepEqual(programsFromToolNodes([settled('bad-temp', { program: PROGRAM, style: 'card', ...args })]), [])
+  }
+  assert.equal(programsFromToolNodes([settled('builtin', { program: PROGRAM, styleSource: 'builtin' })])[0].styleSource, 'builtin')
+  assert.equal(programsFromToolNodes([settled('template', { program: PROGRAM, styleSource: 'template' })])[0].styleSource, 'template')
+  assert.equal(programsFromToolNodes([settled('bad-source', { program: PROGRAM, styleSource: 'unknown' })])[0].styleSource, undefined)
+})

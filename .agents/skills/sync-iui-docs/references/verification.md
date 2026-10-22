@@ -6,15 +6,19 @@ Run from the repo root. Current expected values are dated 2026-10-22; derive the
 
 | Command | Expected (2026-10-22) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js ~598 kB`, `client lib/client.js ~3.56 MB`, `lib/standalone.js 3.26 MB + lib/standalone.css 497 kB`; tests: 102 total = Host 27 + Client 54 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 40 files; tarball ~3.63 MB; unpacked ~9.45 MB; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run check` | build: `host lib/index.js 624.7 KiB`, `client lib/client.js 3.59 MiB`, `lib/standalone.js 3.27 MiB + lib/standalone.css 500.7 KiB`; tests: 179 total = Host 77 + Client 81 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run pack:check` | 43 files; tarball 4,036,213 bytes (~4.04 MB); unpacked 10,215,858 bytes (~10.22 MB); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
-| `node --test test/host/*.test.mjs` | 27 pass = mode 8 + skill 3 + tool 13 + export-routes 1 + layout 2 | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 54 pass = programs 11 + toggle 10 + locales 6 + settings 7 + export-data 8 + export-image-plan 5 + export-html-plan 5 + follow-ups 2 | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
-| `npm run test:browser` | five suites: style-panel, image export, the standalone interactive page, Article layout spacing and the custom color picker (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
+| `node --test test/host/*.test.mjs` | 77 pass (mode, skill, tool, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
+| `node --test test/client/*.test.mjs` | 81 pass (programs, toggle, locales, settings, exports, follow-ups, on-demand, style-actions, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
+| `npm run test:browser` | seven suites: on-demand (85 assertions), style-panel, style-theme, image export, standalone interactive page, Article spacing and settings/template management (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
+
+## Screenshot reproduction
+
+`node scripts/capture-screenshots.mjs` captures seven production-component fixtures at 2x (layout, settings, toggle, panel, armed hint, temporary result, dark temporary result), retaining 13 README assets in total. `node scripts/capture-screenshots.mjs --dark --out-dir=/tmp/iui-r4-dark` checks all seven against fixed dark tokens without overwriting shipped light captures. Services are deterministic fakes; shell card glyphs use lucide stand-ins because DSH primitives are supplied by the live loader. These are component captures, not real-model DSH evidence.
 
 ## README and changelog structural checks
 
@@ -63,7 +67,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 const root = process.cwd()
 const files = [
-  'README.md', 'README.en.md', 'CHANGELOG.md', 'test/renderer/README.md',
+  'README.md', 'README.en.md', 'CHANGELOG.md', 'test/renderer/README.md', 'test/browser/README.md',
   'docs/architecture.md', 'docs/architecture.en.md',
   'docs/development.md', 'docs/development.en.md',
   'docs/verification.md', 'docs/verification.en.md',
@@ -148,7 +152,7 @@ NODE
 ## Known expected non-bugs (do not "fix")
 
 - `docs/verification.md` / `docs/verification.en.md` is a historical verification record; its past tense claims are not current-state claims.
-- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (40 files) is expected, not a missing shipped file.
+- `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (43 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
 - The repository and npm package are public; the README clone and GitHub Issues links are live. The prerelease version `0.3.0-26-10-22` is intentionally tagged `latest`.

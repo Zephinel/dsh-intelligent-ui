@@ -1,3 +1,5 @@
+<img src="icon.svg" alt="dsh-intelligent-ui" width="72" height="72" align="right">
+
 # dsh-intelligent-ui
 
 [中文](README.md) | English
@@ -12,7 +14,7 @@
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`** (`latest`).
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`** (`latest`). Custom styles and on-demand generation described below are **Unreleased** changes in the current checkout and have not been published.
 
 > [!TIP]
 > **Want to try it now?** Install with one command: `dsh plugin --profile web add @zephinel/dsh-intelligent-ui`; restart the DSH process that serves the Web UI, then choose **This session only** from the **UI** control in the composer. See [Quick start](#quick-start) for the full path.
@@ -53,11 +55,14 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Image export | Saves the rendered result as one PNG with a raw, rounded or card frame; background color and 1x/2x live on the Plugin detail page |
 | Interactive-page export | Saves every card from the turn as a single-file HTML page; open it in a browser to keep interacting, and `@ToAssistant` copies its message plus a paste-back-into-DSH hint |
 | Local execution | `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` writes a message back |
-| Switch and style | Global defaults on the Plugin detail page; the composer UI control overrides per session; Auto / Card / Article |
+| Switch and style | Global defaults on the Plugin detail page; composer overrides per session; built-in Auto / Card / Article and custom templates |
+| Custom templates and visual themes | Reusable display preferences with light/dark palettes, font, radius, density and shadow; use, rename, edit or delete in My styles |
+| Chat-native on-demand UI | No template required; choose On-demand UI in the UI panel, send a normal message, clarify with the built-in question tool when needed |
+| Temporary results and optional saving | Inline style snapshots are ready to use, adjust or save later; no required preview, naming or saving |
 | Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
-| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (Auto / Card / Article), Composition (Free-form layout) and Export (background color, resolution, whether images/pages remove follow-up blocks; on by default) |
-| Replayable | The generated program enters the session log as a tool argument and replays with history |
+| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (built-in or saved template), My styles management, Composition (Free-form layout) and Export (background color, resolution, whether images/pages remove follow-up blocks; on by default) |
+| Replayable | Programs and temporary styles replay from recorded tool arguments; exported pages freeze the scheme at export time |
 
 ## Getting the code
 
@@ -119,14 +124,17 @@ See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/
 
 ## Switch and answer style
 
-![The composer UI control: Off / This session only / Follow global, plus Display style below an inset divider](assets/intelligent-ui-toggle.png)
+![The composer UI control: Off / This session only / All sessions, plus Display style below an inset divider](assets/intelligent-ui-toggle.png)
 
-![The This-session style panel: Auto / Card / Article for this session, or follow the global choice](assets/intelligent-ui-style-panel.webp)
+![Style panel: built-in Auto / Card / Article cards, Custom styles and On-demand UI at the bottom](assets/intelligent-ui-style-panel.webp)
 
-- **Global defaults:** the Plugin detail page's **Enable in all sessions** decides whether new sessions start on; the **Display style** control under **Answer style** sets the default Auto / Card / Article.
-- **Session overrides:** the composer **UI** control changes only the current session; choosing **This session only** opens the style panel. `/iui on|off|inherit` and `/iui style auto|card|article|inherit` are equivalent.
-- **Auto** lets the model choose: compact Card for interactive/structured answers, Article for detailed/in-depth/long-form ones. Article pages need a `Toc`, collapsible `Section`s and substantive prose, not a skeleton.
-- Session state is written atomically to `<DSH_HOME>/dsh-intelligent-ui.json` and survives a refresh or DSH restart; see [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full semantics.
+- **Global defaults:** the Plugin detail page sets **Enable in all sessions** and **Answer style** for new sessions; choose a built-in style or a saved global template.
+- **Session overrides:** Composer **UI** chip → **This session only** or **Display style** opens the panel: built-in Auto / Card / Article preview cards, **Custom styles** (saved templates), then **On-demand UI** at the bottom. **All sessions** follows the global switch for this session without turning it on globally. Commands are `/iui on|off|inherit` and `/iui style auto|card|article|inherit|<cs_id>`.
+- **Auto** chooses compact Card for interactive/structured answers and Article for detailed/long-form ones. Article needs a `Toc`, collapsible `Section`s and substantive prose.
+- **On-demand UI:** choosing it closes the panel, focuses the composer and shows a cancellable hint with examples. Examples fill without sending and preserve the existing draft. Send normally: clear requests render directly; material ambiguity uses the built-in `ask_user_question`, then generation continues after the answer.
+- Session enable/style settings are written atomically to `<DSH_HOME>/dsh-intelligent-ui.json`. An on-demand operation changes neither setting; a temporary style is not the selected style. See [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the boundaries.
+
+![Armed on-demand hint: examples fill the composer without sending](assets/intelligent-ui-on-demand-hint.webp)
 
 ## Usage
 
@@ -136,26 +144,48 @@ With the switch on, just ask in natural language, for example:
 - "Build a gear-shifting simulator for a 7-speed bicycle"
 - "Turn these tables into a sales dashboard I can filter"
 - "Introduce Chinese history, expandable by dynasty"
+- Choose On-demand UI, then send "Make this analysis a compact dashboard; highlight key metrics with cards and charts"
+- Choose Adjust style on the result, then send "Keep the content and use a more spacious reading layout"
 
 Once enabled, **any answer with structure defaults to a card** — including explanations, introductions, timelines, stages, comparisons and things to explore; Markdown is reserved for a single fact, a one- or two-sentence reply, an explicit request for text/document/code, or repeated render failures. When the switch is off the model cannot see `render_ui` and answers in plain text — that is not a failure; turn the switch on and ask again.
 
 To guarantee a card (or when the model still replies in text), invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on; explicit invocation is treated as a direct instruction. You can also say "read the intelligent-ui skill and then build ... with render_ui".
 
-![Plugin detail page: availability, answer style, composition and export](assets/intelligent-ui-settings.webp)
+![Temporary result: badge, Adjust style and Save as template](assets/intelligent-ui-temporary-result.webp)
 
-The Plugin detail page groups its settings into **Availability**, **Answer style**, **Composition** and **Export**. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
+![The same temporary result under the fixed dark theme](assets/intelligent-ui-temporary-result-dark.webp)
+
+A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global). Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
+
+![Plugin detail page: global enable, default style, My styles management, composition and export](assets/intelligent-ui-settings.webp)
+
+The Plugin detail page groups settings into **Availability**, **Answer style**, **My styles**, **Composition** and **Export**. My styles manages saved global templates: set as default, rename, edit description/display preferences, export JSON or delete. The composer manages global and session templates visible in that session. Generation happens in the composer; settings explain the entry without providing a generation workbench. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
 
 Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It can save every card from that turn as one PNG — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — or export them as a single-file HTML page, which opens in a browser with the interactions intact; in that page `@ToAssistant` copies the message and shows the paste-back-into-DSH hint instead of calling DSH. The image contains the rendered cards only, not the Markdown text around them and not the export control itself. See [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full flow.
 
 ## Build, test and deploy
 
+For local development from a fresh clone, install dependencies, build and write the local DSH profile:
+
+```bash
+npm install
+npm run build
+node scripts/install.mjs
+```
+
+Restart the DSH process serving the Web UI, then open the URL it prints; the **UI** control on the right of the composer means it worked. There is no development server and no watch mode; see [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for details and uninstall.
+
+Everyday checks and packaging:
+
 ```bash
 npm run build       # build the prompt, Host and Client bundle
 npm run check       # build + Host/Client/packaging tests + renderer checks
 npm run pack:check  # inspect the final npm pack file list
-npm run test:browser # optional: real-browser E2E (style panel + image export + interactive page + Article spacing + custom color picker; Chrome required)
+npm run test:browser # build first; 7 browser suites: on-demand, style panel, theme, image, interactive page, Article spacing, settings (Chrome required)
 ```
 
+- Current Node tests: **179**; renderer parse/render **41/41** each, i18n **4** programs, typography **22/22**. Browser checks cover components/contracts; the on-demand main path (clear request → temporary-style card → save as template), free-form clarification when content is missing, and the real-data grounding rule have been verified with the real model in an isolated DSH Web instance; remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+- `node scripts/capture-screenshots.mjs` rebuilds panel, hint, temporary-result and settings captures at 2x in Chrome using fixed DSH tokens, production components and fake services. English UI; shell card glyphs use lucide stand-ins.
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
 
 The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall and version notes.
@@ -183,7 +213,20 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - The configuration on the Plugin detail page requires the DSH settings services: a minimal custom profile without `dsh-settings` / `dsh-client-ui-settings` does not show it, and a Host/Client version mismatch can leave the switch unavailable. Global enable/style and free-form layout only change the prompt and page shape; no model is guaranteed to follow them perfectly, and session style overrides still rely on the Host-injected prompt.
 - The interactive-page export needs the `webServer` service (included by default in DSH Web 0.2.1); a minimal custom profile without it cannot build the exported page, while image export is unaffected.
 
+- Temporary styles live in recorded tool arguments/result snapshots, outside the catalog. Replay needs the call arguments in the loaded history window. Saving later depends on the bounded result registry (latest 200 records); an evicted result may still replay but cannot be saved. Saved templates and result snapshots persist in separate JSON files under `<DSH_HOME>`.
+- Style creation/on-demand generation uses the deployment's default main-conversation model services; the extension supplies no separate generation model or draft interview service. `ask_user_question` is the structured clarification path; if unavailable, text questions are a degraded fallback — the hint stays and the next message continues the same operation without re-selecting On-demand UI (except after expiry, restart or failure).
+- Operations are in memory: armed intent expires after 10 minutes; active operations cannot resume after restart and must be re-armed. Completed results survive. There is one active operation per session: re-arming replaces it while armed, while a bound running/clarifying operation rejects re-arming until explicitly cancelled. Clarification is limited to two rounds. A text-only completion without rendering returns to the pending/resume state and the next message continues; failed/interrupted turns show Retry/Dismiss guidance.
+- Multi-tab binding is conservative: only the arming tab shows the hint, but the Host binds the next human message in the session without verifying its sending tab. Send from the arming tab and avoid concurrent messages in another tab.
+- Custom themes apply to the renderer host; portaled popovers and sandboxed iframes keep the default theme, and semantic status colors remain renderer-owned. Exported pages freeze the light/dark scheme at export time.
+- Saved-template directives are bounded display preferences (2,000 characters), with no authority over system, tool or safety rules. Limits are 40 global templates and 20 per session. Missing/deleted saved templates fall back to the default theme; inline temporary replay/export is catalog-independent.
+
 ## FAQ
+
+**Must I create a template, preview or name it first?** No. Choose On-demand UI and chat normally; use the result immediately. A name is needed only when you choose Save as template. Temporary results do not replace the selected session style.
+
+**Can I save later or keep adjusting?** Yes. Use Adjust style or Save as template on that result. Saving uses the clicked result's version, not a later result. If the registry has evicted it, saving reports an unavailable snapshot.
+
+**Why did clarification not continue generation?** A structured `ask_user_question` answer resumes the same operation; after a text question, the next message automatically continues it. Only expiry, restart, failure or interruption needs a re-arm/retry. Concurrent messages in multiple tabs may also consume the same intent.
 
 **Why does an answer come back as plain text with no card?** First check that the switch is on for that session (the **UI** control in the composer, or `/iui on`). Even then the model may treat a single fact, a one- or two-sentence reply, or an explicit text/code request as a bounded exception. To force a card, invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on. See [Usage](#usage).
 

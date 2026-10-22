@@ -131,15 +131,23 @@ try {
     assert.equal(probes[0].animationsFrozen, true, 'CSS animations are frozen for the capture')
     assert.equal(probes[0].expandedAtCapture, true, 'a collapsed card is expanded for the capture')
     assert.equal(probes[0].mapReadyAtCapture, true, 'the export waits for the map readiness signal')
+    assert.equal(probes[0].themeCanvas, '#edf7ff', 'capture uses the inline snapshot theme from the live DOM')
     assert.equal(await cdp.evaluate('document.querySelector(".dsh-iui-body").hidden'), true, 'the collapsed card is restored after the export')
 
     const raw = await cdp.evaluate(`(async () => {
       const blob = window.exportedBlobs[0]
       const bitmap = await createImageBitmap(blob)
-      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height }
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width; canvas.height = bitmap.height
+      const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0)
+      const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
+      let themedPixels = 0
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] === 237 && pixels[i + 1] === 247 && pixels[i + 2] === 255 && pixels[i + 3] === 255) themedPixels++
+      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height, themedPixels }
     })()`)
     assert.equal(raw.type, 'image/png', 'the download is a PNG')
     assert.ok(raw.size > 1000, 'the PNG carries pixels')
+    assert.ok(raw.themedPixels > 1000, 'the PNG paints the inline theme canvas color')
     assert.ok(raw.width > 0 && raw.height > 0, 'the PNG has dimensions')
 
     // A second export with the card frame must reserve room for the soft shadow
@@ -207,6 +215,8 @@ try {
     assert.match(page.text, /--standalone-css:true/, 'the fetched stylesheet is inlined')
     assert.match(page.text, /"program":"root = Col/, 'the recorded card program is embedded')
     assert.match(page.text, /"callId":"call-1"/)
+    assert.match(page.text, /"themeStyle":\{"--iui-canvas":"#edf7ff"/, 'ExportAction snapshots temporary tokens into the page payload')
+    assert.match(page.text, /"scheme":"light"/, 'the page payload fixes the exporting scheme')
     assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
 
     // With the remove-follow-ups switch on, the image capture removes the whole
@@ -228,6 +238,29 @@ try {
 
     const probesAfterAll = await cdp.evaluate('window.captureProbes')
     assert.equal(probesAfterAll.length, 4, 'the four image exports rasterized the card')
+    // Switch to a catalog-owned theme and exercise both live-DOM raster and HTML resolution.
+    await cdp.evaluate('window.setExportRemoveFollowUps(false);window.useSavedTemplate()')
+    await cdp.waitFor(`getComputedStyle(document.querySelector('.dsh-iui-host')).getPropertyValue('--iui-canvas').trim()==='#f0fff4'`, 'saved template theme applied')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed for saved export')
+    await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
+    await cdp.waitFor('!!document.querySelector("[data-export-style=raw]")', 'saved image menu')
+    await cdp.evaluate('document.querySelector("[data-export-style=raw]").click()')
+    await cdp.waitFor('window.downloads.length===6', 'saved themed PNG', { timeout: 30000 })
+    assert.equal(await cdp.evaluate('window.captureProbes.at(-1).themeCanvas'), '#f0fff4')
+    const savedPixels = await cdp.evaluate(`(async()=>{
+      const bitmap=await createImageBitmap(window.exportedBlobs[5]), canvas=document.createElement('canvas');
+      canvas.width=bitmap.width;canvas.height=bitmap.height;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);
+      const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;let count=0;
+      for(let i=0;i<pixels.length;i+=4) if(pixels[i]===240&&pixels[i+1]===255&&pixels[i+2]===244&&pixels[i+3]===255)count++;
+      return count;
+    })()`)
+    assert.ok(savedPixels>1000, 'the PNG paints the saved template canvas color')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed for saved page')
+    await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
+    await cdp.waitFor('!!document.querySelector("[data-export-page]")', 'saved page menu')
+    await cdp.evaluate('document.querySelector("[data-export-page]").click()')
+    await cdp.waitFor('window.downloads.length===7', 'saved themed HTML', { timeout: 30000 })
+    assert.match(await cdp.evaluate('window.exportedBlobs[6].text()'), /"themeStyle":\{"--iui-canvas":"#f0fff4"/, 'ExportAction resolves saved theme from catalog')
     console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {

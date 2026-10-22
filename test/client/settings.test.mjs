@@ -17,6 +17,8 @@ import { pathToFileURL } from 'node:url'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { build } from 'esbuild'
+import { createStyleCatalog } from '../../src/client/styles.ts'
+import { template } from '../host/style-fixtures.mjs'
 import { translate, zh } from '../../src/shared/locales.ts'
 
 const root = join(import.meta.dirname, '..', '..')
@@ -31,7 +33,7 @@ await build({
   platform: 'node',
   jsx: 'automatic',
   target: 'node22',
-  external: ['react'],
+  external: ['react', 'react-dom'],
   logLevel: 'silent',
 })
 const { SettingsPage } = await import(pathToFileURL(outfile).href)
@@ -57,6 +59,7 @@ function form(overrides = {}) {
  */
 function render(options = {}) {
   return renderToStaticMarkup(createElement(SettingsPage, {
+    styles: options.styles ?? createStyleCatalog(),
     settingsForm: options.form ?? form(),
     t: options.t,
   }))
@@ -75,7 +78,9 @@ test('off shows every control with its default state', () => {
   assert.match(html, /data-dsh-iui-style-picker="true"/)
   assert.match(html, /Card \(compact\)/)
   assert.match(html, /Article \(detailed\)/)
-  assert.match(html, /Display style: Auto/)
+  assert.match(html, /data-style-id="auto"[^>]+aria-pressed="true"/)
+  assert.doesNotMatch(html, /type="range"/)
+  assert.doesNotMatch(html, /Create a new style/)
   assert.doesNotMatch(html, /disabled=""/)
 })
 
@@ -85,7 +90,7 @@ test('on reflects the global enable, style, and free-composition values', () => 
   assert.match(html, /On: new sessions start with Intelligent UI enabled/)
   assert.match(html, /On: the model may choose the page structure/)
   assert.match(html, /data-active="true"/)
-  assert.match(html, /Display style: Article/)
+  assert.match(html, /data-style-id="article"[^>]+aria-pressed="true"/)
 })
 
 test('image export shows its defaults: white background and 2x', () => {
@@ -134,4 +139,20 @@ test('the Chinese dictionary localizes the page copy', () => {
   assert.match(html, /图片与交互页面导出的默认外观和选项/)
   assert.match(html, /背景颜色/)
   assert.match(html, /分辨率/)
+})
+
+
+test('stored custom styles stay selected; missing references render a fallback note', async () => {
+  const saved = template()
+  const styles = createStyleCatalog({ fetch: async () => ({ ok: true, json: async () => ({ templates: [saved] }) }) })
+  await styles.ensure()
+  const html = render({ styles, form: form({ value: { answerStyle: saved.id } }) })
+  assert.match(html, /Custom styles \(1\)/)
+  assert.match(html, /Field notes/)
+  assert.match(html, new RegExp(`data-style-id="${saved.id}"[^>]+aria-pressed="true"`))
+  const missing = render({ form: form({ value: { answerStyle: saved.id } }) })
+  assert.match(missing, /Style unavailable; using the default/)
+  assert.doesNotMatch(missing, /data-style-id="(?:auto|card|article)"[^>]+aria-pressed="true"/)
+  const invalid = render({ form: form({ value: { answerStyle: 'not-a-style' } }) })
+  assert.match(invalid, /data-style-id="auto"[^>]+aria-pressed="true"/)
 })

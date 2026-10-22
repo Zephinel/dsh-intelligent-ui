@@ -2,7 +2,7 @@
  * Configuration on the Plugins detail page for the Intelligent UI extension.
  *
  * The page owns the deployment-wide defaults: the global on/off switch, the
- * default answer style (`auto`, `card`, or `article`), the free-composition
+ * default answer style (built-in or custom), the free-composition
  * preference, and the image-export background and scale. All of them are
  * volatile fields in the Host settings document (entry id `intelligent-ui`).
  * The composer's UI panel only overrides availability and style for one
@@ -25,13 +25,14 @@ import {
   FREE_COMPOSITION_FIELD,
   GLOBAL_ENABLED_FIELD,
   isExportBackground,
-  isAnswerStyle,
   readImageExportSettings,
-  type AnswerStyle,
   type ExportScale,
   type IntelligentUISettings,
 } from '../shared/intelligent-ui.ts'
 import { StylePicker } from './StylePicker.tsx'
+import { isStyleId } from '../shared/style-templates.ts'
+import type { StyleCatalog } from './styles.ts'
+import type { StyleActions } from './style-actions.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
 /** Settings document state the page renders from. */
@@ -61,6 +62,8 @@ export interface SettingsFormLike {
 
 /** Business face injected by the plugin registration. */
 export interface SettingsPageInjected {
+  readonly styles: StyleCatalog
+  readonly styleActions?: StyleActions
   /** Shared form for the `intelligent-ui` Host settings namespace. */
   readonly settingsForm: SettingsFormLike
 }
@@ -123,18 +126,21 @@ function SwitchRow({
  * @param props - bundle-config owner props, the injected form, and the locale seat.
  * @returns the page content, or disabled controls with a state note.
  */
-export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps): ReactNode {
+export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT }: SettingsPageProps): ReactNode {
   const subscribe = useCallback((listener: () => void): (() => void) => settingsForm.subscribe(listener), [settingsForm])
   const getSnapshot = useCallback((): SettingsFormSnapshot => settingsForm.getSnapshot(), [settingsForm])
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
+  useEffect(() => { void styles.ensure() }, [styles])
   const [pending, setPending] = useState<PendingField | null>(null)
   const [failed, setFailed] = useState(false)
+  const [deletedDefault, setDeletedDefault] = useState(false)
   const idPrefix = useId()
   const noteId = useId()
 
   const globalEnabled = snapshot.value?.globalEnabled === true
   const storedStyle = snapshot.value?.answerStyle
-  const answerStyle: AnswerStyle = isAnswerStyle(storedStyle) ? storedStyle : 'auto'
+  const answerStyle = isStyleId(storedStyle) ? storedStyle : 'auto'
   const free = snapshot.value?.freeComposition === true
   const exportSettings = readImageExportSettings(snapshot.value)
   // Custom background picker: a preset palette plus a hex field, no native
@@ -255,11 +261,15 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
             {t('settings.style.label')}
           </h3>
           <p className="dsh-iui-settings-group-hint">{t('settings.style.note')}</p>
+          <p className="dsh-iui-settings-group-hint">{t('onDemand.settingsNote')}</p>
         </div>
         <div className="dsh-iui-settings-style">
           <StylePicker
             value={answerStyle}
             globalStyle={answerStyle}
+            templates={catalog.templates.filter(template => template.scope === 'global')}
+            showTemplates={false}
+            catalogStatus={catalog.status}
             disabled={disabled}
             note={t('style.global.note')}
             footer={t('style.global.footer')}
@@ -267,6 +277,23 @@ export function SettingsPage({ settingsForm, t = fallbackT }: SettingsPageProps)
             t={t}
           />
         </div>
+      </div>
+
+      <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-templates`}>
+        <div className="dsh-iui-settings-group-head">
+          <h3 id={`${idPrefix}-templates`} className="dsh-iui-settings-group-title">{t('template.settingsTitle')}</h3>
+          <p className="dsh-iui-settings-group-hint">{t('template.settingsNote')}</p>
+        </div>
+        <StylePicker value={answerStyle} globalStyle={answerStyle}
+          templates={catalog.templates.filter(template => template.scope === 'global')} catalogStatus={catalog.status}
+          showBuiltins={false} disabled={disabled} t={t}
+          onChange={value => { void save(ANSWER_STYLE_FIELD, value) }}
+          management={{ styles, actions: styleActions, global: true, onDeleted: async id => {
+            if (answerStyle !== id) return
+            if (!(await settingsForm.set(ANSWER_STYLE_FIELD, 'auto'))) throw new Error('Default style update failed')
+            setDeletedDefault(true)
+          } }} />
+        {deletedDefault ? <p className="dsh-iui-style-note" role="status">{t('template.deletedDefault')}</p> : null}
       </div>
 
       <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-composition`}>

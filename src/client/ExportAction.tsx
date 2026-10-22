@@ -19,19 +19,23 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   BEAUTIFY_STYLES,
   type BeautifyStyle,
-  type ExportPageCard,
   type ImageExportSettings,
   type IntelligentUIProgram,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { messageHasRenderUi, type ExportChatSnapshot } from './export-data.ts'
 import { exportCardsHtml } from './export-html.ts'
+import { exportTemplatesFor, programsToExportCards } from './export-html-plan.ts'
+import { useStyleScheme } from './theme-mode.ts'
+import type { StyleCatalog } from './styles.ts'
 import { MenuDivider, MenuItem } from './Menu.tsx'
 import { exportCardsImage } from './export-image.ts'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
 
 /** Business face injected by the plugin registration. */
 export interface ExportActionInjected {
+  readonly styles?: StyleCatalog
+  readonly sessionId?: string
   /**
    * Read every program rendered by the message's Turn.
    * @param messageId - durable assistant message identity.
@@ -81,9 +85,10 @@ type ExportStatus = 'idle' | 'working' | 'empty' | 'done' | 'error'
  * @returns the icon button plus its portal menu, or null for answers that never rendered UI.
  */
 export function ExportAction({
-  messageId, programsFor, settings, useChat, t = fallbackT,
+  messageId, programsFor, settings, styles, sessionId, useChat, t = fallbackT,
 }: ExportActionProps): ReactNode {
   const visible = useChat(snapshot => messageHasRenderUi(snapshot, String(messageId)))
+  const scheme = useStyleScheme()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<BeautifyStyle | 'page' | null>(null)
   const [status, setStatus] = useState<ExportStatus>('idle')
@@ -216,12 +221,9 @@ export function ExportAction({
     setLastKind('page')
     setStatus('working')
     try {
-      const cards: ExportPageCard[] = programs.map(program => ({
-        program: program.program,
-        title: program.title,
-        style: program.style === 'article' ? 'article' : 'card',
-        callId: program.callId,
-      }))
+      await styles?.ensure(sessionId)
+      const templates = exportTemplatesFor(styles?.getSnapshot(), sessionId)
+      const cards = programsToExportCards(programs, scheme, templates)
       await exportCardsHtml({
         cards,
         title: programs[0]?.title,

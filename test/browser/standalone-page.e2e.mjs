@@ -13,7 +13,9 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildStandaloneHtml } from '../../src/client/export-html-plan.ts'
+import { buildStandaloneHtml, programsToExportCards } from '../../src/client/export-html-plan.ts'
+import { programsFromToolNodes } from '../../src/client/programs.ts'
+import { THEME, template } from '../host/style-fixtures.mjs'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 
 const root = new URL('../../', import.meta.url).pathname
@@ -57,6 +59,18 @@ try {
     removeFollowUps: true,
   })
   await writeFile(join(temp, 'hidden.html'), hiddenHtml)
+  const recorded = programsFromToolNodes([{ root: { kind: 'tool-result', name: 'render_ui', callId: 'inline-result', isError: false,
+    call: { name: 'render_ui', argsRaw: JSON.stringify({ program: 'root = Card([Title("Inline export"), Text("Snapshot body")])', style: 'card',
+      temporaryStyle: { schemaVersion: 1, baseLayout: 'card', directives: 'Use clear hierarchy.', theme: THEME } }) },
+  } }])
+  // Each card carries the scheme it was exported in, independent of the page/system scheme.
+  const themedCards = ['light', 'dark'].flatMap(scheme => programsToExportCards(recorded, scheme).map(card => ({ ...card, callId: scheme })))
+  const saved = template({ theme: { ...THEME, light: { ...THEME.light, canvas: '#eaf4ff' } } })
+  const savedProgram = { callId: 'saved', program: 'root = Card([Title("Saved template export"), Text("Saved theme body")])', style: 'card', styleId: saved.id, running: false }
+  themedCards.push(...['light', 'dark'].flatMap(scheme => programsToExportCards([savedProgram], scheme, [saved])
+    .map(card => ({ ...card, callId: `saved-${scheme}` }))))
+  await writeFile(join(temp, 'themed.html'), buildStandaloneHtml({ cards: themedCards, js, css, tokens: PAGE_TOKENS,
+    colorScheme: 'light', title: 'Inline snapshot export', lang: 'en', removeFollowUps: false }))
 
   server = await startStaticServer(temp)
   browser = await launchChrome({ url: server.url + 'index.html', width: 900, height: 1200 })
@@ -117,7 +131,31 @@ try {
   assert.doesNotMatch(hidden.text, /Standalone harness/, 'the hidden card contributes no text')
   assert.match(hidden.text, /Root follow-up body/, 'prose next to a root-level follow-up is preserved')
   assert.match(hidden.text, /Action card/, 'the normal action card stays visible')
-  console.log('standalone-page E2E: OK')
+  await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] })
+  await cdp.send('Page.navigate', { url: server.url + 'themed.html' })
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-host").length === 4', 'inline and saved themed exports')
+  await cdp.evaluate('document.body.setAttribute("data-ds-dark-theme", "")')
+  for (const scheme of ['light', 'dark']) {
+    const actual = await cdp.evaluate(`(() => { const host = document.querySelector('[data-iui-scheme="${scheme}"]'), css = getComputedStyle(host);
+      return { canvas: css.getPropertyValue('--iui-canvas').trim(), ink: css.getPropertyValue('--iui-ink').trim(),
+        scheme: css.colorScheme, chart2: css.getPropertyValue('--iui-chart-2').trim(), fallback: !!host.querySelector('.dsh-iui-fallback') } })()`)
+    assert.equal(actual.canvas, THEME[scheme].canvas)
+    assert.equal(actual.ink, THEME[scheme].ink)
+    assert.equal(actual.scheme, scheme)
+    assert.equal(actual.chart2, scheme === 'light' ? '#00a67d' : '#22bf91', 'forced scheme controls semantic CSS too')
+    assert.equal(actual.fallback, false)
+  }
+  for (const scheme of ['light', 'dark']) {
+    const actual = await cdp.evaluate(`(() => { const host = document.querySelectorAll('[data-iui-scheme="${scheme}"]')[1], css = getComputedStyle(host);
+      return { canvas: css.getPropertyValue('--iui-canvas').trim(), ink: css.getPropertyValue('--iui-ink').trim(), scheme: css.colorScheme,
+        fallback: !!host.querySelector('.dsh-iui-fallback'), text: host.textContent } })()`)
+    assert.equal(actual.canvas, saved.theme[scheme].canvas)
+    assert.equal(actual.ink, saved.theme[scheme].ink)
+    assert.equal(actual.scheme, scheme)
+    assert.equal(actual.fallback, false)
+    assert.match(actual.text, /Saved theme body/)
+  }
+  console.log('standalone-page E2E: OK (3 normal cards; 2 inline + 2 saved-template theme exports, forced light/dark)')
 } finally {
   await cleanup()
 }

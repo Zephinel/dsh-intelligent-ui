@@ -56,7 +56,7 @@ test('the published files list covers every runtime and bundle input', () => {
 
 test('every shipped screenshot exists and is used by both READMEs', () => {
   const screenshots = readdirSync(new URL('assets', root))
-  assert.ok(screenshots.length >= 3, 'assets ships the README screenshots')
+  assert.equal(screenshots.length, 13, 'assets ships the current README screenshot set')
   for (const image of screenshots) {
     assert.ok(existsSync(new URL(`assets/${image}`, root)), `assets/${image} exists`)
     assert.ok(read('README.md').includes(`assets/${image}`), `README.md uses ${image}`)

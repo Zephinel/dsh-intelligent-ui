@@ -14,6 +14,11 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { snapdom } from '@zumer/snapdom'
 import { OpenUIRenderer } from '../../../src/lib/render.tsx'
+import { resolveStyleThemeVars } from '../../../src/lib/style-theme.ts'
+import type { StyleSnapshot } from '../../../src/shared/style-templates.ts'
+import type { IntelligentUIProgram } from '../../../src/shared/intelligent-ui.ts'
+import { createStyleCatalog } from '../../../src/client/styles.ts'
+import { templates } from './style-fixtures.ts'
 import { ExportAction } from '../../../src/client/ExportAction.tsx'
 import type { ExportChatSnapshot } from '../../../src/client/export-data.ts'
 import { fallbackT } from '../../../src/shared/locales.ts'
@@ -51,7 +56,10 @@ const SNAPSHOT = {
   },
 } as unknown as ExportChatSnapshot
 
-const PROGRAMS = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', running: false }]
+const temporaryStyle: StyleSnapshot = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups and clear hierarchy.', theme: templates[0].theme }
+const PROGRAMS: IntelligentUIProgram[] = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', running: false, temporaryStyle }]
+const savedTemplates = [{ ...templates[0], theme: { ...templates[0].theme, light: { ...templates[0].theme.light, canvas: '#f0fff4' } } }]
+const styles = createStyleCatalog({ fetch: async () => new Response(JSON.stringify({ templates: savedTemplates })) })
 const SETTINGS: { background: string; scale: '1x' | '2x'; removeFollowUps: boolean } = { background: '#ffffff', scale: '1x', removeFollowUps: false }
 
 // The SearchImage component searches Wikipedia for its photo. Keep the E2E
@@ -102,13 +110,18 @@ function FakeMap(): ReactElement {
 /** One collapsible card shell matching the rendered-answer chrome. */
 function Card(): ReactElement {
   const [collapsed, setCollapsed] = useState(true)
+  const [saved, setSaved] = useState(false)
+  ;(window as any).useSavedTemplate = () => {
+    PROGRAMS[0] = { ...PROGRAMS[0], temporaryStyle: undefined, styleId: savedTemplates[0].id }
+    setSaved(true)
+  }
   return (
     <section className="dsh-iui-card" data-dsh-intelligent-ui="card">
       <button type="button" className="dsh-iui-header" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>
         <span className="dsh-iui-title" data-dsh-iui-title>Export harness</span>
       </button>
       <div className="dsh-iui-body" hidden={collapsed}>
-        <OpenUIRenderer program={PROGRAM} title="Export harness" />
+        <OpenUIRenderer program={PROGRAM} title="Export harness" themeStyle={resolveStyleThemeVars(saved ? savedTemplates[0].theme : temporaryStyle.theme, 'light')} scheme="light" />
         <FakeMap />
       </div>
     </section>
@@ -130,6 +143,8 @@ function App(): ReactElement {
       >
         <button type="button" aria-label="copy">copy</button>
         <ExportAction
+          styles={styles}
+          sessionId="e2e-session"
           messageId={VISIBLE_MESSAGE as never}
           programsFor={() => PROGRAMS}
           settings={() => SETTINGS}
@@ -175,6 +190,7 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
   const photo = element.querySelector<HTMLImageElement>('.iui-image img')
   const body = element.querySelector<HTMLElement>('.dsh-iui-body')
   ;(window as unknown as { captureProbes: unknown[] }).captureProbes.push({
+    themeCanvas: getComputedStyle(element.querySelector('.dsh-iui-host')!).getPropertyValue('--iui-canvas').trim(),
     flipFlattened: inner !== null && inner !== undefined && getComputedStyle(inner).transform === 'none',
     frontHidden: front !== null && front !== undefined && getComputedStyle(front).display === 'none',
     backUnrotated: back !== null && back !== undefined && getComputedStyle(back).transform === 'none',

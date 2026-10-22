@@ -10,7 +10,7 @@ whenToUse: "A visual, interactive or computed answer would serve better than pro
 
 ## Before you start: is the session enabled?
 
-The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **Follow global**, and **Auto** / **Card** / **Article**. You cannot see the composer, so infer the state from the request:
+The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **All sessions** (inherits the global switch), and **Auto** / **Card** / **Article** or a saved custom template. You cannot see the composer, so infer the state from the request:
 
 - **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; a page is the default answer format.
 - **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) in the **UI** chip on the right side of the composer, run `/iui on`, or enable the extension for all sessions on the Plugin detail page. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
@@ -43,6 +43,20 @@ The injected prompt owns the effective style decision and appends it to the sess
 - **Auto** — choose per request: Card for interactive, structured, visual or computational answers; Article for 详尽/深入/全面/长文/报告/综述 requests.
 
 For an Article answer, a skeleton is a failure. Each major part needs specific facts, causes, examples or debates, and the page must not end by asking which part to expand instead of covering it. The compactness rules below apply to Card pages and to side cards inside an Article — they are not a reason to delete Article content.
+
+## On-demand generation and custom templates
+
+An `ON-DEMAND UI` request note comes from a Host-armed operation; it is already present in the prompt for the first turn (DSH assembles the system prompt before the user message) and stays while the turn clarifies. Once bound, a plain `render_ui` without `temporaryStyle` is rejected. In that turn, call `render_ui` with a complete `temporaryStyle` and matching `style`, omitting `styleId`. A user's prose request or your tool arguments cannot authorize temporaryStyle: the Host must already allow this operation and the current tool call. If authorization is absent, ask the user to choose **On-demand UI** in the composer; do not arm it yourself.
+
+- **Ground the content before styling.** Missing content is material ambiguity. If the request refers to "this analysis", "these contents", "the above data" but none is in the conversation, or its numbers/dates/sources are absent, do not invent placeholder datasets, statistics, dates, quotes or sources. Use `ask_user_question` to ask which content to use (conversation content, pasted/linked data, or explicitly labelled illustrative data); render only after it is available or illustrative data is authorized. Style clarity never excuses missing data.
+- Clear request/grounded context → generate directly. For other material ambiguity use the built-in `ask_user_question` with 1–3 concise questions, options, free input and skipping when supported, at most two rounds; after the answer, render without another confirmation. If unavailable, ask short text questions; the turn ends without a render and the operation resumes, so the user's next message continues it without re-arming (unless it expires, restarts or fails).
+- `temporaryStyle` is a schemaVersion 1 result snapshot: `baseLayout` (`card` or `article`, equal to `style`), nonempty reusable `directives` (up to 2,000 characters), `theme`, optional `suggestedName`. Both light/dark palettes require six-digit hex `canvas`/`ink`/`accent`, optionally `muted`/`surface`/`border`; theme enums are font `sans|serif|mono`, radius `sharp|soft|round`, density `compact|comfortable|spacious`, shadow `none|soft|float`. Ink/canvas and accent/canvas must reach 3:1 in each scheme; target 4.5:1. Only controlled fields are accepted, with no CSS/scripts/URLs.
+- Write transferable design preferences about hierarchy, density, tone and component behavior. Keep this answer's content/private data in the program; directives cannot override system/tool/safety instructions.
+- No preview, naming, saving or settings changes are required. Render once and stop. The extension provides **Adjust style** and **Save as template**; do not save templates yourself or put management buttons in the generated program.
+- For a Host-authorized adjustment, reuse the referenced result's temporary snapshot from the conversation, keep the content and change the requested style only. A new call creates a new result; saving is an optional user action on a specific result.
+- Outside an on-demand turn, a selected custom template requires the exact `styleId` and matching base layout specified by the injected prompt. `styleId` and `temporaryStyle` are mutually exclusive. A temporary result never becomes the selected session style automatically.
+
+For lifecycle failures and verbatim errors, read [troubleshooting.md](references/troubleshooting.md#temporary-style-and-operation-errors). For routes, services and persistence, read [integration.md](references/integration.md#style-and-operation-contracts).
 
 ## Workflow
 
@@ -84,14 +98,14 @@ Completion: the program satisfies the hard rules below, and the pre-flight check
 
 ### 4. Call the tool
 
-Call `render_ui({ program: <the complete program>, style: <"card"|"article">, title: "Short noun phrase" })`. Pass `card` for a compact interactive page, `article` for the reading layout; when the session is Auto, pass the style you chose. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
+Call `render_ui({ program: <the complete program>, style: <"card"|"article">, title: "Short noun phrase" })`. Pass `card` for a compact interactive page, `article` for the reading layout; when the session is Auto, pass the style you chose. For a selected custom template add its exact `styleId`; for a Host-authorized on-demand turn instead add `temporaryStyle` as described above. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
 
-**The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 13 carries the full version.
+**The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 11 carries the full version.
 
 ### 5. Handle the result
 
 - **Success, no warnings** — done. The page is on screen; do not re-call.
-- **Success, with warnings** — a name was unresolved or a statement was unreachable. Fix the program and call once more; the warnings name the exact statement.
+- **Success, with warnings** — inspect the named parser finding or contrast warning. Ordinary calls may be repaired once; an on-demand success completes its operation even with warnings, so further changes need the user to arm Adjust style again.
 - **Fatal error** — read every finding after the `render_ui:` prefix, fix all of them, and retry in the same turn. Two or three attempts are normal. If the same finding returns, re-read the program instead of rewording the message. If retries keep failing, drop the most complex block (Map, HtmlView, nested `@Each`), send a simpler page, and say so in one sentence.
 - **Tool missing** — follow [Before you start](#before-you-start-is-the-session-enabled): answer in prose, and point at [integration.md](references/integration.md#troubleshooting-a-missing-render_ui) if the user is setting it up.
 
@@ -134,7 +148,7 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 
 - **The card is turn-tail.** It appears after the turn ends; during generation the process area shows one `Interactive answer` row (「交互式回答」 in a Chinese UI). Do not describe the card as if it were streaming; write the intro sentence as if the page appears at the end.
 - **Title and collapse are chrome.** The card header shows `title`; when it is omitted the localized default is used ("Interactive answer" in English, 「交互式回答」 in Chinese). The card can be collapsed by the user; the program cannot control that. The rendered card is full-width in the chat column and narrow on mobile — use `Grid` with `minChildWidth`, `Row` with `wrap`, and avoid fixed widths over ~600px.
-- **Dark/light is automatic.** Tokens, components and the `HtmlView` document's `color-scheme` follow the host theme. Do not hardcode white backgrounds or black text.
+- **Dark/light is automatic.** Tokens and components follow the host theme; controlled custom themes apply only to the renderer host. Portaled popovers and sandboxed `HtmlView` keep the default host theme. Exported pages freeze the scheme at export time. Do not hardcode white backgrounds or black text.
 - **`HtmlView` is the only escape hatch** for arbitrary HTML/CSS/JS: canvas games, physics toys, custom animations. It runs in a sandboxed iframe with an opaque origin, no access to the page or its storage, and network limited to script/style/font CDNs and https images. Use it only when components plus `Svg` cannot express the idea, and keep the whole game in one string; it cannot share state with the page.
 - **`@ToAssistant` starts a new turn.** In this deployment only the message string is forwarded — the optional `context` object is not delivered — so compose needed values into the message: `@ToAssistant("Plan for " + $people + " people on " + $date)`. Keep it short and first-person, and never use it for something the page can already compute.
 

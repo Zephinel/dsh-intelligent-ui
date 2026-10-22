@@ -52,13 +52,13 @@ npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run check          # build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
-npm run test:browser   # optional real-browser E2E (style panel + image export + interactive page + Article spacing + color picker; Chrome required)
+npm run test:browser   # 7 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings
 ```
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.
 - `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version that is invoked "through the render_ui tool", and owns the decision policy (enabled sessions default to a page, prose is a bounded exception, explicit invocation is a directive) plus the layout/spacing contract (the renderer owns the page rhythm; the model does not add root gaps or manual blank blocks); rebuild after editing.
 - `scripts/install.mjs`: profile install/uninstall for a local checkout (writes a marked patch block, with automatic backup).
-- `scripts/capture-screenshots.mjs`: re-captures the two design-system README screenshots (component tour and Plugin detail page) into `assets/` at 2x. It embeds a fixed light-theme token set and needs no running DSH, but it does need a local Chrome (it skips when Chrome is absent). When the component counts, the settings page or the theme tokens change, update the program, assertions and tokens in the script and re-run; do not hand-edit the images.
+- `scripts/capture-screenshots.mjs`: `node scripts/capture-screenshots.mjs` captures the component tour, UI menu/style panel, armed hint, temporary result (light/dark) and settings at 2x in Chrome. Fixed tokens, production components and fake projection/catalog/form services need no DSH; shell card glyphs use lucide stand-ins. `--dark --out-dir=/tmp/iui-dark` reruns all captures in dark mode in a separate directory; skips without Chrome. Never hand-edit images.
 - `src/lib/**`: the port of the upstream component library and 59 library `@functions`; `src/lib/render.tsx` is the DSH wrapper (theme isolation, error boundary, `@ToAssistant` backfill), and `src/lib/i18n.tsx` gives renderer components their `t` seat plus the English fallback.
 - `src/client/**`: DSH Slot registrations (the composer UI switch, the Plugin detail page `plugins.bundle.config` and the export entry in the message action strip), the turn-tail card, the `render_ui` process line, the program extractor, export message/Turn lookup, the image-export pipeline (SnapDOM plus frame composition), interactive-page assembly (asset fetch + theme snapshot + inline HTML), and the `ctx.locale` dictionary registration.
 - `src/standalone/**`: the standalone page entry and chrome (card title/collapse, `@ToAssistant` copy fallback, theme styles); `npm run build` emits `lib/standalone.*`, and the Host serves them on same-origin routes for the export flow.
@@ -94,6 +94,10 @@ The Host half loads only at **process start**; the browser half is re-fetched fr
 - the old Host's success messages are also the old ones (for example "already off for this session").
 
 When you see this mixed state, first **restart the DSH process that serves the Web UI** (then refresh the page) so both halves switch to the current build; `/iui on` then returns the normal success message. The same applies to plugin upgrades after release: after a bundle update the host must be restarted, not merely refreshed.
+
+### Tool JSON Schema subset (activation failure triage)
+
+DSH 0.2.1's `dsh-tools` accepts only `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` plus annotations (`description` / `title` / `default` / `examples`). If `render_ui` parameters or output use `maxLength` / `minLength` / `pattern` / `format`, registration throws `JsonSchemaError`: the plugin entry shows **Problem**, the settings page reports no settings service, and the composer UI control disappears. Put limits in `description` and enforce them in execute; `test/host/tool.test.mjs` guards the parameter and output schemas with the same subset rules, and the installed `dsh-tools` `assertSupportedJsonSchema` can verify the build directly. These errors surface only when the Host activates; restart the host after fixing.
 
 ## Layout (release-related)
 

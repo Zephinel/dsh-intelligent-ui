@@ -12,7 +12,7 @@ End-to-end verification was performed on a second, isolated DSH Web instance (po
 - The component overview page, the San Francisco itinerary, the coffee calculator and the SVG origami tutorial all render correctly; photos (Wikipedia/Wikimedia), MapLibre maps + pins, charts, forms, timers, flip cards, confetti and HtmlView animations work.
 - Interaction: checking timeline items updates counts, the SegmentedControl stays in sync, and form and button states behave; the dark theme switches automatically.
 - Responsive: no horizontal overflow at 390 / 546 / 768 / 1092 px (the scoped `box-sizing` reset the component library relies on was added).
-- Tests: `npm run check` is fully green — Host 27 (including global enable/style, session overrides, cross-tab broadcast, projection/commands/tool style validation and Article structure enforcement, settings/prompt style injection, the interactive-page asset routes, and layout/spacing warnings), Client 54 (including the style control/panel/slider, bilingual dictionaries, settings page global enable/style/image-export settings, program style parsing, cross-tab broadcast, export message/Turn lookup, image-frame/shadow-bleed geometry, and standalone page assembly), packaging 21 (including the component/function catalog, 57-component count, SKILL.md counts, bilingual README links, CHANGELOG and screenshot consistency, the prompt/Skill read-only-checkout guardrail, the layout/spacing contract guardrail, the article/Section/Toc documentation guardrail, and the enabled-session "page by default / explicit invocation is a directive" policy guard, plus the `render_ui` tool contract and shipped file count guards), renderer parsing 41/41, SSR 41/41, i18n render check for 4 programs (zh + en fallback), typography check 22/22 (currency tracking, CJK tracking, in-card title scale, narrow-screen wrapping and chart labels); the `npm pack` artifact is about 3.63 MB / 40 files (9.45 MB unpacked); the README screenshots now cover the 57-component tour, examples, the composer switch/style panel and the plugin settings page (WebP + PNG).
+- Tests (live subclaims, 2026-10-22 R4): `npm run check`: 179/179 (Host 77 + Client 81 + packaging 21); renderer parse 41/41, SSR 41/41, contrast OK, i18n 4 programs, typography 22/22; `npm run pack:check`: 43 files, tarball 4,036,213 bytes, unpacked 10,215,858 bytes. Older browser/model records below remain historical; current evidence and boundaries are in the appended R4 record.
 - **Agent Skill end-to-end**: in a real DSH session the model called `skill { name: "intelligent-ui" }` and successfully loaded `<skill_content>` (15 KB body + a hint about the references base directory), then used `render_ui` as described by the skill to generate and render a verification page.
 - **Bundle install path**: the `npm pack` artifact was installed into a throwaway profile (`~/.dsh/profiles/zbundle-test`, depending on `file:/tmp/…tgz` + `dsh.profile.bundles`); `dsh --profile zbundle-test --dump-config` exited 0, and its output contained `# == @zephinel/dsh-intelligent-ui` and the inserted row `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'` (cleaned up after verification).
 - **Three-state switch end-to-end (0.2.1-era record):** with the default "Off", requests contain no `render_ui` and the prompt is empty; after choosing "This session only", requests in that session carry the tool and the prompt and render a card, while a newly opened session is still off; after choosing "All sessions", newly opened sessions carry the tool and prompt directly; after choosing "Off", the file is cleared and new sessions again have neither tool nor prompt; control state syncs between two tabs over BroadcastChannel; the state file `{ "global": false, "sessions": [] }` and the projection behave as expected. The 0.3 session switch/style overrides and Article page still need live verification.
@@ -31,3 +31,103 @@ End-to-end verification was performed on a second, isolated DSH Web instance (po
 - **Platform coverage**: macOS (Web + DSH Desktop) and Windows (DSH Desktop) have both been installed and used successfully (composer UI control, cards); Linux is unverified.
 - **0.2.2 release** (docs-only): fixed the README's CJK emphasis rendering and platform-verification wording; tag `v0.2.2-26-10-21` triggered [run 39598770488](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39598770488), registry `latest` = `0.2.2-26-10-21` (`gitHead` = `aac3f86`), and the provenance was verified; no code or behavior changed.
 - **0.3.0 release**: the answer styles, image export and interactive-page export shipped as 0.3.0 together with a fix to the shipped Agent Skill's tool-contract docs; annotated tag `v0.3.0-26-10-22` triggered [run 39785829751](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39785829751) (40 s), registry `latest` = `0.3.0-26-10-22`, `gitHead` = `8cfd0cd`; the provenance statement is in the transparency log (logIndex 3388870856), and `npm audit signatures` from a temporary install reported 2 packages with verified attestations. Local `npm run check` had 102 tests and `npm pack` shipped 40 files (3.63 MB / 9.45 MB unpacked). The registry metadata took about five minutes after publish to become visible, with the tarball one to two minutes behind it (`npm install` returned 404 in that window); that is propagation, not a failed publish.
+
+## 2026-10-22 — R4 custom templates and chat-native on-demand UI
+
+This is a delta documentation/screenshot sync of an uncommitted worktree, not release acceptance. It covers HEAD `155585c9afcc943b98e7fb5b36a2a2f0e4b51c49` plus existing R1–R3 work. This stage changed no src, dependencies, version or plan/review history, and made no commit/publication. Environment: Node v24.22.0, npm 11.19.1, Google Chrome 155.0.8059.86.
+
+### Automated results
+
+| Command / check | Result in this stage |
+| --- | --- |
+| `npm run check` | PASS; 179/179 Node tests = Host 77 + Client 81 + packaging 21; 0 failed, 0 skipped |
+| Renderer (inside check) | Parse 41/41, SSR 41/41 (existing `/tmp/oiui/src/app/gallery` fixtures); contrast OK; i18n 4 programs (zh/en fallback); typography 22/22 actually executed in Chrome |
+| `npm run pack:check` | PASS; 43 files; tarball **4,036,213 bytes** (4.04 MB), unpacked **10,215,858 bytes** (10.22 MB) |
+| Build artifacts | `lib/index.js` 637,813 bytes; `lib/client.js` 3,763,748 bytes; `lib/standalone.js` 3,426,892 bytes; `lib/standalone.css` 511,833 bytes |
+| `npm run test:browser` | PASS, 7/7 suites: on-demand (85 assertions), style-panel, style-theme, export-image, standalone-page, article-layout, settings-picker; none skipped |
+| `node --test test/packaging/*.test.mjs` | PASS, 21/21; manifest 9 + references 6 + guardrails 6; all 13 assets referenced by both READMEs, locale meta key parity |
+| Documentation checks | Matching heading depth in README and all three docs pairs; valid local links/anchors, absolute GitHub doc paths, language switchers, clone URL and CHANGELOG links |
+| `git diff --check` | PASS |
+
+The first browser run, concurrent with screenshot work, failed at a menu-item click in `export-image.e2e.mjs:228` with `Cannot read properties of null (reading 'click')`. Without changing product code or that test, a full serial rerun passed all seven suites. Cause remains unconfirmed; retain this as one unstable browser run. React useLayoutEffect notices remain visible during SSR; render-check exits 0, so they are not recorded as a failed run.
+
+Current component evidence covers production slot/command/focus wiring, draft preservation, armed hint/cancellation, temporary-card adjustment/save, template management and error states; temporary replay without a catalog, scheme changes/recovery; PNG pixels and HTML theme snapshots for temporary/saved templates. The image-export fixture uses a local photo, a fake map readiness signal and minimal standalone assets; the standalone-page suite uses real build artifacts. These cannot establish that DSH services or a real model follow the protocol.
+
+### Screenshots and reproduction
+
+`node scripts/capture-screenshots.mjs` mounts production `ToggleControl`, `OnDemandHint`, `IntelligentUICards` and `SettingsPage` in a temporary HTTP server + headless Chrome/CDP, with fixed light/dark tokens and fake projection/catalog/form services at deviceScaleFactor 2. `scripts/screenshot-entry.tsx` supplies fixed content; shell card glyphs use lucide stand-ins because DSH primitives come from the live loader. No images were hand-edited. The layout/tour remains reproducible; a full recapture into a separate directory produced seven outputs with SHA-256 hashes identical to assets.
+
+| Capture | Output pixels |
+| --- | --- |
+| `assets/intelligent-ui-components-layout.webp` | 1616 × 4040 |
+| `assets/intelligent-ui-settings.webp` | 1336 × 2690 |
+| `assets/intelligent-ui-toggle.png` | 1080 × 800 |
+| `assets/intelligent-ui-style-panel.webp` | 1080 × 1860 |
+| `assets/intelligent-ui-on-demand-hint.webp` | 1520 × 598 |
+| `assets/intelligent-ui-temporary-result.webp` / `assets/intelligent-ui-temporary-result-dark.webp` | 1536 × 1032 each |
+
+All seven captures also passed `node scripts/capture-screenshots.mjs --dark --out-dir=/tmp/iui-r4-dark`; these temporary outputs are outside assets. Both READMEs reference all 13 assets; existing real-session examples are unchanged. The actual composer label is Custom styles; the settings group is My styles. Captures follow the current code.
+
+### Real-model status and scenarios after restart
+
+**Real-model DSH E2E was not run in this stage.** Historical model records above do not qualify this rework. After restarting the process serving DSH Web and reopening the page so Host/Client load the same build, the owner must still verify:
+
+1. Clear requests: Composer → On-demand UI → normal message renders directly, without redundant questions, preview, naming, confirmation or forced saving; the next ordinary message does not repeat generation.
+2. Material ambiguity: the default main-conversation model can use `ask_user_question`; options/free input/skipping and blocking/timed-reply recovery work; at most two rounds, no render before answering. Missing-tool text fallback and re-arming guidance are understandable.
+3. Results/adjustment: preserve the draft and content, bind repeated adjustments to the right parent result; saving old/new results uses each snapshot. Directives transfer across content rather than copying business/private data.
+4. Saving/management: usable without saving; session/global save, duplicate names, limits, deleting the current default, stale templates, settings limited to persistence without a generation workbench; no unintended session/global style changes.
+5. Lifecycle: cancellation, re-arming after failure, 10-minute armed expiry and cleared operations after restart; prevent unintended consumption across two tabs and confirm arming-tab hint visibility. The Host still binds the next human session message with no sending-source isolation guarantee.
+6. History/export: restarted DSH history really retains complete temporaryStyle arguments; temporary replay survives an unavailable catalog, and saving after 200-record eviction has a clear error. Check actual PNG/single-file HTML, light/dark, Article/Card, live media and frozen exported scheme; portaled popovers/iframes retain default themes.
+
+No mechanical gate guarantees these model/deployment behaviors. The implementation also has no separate revisionId or server save-idempotency key. As-built docs describe immutable callId-owned results and duplicate-name errors; approved §13/§14 and the original review remain unchanged.
+
+### 2026-10-22 — Post-R4 activation fix (tool JSON Schema subset)
+
+When the new Host first activated after R4, the plugin entry showed Problem and the composer UI control disappeared; the Host log reported:
+
+```
+JsonSchemaError: unsupported JSON schema: schema.properties.styleId.maxLength is not a supported keyword
+(subset: type/oneOf/properties/required/additionalProperties/items/enum/const + annotations)
+```
+
+Cause: the `render_ui` input/output JSON Schemas used `maxLength` / `minLength` / `pattern`, which DSH 0.2.1 tool registration rejects. Fix: move limits into `description`, keep strict runtime validation in execute, and add a schema-subset guard test in `test/host/tool.test.mjs` (also verified against the installed `dsh-tools` `assertSupportedJsonSchema`). After rebuilding:
+
+- `npm run check`: **179/179** (Host 77 + Client 81 + packaging 21); renderer unchanged; `lib/index.js` 639,718 bytes.
+- A second isolated DSH Web instance (127.0.0.1:3081, same profile, no concurrently written session) activated the plugin normally: no Problem entry, composer UI control present, scope menu/style panel/My styles + On-demand UI entries, armed hint, example draft fill and cancel all worked with no page/console errors. That instance made no real model call and has been stopped; **the primary instance still needs a restart** to load the fix.
+
+### 2026-10-22 — Post-R4 on-demand timing fix and real-model validation
+
+Real-model validation in an isolated instance exposed a DSH ordering detail: within a step the loop appends `system/message` before the first `user/message`, while the controller bound the operation only on `user/message`. The first on-demand turn therefore never received the ON-DEMAND note and rendered a normal card; a second arm click could also replace the running operation. Fix:
+
+- `promptNote` is now injected while the operation is **armed** and kept after binding.
+- Re-arming a bound running/clarifying operation is rejected; explicit cancel is required.
+- A bound on-demand turn rejects a plain `render_ui` without `temporaryStyle`, forcing a temporary snapshot or a clarifying question.
+- Added Host tests (**179/179**: Host 77 + Client 81 + packaging 21); `lib/index.js` is 639718 bytes.
+
+Real-model DSH E2E (second isolated instance at 127.0.0.1:3081, same profile, primary untouched): new session → On-demand UI → example "Make this analysis a compact Linear-style dashboard" → send. The real model (DeepSeek-V4.1-Flash) called `render_ui` with a `temporaryStyle`; the page showed the Temporary style badge and temporary theme. The result registry recorded one snapshot (reusable directives plus light/dark theme); Save as template created a template in the style store. The test instance was stopped and the test template/result records removed. Still unverified live: genuine ambiguity/`ask_user_question`, chained adjustments, multiple tabs, restart replay, real image/single-file export. The primary instance needs another restart to load this Host change.
+
+### 2026-10-22 — Post-R4 on-demand status and content-clarification hardening
+
+Real-model testing surfaced two issues: the on-demand hint vanished on send, hiding the generating state; and when content was missing the model once fabricated a dataset, while the built-in option row cannot carry a pasted link. Changes:
+
+- `OnDemandHint` now covers armed / running / clarifying: after sending it keeps a generating status with a restrained SVG loading indicator; while a question is pending it shows a waiting state. It no longer disappears on Enter, and is cleared only after a temporary result renders or the user cancels.
+- A completed turn with no render (typically the model asking in prose for missing content) returns the operation to armed with `resume: true`; the hint shows a continue copy and the next message continues the same operation instead of silently dropping the intent.
+- Content grounding: the prompt and Agent Skill now require checking content, numbers, dates and sources first; when content/link is missing, ask via `ask_user_question` with a **free-form question and no options** so the user can paste text, a path or a URL; placeholder data is explicitly forbidden. The built-in question UI itself is unchanged.
+- The loading indicator was replaced by a conventional but refined SVG ring (track plus rounded arc) with a reduced-motion fallback.
+
+Real-model DSH E2E (isolated instance at 127.0.0.1:3082): in an empty session the model checked the conversation/workspace, refused to ground the dashboard on invented data, and asked a no-options free-form question ("What should the dashboard be built from? Paste the analysis text, or give the file path / URL"); the hint stayed visible through running→clarifying. It then rendered a temporary-style card from a real `stats.gov.cn` source, kept the source in the card, and the hint cleared only after the result appeared. The test instance was stopped and its result record removed.
+
+Gates: `npm run check` **179/179** (Host 77 + Client 81 + packaging 21); browser **7/7** (on-demand **85** assertions); `lib/index.js` 639718 bytes. The primary instance still needs a restart to load this Host/Client. Still unverified live: chained adjustments, multiple tabs, restart replay, real image/single-file export.
+
+Addition — terminal guidance. Failed/interrupted operations no longer make the hint disappear silently: the composer keeps a summary with Retry (re-arm on-demand in this session) and Dismiss (hide this tab's hint); the hint clears on cancel, a successful render, or Dismiss. On-demand browser assertions are now **84**; Node remains 179/179.
+
+### 2026-10-22 — Codex review fixes for the uncommitted worktree
+
+Codex (gpt-6.1-sol / xhigh) reviewed the uncommitted tree: **no P0; 1 P1 and 3 P2 findings**. All are fixed:
+
+- **P1 projection schema rejected `resume`**: `modeViewSchema` did not declare it, so DSH publication/read validation failed with `unrecognized_keys: resume`. Added it as an optional boolean; binding the next message clears the flag; added a wire-schema assertion that accepts `resume`.
+- **P2 adjustment retry lost its parent result**: Retry after failure/interruption sent a plain arm and turned adjust into generate. It now re-arms with `kind: adjust` and `parentResultId`; the browser test asserts the command contains `adjust <parent>`.
+- **P2 HTML export theme diverged when the catalog was unavailable**: live cards fell back to the default theme while export used cached templates. Added `exportTemplatesFor` as the shared selection rule (empty templates when unavailable) and a unit test; export now matches the page.
+- **P2 stale lifecycle docs**: README/FAQ/architecture/integration still claimed "text-only completion without rendering fails", "re-arming replaces the active operation" and immediate re-arming after text questions. Updated to resume / rejected re-arm while bound / next message continues / retry for failures.
+
+Gates: `npm run check` **179/179** (Host 77 + Client 81 + packaging 21); browser **7/7** (on-demand **85** assertions); packaging 21/21; `git diff --check` clean. The review did not run a real-model E2E (the real-model path was validated earlier).

@@ -10,19 +10,23 @@ This page expands the structural and behavioral details summarised in the README
 
 ```
 Host  lib/index.js (Node)
-├─ ctx.tools.register(render_ui)          # args { program, style, title? }
+├─ ctx.tools.register(render_ui)          # args { program, style, title?, styleId? | temporaryStyle? }
 │   └─ @openuidev/lang-core validates against the component library spec; errors are returned precisely, and the model repairs them in the same turn
 ├─ session switch + answer style (global defaults + session overrides)   # /iui command + projection + per-agent tool visibility
 ├─ ctx.systemPrompt.section(...)          # injects the OpenUI Lang generation prompt only when the switch is on
 ├─ Config.globalEnabled / answerStyle / freeComposition / exportBackground / exportScale / removeFollowUps (volatile)  # written by the plugin detail page; the prompt reads them live per request
+├─ on-demand.ts Operation controller       # session/event binding, clarification and termination; projection v6 onDemand
+├─ style-store.ts + style-routes.ts          # saved templates; authenticated catalog/saveFromResult/update/delete
+├─ result-store.ts                          # up to 200 immutable temporary result snapshots; save later
 ├─ webServer routes (optional injection)     # /api/intelligent-ui/export/standalone.{js,css} for the interactive-page export
 └─ ctx.skills.register(intelligent-ui)    # embedded Agent Skill (skills/intelligent-ui/SKILL.md)
 
 Client  lib/client.js (browser, lazily loaded by the DSH module loader)
 ├─ ctx.locale.register('intelligent-ui')  # zh/en UI dictionaries; slots declare locale and receive the injected t
-├─ conversation.input.activity             # the composer UI control (chip + Menu + style panel; reads the projection + runs switch/style commands)
-├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # plugin detail page: Availability, Answer style, Composition and Export (writes volatile Host settings fields)
-├─ conversation.chat.turnTail list item    # at the end of each turn, takes that turn's render_ui program and renders the card
+├─ conversation.input.activity             # the composer UI control (chip + Menu + style panel; reads projection + switch/style/on-demand commands)
+├─ conversation.input.overlay              # OnDemandHint: armed hint, examples and cancel in the arming tab
+├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # plugin detail page: Availability, Answer style, My styles, Composition and Export (writes volatile Host settings fields)
+├─ conversation.chat.turnTail list item    # extracts programs/snapshots at turn end; renders themes, temporary badge and adjust/save actions
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 57 ported components (chrome reads the renderer i18n context)
 ├─ conversation.chat.assistant-actions list item  # export button, only for messages whose Turn recorded render_ui
 │   └─ menu (image: raw / rounded / card; interactive page) -> PNG or single-file HTML download
@@ -36,12 +40,48 @@ With the switch off there is no trace of this tool on the model side; only after
 
 ![The composer UI control: the three-way switch and Display style below an inset divider](../assets/intelligent-ui-toggle.png)
 
-- **Global defaults:** the Plugin detail page provides **Enable in all sessions**, the global Auto / Card / Article style, the **Free-form layout** switch, and the **Export** defaults (image background color, 1x/2x, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default)). New sessions inherit these values. The page groups them into **Availability**, **Answer style**, **Composition** and **Export**.
-- **Session overrides:** the composer UI control changes only the current session. `/iui on|off|inherit` sets the enable override; `/iui style auto|card|article|inherit` sets the style override. A session override wins over the global value; `inherit` follows it.
+- **Global defaults:** the Plugin detail page provides **Enable in all sessions**, the global Auto / Card / Article or saved-template style, the **Free-form layout** switch, and the **Export** defaults (image background color, 1x/2x, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default)). New sessions inherit these values. The page groups them into **Availability**, **Answer style**, **My styles**, **Composition** and **Export**.
+- **Session overrides:** the composer UI control changes only the current session. `/iui on|off|inherit` sets the enable override; `/iui style auto|card|article|inherit|<cs_id>` sets the style override. A session override wins over the global value; `inherit` follows it.
 - **Answer styles:** `Card` is the compact interactive card; `Article` is a reading layout inside the `render_ui` card (`Toc` + collapsible `Section`s + long Markdown prose); `Auto` lets the model choose per request. A Section body is its own nested flow using the group rhythm; the page-level flow relies on margins only, without an extra flex gap, so section boundaries do not double their blank space.
 - **State:** the global enable/style/free-composition values live in the Host settings document; session enable, off and style overrides are written atomically to `<DSH_HOME>/dsh-intelligent-ui.json` (`sessions`, `offSessions`, `styles`). Legacy `{ "global": true, "sessions": [...] }` files are still read as migration values.
-- The session command log folds into the `intelligent-ui` projection, which carries the current enable/style view and pending state; the composer control only mirrors the projection, and the Host owns every state decision. The control broadcasts its optimistic view to other tabs over BroadcastChannel; the projection wins once it arrives. The scope menu and the export menu share the same `MenuItem`/`MenuDivider` rows (content-based width with a 208px minimum, one vertical rhythm, consistent selected/hover/disabled states); the scope menu right-aligns with the chip; the Display style row is always visible, disabled while off, with an inset hairline above it; the style panel is a second level, and its back button returns to the scope menu instead of dismissing every popup.
+- The session command log folds into the `intelligent-ui` projection, which carries the current enable/style view, pending state and live `onDemand` (stateVersion 6); the composer control only mirrors the projection, and the Host owns every state decision. The control broadcasts its optimistic view to other tabs over BroadcastChannel; the projection wins once it arrives. The scope menu and the export menu share the same `MenuItem`/`MenuDivider` rows (content-based width with a 208px minimum, one vertical rhythm, consistent selected/hover/disabled states); the scope menu right-aligns with the chip; the Display style row is always visible, disabled while off, with an inset hairline above it; the style panel is a second level, and its back button returns to the scope menu instead of dismissing every popup.
 - The switch requires a deployment that composes both `sessionProjections` and `commands` (DSH Web has both by default). If either service is missing, the session controls cannot be displayed or persisted, and the extension falls back to **always on**.
+
+## Custom styles and on-demand operations
+
+### Result style contract
+
+`StyleSnapshot` in `src/shared/style-templates.ts` is schemaVersion 1 (StyleSnapshotV1): `baseLayout: card|article`, `directives`, `theme`, and optional `suggestedName`. `render_ui` requires `program` and `style`, with optional `title` and mutually exclusive `styleId` or `temporaryStyle`. The temporary snapshot's `baseLayout` must equal `style`; only a current tool call observed and authorized by the Host may use it. Parser/Article checks still apply. Success includes `statements`, `style`, `styleSource: builtin|template|temporary`, and optional `styleId`/`warnings`; the snapshot lives in tool arguments rather than a duplicate success field.
+
+Precedence is authorized temporary style for this call → session override → global default → Auto. Temporary styles never write session/global settings. An ordinary call under a selected custom template must pass its exact `styleId` and base layout. Missing templates/catalog fall back to the default client theme; temporary snapshots are independent of the catalog.
+
+### Operation and session events
+
+`host/on-demand.ts` keeps one Operation per session: Host-generated `operationId`, session/optional client identity, the first human message's `triggerMessageId`, generate/adjust kind, optional `parentResultId`, clarification rounds, result IDs and timestamps. `/iui on-demand [off|<client-instance-token> [adjust <resultId>]]` arms or cancels; the session must be enabled first. While armed, re-arming replaces the active operation without changing the selected style; once a human message has bound the operation (running/clarifying), re-arming is rejected and the caller must cancel explicitly, so a second click cannot revoke an authorization the model is about to use.
+
+States are `armed → running ↔ clarifying → completed`, with `failed`, `cancelled` and `interrupted` exits. Armed intent has a 10-minute TTL checked on access. The controller retains at most 256 sessions without silently evicting active work. Operations are in memory; restart clears their views (without reconstructing interrupted records) and requires re-arming.
+
+A prepended `session/event` listener updates state before projection publication, deduplicates monotonic seq values and constrains tool events by turn. The first human `user/message` binds the operation; injected skill/file context is ignored. DSH appends a step's `system/message` before its first `user/message`, so the ON-DEMAND note must be injected while the operation is **armed** and kept after binding; otherwise the first turn's model never sees the on-demand contract. During a bound on-demand turn, a plain `render_ui` without `temporaryStyle` is rejected so the model must use a temporary snapshot or ask first. `tool/call render_ui` registers its callId (up to 8 attempts); temporary authorization requires the bound message, active state and current callId. After validation and the durable result write, the Host synchronously completes the operation. Late calls lose authorization after completion/cancellation. A completed turn that rendered nothing returns to armed/resume; only error/abort moves the operation to failed/cancelled/interrupted.
+
+`ask_user_question` enters clarifying and blocks temporary render until answered. A matching structured tool result (`answers` array) or callId-tagged `user-question-reply` resumes running; a timeout is not an answer, a question error fails, and at most two rounds are allowed. The prompt requests 1–3 questions per round, with options/free input/skipping when DSH supports them; the extension does not replace the built-in question UI. If the tool is unavailable, text questions degrade the flow; a completed turn without a render enters resume, so the next message continues without an immediate re-arm (except after expiry, restart or failure).
+
+Projection v6 adds nullable `onDemand` (operationId, status, kind, parentResultId, clientInstanceId, resultIds) alongside enable/style/pending. Replaying history does not authorize operations. `OnDemandHint` appears only for armed intent and matching client identity; examples fill without sending and preserve drafts. The Host still binds the next human message in the session without checking its sending tab; this conservative convergence is not message-metadata isolation.
+
+### Saving and template management
+
+`result-store.ts` atomically persists the latest 200 immutable temporary snapshots in `<DSH_HOME>/dsh-intelligent-ui-results.json`: `resultId = tool callId`, sessionId, snapshot, optional parentResultId and createdAt. Each adjustment gets a new callId; there is no separate revisionId in this implementation. Saving uses the clicked result ID. Recorded arguments can still replay after registry eviction, but saving then returns `result_missing`.
+
+`style-store.ts` persists templates in `<DSH_HOME>/dsh-intelligent-ui-styles.json`, limited to 40 global and 20 per session. `GET /api/intelligent-ui/styles?sessionId=…` returns global and that session's templates; POST on the same route supports `save`, `saveFromResult`, `update`, `delete`. Routes register only with `webServer` and `connection.requestRejection`, authenticate first, accept JSON up to 64 KiB/15 seconds and return no-store responses.
+
+`saveFromResult` accepts only resultId, name, description, scope and optional sessionId. The Host retrieves the snapshot; the browser cannot replace directives/theme, and session scope must match the owning session. Saving neither selects the template nor changes the global default. Duplicate names fail; the server has no separate idempotency key. `update` allows only name/description/directives; `delete` removes a template. The composer manages visible templates; settings manages global templates and can export JSON. Deleting the current choice attempts an Auto fallback; other sessions handle stale references as missing templates.
+
+### Card themes, actions and security boundaries
+
+`programs.ts` defensively extracts temporary snapshots from recorded arguments, rejects mixed sources/layout mismatch, and skips failed calls or arguments outside the loaded history window. `IntelligentUICards` resolves temporary snapshots first, catalog templates second; `resolveStyleThemeVars` maps only whitelisted fields into renderer-host CSS variables. Scheme follows the DSH body marker (system preference outside DSH). Portaled popovers and sandboxed iframes keep the default theme; semantic status colors remain CSS-owned.
+
+Temporary results show a **Temporary style** badge and extension-owned **Adjust style** / **Save as template** actions outside the model program. Adjustment binds a specific resultId, preserves the draft and fills a prefix; normal sending creates a new result. The save popover asks only for name/description/availability, reuses the snapshot and makes no model call. Settings owns global defaults, saved-template management, composition and exports; generation happens in the composer.
+
+Themes accept only light/dark six-digit hex palettes and font/radius/density/shadow enums, rejecting unknown fields, arbitrary CSS/scripts/URLs. Temporary ink/canvas and accent/canvas must reach 3:1 in each scheme, with a warning below 4.5:1. Directives are limited to 2,000 characters. Saved-template directives enter the prompt as a JSON string inside DISPLAY PREFERENCES delimiters, explicitly subordinate to system/tool/safety rules. Temporary directives remain result data, never promoted to system instructions. Models cannot self-arm, save templates or change defaults; the existing `HtmlView` sandbox boundary remains.
 
 ## Layout and spacing contract
 
@@ -66,6 +106,7 @@ The switch only makes the capability visible; the policy that decides whether a 
 - **Scope:** one export covers every card rendered by that Turn. Exported images contain the rendered cards only — not the Markdown text around them and not the export control itself.
 - **Capture:** the entry temporarily expands collapsed cards (restoring them afterwards), waits for in-card photos and image searches plus each map's readiness signal (`data-iui-map-ready` mirrors MapLibre `idle`, and style swaps, tile fallback and resizes reset it first) to settle, freezes CSS transitions and animations, and rasterizes the live card DOM with SnapDOM. SVG rasterization does not honour `backface-visibility`, so a flashcard's 3D faces are flattened during the capture to the face the reader currently sees. Maps are captured through MapLibre's preserved WebGL drawing buffer; sandboxed iframes (`HtmlView`) are not capturable and are missing from the image. Images, fonts and local interaction state follow the live DOM.
 - **Frames:** the menu offers **raw** (the answer alone), **rounded** (background color plus rounded padding) and **card** (padding, rounded corners and a soft shadow). The frame is chosen per export; the menu right-aligns with the export pill, its width follows its content, and when the space above is too short it opens below the pill. The background color, 1x/2x resolution and the follow-up-removal switch are defaults from the **Export** group on the Plugin detail page.
+- **Theme:** PNG captures the live renderer theme, including the current card chrome and action row.
 - **Download:** the browser receives one PNG named after the answer title plus a local timestamp. No Host or session data is involved.
 
 ## Interactive-page export
@@ -73,6 +114,7 @@ The switch only makes the capability visible; the policy that decides whether a 
 - **Entry:** it shares the action-strip export pill and menu with the image export; the item below a divider, labelled **Interactive page**, is separate from the three image frames.
 - **Assets:** `scripts/build.mjs` also builds `lib/standalone.js` / `lib/standalone.css` (React + renderer + KaTeX/MapLibre styles). Through an optional `webServer` injection the Host registers two same-origin exact routes (`/api/intelligent-ui/export/standalone.js` and `.../standalone.css`) and reads those build artifacts per request; a deployment without `webServer` registers nothing and the client reports a page-build failure.
 - **Assembly:** on click the browser fetches both assets in parallel, walks the current page stylesheets to snapshot computed custom properties as the theme, then `export-html-plan.ts` inlines the card programs, assets and theme into one HTML document (about 3.4–4.9 MB). The download name carries the answer title and a local timestamp.
+- **Per-result theme snapshot:** `programsToExportCards` prioritizes inline temporaryStyle.theme, then the currently visible template, and inlines resolved themeStyle and scheme per card. The exported page makes no later catalog lookup. Temporary results are catalog-independent; missing saved templates export with the default theme.
 - **Page runtime:** `src/standalone/index.tsx` renders the real `OpenUIRenderer` body only (the DSH card header and collapse control are not exported), so maps, charts and forms keep the same interactions as inside DSH. `@OpenUrl` opens links as usual; `@ToAssistant` degrades to copy-message + toast telling the reader to paste back into DSH, and a failed clipboard leaves the message in the toast; the **Remove follow-up actions** switch is on by default and removes the whole block that contains the follow-up at export time (for both images and pages); turn it off to keep the copy fallback. The page keeps only the theme it was exported with (current light/dark) and does not follow later DSH theme switches.
 
 ## UI language
@@ -91,6 +133,7 @@ On mount, the plugin registers `skills/intelligent-ui/SKILL.md` as an **embedded
 - `intelligent-ui` appears in the session catalog, and the model loads it on demand with the `skill` tool;
 - the skill catalog entry is always visible (at negligible cost); but **do not call `render_ui` while the switch is off** — the Host rejects it, so ask the user to turn the switch on first;
 - users can also invoke it directly with `/intelligent-ui` (`userInvocable`); explicit invocation injects the same skill content and turns the invocation into a directive to build a page;
+- During on-demand operations the skill requires temporaryStyle with matching style and no styleId; material ambiguity uses built-in ask_user_question before direct rendering, with no required preview/naming/saving. Authorization belongs to the Host; the model cannot self-authorize or save templates.
 - the skill contains:
   - `SKILL.md` — the workflow (the decision policy is owned by the injected prompt; explicit invocation is a directive), the read-only-checkout preflight rule while answering, hard OpenUI Lang rules, design guidelines (advisory when Free-form layout is on), DSH behavior, and a reference index;
   - `references/components.md` — complete parameter tables for 57 components + 73 `@functions` (14 core + 59 library) + 5 action steps;

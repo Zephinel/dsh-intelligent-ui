@@ -3,9 +3,9 @@
  *
  * The deployment-wide preferences live in the Host settings document:
  * `globalEnabled` (is every session on by default?) and `answerStyle`
- * (`auto`, `card`, or `article`). The composer can still override both for one
+ * (a built-in style or custom template id). The composer can still override both for one
  * session: `/iui on|off|inherit` changes the switch, and
- * `/iui style auto|card|article|inherit` changes the style. A session override
+ * `/iui style auto|card|article|inherit|<cs_id>` changes the style. A session override
  * always wins over the global value; `inherit` follows it.
  *
  * Persistence is a small JSON file in the harness home
@@ -37,8 +37,10 @@ import {
   isAnswerStyle,
   isStylePreference,
 } from '../shared/intelligent-ui.ts'
+import { isCustomStyleId, isStyleId, type StyleId, type StyleTemplate } from '../shared/style-templates.ts'
+import type { StyleStore } from './style-store.ts'
+import { createOnDemandController, validOnDemandResultId, type OnDemandController } from './on-demand.ts'
 import type {
-  AnswerStyle,
   IntelligentUIModeState,
   IntelligentUIModeView,
   SessionEnable,
@@ -72,18 +74,27 @@ interface SessionEventLike {
 /** One accepted command or the settled session id. */
 const modeStateSchema = z.object({
   sessionId: z.string(),
-  command: z.object({ commandId: z.string(), kind: z.enum(['scope', 'style']) }).strict().nullable().optional(),
+  command: z.object({ commandId: z.string(), kind: z.enum(['scope', 'style', 'on-demand']) }).strict().nullable().optional(),
 }).strict()
 
 /** Wire shape of the `intelligent-ui` projection view. */
 const modeViewSchema = z.object({
   sessionEnable: z.enum(['inherit', 'on', 'off']),
-  sessionStyle: z.enum(['inherit', 'auto', 'card', 'article']),
+  sessionStyle: z.string().max(64),
   globalEnabled: z.boolean(),
-  globalStyle: z.enum(['auto', 'card', 'article']),
+  globalStyle: z.string().max(64),
   enabled: z.boolean(),
-  style: z.enum(['auto', 'card', 'article']),
+  style: z.string().max(64),
   pending: z.boolean(),
+  onDemand: z.object({
+    kind: z.enum(['generate', 'adjust']),
+    parentResultId: z.string().max(200).optional(),
+    status: z.enum(['armed', 'running', 'clarifying', 'completed', 'failed', 'cancelled', 'interrupted']),
+    operationId: z.string().max(200),
+    clientInstanceId: z.string().max(200).optional(),
+    resultIds: z.array(z.string().max(200)).max(8),
+    resume: z.boolean().optional(),
+  }).strict().nullable(),
 }).strict()
 
 /** One parsed `/iui` invocation. */
@@ -91,6 +102,7 @@ type ParsedCommand =
   | { readonly kind: 'status' }
   | { readonly kind: 'scope'; readonly value: SessionEnable }
   | { readonly kind: 'style'; readonly value: StylePreference }
+  | { readonly kind: 'on-demand'; readonly off: boolean; readonly clientInstanceId?: string; readonly operationKind?: 'adjust'; readonly parentResultId?: string }
   | { readonly kind: 'invalid'; readonly message: string }
 
 /**
@@ -102,11 +114,19 @@ function parseCommand(raw: string): ParsedCommand {
   const tokens = raw.trim().split(/\s+/).filter(Boolean)
   if (tokens.length === 0) return { kind: 'status' }
   const head = tokens[0].toLowerCase()
+  if (head === 'on-demand') {
+    if (tokens.length === 1) return { kind: 'on-demand', off: false }
+    if (tokens.length === 2 && tokens[1].toLowerCase() === 'off') return { kind: 'on-demand', off: true }
+    if (tokens.length === 4 && tokens[1].toLowerCase() !== 'off' && /^[a-zA-Z0-9_-]{1,128}$/.test(tokens[1]) && tokens[2] === 'adjust' && validOnDemandResultId(tokens[3])) return { kind: 'on-demand', off: false, clientInstanceId: tokens[1], operationKind: 'adjust', parentResultId: tokens[3] }
+    if (tokens.length === 2 && /^[a-zA-Z0-9_-]{1,128}$/.test(tokens[1])) return { kind: 'on-demand', off: false, clientInstanceId: tokens[1] }
+    return { kind: 'invalid', message: 'Usage: /iui on-demand [off|<client-instance-token> [adjust <resultId>]]' }
+  }
   if (head === 'style') {
-    if (tokens.length !== 2) return { kind: 'invalid', message: 'Usage: /iui style [auto|card|article|inherit]' }
-    const value = tokens[1].toLowerCase()
+    if (tokens.length !== 2) return { kind: 'invalid', message: 'Usage: /iui style [auto|card|article|inherit|<cs_id>]' }
+    const builtin = tokens[1].toLowerCase()
+    const value = isAnswerStyle(builtin) || builtin === 'inherit' ? builtin : tokens[1]
     if (isStylePreference(value)) return { kind: 'style', value }
-    return { kind: 'invalid', message: 'Usage: /iui style [auto|card|article|inherit]' }
+    return { kind: 'invalid', message: 'Usage: /iui style [auto|card|article|inherit|<cs_id>]' }
   }
   if (tokens.length !== 1) return { kind: 'invalid', message: 'Usage: /iui [on|off|inherit]' }
   switch (head) {
@@ -116,7 +136,7 @@ function parseCommand(raw: string): ParsedCommand {
     case 'global': case 'all':
       return { kind: 'invalid', message: 'Global enabling moved to the extension settings page (Plugins → Intelligent UI).' }
     default:
-      return { kind: 'invalid', message: 'Usage: /iui [on|off|inherit] | style [auto|card|article|inherit]' }
+      return { kind: 'invalid', message: 'Usage: /iui [on|off|inherit] | style [auto|card|article|inherit|<cs_id>]' }
   }
 }
 
@@ -145,14 +165,14 @@ export function readPreference<T>(ref: { get?: () => unknown } | undefined, vali
 export function createSessionProjection(viewFor: (sessionId: string) => Omit<IntelligentUIModeView, 'pending'>): ProjectionDefinitionLike {
   return {
     key: MODE_PROJECTION_KEY,
-    stateVersion: 4,
+    stateVersion: 6,
     stateSchema: modeStateSchema,
     init: (header): IntelligentUIModeState => ({ sessionId: header.id, command: null }),
     apply: (state, event): IntelligentUIModeState => {
       if (event.type === 'command/run' && event.data?.name === MODE_COMMAND) {
         const parsed = parseCommand(typeof event.data.args === 'string' ? event.data.args : '')
         // Status/help commands and invalid arguments do not change state.
-        if (parsed.kind !== 'scope' && parsed.kind !== 'style') return state
+        if (parsed.kind !== 'scope' && parsed.kind !== 'style' && parsed.kind !== 'on-demand') return state
         return {
           ...state,
           command: { commandId: event.data.commandId as string, kind: parsed.kind },
@@ -161,6 +181,9 @@ export function createSessionProjection(viewFor: (sessionId: string) => Omit<Int
       if (event.type === 'command/done' && state.command != null && event.data?.commandId === state.command.commandId) {
         return { ...state, command: null }
       }
+      // DSH publishes a wire view only when fold identity changes. Operations
+      // stay in memory, but their live-event updates must reach subscribers too.
+      if (['turn/start', 'user/message', 'tool/call', 'tool/result', 'turn/end'].includes(event.type)) return { ...state }
       return state
     },
     wire: {
@@ -205,9 +228,11 @@ export interface IntelligentUIState {
   /**
    * Effective answer style for a session.
    * @param sessionId - the session to read; omitted means the global style.
-   * @returns the session override, else the global style.
+   * @returns the visible selection, or Auto when a reference is missing or invisible.
    */
-  styleFor(sessionId?: string): AnswerStyle
+  styleFor(sessionId?: string): StyleId
+  /** Return the selected custom template only when it is visible in this session. */
+  templateFor(sessionId?: string): StyleTemplate | undefined
 }
 
 /** Persisted session overrides, with legacy global shapes accepted on read. */
@@ -230,13 +255,14 @@ function stateFile(): string {
  * per-agent tool visibility.
  * @param ctx - host context.
  * @param config - live deployment-wide preference refs, optional on minimal hosts.
+ * @param store - reusable templates available to the current session.
  * @returns the mode surface used by the prompt section and tool guard.
  */
-export function installSessionControls(ctx: ModeHostContext, config?: IntelligentUIPreferenceConfig): IntelligentUIState {
+export function installSessionControls(ctx: ModeHostContext, config: IntelligentUIPreferenceConfig | undefined, store: StyleStore, onDemand: OnDemandController = createOnDemandController(ctx)): IntelligentUIState {
   let legacyGlobal = false
   let sessionOn = new Set<string>()
   let sessionOff = new Set<string>()
-  let sessionStyles = new Map<string, AnswerStyle>()
+  let sessionStyles = new Map<string, string>()
   let switchReady = false
   let agents: { list?: () => Iterable<unknown> } | undefined
   const restrictions = new WeakMap<object, () => void>()
@@ -258,7 +284,7 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
     }
     if (typeof raw?.styles === 'object' && raw.styles !== null) {
       for (const [id, style] of Object.entries(raw.styles as Record<string, unknown>)) {
-        if (id !== '' && isAnswerStyle(style)) sessionStyles.set(id, style)
+        if (id !== '' && isStyleId(style)) sessionStyles.set(id, style)
       }
     }
   } catch {
@@ -267,8 +293,21 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
 
   const globalEnabled = (): boolean =>
     readPreference(config?.globalEnabled, (value): value is boolean => typeof value === 'boolean') ?? legacyGlobal
-  const globalStyle = (): AnswerStyle =>
-    readPreference(config?.answerStyle, isAnswerStyle) ?? 'auto'
+  const globalStyle = (): string =>
+    readPreference(config?.answerStyle, (value): value is string => typeof value === 'string' && value.length <= 64) ?? 'auto'
+
+  const selectionFor = (sessionId?: string): string =>
+    (sessionId === undefined ? undefined : sessionStyles.get(sessionId)) ?? globalStyle()
+
+  const templateFor = (sessionId?: string): StyleTemplate | undefined => {
+    const selection = selectionFor(sessionId)
+    return isCustomStyleId(selection) ? store.resolve(selection, sessionId) : undefined
+  }
+
+  const styleFor = (sessionId?: string): StyleId => {
+    const selection = selectionFor(sessionId)
+    return isAnswerStyle(selection) ? selection : templateFor(sessionId)?.id ?? 'auto'
+  }
 
   /** No composer controls on this host: keep the extension usable (always-on). */
   const effectiveEnabled = (sessionId?: string): boolean => {
@@ -298,7 +337,8 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
       globalEnabled: globalOn,
       globalStyle: globalOut,
       enabled: effectiveEnabled(sessionId),
-      style: sessionStyle === 'inherit' ? globalOut : sessionStyle,
+      style: styleFor(sessionId),
+      onDemand: onDemand.projection(sessionId),
     }
   }
 
@@ -361,6 +401,7 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
 
   /** Apply one session override, persist it, and refresh agent visibility when needed. */
   const setSessionEnable = (value: SessionEnable, sessionId: string): 'changed' | 'noop' => {
+    if (value === 'off') onDemand.cancel(sessionId)
     if (sessionEnableFor(sessionId) === value) return 'noop'
     if (value === 'on') {
       sessionOn.add(sessionId)
@@ -379,6 +420,7 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
 
   /** Apply one session style override; style never changes tool visibility. */
   const setSessionStyle = (value: StylePreference, sessionId: string): 'changed' | 'noop' => {
+    onDemand.cancel(sessionId)
     if (sessionStyleFor(sessionId) === value) return 'noop'
     if (value === 'inherit') sessionStyles.delete(sessionId)
     else sessionStyles.set(sessionId, value)
@@ -397,9 +439,10 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
 
   const describeStyle = (sessionId: string): string => {
     const view = viewFor(sessionId)
+    const label = templateFor(sessionId)?.name ?? view.style
     return view.sessionStyle === 'inherit'
-      ? `following the global style (${view.style})`
-      : `overridden for this session (${view.style})`
+      ? `following the global style (${label})`
+      : `overridden for this session (${label})`
   }
 
   // Agents may exist before the projection services finish resolving (session
@@ -418,7 +461,7 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
       definitionId: 'dsh-intelligent-ui',
       name: MODE_COMMAND,
       description: 'Set Intelligent UI on/off for this session, or set this session\'s answer style',
-      input: { hint: '[on|off|inherit] | style [auto|card|article|inherit]' },
+      input: { hint: '[on|off|inherit] | style [auto|card|article|inherit|<cs_id>] | on-demand [off|<client-instance-token> [adjust <resultId>]]' },
       handler: ({ agent, rawInput }: { agent?: AgentLike; rawInput: string }) => {
         const sessionId = agent?.session?.id
         const parsed = parseCommand(rawInput)
@@ -426,11 +469,17 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
         if (parsed.kind === 'status') {
           return {
             kind: 'success',
-            text: `Intelligent UI is ${describeEnable(sessionId)}; answer style is ${sessionId === undefined ? globalStyle() : describeStyle(sessionId)}.`,
+            text: `Intelligent UI is ${describeEnable(sessionId)}; answer style is ${sessionId === undefined ? templateFor()?.name ?? styleFor() : describeStyle(sessionId)}. On-demand UI: ${sessionId === undefined ? 'none' : onDemand.view(sessionId)?.status ?? 'none'}.`,
           }
         }
         if (sessionId === undefined) {
           return { kind: 'error', text: 'Intelligent UI needs a session for a session override.' }
+        }
+        if (parsed.kind === 'on-demand') {
+          if (parsed.off) return { kind: 'success', text: onDemand.cancel(sessionId) }
+          if (!effectiveEnabled(sessionId)) return { kind: 'error', text: 'Enable Intelligent UI for this session before arming on-demand UI (/iui on).' }
+          const text = onDemand.arm(sessionId, parsed.clientInstanceId, { kind: parsed.operationKind, parentResultId: parsed.parentResultId })
+          return { kind: onDemand.view(sessionId)?.status === 'armed' ? 'success' : 'error', text }
         }
         if (parsed.kind === 'scope') {
           const outcome = setSessionEnable(parsed.value, sessionId)
@@ -444,13 +493,16 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
                 : 'This session follows the global Intelligent UI switch.',
           }
         }
+        if (isCustomStyleId(parsed.value) && store.resolve(parsed.value, sessionId) === undefined) {
+          return { kind: 'error', text: 'Custom style does not exist or is not visible in this session. Usage: /iui style [auto|card|article|inherit|<cs_id>]' }
+        }
         const outcome = setSessionStyle(parsed.value, sessionId)
         if (outcome === 'noop') return { kind: 'success', text: `Answer style is already ${describeStyle(sessionId)}.` }
         return {
           kind: 'success',
           text: parsed.value === 'inherit'
             ? 'This session follows the global answer style.'
-            : `Answer style for this session is ${parsed.value}.`,
+            : `Answer style for this session is ${templateFor(sessionId)?.name ?? parsed.value}.`,
         }
       },
     })
@@ -485,6 +537,7 @@ export function installSessionControls(ctx: ModeHostContext, config?: Intelligen
 
   return {
     enabledFor: effectiveEnabled,
-    styleFor: (sessionId?: string) => sessionId === undefined ? globalStyle() : viewFor(sessionId).style,
+    styleFor,
+    templateFor,
   }
 }

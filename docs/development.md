@@ -52,13 +52,13 @@ npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
 npm run check          # build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
-npm run test:browser   # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面 + Article 间距 + 选色器，需要 Chrome）
+npm run test:browser   # 7 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置
 ```
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（开启会话默认出卡片、文字例外有界、显式调用是直接指令）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
-- `scripts/capture-screenshots.mjs`：重拍两张设计系统截图（组件总览与插件详情页）到 `assets/`，固定输出 2x；内置固定的浅色主题 token，不需要运行中的 DSH，但需要本机 Chrome（缺少时跳过）。组件数量、设置页或主题 token 变化时，改脚本里的程序、断言与 token 后重跑；不要手改图片。
+- `scripts/capture-screenshots.mjs`：`node scripts/capture-screenshots.mjs` 在 Chrome 2x 重建组件 tour、UI 菜单/样式面板、armed 提示、临时结果（明/暗）与插件设置截图。使用固定主题 token、生产组件与假投影/catalog/form，不需运行 DSH；壳层卡片图标用 lucide 替身。`--dark --out-dir=/tmp/iui-dark` 可在独立目录重跑全套深色截图；没有 Chrome 时跳过。禁止手工编辑图片。
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` 进程行、程序提取器、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册。
 - `src/standalone/**`：交互页面的独立入口与页面 chrome（卡片标题/折叠、`@ToAssistant` 复制兜底、主题样式）；由 `npm run build` 打成 `lib/standalone.*`，Host 通过 same-origin 路由提供给导出流程。
@@ -94,6 +94,10 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 - 旧 Host 的成功文案也还是旧版本（例如「already off for this session」）。
 
 看到这种混合状态先**重启承载 Web UI 的 DSH 进程**（再刷新页面），两半会一起切到当前构建；`/iui on` 随即返回正常成功文案。发布后的插件升级同理：bundle 更新后需要重启宿主，而不是只刷新。
+
+### 工具 JSON Schema 子集（激活失败排查）
+
+DSH 0.2.1 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`render_ui` 参数或输出里出现 `maxLength` / `minLength` / `pattern` / `format` 等关键字时，注册会抛 `JsonSchemaError`，插件条目显示 **Problem**、设置页提示没有 settings service、composer 的 UI 控件消失。限制写进 `description` 并在 execute 中校验；`test/host/tool.test.mjs` 用同一子集规则守护参数与输出 schema，也可用已安装 `dsh-tools` 的 `assertSupportedJsonSchema` 自检。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
 
 ## 目录（发布相关）
 

@@ -65,7 +65,7 @@ function CardBody({ card, t, onToAssistant, hideToAssistant }: CardProps): React
   return (
     <section className="dsh-iui-standalone-card" data-dsh-intelligent-ui="card" data-dsh-iui-style={card.style ?? 'card'}>
       <div className={card.style === 'article' ? 'dsh-iui-article' : undefined}>
-        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} onToAssistant={hideToAssistant ? undefined : onToAssistant} t={t} />
+        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} themeStyle={card.themeStyle} scheme={card.scheme} onToAssistant={hideToAssistant ? undefined : onToAssistant} t={t} />
       </div>
     </section>
   )

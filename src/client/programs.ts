@@ -11,6 +11,7 @@
  * Tool name and argument contract live in src/shared/intelligent-ui.ts.
  */
 import { RENDER_UI_TOOL, isPageStyle, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { isCustomStyleId, isStyleSnapshot } from '../shared/style-templates.ts'
 
 /** The subset of `PreparingToolCall` this extractor reads. */
 export interface PreparingToolCall {
@@ -91,13 +92,20 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean): Int
     return undefined
   }
   if (typeof args !== 'object' || args === null) return undefined
-  const { program, title, style } = args as { program?: unknown; title?: unknown; style?: unknown }
+  const { program, title, style, styleId, temporaryStyle, styleSource } = args as {
+    program?: unknown; title?: unknown; style?: unknown; styleId?: unknown; temporaryStyle?: unknown; styleSource?: unknown
+  }
   if (typeof program !== 'string' || program.trim() === '') return undefined
+  // Replayed model arguments are data too. Do not render a conflicting or invalid snapshot.
+  if ('temporaryStyle' in args && (!isStyleSnapshot(temporaryStyle) || temporaryStyle.baseLayout !== style || 'styleId' in args)) return undefined
   const base = {
     callId,
     program,
     ...typeof title === 'string' ? { title } : {},
     ...isPageStyle(style) ? { style } : {},
+    ...isCustomStyleId(styleId) ? { styleId } : {},
+    ...isStyleSnapshot(temporaryStyle) ? { temporaryStyle, styleSource: 'temporary' as const }
+      : styleSource === 'builtin' || styleSource === 'template' ? { styleSource } : {},
     running,
   }
   return base

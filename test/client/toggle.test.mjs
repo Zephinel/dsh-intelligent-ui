@@ -24,10 +24,12 @@ import {
   readSyncedMode,
   resetSyncedMode,
   runCommand,
+  sameView,
   startModeSync,
   styleCommand,
   subscribeSyncedMode,
 } from '../../src/client/commands.ts'
+import { createStyleCatalog } from '../../src/client/styles.ts'
 import { translate, zh } from '../../src/shared/locales.ts'
 
 const root = join(import.meta.dirname, '..', '..')
@@ -42,7 +44,11 @@ await build({
   platform: 'node',
   jsx: 'automatic',
   target: 'node22',
-  external: ['react', 'react-dom'],
+  external: ['react', 'react/jsx-runtime', 'react-dom', 'maplibre-gl', 'lucide-react', 'lucide-react/*', 'katex'],
+  plugins: [{ name: 'stub-css', setup(api) {
+    api.onResolve({ filter: /\.css$/ }, () => ({ path: 'css', namespace: 'stub-css' }))
+    api.onLoad({ filter: /.*/, namespace: 'stub-css' }, () => ({ contents: '', loader: 'js' }))
+  } }],
   logLevel: 'silent',
 })
 const { ToggleControl } = await import(pathToFileURL(outfile).href)
@@ -77,6 +83,7 @@ function render(projection, options = {}) {
       projectionKeys.push(key)
       return projection
     },
+    styles: createStyleCatalog(),
     locked: options.locked ?? false,
     sessionId: options.sessionId ?? 'session-1',
     flip: options.flip ?? (async () => null),
@@ -105,20 +112,20 @@ test('off renders the closed chip with its own command hint', () => {
   assert.doesNotMatch(html, /disabled=""/)
 })
 
-test('session scope labels the chip Session and hints the session command', () => {
+test('session scope labels the chip This session only and hints the session command', () => {
   const { html } = render(view({ sessionEnable: 'on' }))
   assert.match(html, /data-state="on"/)
   assert.match(html, /aria-label="Intelligent UI: this session only"/)
-  assert.match(html, />UI: Session</)
+  assert.match(html, />UI: This session only</)
   assert.match(html, /\/iui on/)
   assert.doesNotMatch(html, /disabled=""/)
 })
 
-test('inherit labels the chip Global and hints the inherit command', () => {
+test('inherit labels the chip All sessions and retains the inherit command', () => {
   const { html } = render(view({ sessionEnable: 'inherit' }))
   assert.match(html, /data-state="inherit"/)
-  assert.match(html, /aria-label="Intelligent UI: follow global"/)
-  assert.match(html, />UI: Follow global</)
+  assert.match(html, /aria-label="Intelligent UI: all sessions"/)
+  assert.match(html, />UI: All sessions</)
   assert.match(html, /\/iui inherit/)
   assert.doesNotMatch(html, /disabled=""/)
 })
@@ -128,7 +135,7 @@ test('a Chinese locale seat translates the chip, aria label and tooltip', () => 
   const { html } = render(view({ sessionEnable: 'on' }), { t })
   assert.match(html, /data-state="on"/)
   assert.match(html, /aria-label="Intelligent UI：仅本会话"/)
-  assert.match(html, />UI：本会话</)
+  assert.match(html, />UI：仅本会话</)
   assert.match(html, /title="Intelligent UI 在本会话开启（\/iui on） — 点击更改"/)
 })
 
@@ -143,7 +150,7 @@ test('pending disables the chip and reports the pending state', () => {
 test('a locked composer disables the chip without changing its state', () => {
   const { html } = render(view({ sessionEnable: 'inherit' }), { locked: true })
   assert.match(html, /data-state="inherit"/)
-  assert.match(html, />UI: Follow global</)
+  assert.match(html, />UI: All sessions</)
   assert.match(html, /disabled=""/)
 })
 
@@ -155,6 +162,7 @@ test('the command helpers spell the host command for every value', () => {
   assert.equal(styleCommand('card'), '/iui style card')
   assert.equal(styleCommand('article'), '/iui style article')
   assert.equal(styleCommand('inherit'), '/iui style inherit')
+  assert.equal(styleCommand('cs_abcdef'), '/iui style cs_abcdef')
 })
 
 test('runCommand normalizes both failure channels', async () => {
@@ -182,4 +190,13 @@ test('cross-tab views publish, subscribe, and stop overriding once cleared', () 
   assert.equal(seen.length, 1, 'unsubscribed listeners stop receiving updates')
   resetSyncedMode()
   assert.equal(readSyncedMode(), undefined)
+})
+
+test('operation changes settle an optimistic mode view even when style and scope stay the same', () => {
+  const base = { sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null }
+  const armed = { ...base, onDemand: { operationId: 'op-1', status: 'armed', clientInstanceId: 'tab-1', resultIds: [] } }
+  assert.equal(sameView(base, armed), false)
+  assert.equal(sameView(armed, { ...armed, onDemand: { ...armed.onDemand, status: 'running' } }), false)
+  assert.equal(sameView(armed, { ...armed, onDemand: { ...armed.onDemand, resultIds: ['r-1'] } }), false)
+  assert.equal(sameView(armed, { ...armed, pending: true, onDemand: { ...armed.onDemand, resultIds: [] } }), true)
 })

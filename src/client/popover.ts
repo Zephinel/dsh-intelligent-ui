@@ -74,7 +74,7 @@ export function useAnchoredPopup(
           right: Math.min(Math.max(margin, viewport - rect.right), viewport - margin),
           maxWidth: Math.min(maxWidth, viewport - margin * 2),
           bottom,
-          ...maxHeight ? { maxHeight: Math.max(260, rect.top - 24) } : {},
+          ...maxHeight ? { maxHeight: Math.max(0, window.innerHeight - bottom - margin) } : {},
         })
         return
       }
@@ -84,7 +84,8 @@ export function useAnchoredPopup(
         left,
         bottom,
         width,
-        ...maxHeight ? { maxHeight: Math.max(260, rect.top - 24) } : {},
+        // A minimum height can push a scrollable panel above a short viewport.
+        ...maxHeight ? { maxHeight: Math.max(0, window.innerHeight - bottom - margin) } : {},
       })
     }
     place()
@@ -131,10 +132,13 @@ export function usePopupDismiss(
       const target = event.target as Node | null
       if (target === null) return
       if (popupRef.current?.contains(target) || triggerRef.current?.contains(target)) return
+      // A template editor/menu is portaled outside its owning composer panel.
+      if (target instanceof Element && target.closest('[data-dsh-iui-popup-child]')) return
       onClose()
     }
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      if (!popupRef.current?.hasAttribute('data-dsh-iui-popup-child') && document.querySelector('[data-dsh-iui-popup-child]')) return
       event.stopPropagation()
       onClose()
     }

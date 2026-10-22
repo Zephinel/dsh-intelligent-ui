@@ -100,6 +100,12 @@ export function sameView(left: IntelligentUIModeView, right: IntelligentUIModeVi
     && left.globalStyle === right.globalStyle
     && left.enabled === right.enabled
     && left.style === right.style
+    && left.onDemand?.operationId === right.onDemand?.operationId
+    && left.onDemand?.status === right.onDemand?.status
+    && left.onDemand?.clientInstanceId === right.onDemand?.clientInstanceId
+    && left.onDemand?.kind === right.onDemand?.kind
+    && left.onDemand?.parentResultId === right.onDemand?.parentResultId
+    && (left.onDemand?.resultIds ?? []).join('\n') === (right.onDemand?.resultIds ?? []).join('\n')
 }
 
 /**
@@ -126,6 +132,17 @@ export function enableCommand(scope: SessionEnable): string {
 /** Slash command that sets this session's answer-style override. */
 export function styleCommand(style: StylePreference): string {
   return `/${MODE_COMMAND} style ${style}`
+}
+
+/** Explicit one-shot intent, using the same remote command channel as style selection. */
+export function onDemandCommand(action: 'arm' | 'cancel' | 'adjust', token?: string, resultId?: string): string {
+  if (action === 'cancel') return `/${MODE_COMMAND} on-demand off`
+  if (typeof token !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(token) || token.toLowerCase() === 'off') throw new Error('Invalid client instance token')
+  if (action === 'adjust') {
+    if (typeof resultId !== 'string' || !/^[a-zA-Z0-9_:.-]{1,200}$/.test(resultId)) throw new Error('Invalid parent result id')
+    return `/${MODE_COMMAND} on-demand ${token} adjust ${resultId}`
+  }
+  return `/${MODE_COMMAND} on-demand ${token}`
 }
 
 /**

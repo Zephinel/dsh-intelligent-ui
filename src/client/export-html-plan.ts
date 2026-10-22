@@ -6,8 +6,30 @@
  * the recorded cards into one downloadable document. Unit tests load it
  * directly under Node.
  */
-import type { ExportPageCard } from '../shared/intelligent-ui.ts'
+import type { ExportPageCard, IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { resolveStyleThemeVars } from '../lib/style-theme.ts'
 import { fileStem } from './export-image-plan.ts'
+import type { StyleTemplate } from '../shared/style-templates.ts'
+import type { StyleCatalogSnapshot } from './styles.ts'
+
+/** Resolve only templates the live cards would currently use; an unavailable catalog falls back to defaults. */
+export function exportTemplatesFor(catalog: StyleCatalogSnapshot | undefined, sessionId?: string): readonly StyleTemplate[] {
+  if (catalog === undefined || catalog.status === 'unavailable') return []
+  return catalog.templates.filter(template => template.scope === 'global' || template.sessionId === sessionId)
+}
+
+/** Inline snapshots take priority; saved styles resolve from the visible catalog. */
+export function programsToExportCards(programs: readonly IntelligentUIProgram[], scheme: 'light' | 'dark', templates: readonly StyleTemplate[] = []): ExportPageCard[] {
+  return programs.map(program => {
+    const theme = program.temporaryStyle?.theme ?? templates.find(template => template.id === program.styleId)?.theme
+    return {
+    program: program.program,
+    title: program.title,
+    style: program.style === 'article' ? 'article' : 'card',
+    callId: program.callId,
+    ...theme === undefined ? {} : { themeStyle: resolveStyleThemeVars(theme, scheme), scheme },
+  } })
+}
 
 /** Everything the standalone page needs, already fetched as text. */
 export interface StandalonePageInput {

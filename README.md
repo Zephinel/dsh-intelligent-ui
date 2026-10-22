@@ -1,3 +1,5 @@
+<img src="icon.svg" alt="dsh-intelligent-ui" width="72" height="72" align="right">
+
 # dsh-intelligent-ui
 
 中文 | [English](README.en.md)
@@ -12,7 +14,7 @@
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`**（`latest`）。
+> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`**（`latest`）。下述自定义样式与按需生成功能属于当前 checkout 的 **Unreleased** 改动，尚未发布。
 
 > [!TIP]
 > **想先跑起来？** 安装只需一条命令：`dsh plugin --profile web add @zephinel/dsh-intelligent-ui`；重启承载 Web UI 的 DSH 进程后，在输入框右侧的 **UI** 控件里选择「仅本会话」即可开启。完整步骤见[快速开始](#快速开始)。
@@ -53,11 +55,14 @@
 | 导出图片 | 把该轮渲染结果保存为一张 PNG：原始 / 圆角 / 卡片三种美化；背景色与 1x/2x 在插件详情页设置 |
 | 导出交互页面 | 把该轮全部卡片导出为单个 HTML 文件，浏览器打开后继续交互；`@ToAssistant` 改为复制文案并提示回 DSH 粘贴 |
 | 本地执行 | `$变量`、`@Set`、`@functions` 在浏览器运行；只有 `@ToAssistant` 回写消息 |
-| 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；Auto / Card / Article 三档样式 |
+| 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；内置 Auto / Card / Article 与自定义模板 |
+| 自定义模板与视觉主题 | 保存可复用的展示偏好与明暗配色、字体、圆角、密度、阴影；在「我的样式」中使用、重命名、编辑或删除 |
+| 聊天内按需生成 | 无需模板；在 UI 面板选择「按需生成」，正常发送需求，必要时用内置提问工具澄清 |
+| 临时结果与可选保存 | 结果自带内联样式快照，可直接使用、调整样式或事后保存为模板；不强制预览、命名或保存 |
 | 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
 | Agent Skill | 随插件注册 `intelligent-ui`，模型按需加载完整语法、示例与排障 |
-| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（Auto / Card / Article）、编排方式（自由布局）、导出（背景色、分辨率、图片/页面导出是否移除追问区块，默认移除） |
-| 可重放 | 生成程序作为工具参数进入会话日志，随历史重放 |
+| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（内置或已保存模板）、我的样式管理、编排方式（自由布局）、导出（背景色、分辨率、图片/页面导出是否移除追问区块，默认移除） |
+| 可重放 | 程序与临时样式随工具参数重放；导出页面冻结导出时的主题方案 |
 
 ## 获取代码
 
@@ -68,7 +73,7 @@ git clone https://github.com/Zephinel/dsh-intelligent-ui.git
 cd dsh-intelligent-ui
 ```
 
-也可以直接从 npm 安装，不需要 checkout（见[快速开始](#快速开始)）。
+如果要提交改动，先 Fork 本仓库再克隆自己的副本；只想使用插件时，直接安装 npm 包即可（见[快速开始](#快速开始)）。
 
 ## 前置条件
 
@@ -119,14 +124,17 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 ## 开关与回答样式
 
-![输入框右侧的 UI 控件：Off / This session only / Follow global，以及分隔线下的 Display style](assets/intelligent-ui-toggle.png)
+![输入框右侧的 UI 控件：Off / This session only / All sessions，以及分隔线下的 Display style](assets/intelligent-ui-toggle.png)
 
-![选择「仅本会话」后的样式面板：本会话 Auto / Card / Article 与跟随全局](assets/intelligent-ui-style-panel.webp)
+![样式面板：内置 Auto / Card / Article 卡片、自定义样式与底部按需生成入口](assets/intelligent-ui-style-panel.webp)
 
-- **全局默认**：插件详情页里的「在所有会话中启用」决定新会话是否默认开启；「回答样式」里的「显示样式」决定默认的 Auto / Card / Article。
-- **会话覆盖**：输入框 **UI** 控件只改当前会话，选择「仅本会话」后打开样式面板；`/iui on|off|inherit` 与 `/iui style auto|card|article|inherit` 等价。
-- **Auto** 由模型按请求选择：交互/结构化用紧凑 Card，详尽/深入/长文用 Article 阅读页。Article 需要 `Toc`、可折叠 `Section` 和实质正文，不是骨架。
-- 会话状态原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`，刷新、DSH 重启后保留；完整语义（投影、服务依赖）见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
+- **全局默认**：插件详情页的「在所有会话中启用」与「回答样式」设置新会话默认值；可以选择内置样式或已保存的全局模板。
+- **会话覆盖**：点 Composer 的 **UI** chip →「仅本会话」或「显示样式」进入面板。上方是内置 Auto / Card / Article 预览卡片，中间是「自定义样式」（已保存模板），底部是「按需生成」。「全部会话」表示本会话跟随全局开关，不会打开全局开关；`/iui on|off|inherit` 与 `/iui style auto|card|article|inherit|<cs_id>` 提供命令入口。
+- **Auto** 由模型按请求选择：交互/结构化用紧凑 Card，详尽/深入/长文用 Article。Article 需要 `Toc`、可折叠 `Section` 和实质正文。
+- **按需生成**：选择后面板关闭，焦点回到输入框，出现可取消的提示与示例；示例只填入内容，保留已有草稿，不自动发送。正常发送后，清晰需求直接渲染，有重要歧义时由内置 `ask_user_question` 结构化提问，回答后继续生成。
+- 会话启用/样式设置原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`；按需操作不改这些设置，临时样式也不是当前选中的样式。完整边界见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
+
+![已武装的按需生成提示：示例只填入输入框，不发送](assets/intelligent-ui-on-demand-hint.webp)
 
 ## 使用
 
@@ -136,26 +144,48 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 - 「做一个 7 速自行车的换挡模拟器」
 - 「把这几张表变成一个可以筛选的销售看板」
 - 「介绍一下中国历史，要能按朝代展开」
+- 先选「按需生成」，再发送「把这次分析做成紧凑仪表盘，用卡片和图表突出关键指标」
+- 点结果下的「调整样式」，再发送「保留内容，改成留白更多的阅读版式」
 
 开启后，**有结构的回答默认用卡片呈现**——包括讲解、介绍、时间线、阶段、对比和可探索内容；文字只用于单个事实、一两句话的答复、你明确要文字/文档/代码，或渲染连续失败。开关没打开时，模型看不到 `render_ui`，会直接用文字回答——这不是故障；打开开关再问即可。
 
 如果一定要保证出卡片（或模型仍然回了文字），在开关已打开的会话里用 `/intelligent-ui` 显式调用技能；显式调用会被当作直接指令。也可以说「读取 intelligent-ui skill 然后用 render_ui 做一个…」。
 
-![插件详情页：可用性、回答样式、编排方式与导出四组设置](assets/intelligent-ui-settings.webp)
+![临时结果：临时样式标记、调整样式与保存为模板](assets/intelligent-ui-temporary-result.webp)
 
-插件详情页按 **可用性**、**回答样式**、**编排方式** 和 **导出** 分组。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**导出** 保存图片的默认背景色、1x/2x 分辨率，以及图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除）。
+![同一临时结果在固定深色主题下的渲染](assets/intelligent-ui-temporary-result-dark.webp)
+
+临时结果可以立即使用。点「调整样式」会关联这张结果并在保留草稿的前提下填入调整提示，仍需正常发送；点「保存为模板」才填写名称、描述与可用范围（本会话或全局）。保存复用该结果的已校验样式，不再次生成，也不自动选中模板或更改全局默认；不要求先预览、命名或保存。
+
+![插件详情页：全局启用、默认样式、我的样式管理、编排方式与导出](assets/intelligent-ui-settings.webp)
+
+插件详情页按 **可用性**、**回答样式**、**我的样式**、**编排方式** 和 **导出** 分组。「我的样式」管理已保存的全局模板，可设为默认、重命名、编辑描述/展示偏好、导出 JSON 或删除；Composer 管理当前会话可见的全局与会话模板。生成入口在 Composer，设置页提供说明，不设生成工作台。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**导出** 保存图片的默认背景色、1x/2x 分辨率，以及图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除）。
 
 回答渲染完成后，消息底部操作栏的**最右侧**会出现带「导出」字样的**药丸按钮**（只有扩展渲染的回答才有）。点开后可把该轮全部卡片保存为一张 PNG——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影）；也可以导出为单文件 HTML，直接在浏览器打开即可继续交互，页面里的 `@ToAssistant` 改为复制消息并提示回到 DSH 粘贴。导出的图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字或导出按钮本身。完整流程见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
 
 ## 构建、测试与部署
 
+从全新 clone 本地开发时，先安装依赖、构建并写入本地 DSH profile：
+
+```bash
+npm install
+npm run build
+node scripts/install.mjs
+```
+
+重启承载 Web UI 的 DSH 进程，再打开它打印的 URL；输入框右侧出现 **UI** 控件即成功。扩展没有独立开发服务器，也没有 watch 模式；细节与卸载见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
+
+日常检查与打包：
+
 ```bash
 npm run build       # 生成 prompt、Host 与 Client bundle
 npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
 npm run pack:check  # 检查 npm pack 的最终文件清单
-npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导出 + 交互页面 + Article 间距 + 自定义选色器，需要本机 Chrome）
+npm run test:browser # 先构建；7 个浏览器套件：按需生成、样式面板、主题、图片、交互页面、Article 间距、设置（需要 Chrome）
 ```
 
+- 当前 Node 测试 **179** 项；renderer 解析/渲染各 **41/41**，i18n **4** 个程序，排版 **22/22**。浏览器为组件/契约验证；按需生成主链路（清晰需求→临时样式卡片→保存为模板）、缺少内容时的自由输入澄清与真实数据来源约束，均已在隔离 DSH Web 实例中用真实模型验证；其余场景见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+- `node scripts/capture-screenshots.mjs` 以固定 DSH token、生产组件与假服务在 Chrome 2x 重建面板、提示、临时结果与设置截图；英文 UI，卡片壳层图标用 lucide 替身。
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
 
 发布物是一个 DSH bundle；部署就是把插件安装进目标 DSH profile。卸载与版本注意事项见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
@@ -183,7 +213,20 @@ npm run test:browser # 可选：真实浏览器 E2E（样式面板 + 图片导�
 - 插件详情页里的配置依赖 DSH 的 settings 服务：最小自定义 profile 未组合 `dsh-settings` / `dsh-client-ui-settings` 时不出现；Host/Client 版本错位时开关可能显示为不可用。全局启用/样式与自由布局只改变提示词与页面形态，不保证每个模型都完全遵守；会话样式覆盖仍以 Host 注入的提示词为准。
 - 交互页面导出需要部署提供 `webServer` 服务（DSH Web 0.2.1 默认包含）；最小自定义 profile 缺少它时无法导出交互页面，图片导出不受影响。
 
+- 临时样式保存在工具参数/结果快照中，不进入模板库；历史工具参数仍在加载窗口时可重放。事后保存依赖有界结果注册表（最近 200 条），被淘汰的结果可能仍能重放但无法再保存。保存模板与结果快照在 `<DSH_HOME>` 的独立 JSON 文件中持久化。
+- 样式创建/按需生成使用部署的默认主对话模型服务；扩展不提供独立生成模型或 draft 访谈服务。`ask_user_question` 是结构化澄清路径；工具不可用时降级为文字提问，文字轮结束后提示会保留，下一条消息继续同一操作，不需要重新选择「按需生成」（过期、重启或失败后除外）。
+- 按需操作只在内存中：等待发送（armed）10 分钟过期，重启后活动操作无法恢复，需要重新武装；已完成结果不因此丢失。每会话最多一个活动操作：armed 时重新武装会替换，已绑定的 running/clarifying 拒绝重新武装且需先取消；最多两轮澄清。文本结束但未渲染时操作回到待继续状态，下一条消息继续；失败/中断会显示重试/关闭提示。
+- 多标签页采用保守绑定：提示只显示在发起标签页，但 Host 绑定该会话的下一条人工消息，并不验证发送标签来源；请在发起标签页发送，避免另一标签同时发送。
+- 自定义主题只应用到 renderer host，portaled Popover 与沙盒 iframe 保留默认主题；语义状态色保持渲染器定义。导出交互页面冻结导出时的明/暗方案，不随系统切换。
+- 已保存模板的 directives 是有界展示偏好（最多 2,000 字符），不能覆盖系统、工具或安全规则；模板库上限为全局 40 个、每会话 20 个。删除/不可用的已保存模板按默认主题降级；内联临时结果的重放/导出不依赖模板库。
+
 ## 常见问题
+
+**必须先建模板、预览或命名吗？** 不需要。选「按需生成」后正常聊天，结果可以直接使用；只有主动「保存为模板」才需要名称。临时结果不会替换当前会话选中的样式。
+
+**能晚些保存或继续调整吗？** 可以。使用那张结果下的「调整样式」或「保存为模板」；保存的是点选结果的版本，不会自动保存后来生成的版本。注册表已淘汰该结果时会提示快照不可用。
+
+**为什么追问后没有继续生成？** 结构化 `ask_user_question` 回答会恢复同一操作；文字提问后，下一条消息会自动继续同一操作。只有过期、重启、失败或中断后才需要重新武装/重试。多个标签同时发送也可能消费同一意图。
 
 **为什么回答只有文字、没有卡片？** 先确认该会话的开关已打开（输入框右侧 **UI** 控件，或 `/iui on`）；开启后模型仍可能把单个事实、一两句话或明确的文字/代码请求当作有界例外。想强制出卡片时，在开关已打开的会话里用 `/intelligent-ui` 显式调用技能。详见[使用](#使用)。
 

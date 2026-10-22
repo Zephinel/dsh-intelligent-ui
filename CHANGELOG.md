@@ -7,6 +7,35 @@ been published yet.
 
 ## [Unreleased]
 
+### Added
+
+- Custom style templates with reusable display preferences and controlled light/dark visual themes (palette, font, radius, density and shadow).
+- Chat-native On-demand UI: normal messages generate temporary inline style snapshots without requiring a template, preview, name or save.
+- Message-bound operations with arming, expiry, structured `ask_user_question` clarification, cancellation, failure and interruption handling.
+- Temporary-result badges, draft-preserving style adjustments and optional save-from-result using Host-validated snapshots.
+- Saved-template management in the composer and Plugin detail page: use/default, rename, edit and delete; global templates can be exported as JSON.
+
+### Changed
+
+- Replaced the answer-style slider with built-in preview cards, saved Custom styles and a bottom On-demand UI entry; settings explains composer generation and manages persistent defaults/templates.
+- Interactive-page export freezes each result's resolved theme and scheme at export time, including catalog-independent temporary snapshots.
+- Updated bilingual documentation, Agent Skill contracts, reproducible 2x screenshots and documentation guards; expanded Node and browser coverage. Real-model DSH E2E for this rework remains pending.
+
+### Fixed
+
+- Host activation on DSH 0.2.1: `render_ui` input/output JSON Schemas no longer use JSON Schema keywords outside the tool-registration subset (`maxLength`, `minLength`, `pattern`), which previously left the plugin in a Problem state and removed the composer UI control. Limits stay in annotations and execute-time validation, with a schema-subset regression test.
+- On-demand generation: inject the request note while the operation is armed (DSH appends the system prompt before the first user message), reject a plain `render_ui` during a bound on-demand turn so the model retries with `temporaryStyle`, and reject re-arming a running/clarifying operation instead of silently replacing it. Added regression tests and real-model DSH validation of the main path.
+- On-demand UI status: keep the composer hint visible while the result is generating or a question is pending; if the model ends a turn with text but no render (for example to request missing content), automatically re-arm the same intent with a continue hint. The hint now clears only after a temporary result renders or the user cancels, and the generic spinner was replaced with a refined inline SVG indicator.
+- Content grounding: on-demand requests now require grounding data, figures, dates and sources in the conversation or tool results; missing content must be asked about with a free-form question (no options) so users can paste text, a path or a link. Never fabricate placeholder datasets or sources. Verified with the real model: it refused to invent data, asked for the analysis, then rendered from a real public source.
+- Terminal guidance: failed and interrupted on-demand turns now keep a composer hint with a reason summary, Retry (re-arm) and Dismiss actions instead of silently reverting to a plain composer.
+
+### Fixed after review
+
+- Declare the optional `resume` flag in the published projection schema (it was rejected by DSH wire validation) and clear it when the next message binds.
+- Preserve `kind: adjust` and `parentResultId` when retrying a failed/interrupted adjustment instead of downgrading it to a fresh generate.
+- Make HTML page export use the same catalog fallback as live cards, so an unavailable catalog no longer exports a stale saved-template theme.
+- Sync README/FAQ/architecture/integration lifecycle descriptions with resume, rejected re-arming while bound, and terminal retry behavior.
+
 ## [0.3.0-26-10-22] - 2026-10-22
 
 ### Added

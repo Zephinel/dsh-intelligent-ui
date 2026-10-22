@@ -1,30 +1,19 @@
 #!/usr/bin/env node
 /**
- * Re-capture the two README screenshots owned by the design-system harness:
+ * README captures from production components with deterministic local services.
+ * Fixed DSH light/dark token sets, 2x Chrome screenshots; no running DSH/model.
+ * Shell-only card glyphs use the matching lucide icons because DSH primitives
+ * are supplied by the live module loader, not installed in this checkout.
  *
- *   assets/intelligent-ui-components-layout.webp  — the component-tour card
- *   assets/intelligent-ui-settings.webp           — the Plugin detail page form
+ * node scripts/capture-screenshots.mjs                 # all README captures
+ * node scripts/capture-screenshots.mjs panel hint       # selected captures
+ * node scripts/capture-screenshots.mjs --dark --out-dir=/tmp/iui-dark
  *
- * Both are rendered at 2x from the real renderer / settings component and the
- * extension's own CSS, with a fixed light-theme token set (the subset of DSH
- * `--dsw-*` aliases those two surfaces read), so the images are reproducible
- * without a running DSH instance. They are English-UI captures by design: the
- * settings harness passes `fallbackT`, and the card header is authored here.
- *
- *   node scripts/capture-screenshots.mjs              # both
- *   node scripts/capture-screenshots.mjs settings     # just the settings form
- *
- * Requires the devDependencies (esbuild, react) and a local Chrome; set
- * CHROME_BIN to point at another binary. Exits 0 with a skip message when no
- * Chrome is found, matching the browser tests.
- *
- * Update the program / header title / expected strings below when the component
- * vocabulary or the Plugin detail page changes, then re-run. Never hand-edit
- * the WebP assets: the other eight README screenshots come from the answer
- * renderer and are captured from real sessions.
+ * Requires Chrome (CHROME_BIN overrides discovery). Never hand-edit images.
+ * Historical itinerary/media/example assets are real-session captures.
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +21,11 @@ import { build } from 'esbuild'
 import { chromeExists, startStaticServer, launchChrome, connectCdp } from '../test/support/browser.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const assets = join(root, 'assets')
+const args = process.argv.slice(2)
+const dark = args.includes('--dark')
+const outputArg = args.find(arg => arg.startsWith('--out-dir='))?.slice('--out-dir='.length)
+assert.ok(!dark || outputArg, '--dark needs --out-dir to preserve the README light captures')
+const assets = outputArg ? resolve(outputArg) : join(root, 'assets')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
@@ -67,6 +60,17 @@ const THEME = `:root{
   --dsw-radius-sm: 8px;
   --dsw-radius-md: 12px;
   --dsw-radius-lg: 16px;
+}`
+
+const DARK_THEME = `body[data-ds-dark-theme]{
+  color-scheme:dark;
+  --dsw-alias-bg-base:#141414; --dsw-alias-bg-layer-1:#1b1b1b;
+  --dsw-alias-bg-layer-2:#242424; --dsw-alias-bg-layer-3:#2c2c2c;
+  --dsw-alias-label-primary:#f2f2f2; --dsw-alias-label-secondary:#b8b8b8;
+  --dsw-alias-label-tertiary:#929292; --dsw-alias-label-caption:#777;
+  --dsw-alias-label-primary-foreground:#141414; --dsw-alias-brand-primary:#f2f2f2;
+  --dsw-alias-border-l1:#323232; --dsw-alias-border-l2:#3c3c3c;
+  --dsw-alias-border-l3:#444; --dsw-alias-interactive-bg-hover:#ffffff12;
 }`
 
 /** The component-tour program. Counts and group members must match the current vocabulary. */
@@ -128,7 +132,7 @@ createRoot(document.getElementById('shot-root')!).render(createElement(Shot))
 const ERROR_PROBE = `<script>window.__errors=[];addEventListener('error',(event)=>window.__errors.push(String(event.message)));addEventListener('unhandledrejection',(event)=>window.__errors.push(String(event.reason)))</script>`
 
 const LAYOUT_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<style>${THEME}</style>
+<style>${THEME}${DARK_THEME}</style>
 <style>
 html, body { margin: 0; padding: 0; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-family: var(--dsw-font-family); }
 #shot-frame { display: flex; justify-content: center; padding: 24px; box-sizing: border-box; }
@@ -137,40 +141,40 @@ html, body { margin: 0; padding: 0; background: var(--dsw-alias-bg-base); color:
 <link rel="stylesheet" href="./layout.css">
 </head><body>${ERROR_PROBE}<div id="shot-frame"><div id="shot-root"></div></div><script type="module" src="./layout.js"></script></body></html>`
 
-const SETTINGS_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<style>${THEME}</style>
+const SURFACE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<style>${THEME}${DARK_THEME}</style><link rel="stylesheet" href="./surface.css">
 <style>
-html, body { margin: 0; background: #eef1f4; color: var(--dsw-alias-label-primary); font-family: var(--dsw-font-family); -webkit-font-smoothing: antialiased; }
-::-webkit-scrollbar { display: none; }
-#root { width: 620px; margin: 24px auto; }
-</style>
-<link rel="stylesheet" href="./settings.css">
-</head><body>${ERROR_PROBE}<div id="root"></div><script type="module" src="./settings.js"></script></body></html>`
+html,body{margin:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:14px var(--dsw-font-family);-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{display:none} #root{margin:24px auto;width:620px}
+body[data-shot="panel"] #root,body[data-shot="toggle"] #root{position:fixed;bottom:24px;left:24px;right:24px;width:auto;margin:0}
+html:has(body[data-ds-dark-theme]){background:#141414}
+body[data-shot="result"] #root{width:720px}
+[data-screenshot-composer]{position:relative;border:1px solid var(--dsw-alias-border-l2);border-radius:16px;background:var(--dsw-alias-bg-layer-1)}
+.shot-input{padding:18px;min-height:42px;color:var(--dsw-alias-label-tertiary)}
+.shot-toolbar{display:flex;justify-content:flex-end;padding:10px}
+</style></head><body>${ERROR_PROBE}<div id="root"></div><script type="module" src="./surface.js"></script></body></html>`
 
 const SHOTS = [
-  {
-    name: 'layout',
-    html: 'layout.html',
-    bundle: 'layout.js',
-    width: 808,
-    heightExpr: 'Math.ceil(document.documentElement.scrollHeight)',
-    wait: '!!document.querySelector(".dsh-iui-body") && document.querySelector(".dsh-iui-body").innerText.length > 400',
-    expect: ['57 components', 'Section & Toc', '12 components'],
-    out: join(assets, 'intelligent-ui-components-layout.webp'),
-  },
-  {
-    name: 'settings',
-    html: 'settings.html',
-    bundle: 'settings.js',
-    width: 668,
-    heightExpr: "Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
-    wait: '!!document.querySelector("[data-dsh-iui-export-background]") && document.querySelectorAll(".dsh-iui-settings-row").length >= 4',
-    expect: ['Global defaults', 'Remove follow-up actions', '#ffffff'],
-    out: join(assets, 'intelligent-ui-settings.webp'),
-  },
+  { name:'layout', html:'layout.html', width:808, heightExpr:'Math.ceil(document.documentElement.scrollHeight)',
+    wait:'!!document.querySelector(".dsh-iui-body") && document.querySelector(".dsh-iui-body").innerText.length > 400',
+    expect:['57 components','Section & Toc','12 components'], out:'intelligent-ui-components-layout.webp' },
+  { name:'settings', surface:'settings', width:668, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
+    wait:'document.querySelectorAll("[data-dsh-iui-manage]").length === 2', expect:['Global defaults','My styles','Remove follow-up actions','#ffffff'], out:'intelligent-ui-settings.webp' },
+  { name:'toggle', surface:'toggle', width:540, fixedHeight:400,
+    wait:'!!document.querySelector("[data-dsh-iui-toggle]")', setup:['document.querySelector("[data-dsh-iui-toggle]").click()'],
+    expect:['Off','This session only','Display style'], out:'intelligent-ui-toggle.png' },
+  { name:'panel', surface:'panel', width:540, fixedHeight:930,
+    wait:'!!document.querySelector("[data-dsh-iui-toggle]")', setup:['document.querySelector("[data-dsh-iui-toggle]").click()', 'document.querySelector("[data-style-entry]").click()'],
+    settled:'!!document.querySelector("[data-dsh-iui-on-demand-entry]")', expect:['Built-in styles','Custom styles (3)','Ocean notes','On-demand UI'], out:'intelligent-ui-style-panel.webp' },
+  { name:'hint', surface:'hint', width:760, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
+    wait:'!!document.querySelector("[data-dsh-iui-on-demand-hint]")', expect:['On-demand UI','Cancel on-demand UI','Highlight the key metrics'], out:'intelligent-ui-on-demand-hint.webp' },
+  { name:'result', surface:'result', width:768, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
+    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Weekly review','Temporary style','Adjust style','Save as template','75% complete'], out:'intelligent-ui-temporary-result.webp' },
+  { name:'result-dark', surface:'result', dark:true, width:768, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
+    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Temporary style','Adjust style','Save as template'], out:'intelligent-ui-temporary-result-dark.webp' },
 ]
 
-const requested = process.argv.slice(2).filter((argument) => !argument.startsWith('-'))
+const requested = args.filter((argument) => !argument.startsWith('-'))
 const jobs = requested.length === 0 ? SHOTS : SHOTS.filter((shot) => requested.includes(shot.name))
 assert.equal(jobs.length, requested.length || SHOTS.length, `unknown screenshot name: ${requested.join(', ')}`)
 
@@ -184,7 +188,8 @@ let server
 try {
   await writeFile(join(temp, 'layout-entry.tsx'), LAYOUT_ENTRY)
   await writeFile(join(temp, 'layout.html'), LAYOUT_HTML)
-  await writeFile(join(temp, 'settings.html'), SETTINGS_HTML)
+  await writeFile(join(temp, 'surface.html'), SURFACE_HTML)
+  await mkdir(assets, { recursive: true })
 
   const common = {
     bundle: true,
@@ -199,11 +204,16 @@ try {
     logLevel: 'silent',
   }
   await build({ ...common, entryPoints: [join(temp, 'layout-entry.tsx')], outfile: join(temp, 'layout.js') })
-  await build({ ...common, entryPoints: [join(root, 'test/browser/harness/settings-entry.tsx')], outfile: join(temp, 'settings.js') })
+  await build({ ...common, entryPoints: [join(root, 'scripts/screenshot-entry.tsx')], outfile: join(temp, 'surface.js'),
+    plugins:[{ name:'shell-glyphs', setup(build) {
+      build.onResolve({filter:/^@deepseek-ai\/dsh-client-ui-primitives$/}, () => ({path:'glyphs',namespace:'screenshot'}))
+      build.onLoad({filter:/.*/,namespace:'screenshot'}, () => ({contents:'export { ChevronDown as IconChevronDownOutlineRegular, Sparkles as IconSparkleRegular } from "lucide-react"',resolveDir:root}))
+    }}],
+  })
 
   server = await startStaticServer(temp)
   for (const shot of jobs) {
-    const url = server.url + shot.html
+    const url = server.url + (shot.html ?? `surface.html?shot=${shot.surface}`)
     const browser = await launchChrome({ url, width: shot.width + 200, height: 1200 })
     assert.ok(browser, 'Chrome failed to launch')
     const cdp = await connectCdp(browser.port)
@@ -211,9 +221,13 @@ try {
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: shot.width, height: 1200, deviceScaleFactor: 2, mobile: false })
+      await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark || shot.dark ? 'dark' : 'light' }] })
       await cdp.send('Page.navigate', { url })
       await cdp.waitFor('document.readyState === "complete"', `${shot.name} load`, { timeout: 30000 })
+      await cdp.evaluate(`(() => { window.__DSH_BOOT__ = {}; document.body.dataset.shot=${JSON.stringify(shot.surface ?? 'layout')}; ${dark || shot.dark ? 'document.body.setAttribute("data-ds-dark-theme","")' : ''} })()`)
       await cdp.waitFor(shot.wait, `${shot.name} content`, { timeout: 30000 })
+      for (const step of shot.setup ?? []) { await cdp.evaluate(step); await sleep(250) }
+      if (shot.settled) await cdp.waitFor(shot.settled, `${shot.name} settled`)
       await cdp.evaluate('document.fonts ? document.fonts.ready.then(() => true) : true')
       await sleep(1200)
 
@@ -222,20 +236,20 @@ try {
       const text = await cdp.evaluate('document.body.innerText')
       for (const expected of shot.expect) assert.ok(text.includes(expected), `${shot.name} is missing "${expected}"`)
 
-      const first = await cdp.evaluate(shot.heightExpr)
+      const first = shot.fixedHeight ?? await cdp.evaluate(shot.heightExpr)
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: shot.width, height: first, deviceScaleFactor: 2, mobile: false })
       await sleep(800)
-      const height = await cdp.evaluate(shot.heightExpr)
-      assert.ok(height > 400, `${shot.name} rendered too little content (${height}px)`)
+      const height = shot.fixedHeight ?? await cdp.evaluate(shot.heightExpr)
+      assert.ok(height >= 200, `${shot.name} rendered too little content (${height}px)`)
       const shotResult = await cdp.send('Page.captureScreenshot', {
-        format: 'webp',
-        quality: 90,
+        format: shot.out.endsWith('.png') ? 'png' : 'webp',
+        ...(shot.out.endsWith('.png') ? {} : { quality: 90 }),
         fromSurface: true,
         captureBeyondViewport: true,
         clip: { x: 0, y: 0, width: shot.width, height, scale: 1 },
       })
-      await writeFile(shot.out, Buffer.from(shotResult.data, 'base64'))
-      console.log(`${shot.name}: ${shot.width * 2}x${height * 2} → ${shot.out.slice(root.length + 1)}`)
+      await writeFile(join(assets, shot.out), Buffer.from(shotResult.data, 'base64'))
+      console.log(`${shot.name}: ${shot.width * 2}x${height * 2} → ${join(assets, shot.out)}`)
     } finally {
       cdp.close()
       await browser.cleanup()
