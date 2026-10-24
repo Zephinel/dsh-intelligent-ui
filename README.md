@@ -9,15 +9,22 @@
 [![DSH](https://img.shields.io/badge/DSH-0.2.1-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
 [![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
 
-**把模型回答变成一张真正能用的页面。** 模型调用 `render_ui` 工具，把答案写成一份 [OpenUI Lang 1.0](https://openui.com) 程序；DSH 聊天页在该轮结束时把它渲染成可交互页面——地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图。
+**把 DeepSeek Harness（DSH）的模型回答变成一张真正能用的页面。** 安装并启用后，直接提问：
+
+```text
+帮我排一个上海两日游，要能勾选和调整
+```
+
+模型调用 `render_ui` 工具，把答案写成一份 [OpenUI Lang 1.0](https://openui.com) 程序；DSH 聊天页在该轮结束时把它渲染成可交互页面——地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件，不是截图。
 
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
 > **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.4.2`**（`latest`）。自定义样式、按需生成以及按需生命周期与内容接地修复均已包含在 0.4.2 中。
 
-> [!TIP]
-> **想先跑起来？** 安装只需一条命令：`dsh plugin --profile web add @zephinel/dsh-intelligent-ui`；重启承载 Web UI 的 DSH 进程后，在输入框右侧的 **UI** 控件里选择「仅本会话」即可开启。完整步骤见[快速开始](#快速开始)。
+> **未发布（当前工作树）**：下文按需结果及保存模板的自由布局、模板文件导入/导出尚未包含在 0.4.2 中。新结果无需 Card/Article 外壳；布局有实质歧义时，模型先提出聚焦问题。保存为模板时完整保留自由布局、偏好和明暗主题，无需选择 Card/Article。体验这些变化需从本地 checkout 构建安装。
+
+[快速开始](#快速开始) · [获取代码](#获取代码) · [构建、测试与部署](#构建测试与部署)
 
 ## 效果
 
@@ -58,10 +65,11 @@
 | 开关与样式 | 全局默认在插件详情页；输入框 UI 控件按会话覆盖；内置 Auto / Card / Article 与自定义模板 |
 | 自定义模板与视觉主题 | 保存可复用的展示偏好与明暗配色、字体、圆角、密度、阴影；在「我的样式」中使用、重命名、编辑或删除 |
 | 聊天内按需生成 | 无需模板；在 UI 面板选择「按需生成」，正常发送需求，必要时用内置提问工具澄清 |
+| 按需自由布局（未发布） | 按用户需求编排页面；保存模板保留自由布局、偏好与主题，再次使用仍无 Card/Article 外壳 |
 | 临时结果与可选保存 | 结果自带内联样式快照，可直接使用、调整样式或事后保存为模板；不强制预览、命名或保存 |
-| 双语界面 | 跟随 DSH 的界面语言；字典在 `src/shared/locales.ts` |
+| 双语界面 | 跟随 DSH 的中文或英文界面语言 |
 | Agent Skill | 随插件注册 `intelligent-ui`，模型按需加载完整语法、示例与排障 |
-| 插件详情页 | 插件 → 智能 UI 详情页：可用性（全局启用）、回答样式（内置或已保存模板）、我的样式管理、编排方式（自由布局）、导出（背景色、分辨率、图片/页面导出是否移除追问区块，默认移除） |
+| 插件详情页 | 集中管理全局启用、默认样式、模板、编排方式与导出偏好 |
 | 可重放 | 程序与临时样式随工具参数重放；导出页面冻结导出时的主题方案 |
 
 ## 获取代码
@@ -77,34 +85,36 @@ cd dsh-intelligent-ui
 
 ## 前置条件
 
-- **DSH 0.2.1**（[`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)）：Host/Client 与插件协议按这个版本开发；实际验证版本是 `0.2.1-rc.2`，更晚版本未验证。安装：`npm install -g @deepseek-ai/dsh`。
-- **[Node.js 24](https://nodejs.org/en/download)**：构建、测试与 `npm pack` 都在 Node 24 下验证；Host 产物编译目标是 Node 22（`target: 'node22'`），仓库没有 `engines` 或 `.nvmrc` 版本锁，使用更低版本前请自行验证。
+以下命令用于 DSH Web 与源码开发；DSH Desktop 用户可直接按[快速开始](#快速开始)中的应用内步骤安装。
+
+- **DSH 0.2.1 插件接口**（[`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)）：Host/Client 与插件协议按这个版本开发；实际验证版本是 `0.2.1-rc.2`，更晚版本未验证。安装命令固定到已验证版本：`npm install -g @deepseek-ai/dsh@0.2.1-rc.2`。
+- **[Node.js 24 与自带的 npm](https://nodejs.org/en/download)**：构建、测试与发布工作流使用 Node 24。仓库没有 `engines` 或 `.nvmrc` 版本锁，运行 `npm install` 前需自行选用 Node 24；Host 的 Node 22 编译目标不代表整个工具链已在 Node 22 验证。
+- **[Git](https://git-scm.com/downloads)**：仅获取源码时需要，仓库未指定最低版本。
 - **`@deepseek-ai/dsh-client-locale`**：浏览器半边要求部署组合了它；DSH Web 0.2.1 默认包含，缺少时开关和卡片不会挂载（Host 工具与提示词仍可用）。
 
 确认工具存在：
 
 ```bash
 node --version   # v24.x
-dsh --version    # 0.2.1 或 0.2.1-rc.2
+npm --version
+dsh --version    # 已验证：0.2.1-rc.2
+git --version    # 仅获取源码时需要
 ```
 
 重启示例覆盖前台 `dsh web`、macOS launchd 与 Linux systemd；用其他方式托管时重启对应服务。验证平台：macOS（Web + DSH Desktop）与 Windows（DSH Desktop）；Linux 未验证。
 
 ## 快速开始
 
-从 npm 安装（前置条件见上一节）：
+**DSH Web**：从 npm 安装已发布的 0.4.2，再启动 Web UI（首次前台运行示例）：
 
 ```bash
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-
-# 固定当前版本
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.2
-
-# 或从 GitHub 安装
-dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
+dsh web
 ```
 
-重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；launchd/systemd：重启对应服务），打开它打印的 URL，输入框右侧出现 **UI** 控件即加载成功。
+已有 Web 进程时，安装后重启该进程（前台：Ctrl+C 后重新运行 `dsh web`；launchd/systemd：重启对应服务）。打开它打印的 URL，输入框右侧出现 **UI** 控件即加载成功；地址与端口由 DSH profile 决定。
+
+其他安装来源可替代上面的安装命令：跟随 npm 最新版用 `dsh plugin --profile web add @zephinel/dsh-intelligent-ui`；从 GitHub 已提交代码安装用 `dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui`。两者都不会安装当前 checkout 的未提交改动。
 
 **DSH Desktop（桌面版）** 不需要终端命令，在应用内安装：
 
@@ -114,11 +124,7 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。
 
-然后在输入框右侧点 **UI** 控件，选择「仅本会话」（或 `/iui on`），需要时在同一面板里设置本会话的 Auto / Card / Article 样式，直接提问，例如：
-
-```text
-帮我排一个上海两日游，要能勾选和调整
-```
+安装后在输入框右侧点 **UI** 控件，选择「仅本会话」（或发送 `/iui on`），再发送开头的行程示例。该轮结束后出现可交互的行程页面即验证成功。需要时可在同一面板设置本会话的 Auto / Card / Article 样式。
 
 本地开发（从 checkout 构建并安装）、卸载与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)；扩展没有独立的开发服务器。
 
@@ -155,47 +161,58 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 
 ![同一临时结果在固定深色主题下的渲染](assets/intelligent-ui-temporary-result-dark.webp)
 
-临时结果可以立即使用。点「调整样式」会关联这张结果并在保留草稿的前提下填入调整提示，仍需正常发送；点「保存为模板」才填写名称、描述与可用范围（本会话或全局）。保存复用该结果的已校验样式，不再次生成，也不自动选中模板或更改全局默认；不要求先预览、命名或保存。
+临时结果可以立即使用。点「调整样式」会关联这张结果并在保留草稿的前提下填入调整提示，仍需正常发送；点「保存为模板」才填写名称、描述与可用范围（本会话或全局）；保存完整保留该结果的布局（free/card/article）、偏好与明暗主题，不再选择布局。自由模板使用独立预览与「自由布局」提示；选中后仍无 Card/Article 外壳，保留 DSH 卡片标题栏，Toc/Section 可选。保存复用该结果的已校验样式，不再次生成，也不自动选中模板或更改全局默认；不要求先预览、命名或保存。
+
+**当前工作树（未发布）**：Host 强制新按需生成使用自由布局；调整保留父结果的布局（free、旧 card 或 article）。若父快照已不在最近 200 条结果注册表中，调整会报错；请取消调整后重新选择「按需生成」。历史结果仍可从工具参数重放。
 
 ![插件详情页：全局启用、默认样式、我的样式管理、编排方式与导出](assets/intelligent-ui-settings.webp)
 
-插件详情页按 **可用性**、**回答样式**、**我的样式**、**编排方式** 和 **导出** 分组。「我的样式」管理已保存的全局模板，可设为默认、重命名、编辑描述/展示偏好、导出 JSON 或删除；Composer 管理当前会话可见的全局与会话模板。生成入口在 Composer，设置页提供说明，不设生成工作台。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**导出** 保存图片的默认背景色、1x/2x 分辨率，以及图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除）。
+插件详情页按 **可用性**、**回答样式**、**我的样式**、**编排方式** 和 **导出** 分组。「我的样式」管理已保存的全局模板，可设为默认、重命名、编辑描述/展示偏好、导出文件、导入模板或删除；Composer 管理当前会话可见的全局与会话模板。生成入口在 Composer，设置页提供说明，不设生成工作台。全局值是新会话的默认；输入框 UI 控件里的会话值优先。**自由布局**只影响设计规范的建议强度，与回答样式正交。**导出** 保存图片的默认背景色、1x/2x 分辨率，以及图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除）。
+
+**模板文件分享（未发布）**：在插件设置页「我的样式」或 Composer 的「显示样式」面板中点模板的 `…` →「导出文件」，检查敏感信息提示后点「下载」，得到 `<模板名>.iui-style.json`。Composer 面板同时覆盖仅本会话的模板，因此不必先另存为全局模板。文件包含名称、描述、基础布局、展示规范全文和主题；分享前检查其中是否包含个人或内部信息。接收方在「我的样式」或「显示样式」面板点「导入模板」，选择文件或粘贴 JSON →「预览」→ 检查名称、描述、布局、明暗色板及展示规范全文。可以改名、编辑或清空展示规范；导入前必须勾选「我已阅读并理解上述风险，确认导入该外部模板」，再点「导入模板」。导入只新建全局模板（Composer 里的导入同样只写全局；导入到本会话仍待会话授权校验后开放），不自动应用，也不改变当前选择或全局默认；随后可正常选用、编辑、删除或再次导出。
+
+模板交换格式 v1 只包含可移植样式配置，支持 `card|article|free`，不含本地 id、作用域、会话和时间戳。支持 v1 的插件版本可以导入该格式；未知版本会被拒绝，不尝试降级解析。导入器只接受该交换格式：原始模板导出文件与持久化库文件都会被拒绝（当前没有外部用户，不维护旧格式兼容）。交换格式版本独立于 npm 包版本；未来引入 v2 应继续支持 v1，新增布局或移除 `baseLayout` 必须显式演进格式，不允许 v1 静默接受未知布局。
+
+单次只交换一个模板，输入最多 **32 KiB（UTF-8 字节）**；文件大小先检查再读取，不依赖扩展名或 MIME。允许全文包住的一层 Markdown 代码围栏，不从任意说明文字中提取 JSON。未知字段和模板库备份均拒绝。全局最多 40 个模板；重名时建议 `(Imported)` 后缀，仍冲突时需改名，配额满时先删除不需要的模板。没有分享码、在线链接、批量备份或会话范围导入；Composer 的导入同样只写全局。
+
+**安全边界**：外部模板的名称与展示规范会进入提示词、可能影响模型行为；描述仅保存/导出，不会进入提示词。三者都按不可信文本处理，预览、阅读确认和不自动应用是缓解措施，不能消除提示词注入；实际执行权限仍由 DSH 工具/权限层控制。当前实现按 owner 已确认的方案（2026-10-24）用免责声明 + 阅读确认后保留外部内容；真实部署的 Origin/CSRF 与工具越权审计仍是发布前建议补做的加固。
 
 回答渲染完成后，消息底部操作栏的**最右侧**会出现带「导出」字样的**药丸按钮**（只有扩展渲染的回答才有）。点开后可把该轮全部卡片保存为一张 PNG——**原始**（只截取答案本身）、**圆角**（背景色 + 圆角留白）或 **卡片**（留白、圆角与柔和阴影）；也可以导出为单文件 HTML，直接在浏览器打开即可继续交互，页面里的 `@ToAssistant` 改为复制消息并提示回到 DSH 粘贴。导出的图片只包含渲染出的卡片，不包含聊天里的 Markdown 文字或导出按钮本身。完整流程见[架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)。
 
 ## 构建、测试与部署
 
-从全新 clone 本地开发时，先安装依赖、构建并写入本地 DSH profile：
+从[获取代码](#获取代码)的 checkout 根目录开始。`npm install` 的 `prepare` 会自动构建；本地安装器默认写入 `web` profile 并自动备份。若该 profile 已安装 npm/GitHub 版，先用 `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` 移除，避免同一插件重复注册。
 
 ```bash
 npm install
-npm run build
+dsh plugin --profile web list  # 检查 profile；首次使用会初始化
 node scripts/install.mjs
+dsh web
 ```
 
-重启承载 Web UI 的 DSH 进程，再打开它打印的 URL；输入框右侧出现 **UI** 控件即成功。扩展没有独立开发服务器，也没有 watch 模式；细节与卸载见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
+已有 Web 进程时，安装后重启该进程，再打开它打印的 URL；输入框右侧出现 **UI** 控件后按[快速开始](#快速开始)启用并试问。扩展没有独立开发服务器或 watch 模式；每次修改后重新 `npm run build` 并重启 DSH。卸载与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
 
 日常检查与打包：
 
-```bash
-npm run build       # 生成 prompt、Host 与 Client bundle
-npm run check       # 构建 + Host/Client/打包测试 + renderer 检查
-npm run pack:check  # 检查 npm pack 的最终文件清单
-npm run test:browser # 先构建；7 个浏览器套件：按需生成、样式面板、主题、图片、交互页面、Article 间距、设置（需要 Chrome）
-```
+| 命令 | 用途 |
+|---|---|
+| `npm run build` | 生成 prompt、Host、Client 与独立导出页面 bundle |
+| `npm test` | 构建后运行 Host、Client 与打包的 Node 测试 |
+| `npm run check` | 提交前完整检查：构建、Node 测试与 renderer 检查 |
+| `npm run pack:check` | 预览 npm 包最终文件清单，不发布 |
+| `npm run test:browser` | 先构建；运行 7 个浏览器套件，需要 Chrome |
 
-- 当前 Node 测试 **179** 项；renderer 解析/渲染各 **41/41**，i18n **4** 个程序，排版 **22/22**。浏览器为组件/契约验证；按需生成主链路（清晰需求→临时样式卡片→保存为模板）、缺少内容时的自由输入澄清与真实数据来源约束，均已在隔离 DSH Web 实例中用真实模型验证；其余场景见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+- 当前工作树验证记录：Node 测试 **207/207**（Host 89、Client 97、packaging 21）；renderer 解析/渲染各 **41/41**，i18n **4** 个程序，排版 **22/22**；浏览器 **7/7** 套件通过，其中设置页模板交换 **101** 条、按需流程 **114** 条断言。浏览器测试覆盖组件/契约；真实模型验证范围与尚未覆盖的场景见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)（历史记录）。
 - `node scripts/capture-screenshots.mjs` 以固定 DSH token、生产组件与假服务在 Chrome 2x 重建面板、提示、临时结果与设置截图；英文 UI，卡片壳层图标用 lucide 替身。
-- `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。
+- `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
 
 发布物是一个 DSH bundle；部署就是把插件安装进目标 DSH profile。卸载与版本注意事项见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)。
 
 ## 贡献
 
 - 问题与功能请求：使用 [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues)。
-- 提交前运行 `npm run check`；仓库没有 PR CI，以本地命令结果为准。发布由 GitHub Actions 的 Trusted Publishing 工作流执行（推送与 `package.json` 版本一致的 `v*` tag）。
-- 行为、文案或计数变化时，中英 README、`CHANGELOG.md` 与 `docs/` 对应文档要一起更新；同步规则见 `.agents/skills/sync-iui-docs/SKILL.md`（开发环境使用，不随 npm 包发布）。
-- 仓库内的维护技能与文档同步规则在 `.agents/skills/`（不随 npm 包发布）；AI 协作代理同样以 `npm run check` 作为提交前门槛。
+- 提交 PR 前运行 `npm run check`；仓库没有 PR CI，以本地命令结果为准。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)执行，流程见开发文档。
+- 贡献者与 AI 协作代理都应遵循[文档同步技能](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md)：行为、文案或计数变化时，同步中英 README、`CHANGELOG.md` 与 `docs/` 对应文档。checkout 中以本地 `.agents/skills/sync-iui-docs/SKILL.md` 为准。
 - 维护者：[@Zephinel](https://github.com/Zephinel)。
 
 ## 已知限制
@@ -236,6 +253,8 @@ npm run test:browser # 先构建；7 个浏览器套件：按需生成、样式�
 
 ## 文档
 
+详细文档、变更日志与仓库维护技能不随 npm 包发布，因此链接使用绝对 GitHub 地址；未提交功能以 checkout 内对应文件为准。
+
 - [架构与行为](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.md)：Host/Client 组件树、开关与回答样式的完整语义、界面语言、图片与交互页面导出流程、Agent Skill。
 - [开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md)：安装与卸载、开发命令、改名/重建后的重启提示、Host/Client 版本错位、发布物布局与插件市场维护。
 - [验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)：端到端验证、测试与打包结果（历史记录）。
@@ -244,4 +263,4 @@ npm run test:browser # 先构建；7 个浏览器套件：按需生成、样式�
 
 ## 许可证
 
-本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）；交互页面的独立 bundle 还内联 React / React DOM（MIT）。完整声明与许可证全文见 `NOTICE` 与 `licenses/`。
+本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）；交互页面的独立 bundle 还内联 React / React DOM（MIT）。完整声明与许可证全文见 [NOTICE](NOTICE) 与 [licenses/](licenses/)。

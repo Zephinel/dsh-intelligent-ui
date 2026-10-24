@@ -73,3 +73,14 @@ test('rejects invalid identities, unbounded data, unknown keys, contrast and ver
   ]) assert.throws(() => store.record(result(patch)), /Invalid/)
   assert.equal(existsSync(file), false)
 })
+
+test('free and legacy Card/Article snapshots coexist and replay unchanged after restart', () => {
+  const { store } = mount()
+  for (const baseLayout of ['card', 'article', 'free']) {
+    store.record(result({ resultId: baseLayout, snapshot: { ...snapshot, baseLayout } }))
+  }
+  const restored = createResultStore()
+  for (const baseLayout of ['card', 'article', 'free']) {
+    assert.deepEqual(restored.get(baseLayout).snapshot, { ...snapshot, baseLayout })
+  }
+})

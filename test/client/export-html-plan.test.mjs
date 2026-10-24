@@ -93,8 +93,10 @@ test('programs to export cards snapshots the inline theme for each scheme withou
   const { THEME } = await import('../host/style-fixtures.mjs')
   const program = { callId: 'temporary', program: 'root = Text("Result")', style: 'card', running: false,
     temporaryStyle: { schemaVersion: 1, baseLayout: 'card', directives: 'Compact sections.', theme: THEME } }
-  for (const scheme of ['light', 'dark']) {
-    const [card, builtin] = programsToExportCards([program, { ...program, callId: 'builtin', temporaryStyle: undefined }], scheme)
+  for (const style of ['card', 'article', 'free']) for (const scheme of ['light', 'dark']) {
+    const styled = { ...program, style, temporaryStyle: { ...program.temporaryStyle, baseLayout: style } }
+    const [card, builtin] = programsToExportCards([styled, { ...program, callId: 'builtin', temporaryStyle: undefined }], scheme)
+    assert.equal(card.style, style)
     assert.equal(card.scheme, scheme)
     assert.equal(card.themeStyle['--iui-canvas'], THEME[scheme].canvas)
     assert.equal(card.themeStyle['--iui-ink'], THEME[scheme].ink)
@@ -104,6 +106,7 @@ test('programs to export cards snapshots the inline theme for each scheme withou
     assert.equal(builtin.themeStyle, undefined)
     assert.equal(builtin.scheme, undefined)
     assert.equal('temporaryStyle' in card, false)
+    assert.ok(buildStandaloneHtml({ cards: [card], js: '', css: '', tokens: '', colorScheme: scheme, title: '', lang: 'en' }).includes(`"style":"${style}"`))
     card.themeStyle['--iui-canvas'] = '#123456'
     assert.notEqual(THEME[scheme].canvas, '#123456', 'export is detached from the recorded snapshot')
   }
@@ -112,15 +115,22 @@ test('programs to export cards snapshots the inline theme for each scheme withou
 test('export resolves saved templates for each scheme, temporary overrides catalog, missing styles fall back', async () => {
   const { programsToExportCards } = await import('../../src/client/export-html-plan.ts')
   const { template } = await import('../host/style-fixtures.mjs')
-  const saved = template()
-  const program = { callId: 'saved', program: 'root = Text("Saved")', style: 'card', styleId: saved.id, running: false }
-  for (const scheme of ['light', 'dark']) {
-    const [card, missing, temporary] = programsToExportCards([program, { ...program, styleId: 'cs_missing' },
-      { ...program, temporaryStyle: { theme: { ...saved.theme, [scheme]: { ...saved.theme[scheme], canvas: '#123456' } } } }], scheme, [saved])
-    assert.equal(card.themeStyle['--iui-canvas'], saved.theme[scheme].canvas)
-    assert.equal(card.scheme, scheme)
-    assert.equal(missing.themeStyle, undefined)
-    assert.equal(temporary.themeStyle['--iui-canvas'], '#123456')
+  for (const style of ['free', 'card', 'article']) {
+    const saved = template({ baseLayout: style })
+    const program = { callId: 'saved', program: 'root = Text("Saved")', style, styleId: saved.id, running: false }
+    for (const scheme of ['light', 'dark']) {
+      const [card, missing, temporary] = programsToExportCards([program, { ...program, styleId: 'cs_missing' },
+        { ...program, temporaryStyle: { theme: { ...saved.theme, [scheme]: { ...saved.theme[scheme], canvas: '#123456' } } } }], scheme, [saved])
+      assert.equal(card.themeStyle['--iui-canvas'], saved.theme[scheme].canvas)
+      assert.equal(card.scheme, scheme)
+      assert.equal(card.style, style)
+      assert.equal(card.program, program.program)
+      const html = buildStandaloneHtml({ cards: [card], js: '', css: '', tokens: '', colorScheme: scheme, title: '', lang: 'en' })
+      assert.ok(html.includes(`"style":"${style}"`))
+      assert.ok(html.includes(saved.theme[scheme].canvas))
+      assert.equal(missing.themeStyle, undefined)
+      assert.equal(temporary.themeStyle['--iui-canvas'], '#123456')
+    }
   }
 })
 

@@ -23,7 +23,7 @@ import {
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { MenuDivider, MenuItem } from './Menu.tsx'
-import { StylePicker } from './StylePicker.tsx'
+import { StylePanel } from './StylePanel.tsx'
 import type { StyleCatalog } from './styles.ts'
 import type { StyleActions } from './style-actions.ts'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
@@ -199,23 +199,32 @@ export function ToggleControl({
   const menuRef = useRef<HTMLDivElement>(null)
   const focusStyleRef = useRef(false)
   const focusComposerRef = useRef(false)
+  const [importBusy, setImportBusy] = useState(false)
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const importBusyRef = useRef(false)
+  useEffect(() => { importBusyRef.current = importBusy }, [importBusy])
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   useEffect(() => { void styles.ensure(sessionId).then(() => { if (panelOpen) return styles.refresh() }) }, [styles, sessionId, panelOpen])
 
   const sessionEnable = view?.sessionEnable ?? 'inherit'
   const pending = view?.pending === true || busy
   const disabled = locked || pending
+  // The panel stays visually enabled while a style command is in flight; the
+  // command guard above still ignores extra clicks. Marking every control
+  // disabled made the whole panel flash opacity .5 on each style choice.
+  const panelDisabled = locked || view === undefined || !view.enabled
   const enabled = view?.enabled === true
 
   // Never keep a popup over a disappearing, locked or disabled composer. A
   // pending command must not close the style panel: the controls inside it are
   // disabled until the next projection frame, then it settles in place.
   useEffect(() => {
+    if (importBusyRef.current || importStatus !== null) return
     if (view === undefined || locked || (!view.enabled && !view.pending)) {
       setOpen(false)
       setPanelOpen(false)
     }
-  }, [locked, view])
+  }, [importBusy, importStatus, locked, view])
 
   // Once a projection frame differs from the base the sender saw, that frame is
   // authoritative; clear the optimistic cross-tab view even if the command was
@@ -225,11 +234,11 @@ export function ToggleControl({
     if (synced.base === undefined || !sameView(projected, synced.base)) resetSyncedMode()
   }, [projected, sessionId, synced])
   const closeMenu = useCallback(() => { setOpen(false) }, [])
-  const closePanel = useCallback(() => { setPanelOpen(false) }, [])
+  const closePanel = useCallback(() => { if (importBusyRef.current) return; setImportStatus(null); setPanelOpen(false) }, [])
   const menuPlacement = useAnchoredPopup(open, triggerRef, { minWidth: 0, maxWidth: 320, alignEnd: true }, menuRef)
-  const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 340, maxWidth: 460, maxHeight: true })
+  const panelPlacement = useAnchoredPopup(panelOpen, triggerRef, { minWidth: 340, maxWidth: 460, maxHeight: true, alignEnd: true })
   const menuVisible = open && menuPlacement !== null
-  const panelVisible = panelOpen && panelPlacement !== null && enabled
+  const panelVisible = panelOpen && panelPlacement !== null && (enabled || importBusy)
   usePopupDismiss(
     menuVisible,
     triggerRef,
@@ -262,6 +271,8 @@ export function ToggleControl({
   // The panel is a second level: its back button returns to the scope menu
   // instead of dismissing every popup.
   const backToMenu = (): void => {
+    if (importBusyRef.current) return
+    setImportStatus(null)
     focusStyleRef.current = true
     setPanelOpen(false)
     setOpen(true)
@@ -315,19 +326,18 @@ export function ToggleControl({
     })
   }
 
-  const arm = (): void => {
+  const arm = async (): Promise<void> => {
     if (disabled || !enabled || armOnDemand === undefined) return
     setError(null)
     setBusy(true)
-    void runCommand(armOnDemand, clientToken()).then(failure => {
-      setBusy(false)
-      setError(failure === null ? null : t('onDemand.armError', { error: failure }))
-      if (failure === null) {
-        focusComposerRef.current = true
-        setPanelOpen(false)
-        setOpen(false)
-      }
-    })
+    const failure = await runCommand(armOnDemand, clientToken())
+    setBusy(false)
+    setError(failure === null ? null : t('onDemand.armError', { error: failure }))
+    if (failure === null && !importBusyRef.current) {
+      focusComposerRef.current = true
+      setPanelOpen(false)
+      setOpen(false)
+    }
   }
 
   const items: ScopeMenuItem[] = (['off', 'on', 'inherit'] as const).map(scope => ({
@@ -347,51 +357,33 @@ export function ToggleControl({
     disabled: !view.enabled,
   })
 
+  const visibleTemplates = catalog.templates.filter(template => template.scope === 'global' || template.sessionId === sessionId)
   const panel = panelVisible
     ? createPortal(
-      <div
-        ref={panelRef}
-        className="dsh-iui-style-panel"
-        role="dialog"
-        aria-label={t('style.panel.title')}
-        style={{ left: panelPlacement.left, bottom: panelPlacement.bottom, width: panelPlacement.width, maxHeight: panelPlacement.maxHeight }}
-        data-dsh-iui-style-panel
-      >
-        <div className="dsh-iui-style-panel-header">
-          <button
-            type="button"
-            className="dsh-iui-style-back"
-            aria-label={t('style.panel.back')}
-            onClick={backToMenu}
-          >
-            <span aria-hidden="true">‹</span>
-          </button>
-          <span className="dsh-iui-style-panel-title">{t('style.panel.title')}</span>
-          <span className="dsh-iui-style-panel-scope">{t('style.panel.scope')}</span>
-        </div>
-        <div className="dsh-iui-style-panel-body">
-          <StylePicker
-            value={view.sessionStyle}
-            globalStyle={view.globalStyle}
-            templates={catalog.templates.filter(template => template.scope === 'global' || template.sessionId === sessionId)}
-            catalogStatus={catalog.status}
-            allowInherit
-            disabled={disabled}
-            note={t('style.session.note')}
-            footer={t('style.session.footer')}
-            onChange={chooseStyle}
-            management={{ styles, actions: styleActions, onDeleted: async id => {
-              if (view.sessionStyle !== id) return
-              const failure = await runCommand(setStyle, 'auto')
-              if (failure !== null) throw new Error(failure)
-              publishMode({ ...view, sessionStyle: 'auto', style: 'auto', pending: false }, sessionId, projected)
-            } }}
-            onDemand={armOnDemand === undefined ? undefined : arm}
-            t={t}
-          />
-          {error === null ? null : <p className="dsh-iui-style-error" role="alert">{error}</p>}
-        </div>
-      </div>,
+      <StylePanel
+        panelRef={panelRef}
+        placement={panelPlacement}
+        styles={styles}
+        templates={visibleTemplates}
+        actions={styleActions}
+        disabled={panelDisabled}
+        error={error}
+        value={view.sessionStyle}
+        globalStyle={view.globalStyle}
+        catalogStatus={catalog.status}
+        onBack={backToMenu}
+        onChange={chooseStyle}
+        onDemand={armOnDemand === undefined ? undefined : arm}
+        onDeleted={async id => {
+          if (view.sessionStyle !== id) return
+          const failure = await runCommand(setStyle, 'auto')
+          if (failure !== null) throw new Error(failure)
+          publishMode({ ...view, sessionStyle: 'auto', style: 'auto', pending: false }, sessionId, projected)
+        }}
+        onImportBusy={setImportBusy}
+        onImportStatus={setImportStatus}
+        t={t}
+      />,
       document.body,
     )
     : null
@@ -411,6 +403,8 @@ export function ToggleControl({
       title={t('chip.title', { description: t(current.description) })}
       disabled={disabled}
       onClick={() => {
+        if (panelOpen && importBusyRef.current) return
+        setImportStatus(null)
         setError(null)
         setPanelOpen(false)
         setOpen(!open)

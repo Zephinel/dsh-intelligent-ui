@@ -274,13 +274,13 @@ strip = Grid(@Each(@Range(0, 4), "i", Pressable([drawings[i], Caption((i + 1) + 
 
 ## Layout and spacing contract
 
-The renderer owns the vertical rhythm; a page is one readable column.
+The renderer owns the vertical rhythm. Card/Article pages use one readable column. For an authorized free-layout result or selected free template, page shape and typography guidance is advisory: compose the user-requested layout, ask if materially unclear, and keep language, theme and safety rules.
 
 - Leave `gap` unset on the page root `Col`, on the children of a `Section`, and on `Card` contents. The renderer already applies section/group spacing; an explicit gap there overrides it or doubles the blank space.
 - Use an explicit `gap` only on `Row`, `Grid`, `Carousel`, and small compact control stacks: 1–2 for inner pairs, 3–4 for grouped blocks (4px steps). Do not use a gap of 5–6 on a nested `Col` to imitate page spacing.
 - Never create vertical space with `Spacer()`, an empty `Box`/`Col`/`Card`, empty `Text`/`Markdown`, or a `Divider` used as a blank. Group related blocks in a `Card` or let the flow space them.
 - A `Section` body is a sequence of blocks: prose (`Markdown`/`Text`) first, then at most a couple of supplemental blocks (`Grid`, `Table`, `Chart`, `Code`, `Quote`). Do not wrap the whole body in a `Col` with a manual gap.
-- Keep one page measure; do not put a whole page side by side. Use `Grid` only for genuinely parallel blocks.
+- For Card/Article pages, keep one page measure; do not put a whole page side by side. Use `Grid` only for genuinely parallel blocks. Free result and template layouts may compose parallel page regions as requested.
 
 ## Important Rules
 - Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)

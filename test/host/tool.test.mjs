@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { template, THEME } from './style-fixtures.mjs'
@@ -23,11 +23,12 @@ after(() => {
 })
 
 /** Mount the plugin on a stub context and return its registrations. */
-function mount(config, templates = [], controls = false) {
+function mount(config, templates = [], controls = false, results = []) {
   const home = mkdtempSync(join(tmpdir(), 'iui-tool-'))
   homes.push(home)
   process.env.DSH_HOME = home
   writeFileSync(join(home, 'dsh-intelligent-ui-styles.json'), JSON.stringify({ version: 1, templates }))
+  if (results.length > 0) writeFileSync(join(home, 'dsh-intelligent-ui-results.json'), JSON.stringify({ version: 1, results }))
   const registered = { tool: undefined, sections: [], handlers: {}, command: undefined, projection: undefined, home }
   plugin.apply({
     on(name, handler) { registered.handlers[name] = handler },
@@ -61,7 +62,7 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   // annotations and are enforced by the Host at execution time.
   assert.equal(Object.hasOwn(tool.parameters.properties.styleId, 'maxLength'), false)
   assert.equal(Object.hasOwn(tool.output.schema.properties.styleId, 'maxLength'), false)
-  assert.deepEqual(tool.parameters.properties.style.enum, ['card', 'article'])
+  assert.deepEqual(tool.parameters.properties.style.enum, ['card', 'article', 'free'])
   assert.equal(tool.output.schema.type, 'object')
   assert.equal(sections.length, 1)
   assert.equal(sections[0].name, 'tool:intelligent-ui')
@@ -201,6 +202,15 @@ test('custom card prompt and tool require the selected styleId and base layout',
   assert.equal(result.style, 'card')
 })
 
+test('custom prompt escapes line separators from external names and directives', async () => {
+  const custom = template({ name: 'line\u2028name', directives: 'before\u2029after' })
+  const { sections } = mount({ answerStyle: { get: () => custom.id } }, [custom])
+  const prompt = sections[0].text()
+  assert.ok(prompt.includes('"line\\u2028name"'))
+  assert.ok(prompt.includes('"before\\u2029after"'))
+  assert.equal(/[\u2028\u2029]/.test(prompt), false)
+})
+
 test('custom article retains substantial prose guidance and Toc/Section hard validation', async () => {
   const custom = template({ baseLayout: 'article' })
   const { tool, sections } = mount({ answerStyle: { get: () => custom.id } }, [custom])
@@ -230,24 +240,24 @@ test('built-in selections ignore styleId and omit it from success output', async
   }
 })
 
-const SNAPSHOT = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups and clear hierarchy.', theme: THEME }
+const SNAPSHOT = { schemaVersion: 1, baseLayout: 'free', directives: 'Use compact groups and clear hierarchy.', theme: THEME }
 
 /** Arm through the user command and bind via actual SessionEventMap payloads. */
-function onDemandMount({ selected = 'card', templates = [] } = {}) {
-  const mounted = mount({ globalEnabled: { get: () => true }, answerStyle: { get: () => selected } }, templates, true)
+function onDemandMount({ selected = 'card', templates = [], results = [] } = {}) {
+  const mounted = mount({ globalEnabled: { get: () => true }, answerStyle: { get: () => selected } }, templates, true, results)
   const agent = { session: { id: 's1' } }
   let seq = 0
   const event = (type, data) => mounted.handlers['session/event']({ id: 's1' }, { type, data, seq: ++seq })
   const command = rawInput => mounted.command.handler({ agent, rawInput })
   const view = () => mounted.projection.wire.view(mounted.projection.init({ id: 's1' }))
-  const bind = () => {
-    command('on-demand tab-1')
+  const bind = (parentResultId) => {
+    command(`on-demand tab-1${parentResultId === undefined ? '' : ` adjust ${parentResultId}`}`)
     event('turn/start', { turn: 1 })
     event('user/message', { id: `message-${seq}`, source: { kind: 'user' }, content: [] })
   }
   const execute = (args, callId = `render-${seq}`) => {
     event('tool/call', { turn: 1, step: 1, name: 'render_ui', callId, arguments: JSON.stringify(args) })
-    return mounted.tool.execute({ program: VALID, style: 'card', ...args }, { agent, callId })
+    return mounted.tool.execute({ program: VALID, style: 'free', ...args }, { agent, callId })
   }
   return { ...mounted, agent, event, command, view, bind, execute }
 }
@@ -257,6 +267,8 @@ test('temporaryStyle has a complete nested model schema and source output', () =
   const snapshot = tool.parameters.properties.temporaryStyle
   assert.deepEqual(snapshot.required, ['schemaVersion', 'baseLayout', 'directives', 'theme'])
   assert.equal(snapshot.properties.schemaVersion.const, 1)
+  assert.deepEqual(snapshot.properties.baseLayout.enum, ['card', 'article', 'free'])
+  assert.deepEqual(tool.output.schema.properties.style.enum, snapshot.properties.baseLayout.enum)
   assert.match(snapshot.properties.directives.description, /1-2000/)
   assert.equal(Object.hasOwn(snapshot.properties.directives, 'maxLength'), false)
   assert.equal(snapshot.properties.theme.additionalProperties, false)
@@ -267,13 +279,70 @@ test('temporaryStyle has a complete nested model schema and source output', () =
   assert.deepEqual(tool.output.schema.properties.styleSource.enum, ['builtin', 'template', 'temporary'])
 })
 
+test('new on-demand generation rejects card and article layouts without recording or completing', async () => {
+  for (const style of ['card', 'article']) {
+    const m = onDemandMount()
+    m.bind()
+    await assert.rejects(() => m.execute({ style, temporaryStyle: { ...SNAPSHOT, baseLayout: style },
+      program: 'root = Col([Toc(["Body"]), Section("Body", [Markdown("Body")])])' }),
+    /on-demand generation requires style: "free" and temporaryStyle.baseLayout: "free"/)
+    assert.equal(m.view().onDemand.status, 'running')
+    assert.equal(existsSync(join(m.home, 'dsh-intelligent-ui-results.json')), false)
+    assert.equal((await m.execute({ temporaryStyle: SNAPSHOT })).style, 'free', 'the model can retry with free layout')
+  }
+})
+
+test('adjustments enforce the stored parent layout for free and legacy card/article snapshots', async () => {
+  for (const baseLayout of ['free', 'card', 'article']) {
+    const parent = { resultId: `parent-${baseLayout}`, sessionId: 's1', snapshot: { ...SNAPSHOT, baseLayout }, createdAt: 1 }
+    const m = onDemandMount({ results: [parent] })
+    const file = join(m.home, 'dsh-intelligent-ui-results.json')
+    const before = readFileSync(file, 'utf8')
+    const program = 'root = Col([Toc(["Body"]), Section("Body", [Markdown("Body")])])'
+    m.bind(parent.resultId)
+    for (const style of ['free', 'card', 'article'].filter(layout => layout !== baseLayout)) {
+      await assert.rejects(() => m.execute({ style, temporaryStyle: { ...SNAPSHOT, baseLayout: style }, program }),
+        new RegExp(`on-demand adjustment must preserve the parent result layout; pass style: "${baseLayout}" and temporaryStyle.baseLayout: "${baseLayout}"`))
+      assert.equal(m.view().onDemand.status, 'running')
+      assert.equal(readFileSync(file, 'utf8'), before, 'layout rejection leaves the registry unchanged')
+    }
+    const snapshot = { ...parent.snapshot, directives: 'Use spacious groups.' }
+    const result = await m.execute({ style: baseLayout, temporaryStyle: snapshot, program }, 'adjusted-result')
+    assert.equal(result.style, baseLayout)
+    assert.equal(m.view().onDemand.status, 'completed')
+    const records = JSON.parse(readFileSync(file, 'utf8')).results
+    assert.deepEqual(records[0], parent, 'adjusting never mutates the parent snapshot')
+    assert.equal(records[1].parentResultId, parent.resultId)
+    assert.deepEqual(records[1].snapshot, snapshot)
+  }
+})
+
+test('adjustments reject every layout when the parent snapshot is missing; cancel and generate recovers', async () => {
+  const m = onDemandMount()
+  m.bind('missing-parent')
+  for (const style of ['free', 'card', 'article']) {
+    await assert.rejects(() => m.execute({ style, temporaryStyle: { ...SNAPSHOT, baseLayout: style },
+      program: 'root = Col([Toc(["Body"]), Section("Body", [Markdown("Body")])])' }),
+    /cannot adjust result "missing-parent": its parent snapshot is unavailable in the result registry\. Ask the user to cancel this adjustment and start a new on-demand generation/)
+    assert.equal(m.view().onDemand.status, 'running')
+    assert.deepEqual(m.view().onDemand.resultIds, [])
+    assert.equal(existsSync(join(m.home, 'dsh-intelligent-ui-results.json')), false)
+  }
+  m.command('on-demand off')
+  m.bind()
+  assert.equal((await m.execute({ temporaryStyle: SNAPSHOT }, 'new-result')).style, 'free')
+  const [record] = JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-results.json'), 'utf8')).results
+  assert.equal(record.resultId, 'new-result')
+  assert.equal(record.parentResultId, undefined)
+})
+
 test('temporary snapshots require enabled, bound operations; the model cannot self-authorize', async () => {
   const m = onDemandMount()
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT }), /requires a bound/)
   m.command('on-demand')
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT }), /requires a bound/)
   m.bind()
-  await assert.rejects(() => m.tool.execute({ program: VALID, style: 'card', temporaryStyle: SNAPSHOT }, { agent: m.agent, callId: 'unobserved' }), /requires a bound/)
+  await assert.rejects(() => m.tool.execute({ program: VALID, style: 'free', temporaryStyle: SNAPSHOT }, { agent: m.agent, callId: 'unobserved' }), /requires a bound/)
   m.command('off')
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT }), /disabled/)
   assert.equal(m.view().onDemand.status, 'cancelled')
@@ -311,7 +380,7 @@ test('temporary success records its exact snapshot without changing templates or
   const result = await m.execute({ temporaryStyle: { ...SNAPSHOT, theme } }, 'temporary-result')
   assert.equal(result.styleSource, 'temporary')
   assert.equal(result.styleId, undefined)
-  assert.equal(result.style, 'card')
+  assert.equal(result.style, 'free')
   assert.match(result.warnings.join(' '), /contrast.*4.5:1/)
   assert.equal(m.view().onDemand.status, 'completed')
   assert.deepEqual(m.view().onDemand.resultIds, ['temporary-result'])
@@ -327,10 +396,10 @@ test('temporary success records its exact snapshot without changing templates or
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT }), /requires a bound/)
 })
 
-test('temporary articles keep Toc, Section and anchor hard checks; successful completion returns the call id', async () => {
-  const m = onDemandMount()
+test('legacy article adjustments keep Toc, Section and anchor hard checks; successful completion returns the call id', async () => {
   const temporaryStyle = { ...SNAPSHOT, baseLayout: 'article' }
-  m.bind()
+  const m = onDemandMount({ results: [{ resultId: 'legacy-article', sessionId: 's1', snapshot: temporaryStyle, createdAt: 1 }] })
+  m.bind('legacy-article')
   await assert.rejects(() => m.execute({ temporaryStyle, style: 'article', program: 'root = Markdown("Outline")' }), /article style needs/)
   await assert.rejects(() => m.execute({ temporaryStyle, style: 'article', program: 'root = Col([Toc(["Missing"]), Section("Body", [Markdown("Body")])])' }), /Toc.*Section/)
   assert.equal(m.view().onDemand.status, 'running')
@@ -345,7 +414,7 @@ test('cancelled/replaced calls and unanswered clarification cannot submit a temp
   m.event('tool/call', { turn: 1, name: 'render_ui', callId: 'late' })
   m.command('on-demand off')
   m.bind()
-  await assert.rejects(() => m.tool.execute({ program: VALID, style: 'card', temporaryStyle: SNAPSHOT }, { agent: m.agent, callId: 'late' }), /requires a bound/)
+  await assert.rejects(() => m.tool.execute({ program: VALID, style: 'free', temporaryStyle: SNAPSHOT }, { agent: m.agent, callId: 'late' }), /requires a bound/)
   m.event('tool/call', { turn: 1, name: 'ask_user_question', callId: 'q' })
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT }), /requires a bound/)
   m.event('tool/result', { turn: 1, message: { toolCallId: 'q', content: [{ type: 'text', text: '{"answers":[]}' }] } })
@@ -356,7 +425,7 @@ test('only successful temporary renders enter the registry, with immutable paren
   const { existsSync, readFileSync } = await import('node:fs')
   const m = onDemandMount()
   const file = join(m.home, 'dsh-intelligent-ui-results.json')
-  await m.execute({})
+  await m.execute({ style: 'card' })
   assert.equal(existsSync(file), false, 'built-in results are not persisted')
   m.bind()
   await assert.rejects(() => m.execute({ temporaryStyle: SNAPSHOT, program: 'root = Wrong("invalid")' }), /not valid/)
@@ -415,4 +484,80 @@ test('a bound on-demand turn rejects a plain render instead of silently bypassin
   await assert.rejects(() => m.execute({}), /on-demand UI request/)
   await assert.rejects(() => m.execute({ styleId: 'cs_abcdef' }), /on-demand UI request/)
   assert.equal(m.view().onDemand.status, 'running', 'rejected renders do not complete or replace the operation')
+})
+
+test('authorized free on-demand snapshots override every session shell', async () => {
+  for (const selected of ['auto', 'card', 'article', template().id]) {
+    const m = onDemandMount({ selected, templates: [template({ baseLayout: 'article' })] })
+    const temporaryStyle = { ...SNAPSHOT, baseLayout: 'free' }
+    await assert.rejects(() => m.execute({ style: 'free' }), /pass style/)
+    await assert.rejects(() => m.execute({ style: 'free', temporaryStyle }), /requires a bound/)
+    m.bind()
+    const prompt = m.sections[0].text({ agent: m.agent })
+    assert.match(prompt, /style: "free"/)
+    assert.doesNotMatch(prompt, /Answer style for this session|Custom answer style for this session/)
+    await assert.rejects(() => m.execute({ style: 'free' }), /on-demand UI request/)
+    await assert.rejects(() => m.execute({ style: 'free', temporaryStyle, program: 'root = Wrong("x")' }), /not valid/)
+    const result = await m.execute({ style: 'free', temporaryStyle, program: 'root = Col([Title("Poster"), Row([Text("Left"), Text("Right")])])' }, 'free-result')
+    assert.equal(result.style, 'free')
+    assert.equal(result.styleSource, 'temporary')
+    assert.equal(result.styleId, undefined)
+    assert.match(m.tool.output.render({}, result)[0].text, /free style/)
+    assert.equal(m.view().style, selected)
+    const { readFileSync } = await import('node:fs')
+    assert.deepEqual(JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-results.json'), 'utf8')).results[0].snapshot, temporaryStyle)
+    await assert.rejects(() => m.execute({ style: 'free', temporaryStyle }), /requires a bound/)
+  }
+})
+
+test('free layout skips Article structure requirements but retains anchor and theme checks', async () => {
+  const m = onDemandMount()
+  m.bind()
+  const temporaryStyle = { ...SNAPSHOT, baseLayout: 'free' }
+  await assert.rejects(() => m.execute({ style: 'card', temporaryStyle }), /baseLayout must match/)
+  await assert.rejects(() => m.execute({ style: 'free', temporaryStyle, styleId: template().id }), /mutually exclusive/)
+  await assert.rejects(() => m.execute({ style: 'free', temporaryStyle: { ...temporaryStyle,
+    theme: { ...THEME, dark: { ...THEME.dark, ink: THEME.dark.canvas } } } }), /contrast must be at least/)
+  await assert.rejects(() => m.execute({ style: 'free', temporaryStyle,
+    program: 'root = Col([Section("Same", [Text("One")]), Section("Same", [Text("Two")])])' }), /Section anchors must be unique/)
+  assert.equal((await m.execute({ style: 'free', temporaryStyle, program: 'root = Markdown("A reading page without a mandatory table of contents.")' })).style, 'free')
+})
+
+
+test('selected free templates prompt and render without a shell or temporary source, including after reload', async () => {
+  const custom = template({ baseLayout: 'free', name: 'Free composition' })
+  for (let reload = 0; reload < 2; reload++) {
+    const { tool, sections } = mount({ answerStyle: { get: () => custom.id } }, [custom])
+    const prompt = sections[0].text()
+    assert.match(prompt, /Base layout: free/)
+    assert.match(prompt, /layout requested by the user without a Card\/Article shell/)
+    assert.match(prompt, /`Toc` and `Section` are optional/)
+    assert.match(prompt, /Omit temporaryStyle for this saved template/)
+    assert.ok(prompt.includes(`style: "free"` + '` plus `styleId: "' + custom.id + '"`'))
+    assert.doesNotMatch(prompt, /Host rejects an article call/)
+    for (const styleId of [undefined, 'cs_wrong123456', 42]) {
+      await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId }), /pass styleId:/)
+    }
+    for (const style of ['card', 'article']) {
+      await assert.rejects(() => tool.execute({ program: VALID, style, styleId: custom.id }), /answer style is "free"/)
+    }
+    await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId: custom.id, temporaryStyle: {} }), /mutually exclusive/)
+    const result = await tool.execute({ program: VALID, style: 'free', styleId: custom.id })
+    assert.deepEqual(result, { statements: 5, style: 'free', styleSource: 'template', styleId: custom.id })
+    await assert.rejects(() => tool.execute({ style: 'free', styleId: custom.id,
+      program: 'root = Col([Section("Same", [Text("One")]), Section("Same", [Text("Two")])])' }), /Section anchors must be unique/)
+  }
+})
+
+test('free layout cannot bypass built-in or Card/Article template selections', async () => {
+  for (const baseLayout of ['auto', 'card', 'article']) {
+    const { tool } = mount({ answerStyle: { get: () => baseLayout } })
+    await assert.rejects(() => tool.execute({ program: VALID, style: 'free' }), /pass style/)
+    await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId: template().id }), /pass style/)
+  }
+  for (const baseLayout of ['card', 'article']) {
+    const custom = template({ baseLayout })
+    const { tool } = mount({ answerStyle: { get: () => custom.id } }, [custom])
+    await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId: custom.id }), /answer style is/)
+  }
 })

@@ -140,11 +140,14 @@ html, body { margin: 0; padding: 0; background: var(--dsw-alias-bg-base); color:
 #shot-root { width: 760px; min-width: 0; }
 </style>
 <link rel="stylesheet" href="./layout.css">
+<style>/* README captures are static: suppress focus indicators. */ *:focus, *:focus-visible { outline: none !important; }</style>
 </head><body>${ERROR_PROBE}<div id="shot-frame"><div id="shot-root"></div></div><script type="module" src="./layout.js"></script></body></html>`
 
 const SURFACE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <style>${THEME}${DARK_THEME}</style><link rel="stylesheet" href="./surface.css">
 <style>
+/* README captures are static: suppress focus indicators raised by the interaction setup. */
+*:focus, *:focus-visible { outline: none !important; }
 html,body{margin:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:14px var(--dsw-font-family);-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{display:none} #root{margin:24px auto;width:620px}
 body[data-shot="panel"] #root,body[data-shot="toggle"] #root{position:fixed;bottom:24px;left:24px;right:24px;width:auto;margin:0}

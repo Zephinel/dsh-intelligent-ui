@@ -71,6 +71,22 @@ try {
     .map(card => ({ ...card, callId: `saved-${scheme}` }))))
   await writeFile(join(temp, 'themed.html'), buildStandaloneHtml({ cards: themedCards, js, css, tokens: PAGE_TOKENS,
     colorScheme: 'light', title: 'Inline snapshot export', lang: 'en', removeFollowUps: false }))
+  const freeProgram = 'root = Col([Title("Free poster"), Grid([Text("Left"), Text("Right")], 2), Flashcard("Front", "Back")])'
+  const freeRecorded = programsFromToolNodes([{ root: { kind: 'tool-result', name: 'render_ui', callId: 'free-export', isError: false,
+    call: { name: 'render_ui', argsRaw: JSON.stringify({ program: freeProgram, style: 'free',
+      temporaryStyle: { schemaVersion: 1, baseLayout: 'free', directives: 'Use a two-column poster.', theme: THEME } }) },
+  } }])
+  const freeTemplate = template({ baseLayout: 'free' })
+  freeRecorded.push(...programsFromToolNodes([{ root: { kind: 'tool-result', name: 'render_ui', callId: 'free-template-export', isError: false,
+    call: { name: 'render_ui', argsRaw: JSON.stringify({ program: freeProgram, style: 'free', styleId: freeTemplate.id }) },
+  } }]))
+  assert.equal(freeRecorded.length, 2, 'free template recording survives replay')
+  for (const scheme of ['light', 'dark']) {
+    const mixedCards = [...programsToExportCards(freeRecorded, scheme, [freeTemplate]), cards[2],
+      { style: 'article', program: 'root = Col([Toc(["Reading"]), Section("Reading", [Markdown("Legacy article body")])])', callId: 'legacy-article' }]
+    await writeFile(join(temp, `free-${scheme}.html`), buildStandaloneHtml({ cards: mixedCards, js, css, tokens: PAGE_TOKENS,
+      colorScheme: scheme, title: 'Free and legacy exports', lang: 'en', removeFollowUps: false }))
+  }
 
   server = await startStaticServer(temp)
   browser = await launchChrome({ url: server.url + 'index.html', width: 900, height: 1200 })
@@ -155,7 +171,46 @@ try {
     assert.equal(actual.fallback, false)
     assert.match(actual.text, /Saved theme body/)
   }
-  console.log('standalone-page E2E: OK (3 normal cards; 2 inline + 2 saved-template theme exports, forced light/dark)')
+  for (const scheme of ['light', 'dark']) {
+    await cdp.send('Page.navigate', { url: server.url + `free-${scheme}.html` })
+    await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 4', 'free and legacy mixed exports')
+    for (const width of [1200, 390]) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
+      const layout = await cdp.evaluate(`(() => {
+        const free = document.querySelector('[data-dsh-iui-style="free"]'), host = free.querySelector('.dsh-iui-host');
+        return { freeWidth: free.getBoundingClientRect().width,
+          legacyWidth: document.querySelector('[data-dsh-iui-style="card"]').getBoundingClientRect().width,
+          wrappers: document.querySelectorAll('.dsh-iui-article').length, freeWrappers: free.querySelectorAll('.dsh-iui-article').length,
+          grid: !!free.querySelector('.iui-grid'), fallback: !!document.querySelector('.dsh-iui-fallback'),
+          canvas: getComputedStyle(host).getPropertyValue('--iui-canvas').trim(),
+          overflow: document.documentElement.scrollWidth > innerWidth };
+      })()`)
+      assert.equal(layout.wrappers, 1, 'legacy Article retains its reading shell')
+      assert.equal(layout.freeWrappers, 0)
+      assert.equal(layout.grid, true)
+      assert.equal(layout.fallback, false)
+      assert.equal(layout.overflow, false)
+      assert.equal(layout.canvas, THEME[scheme].canvas)
+      const savedFree = await cdp.evaluate(`(() => {
+        const card = document.querySelectorAll('[data-dsh-iui-style="free"]')[1];
+        return { style: card.dataset.dshIuiStyle, grid: !!card.querySelector('.iui-grid'),
+          shell: !!card.querySelector('.dsh-iui-article'), width: card.getBoundingClientRect().width,
+          canvas: getComputedStyle(card.querySelector('.dsh-iui-host')).getPropertyValue('--iui-canvas').trim() };
+      })()`)
+      assert.equal(savedFree.style, 'free')
+      assert.equal(savedFree.grid, true)
+      assert.equal(savedFree.shell, false)
+      assert.equal(savedFree.canvas, freeTemplate.theme[scheme].canvas)
+      assert.equal(savedFree.width, layout.freeWidth, 'saved free template retains the same export measure')
+      if (width === 1200) {
+        assert.ok(layout.freeWidth > 760, 'free composition uses available export width')
+        assert.equal(layout.legacyWidth, 760, 'legacy Card keeps its existing export width')
+      }
+    }
+    await cdp.evaluate('document.querySelector(".iui-flashcard").click()')
+    assert.equal(await cdp.evaluate('document.querySelector(".iui-flashcard").classList.contains("is-flipped")'), true)
+  }
+  console.log('standalone-page E2E: OK (legacy, inline and saved themes; free/legacy mixed exports, light/dark, wide/narrow, interactions)')
 } finally {
   await cleanup()
 }

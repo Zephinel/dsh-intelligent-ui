@@ -89,6 +89,9 @@ test('file names stay filesystem-safe and readable', () => {
   assert.equal(fileStem(undefined), 'interactive-answer')
   assert.equal(fileStem('   '), 'interactive-answer')
   assert.equal(fileStem('x'.repeat(120)).length, 80)
+  assert.equal(fileStem('safe\u200ename'), 'safe-name')
+  assert.equal(fileStem('safe\u2028name'), 'safe-name')
+  assert.equal(fileStem('safe\u2060name'), 'safe-name')
 })
 
 test('the image file name carries a sortable local timestamp', () => {

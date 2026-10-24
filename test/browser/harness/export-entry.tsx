@@ -48,7 +48,7 @@ const SNAPSHOT = {
               phase: 'start',
               callId: 'call-1',
               name: 'render_ui',
-              argsRaw: JSON.stringify({ program: PROGRAM, title: 'Export harness' }),
+              argsRaw: JSON.stringify({ program: PROGRAM, title: 'Export harness', style: 'free', temporaryStyle }),
             },
           }]
         : [],
@@ -56,9 +56,9 @@ const SNAPSHOT = {
   },
 } as unknown as ExportChatSnapshot
 
-const temporaryStyle: StyleSnapshot = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups and clear hierarchy.', theme: templates[0].theme }
-const PROGRAMS: IntelligentUIProgram[] = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', running: false, temporaryStyle }]
-const savedTemplates = [{ ...templates[0], theme: { ...templates[0].theme, light: { ...templates[0].theme.light, canvas: '#f0fff4' } } }]
+const temporaryStyle: StyleSnapshot = { schemaVersion: 1, baseLayout: 'free', directives: 'Use compact groups and clear hierarchy.', theme: templates[0].theme }
+const PROGRAMS: IntelligentUIProgram[] = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', style: 'free', running: false, temporaryStyle }]
+const savedTemplates = [{ ...templates[0], baseLayout: 'free', theme: { ...templates[0].theme, light: { ...templates[0].theme.light, canvas: '#f0fff4' } } }]
 const styles = createStyleCatalog({ fetch: async () => new Response(JSON.stringify({ templates: savedTemplates })) })
 const SETTINGS: { background: string; scale: '1x' | '2x'; removeFollowUps: boolean } = { background: '#ffffff', scale: '1x', removeFollowUps: false }
 
@@ -112,11 +112,11 @@ function Card(): ReactElement {
   const [collapsed, setCollapsed] = useState(true)
   const [saved, setSaved] = useState(false)
   ;(window as any).useSavedTemplate = () => {
-    PROGRAMS[0] = { ...PROGRAMS[0], temporaryStyle: undefined, styleId: savedTemplates[0].id }
+    PROGRAMS[0] = { ...PROGRAMS[0], style: 'free', temporaryStyle: undefined, styleId: savedTemplates[0].id }
     setSaved(true)
   }
   return (
-    <section className="dsh-iui-card" data-dsh-intelligent-ui="card">
+    <section className="dsh-iui-card" data-dsh-intelligent-ui="card" data-dsh-iui-style="free">
       <button type="button" className="dsh-iui-header" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>
         <span className="dsh-iui-title" data-dsh-iui-title>Export harness</span>
       </button>
@@ -190,6 +190,7 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
   const photo = element.querySelector<HTMLImageElement>('.iui-image img')
   const body = element.querySelector<HTMLElement>('.dsh-iui-body')
   ;(window as unknown as { captureProbes: unknown[] }).captureProbes.push({
+    layout: element.querySelector('[data-dsh-iui-style]')?.getAttribute('data-dsh-iui-style'),
     themeCanvas: getComputedStyle(element.querySelector('.dsh-iui-host')!).getPropertyValue('--iui-canvas').trim(),
     flipFlattened: inner !== null && inner !== undefined && getComputedStyle(inner).transform === 'none',
     frontHidden: front !== null && front !== undefined && getComputedStyle(front).display === 'none',

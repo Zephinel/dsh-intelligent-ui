@@ -39,8 +39,11 @@ const outfile = join(outDir, 'render-check.mjs')
 
 await (await import('node:fs/promises')).writeFile(entry, `
 import { createElement } from 'react'
+import assert from 'node:assert/strict'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { OpenUIRenderer } from ${JSON.stringify(join(root, 'src/lib/render.tsx'))}
+import { resolveStyleThemeVars } from ${JSON.stringify(join(root, 'src/lib/style-theme.ts'))}
+import { THEME } from ${JSON.stringify(join(root, 'test/host/style-fixtures.mjs'))}
 import { compositionPrograms } from ${JSON.stringify(join(galleryDir, 'composition-programs.ts'))}
 import { programs } from ${JSON.stringify(join(galleryDir, 'programs.ts'))}
 import { toolPrograms } from ${JSON.stringify(join(galleryDir, 'tool-programs.ts'))}
@@ -60,6 +63,18 @@ for (const program of all) {
   }
 }
 console.log('render-check: ' + (all.length - failed) + '/' + all.length + ' gallery programs rendered from ' + ${JSON.stringify(galleryDir)})
+// Free results pass their composition straight to the neutral renderer, with no shell.
+for (const scheme of ['light', 'dark']) {
+  const markup = renderToStaticMarkup(createElement(OpenUIRenderer, {
+    program: 'root = Col([Title("Poster"), Grid([Text("Left"), Text("Right")], 2)])',
+    themeStyle: resolveStyleThemeVars(THEME, scheme), scheme,
+  }))
+  assert.match(markup, /iui-grid/)
+  assert.match(markup, /Poster/)
+  assert.ok(markup.includes('--iui-canvas:' + THEME[scheme].canvas))
+  assert.doesNotMatch(markup, /dsh-iui-article|iui-toc|iui-section|dsh-iui-fallback/)
+}
+console.log('render-check: free composition rendered without a reading shell in light/dark')
 if (failed > 0) process.exitCode = 1
 `)
 

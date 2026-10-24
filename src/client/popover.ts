@@ -8,6 +8,9 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 
 /** Fixed-position placement measured from the trigger. */
+/** Gap between a popup's bottom edge and the trigger's top edge. */
+const POPUP_TRIGGER_GAP = 12
+
 export interface PopupPlacement {
   /** Viewport x for the popup's left edge (start alignment). */
   readonly left?: number
@@ -66,7 +69,7 @@ export function useAnchoredPopup(
     const place = (): void => {
       const viewport = window.innerWidth
       const rect = trigger.getBoundingClientRect()
-      const bottom = Math.max(margin, window.innerHeight - rect.top + 8)
+      const bottom = Math.max(margin, window.innerHeight - rect.top + POPUP_TRIGGER_GAP)
       if (alignEnd) {
         // The caller sizes the popup from its content; only the edge and width
         // cap are placed here.

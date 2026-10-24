@@ -42,7 +42,7 @@ test('dependency-free guards accept only the bounded style contract', () => {
   for (const theme of [null, [], { ...THEME, font: 'custom' }, { ...THEME, css: 'x' }, { ...THEME, dark: { ...THEME.dark, accent: 'red' } }]) {
     assert.equal(isStyleTheme(theme), false)
   }
-  assert.equal(isStyleTemplate(template()), true)
+  for (const baseLayout of ['card', 'article', 'free']) assert.equal(isStyleTemplate(template({ baseLayout })), true)
   for (const value of [null, [], template({ sessionId: 's1' }), template({ scope: 'session' }), template({ scope: 'session', sessionId: ' ' }), template({ createdAt: NaN }), template({ updatedAt: 99 }), template({ extra: true })]) {
     assert.equal(isStyleTemplate(value), false)
   }
@@ -100,7 +100,7 @@ test('rejects reserved, duplicate, overlong and control-character labels and inv
     { name: '' }, { name: ' ' }, { name: 'x'.repeat(31) }, { name: 'AUTO' }, { name: ' Card ' }, { name: 'article' },
     { name: 'bad\nname' }, { description: 'bad\u007f' }, { description: 'x'.repeat(101) }, { directives: 'x'.repeat(2001) },
     { theme: { ...THEME, radius: 'huge' } }, { theme: { ...THEME, light: { ...THEME.light, ink: '#fff' } } },
-    { scope: 'session' }, { scope: 'session', sessionId: '' }, { sessionId: 's1' }, { baseLayout: 'auto' }, { extra: 'CSS' },
+    { scope: 'session' }, { scope: 'session', sessionId: '' }, { sessionId: 's1' }, { baseLayout: 'auto' }, { baseLayout: 'unknown' }, { extra: 'CSS' },
   ]) assert.throws(() => store.create(styleInput(patch)))
   const first = store.create(styleInput({ name: 'Existing' }))
   assert.throws(() => store.create(styleInput({ name: 'eXisTing', scope: 'session', sessionId: 's1' })), /Duplicate style name/)
@@ -170,4 +170,26 @@ test('failed persistence does not publish the mutation in memory or overwrite th
   assert.throws(() => store.remove(created.id))
   assert.equal(store.get(created.id).name, created.name)
   assert.equal(readFileSync(file, 'utf8'), before)
+})
+
+
+test('free templates round-trip in version 1 beside legacy layouts and keep validation and visibility', () => {
+  const { store, file } = mount({ raw: JSON.stringify({ version: 1, templates: [template()] }) })
+  const free = store.create(styleInput({ name: 'Free composition', baseLayout: 'free', scope: 'session', sessionId: 's1' }))
+  assert.equal(store.resolve(free.id, 'other'), undefined)
+  assert.deepEqual(createStyleStore().resolve(free.id, 's1'), free)
+  assert.equal(createStyleStore().get(template().id).baseLayout, 'card')
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).version, 1)
+  const before = readFileSync(file, 'utf8')
+  for (const patch of [{ baseLayout: 'unknown' }, { baseLayout: null }, { theme: {} }, { directives: 'x'.repeat(2001) }, { name: 'CARD' }]) {
+    assert.throws(() => store.update(free.id, patch))
+    assert.equal(readFileSync(file, 'utf8'), before)
+  }
+  for (const baseLayout of ['article', 'free', 'card', 'free']) {
+    store.update(free.id, { baseLayout })
+    assert.equal(createStyleStore().get(free.id).baseLayout, baseLayout)
+  }
+  assert.equal(store.update(free.id, { name: 'Renamed free', directives: 'Edited' }).baseLayout, 'free')
+  assert.equal(store.remove(free.id), true)
+  assert.equal(createStyleStore().get(free.id), undefined)
 })

@@ -1,5 +1,5 @@
 /** Reusable style contracts shared by the Host and browser, without runtime dependencies. */
-import type { AnswerStyle, PageStyle } from './intelligent-ui.ts'
+import type { AnswerStyle, RenderLayout } from './intelligent-ui.ts'
 
 export const CUSTOM_STYLE_PREFIX = 'cs_'
 export const STYLE_NAME_MIN_LENGTH = 1
@@ -18,7 +18,7 @@ export const STYLE_SNAPSHOT_VERSION = 1
 /** A result-owned style, carried in recorded tool arguments rather than the catalog. */
 export interface StyleSnapshot {
   readonly schemaVersion: 1
-  readonly baseLayout: PageStyle
+  readonly baseLayout: RenderLayout
   readonly directives: string
   readonly theme: StyleTheme
   readonly suggestedName?: string
@@ -47,7 +47,7 @@ export interface StyleTemplate {
   readonly id: string
   readonly name: string
   readonly description: string
-  readonly baseLayout: PageStyle
+  readonly baseLayout: RenderLayout
   readonly directives: string
   readonly theme: StyleTheme
   readonly scope: 'global' | 'session'
@@ -59,7 +59,7 @@ export interface StyleTemplate {
 export interface CreateStyleTemplateInput {
   readonly name: string
   readonly description?: string
-  readonly baseLayout: PageStyle
+  readonly baseLayout: RenderLayout
   readonly directives: string
   readonly theme: StyleTheme
   readonly scope: 'global' | 'session'
@@ -112,7 +112,7 @@ export function isStyleTheme(value: unknown): value is StyleTheme {
     && STYLE_SHADOWS.some(shadow => shadow === value.shadow)
 }
 
-function isLabel(value: unknown, min: number, max: number): value is string {
+export function isLabel(value: unknown, min: number, max: number): value is string {
   return typeof value === 'string' && value === value.trim()
     && value.length >= min && value.length <= max && !/[\u0000-\u001f\u007f-\u009f]/.test(value)
 }
@@ -121,7 +121,7 @@ function isLabel(value: unknown, min: number, max: number): value is string {
 export function isStyleSnapshot(value: unknown): value is StyleSnapshot {
   return isRecord(value) && hasOnlyKeys(value, ['schemaVersion', 'baseLayout', 'directives', 'theme', 'suggestedName'])
     && value.schemaVersion === STYLE_SNAPSHOT_VERSION
-    && (value.baseLayout === 'card' || value.baseLayout === 'article')
+    && (value.baseLayout === 'card' || value.baseLayout === 'article' || value.baseLayout === 'free')
     && typeof value.directives === 'string' && value.directives.trim().length > 0
     && value.directives.length <= STYLE_DIRECTIVES_MAX_LENGTH
     && !/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(value.directives)
@@ -152,7 +152,7 @@ export function isStyleTemplate(value: unknown): value is StyleTemplate {
     && isCustomStyleId(value.id)
     && isLabel(value.name, STYLE_NAME_MIN_LENGTH, STYLE_NAME_MAX_LENGTH) && !isReservedStyleName(value.name)
     && isLabel(value.description, 0, STYLE_DESCRIPTION_MAX_LENGTH)
-    && (value.baseLayout === 'card' || value.baseLayout === 'article')
+    && (value.baseLayout === 'card' || value.baseLayout === 'article' || value.baseLayout === 'free')
     && typeof value.directives === 'string' && value.directives.length <= STYLE_DIRECTIVES_MAX_LENGTH
     && !/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(value.directives)
     && isStyleTheme(value.theme)

@@ -6,6 +6,8 @@ import { styleActions, type StyleActions } from './style-actions.ts'
 import type { StyleCatalog } from './styles.ts'
 import { StylePopover } from './StylePopover.tsx'
 import { TemplateField, styleActionMessage } from './TemplateFields.tsx'
+import { encodeStyleExport, StyleExchangeError } from '../shared/style-template-exchange.ts'
+import { fileStem } from './export-image-plan.ts'
 
 export function TemplateManagement({ template, styles, actions = styleActions, onUse, onDeleted, global = false, disabled = false, t }: {
   readonly template: StyleTemplate
@@ -18,7 +20,7 @@ export function TemplateManagement({ template, styles, actions = styleActions, o
   readonly t: Translate
 }): ReactNode {
   const anchor = useRef<HTMLButtonElement>(null)
-  const [mode, setMode] = useState<'menu' | 'rename' | 'edit' | 'delete' | null>(null)
+  const [mode, setMode] = useState<'menu' | 'rename' | 'edit' | 'delete' | 'export' | null>(null)
   const [name, setName] = useState(template.name)
   const [description, setDescription] = useState(template.description)
   const [directives, setDirectives] = useState(template.directives)
@@ -45,11 +47,22 @@ export function TemplateManagement({ template, styles, actions = styleActions, o
     finally { setBusy(false) }
   }
   const exportJson = (): void => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' }))
-    const link = document.createElement('a')
-    link.href = url; link.download = `${template.id}.json`; link.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    close()
+    try {
+      const url = URL.createObjectURL(new Blob([encodeStyleExport(template)], { type: 'application/json' }))
+      const link = document.createElement('a')
+      try {
+        link.href = url; link.download = `${fileStem(template.name, 'style-template')}.iui-style.json`
+        link.rel = 'noopener'; link.style.display = 'none'
+        document.body.appendChild(link)
+        link.click()
+        close()
+      } finally {
+        link.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 4000)
+      }
+    } catch (cause) {
+      setError(t(cause instanceof StyleExchangeError ? 'template.exportFailed' : 'template.error.request_failed'))
+    }
   }
   const title = t(`template.${mode ?? 'manage'}`)
   return <>
@@ -61,20 +74,21 @@ export function TemplateManagement({ template, styles, actions = styleActions, o
         <button type="button" role="menuitem" onClick={() => { onUse(); close() }}>{t(global ? 'template.useGlobal' : 'template.use')}</button>
         <button type="button" role="menuitem" onClick={() => change('rename')}>{t('template.rename')}</button>
         <button type="button" role="menuitem" onClick={() => change('edit')}>{t('template.edit')}</button>
-        {global ? <button type="button" role="menuitem" onClick={exportJson}>{t('template.export')}</button> : null}
+        <button type="button" role="menuitem" onClick={() => change('export')}>{t('template.export')}</button>
         <button type="button" role="menuitem" onClick={() => change('delete')}>{t('template.delete')}</button>
-      </> : <form onSubmit={event => { event.preventDefault(); void submit() }}>
+      </> : <form onSubmit={event => { event.preventDefault(); if (mode === 'export') exportJson(); else void submit() }}>
         {mode === 'rename' ? <TemplateField label={t('template.name')} value={name} max={30} onChange={setName} required disabled={busy} /> : null}
         {mode === 'edit' ? <>
           <TemplateField label={t('template.description')} value={description} max={100} onChange={setDescription} multiline disabled={busy} />
           <TemplateField label={t('template.directives')} value={directives} max={2000} onChange={setDirectives} multiline disabled={busy} />
         </> : null}
         {mode === 'delete' ? <p>{t('template.deleteNote', { name: template.name })}</p> : null}
+        {mode === 'export' ? <p>{t('template.exportNote')}</p> : null}
         {error === null ? null : <p className="dsh-iui-style-error" role="alert">{error}</p>}
         <div className="dsh-iui-template-buttons">
           <button type="button" onClick={close}>{t('template.cancel')}</button>
           <button type="submit" disabled={busy || (mode === 'rename' && !name.trim())}>
-            {t(busy ? 'template.saving' : mode === 'delete' ? 'template.delete' : 'template.save')}
+            {t(busy ? 'template.saving' : mode === 'delete' ? 'template.delete' : mode === 'export' ? 'template.download' : 'template.save')}
           </button>
         </div>
       </form>}

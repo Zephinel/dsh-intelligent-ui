@@ -30,3 +30,5 @@ export const templates: StyleTemplate[] = [
     },
   },
 ]
+
+templates.push({ ...templates[0], id: 'cs_free004', name: 'Free composition', baseLayout: 'free', directives: 'Use parallel regions.' })

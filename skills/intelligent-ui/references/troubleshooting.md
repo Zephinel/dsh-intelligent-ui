@@ -1,6 +1,6 @@
 # Troubleshooting
 
-`render_ui` either returns a success value or throws. A thrown error is the host's own message, verbatim: read the quoted fragment, fix the named problem, and call again in the same turn. A success can still carry parser warnings; treat those as bugs too.
+`render_ui` either returns a success value or throws. A thrown error is the host's own message, verbatim: read the quoted fragment, fix the named problem, and call again in the same turn, or request the user action named by an operation error below. A success can still carry parser warnings; treat those as bugs too.
 
 ## The retry loop
 
@@ -46,11 +46,21 @@ render_ui: styleId and temporaryStyle are mutually exclusive.
 render_ui: temporaryStyle requires a bound, running on-demand operation and its current tool call. The model cannot authorize one.
 render_ui: invalid temporaryStyle snapshot; use schemaVersion 1, a baseLayout, reusable directives and controlled theme tokens.
 render_ui: temporaryStyle.baseLayout must match style.
+render_ui: on-demand generation requires style: "free" and temporaryStyle.baseLayout: "free"; card/article layouts are only supported when adjusting an existing result.
 render_ui: on-demand operation was cancelled or replaced before completion.
 render_ui: this turn is an on-demand UI request; pass a complete temporaryStyle with a matching style (omit styleId), or ask the user a clarifying question first.
 ```
 
 Use only one style source. A temporary snapshot needs a Host-armed operation bound to the human message and current observed `render_ui` call; the model cannot self-authorize. Ask the user to re-arm in the composer after expiry, cancellation or restart. A text-only fallback turn keeps the operation pending (resume) so the next message can continue without re-arming; retry is offered for failed/interrupted turns. A structured question still awaiting an answer blocks rendering; wait for the built-in `ask_user_question` answer first. Match `baseLayout` and `style`, use only schemaVersion 1/controlled theme tokens and bounded reusable directives; omit styleId.
+
+Adjustment errors identify the stored parent layout or an unavailable parent; for a legacy Card parent and a missing result named `old-result`:
+
+```text
+render_ui: on-demand adjustment must preserve the parent result layout; pass style: "card" and temporaryStyle.baseLayout: "card".
+render_ui: cannot adjust result "old-result": its parent snapshot is unavailable in the result registry. Ask the user to cancel this adjustment and start a new on-demand generation.
+```
+
+Retry layout mismatches using both required fields. Adjustments must retain the parent snapshot's free/card/article layout. Missing or evicted snapshots cannot be recovered from model arguments or conversation content: ask the user to cancel and start a new **On-demand UI** generation. Rejection does not record a result or complete the operation; historical replay remains available.
 
 For the light ink pair, the exact contrast error is below; the same format uses `dark` and/or `accent` for the other pairs:
 
@@ -271,3 +281,8 @@ No error appears, yet the page is not what you intended. Check these in order:
 8. **Dates** — comparisons are numeric; order dates with `@DaysBetween(a, b) > 0`, and format them with `@FormatDate`.
 
 If the page is merely visually weak, do not re-call for cosmetic fixes: choose better blocks next turn ([SKILL.md](../SKILL.md#design-playbook) has the composition rules).
+
+
+### Free saved templates
+
+A selected free template requires `style: "free"` and its exact `styleId`, without `temporaryStyle`. A Card/Article selection still rejects free; a built-in selection cannot authorize free by adding an arbitrary styleId. Free templates require no Toc/Section or Article wrapper. Saving a result copies the registered layout, directives and theme; a legacy client sending `baseLayout` receives `invalid_input` and must reload the updated client. Missing/deleted templates retain the existing default-theme fallback.

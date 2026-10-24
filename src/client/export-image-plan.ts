@@ -120,6 +120,9 @@ const UNSAFE_FILENAME = /[\\/:*?"<>|\u0000-\u001f]+/g
 export function fileStem(title: string | undefined, fallback = 'interactive-answer'): string {
   const cleaned = (title ?? '')
     .replace(UNSAFE_FILENAME, ' ')
+    // Invisible format controls and line separators can disguise a file name.
+    .replace(/\p{Cf}/gu, ' ')
+    .replace(/[\u2028\u2029]/g, ' ')
     // Leading dots create hidden files; bidi controls can disguise the name.
     .replace(/^[.\u202a-\u202e\u2066-\u2069]+/u, '')
     .replace(/[\u202a-\u202e\u2066-\u2069]+/gu, ' ')

@@ -156,3 +156,28 @@ test('stored custom styles stay selected; missing references render a fallback n
   const invalid = render({ form: form({ value: { answerStyle: 'not-a-style' } }) })
   assert.match(invalid, /data-style-id="auto"[^>]+aria-pressed="true"/)
 })
+
+
+test('free template previews and labels work in both languages without a built-in free choice', async () => {
+  const saved = template({ baseLayout: 'free' })
+  const styles = createStyleCatalog({ fetch: async () => ({ ok: true, json: async () => ({ templates: [saved] }) }) })
+  await styles.ensure()
+  for (const t of [undefined, translate(zh)]) {
+    const html = render({ styles, t, form: form({ value: { answerStyle: saved.id } }) })
+    assert.match(html, /dsh-iui-preview-art-free/)
+    assert.ok(html.includes(t ? '自由布局' : 'Free layout'))
+    assert.doesNotMatch(html, /style.base.free|data-style-id="free"/)
+    assert.match(html, new RegExp(`data-style-id="${saved.id}"[^>]+aria-pressed="true"`))
+  }
+})
+
+test('My styles exposes the import dialog entry in both languages, respecting settings availability', () => {
+  for (const t of [undefined, translate(zh)]) {
+    const html = render({ t })
+    assert.match(html, /data-dsh-iui-import="true"[^>]*aria-haspopup="dialog"[^>]*aria-expanded="false"/)
+    assert.ok(html.includes(t ? '导入模板' : 'Import template'))
+    assert.doesNotMatch(html, /role="dialog"/)
+  }
+  const readonly = render({ form: form({ writable: false }) })
+  assert.match(readonly, /data-dsh-iui-import="true"[^>]*disabled=""/)
+})

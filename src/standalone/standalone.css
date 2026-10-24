@@ -30,6 +30,17 @@ body {
   min-width: 0;
 }
 
+/* Free compositions use the available page width; reading shells keep their measure. */
+.dsh-iui-standalone-cards[data-dsh-iui-free-layout='true'] {
+  width: 100%;
+}
+
+.dsh-iui-standalone-card:not([data-dsh-iui-style='free']) {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
 .dsh-iui-standalone-toast {
   position: fixed;
   left: 50%;

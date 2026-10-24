@@ -627,6 +627,15 @@
   background: var(--dsw-alias-border-l1);
 }
 
+.dsh-iui-preview-art-free {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.dsh-iui-preview-art-free > .is-title {
+  grid-column: 1 / -1;
+}
+
 .dsh-iui-preview-art-article {
   align-items: stretch;
 }
@@ -772,10 +781,13 @@
   overflow: hidden;
   border: 0;
   border-radius: 18px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 96%, transparent);
+  /* Opaque raised surface, no backdrop blur: the layer-2 token keeps the panel
+     distinct from the page in dark mode while leaving the module-surface cards
+     and rows inside it visible. A translucent blur layer also forced the
+     compositor to re-snapshot the page on every repaint. */
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 24px 64px rgb(0 0 0 / 22%), 0 3px 10px rgb(0 0 0 / 10%);
   color: var(--dsw-alias-label-primary);
-  backdrop-filter: blur(22px);
 }
 
 .dsh-iui-style-panel-header {
@@ -928,8 +940,9 @@
   padding: 6px;
   border: 0;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 94%, transparent);
-  backdrop-filter: blur(20px);
+  /* Keep the menu opaque for the same compositor reason as the style panel;
+     layer-2 leaves its module-surface rows visible. */
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 18px 48px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 8%);
   color: var(--dsw-alias-label-primary);
 }
@@ -1258,10 +1271,8 @@
   place-items: center;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: var(--dsw-alias-brand-primary);
-  color: var(--dsw-alias-label-primary-foreground);
-  font-size: 12px;
+  color: var(--dsw-alias-brand-primary);
+  line-height: 0;
 }
 
 .dsh-iui-style-panel-scope {
@@ -1441,3 +1452,24 @@
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, currentColor); outline-offset: 2px;
 }
 .dsh-iui-template-more:disabled, .dsh-iui-style-popover button:disabled { opacity: .5; cursor: default; }
+.dsh-iui-template-import-entry { margin-bottom: 12px; }
+.dsh-iui-template-import-trigger {
+  padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); font: inherit; cursor: pointer;
+}
+.dsh-iui-template-import-trigger:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-iui-template-import-trigger:disabled { opacity: .5; cursor: default; }
+.dsh-iui-template-import-trigger:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, currentColor); outline-offset: 2px;
+}
+.dsh-iui-template-palettes { display: flex; gap: 8px; margin-block: 12px; }
+.dsh-iui-template-palette {
+  flex: 1; padding: 10px; border: 1px solid var(--iui-border); border-radius: 6px;
+  color: var(--iui-ink); background: var(--iui-canvas);
+}
+.dsh-iui-template-palette > div { display: flex; gap: 6px; margin-top: 8px; }
+.dsh-iui-template-swatch { width: 24px; height: 24px; border: 1px solid var(--iui-border); border-radius: 4px; }
+.dsh-iui-template-warning { color: var(--dsw-alias-label-primary); }
+.dsh-iui-template-directives { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin-block: 8px; }
+.dsh-iui-template-acknowledge { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; }
+.dsh-iui-template-acknowledge input { flex: none; margin-top: 4px; }

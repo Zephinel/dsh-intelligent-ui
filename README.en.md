@@ -9,15 +9,22 @@
 [![DSH](https://img.shields.io/badge/DSH-0.2.1-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
 [![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
 
-**Turn a model answer into a page you can actually use.** The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.0](https://openui.com) program; at the end of the turn, DSH renders it into an interactive page — maps, photos, charts, checklists, forms, SVG drawings and mini-games are all real components, not screenshots.
+**Turn a DeepSeek Harness (DSH) model answer into a page you can actually use.** After installing and enabling the plugin, ask:
+
+```text
+Plan two days in Shanghai, with checkboxes and adjustments
+```
+
+The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.0](https://openui.com) program; at the end of the turn, DSH renders it into an interactive page — maps, photos, charts, checklists, forms, SVG drawings and mini-games are all real components, not screenshots.
 
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
 > **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.4.2`** (`latest`). Custom styles, on-demand generation and the on-demand lifecycle/content-grounding fixes described below are all included in 0.4.2.
 
-> [!TIP]
-> **Want to try it now?** Install with one command: `dsh plugin --profile web add @zephinel/dsh-intelligent-ui`; restart the DSH process that serves the Web UI, then choose **This session only** from the **UI** control in the composer. See [Quick start](#quick-start) for the full path.
+> **Unreleased (working tree)**: the free on-demand and saved-template layouts and template file import/export described below are not included in 0.4.2. New results need no Card/Article shell; if the layout is materially unclear, the model asks a focused question. Saving as a template preserves the free layout, preferences and light/dark theme without a Card/Article choice. Build and install the local checkout to try these changes.
+
+[Quick start](#quick-start) · [Getting the code](#getting-the-code) · [Build, test and deploy](#build-test-and-deploy)
 
 ## What it looks like
 
@@ -58,10 +65,11 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Switch and style | Global defaults on the Plugin detail page; composer overrides per session; built-in Auto / Card / Article and custom templates |
 | Custom templates and visual themes | Reusable display preferences with light/dark palettes, font, radius, density and shadow; use, rename, edit or delete in My styles |
 | Chat-native on-demand UI | No template required; choose On-demand UI in the UI panel, send a normal message, clarify with the built-in question tool when needed |
+| Free on-demand layouts (unreleased) | Compose the page from the user's request; saved templates keep the free layout, preferences and theme without a Card/Article shell |
 | Temporary results and optional saving | Inline style snapshots are ready to use, adjust or save later; no required preview, naming or saving |
-| Bilingual UI | Follows DSH's UI language; dictionaries live in `src/shared/locales.ts` |
+| Bilingual UI | Follows DSH's Chinese or English UI language |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
-| Plugin detail page | Plugins → Intelligent UI detail page: Availability (global enable), Answer style (built-in or saved template), My styles management, Composition (Free-form layout) and Export (background color, resolution, whether images/pages remove follow-up blocks; on by default) |
+| Plugin detail page | Manage global enablement, default style, templates, composition and export preferences in one place |
 | Replayable | Programs and temporary styles replay from recorded tool arguments; exported pages freeze the scheme at export time |
 
 ## Getting the code
@@ -73,38 +81,40 @@ git clone https://github.com/Zephinel/dsh-intelligent-ui.git
 cd dsh-intelligent-ui
 ```
 
-You can also install it from npm without a checkout (see [Quick start](#quick-start)).
+To contribute, fork this repository and clone your fork. To use the plugin, install from npm without a checkout (see [Quick start](#quick-start)).
 
 ## Prerequisites
 
-- **DSH 0.2.1** (the [`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified. Install with `npm install -g @deepseek-ai/dsh`.
-- **[Node.js 24](https://nodejs.org/en/download)**: build, tests and `npm pack` are verified on Node 24; the Host bundle targets Node 22 (`target: 'node22'`), and the repository has no `engines` or `.nvmrc` pin, so verify a lower version yourself before using one.
+These commands are for DSH Web and source development; DSH Desktop users can follow the in-app steps in [Quick start](#quick-start).
+
+- **DSH 0.2.1 plugin API** (the [`dsh` CLI](https://www.npmjs.com/package/@deepseek-ai/dsh)): the Host/Client halves and plugin protocol are developed against this version; the verified version is `0.2.1-rc.2`, and later versions are unverified. Pin the install to the verified version: `npm install -g @deepseek-ai/dsh@0.2.1-rc.2`.
+- **[Node.js 24 and its bundled npm](https://nodejs.org/en/download)**: builds, tests and the publish workflow use Node 24. The repository has no `engines` or `.nvmrc` pin, so select Node 24 before running `npm install`; the Host's Node 22 build target does not verify the whole toolchain on Node 22.
+- **[Git](https://git-scm.com/downloads)**: needed only to get the source; the repository sets no minimum version.
 - **`@deepseek-ai/dsh-client-locale`**: the browser half requires a deployment that composes it; DSH Web 0.2.1 includes it by default, and without it the switch and card do not mount (the Host tool and prompt keep working).
 
 Confirm the tools are present:
 
 ```bash
 node --version   # v24.x
-dsh --version    # 0.2.1 or 0.2.1-rc.2
+npm --version
+dsh --version    # verified: 0.2.1-rc.2
+git --version    # only needed to get the source
 ```
 
 The restart examples cover a foreground `dsh web`, macOS launchd and Linux systemd; for other supervisors restart the corresponding service. Verified platforms: macOS (Web + DSH Desktop) and Windows (DSH Desktop); Linux is unverified.
 
 ## Quick start
 
-Install from npm (prerequisites are in the previous section):
+**DSH Web**: install the published 0.4.2 package and start the Web UI (first foreground run):
 
 ```bash
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-
-# pin the current version
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.2
-
-# or install from GitHub
-dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
+dsh web
 ```
 
-Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again; launchd/systemd: restart the service), open the URL it prints, and look for the **UI** control on the right side of the composer.
+If Web is already running, restart that process after installing (foreground: Ctrl+C, then run `dsh web` again; launchd/systemd: restart the service). Open the printed URL and look for the **UI** control on the right of the composer; the DSH profile determines the address and port.
+
+Alternative sources replace the install command above: use `dsh plugin --profile web add @zephinel/dsh-intelligent-ui` to follow npm's latest version, or `dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui` for committed GitHub code. Neither installs uncommitted changes from your checkout.
 
 **DSH Desktop** needs no terminal command — install it inside the app:
 
@@ -114,11 +124,7 @@ Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, th
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
 
-Then click the **UI** control, choose "This session only" (or `/iui on`), set the session Auto / Card / Article style in the same panel if needed, and ask, for example:
-
-```text
-Plan two days in Shanghai, with checkboxes and adjustments
-```
+After installing, click **UI**, choose **This session only** (or send `/iui on`), then send the itinerary example at the top. An interactive itinerary at the end of the turn confirms it works. Set the session Auto / Card / Article style in the same panel if needed.
 
 See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for the local-checkout development loop, uninstall and troubleshooting; the extension has no development server of its own.
 
@@ -155,47 +161,58 @@ To guarantee a card (or when the model still replies in text), invoke the skill 
 
 ![The same temporary result under the fixed dark theme](assets/intelligent-ui-temporary-result-dark.webp)
 
-A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global). Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
+A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global); saving preserves the result’s layout (free/card/article), preferences and light/dark theme without a layout choice. Free templates have a local preview and **Free layout** hint; selecting one keeps the DSH card header without a Card/Article shell, with optional Toc/Section. Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
+
+**Working tree (unreleased)**: the Host requires free layout for new on-demand generation; adjustments preserve the parent layout (free, legacy card or article). If the parent snapshot is absent from the latest-200 result registry, adjustment returns an error; cancel it and choose **On-demand UI** again. Historical results can still replay from tool arguments.
 
 ![Plugin detail page: global enable, default style, My styles management, composition and export](assets/intelligent-ui-settings.webp)
 
-The Plugin detail page groups settings into **Availability**, **Answer style**, **My styles**, **Composition** and **Export**. My styles manages saved global templates: set as default, rename, edit description/display preferences, export JSON or delete. The composer manages global and session templates visible in that session. Generation happens in the composer; settings explain the entry without providing a generation workbench. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
+The Plugin detail page groups settings into **Availability**, **Answer style**, **My styles**, **Composition** and **Export**. My styles manages saved global templates: set as default, rename, edit description/display preferences, export file, import template or delete. The composer manages global and session templates visible in that session. Generation happens in the composer; settings explain the entry without providing a generation workbench. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the whole `@ToAssistant` follow-up block (on by default).
+
+**Template file sharing (unreleased)**: in My styles, or in the composer’s **Display style** panel, choose a template’s `…` → **Export file**, review the sensitive-information notice, then **Download** to get `<template-name>.iui-style.json`. The composer panel also covers session-scoped templates, so they need no separate global copy first. The file contains the name, description, base layout, full display preferences and theme. Check all of it for personal or internal information before sharing. The recipient chooses **Import template** in My styles or the composer’s **Display style** panel, selects a file or pastes JSON → **Preview**, then checks the name, description, layout, light/dark swatches and full preferences. Rename, edit or clear the preferences as needed. Importing always requires **I have read and understood the risks above; import this external template** before **Import template**. Import creates a new global template (the composer entry also writes global templates only; importing into the current session remains deferred until session authorization is checked), never applies it or changes the current selection/global default; afterwards use, edit, delete and export it normally.
+
+Template exchange format v1 contains only portable style configuration, supports `card|article|free`, and excludes local IDs, scope, sessions and timestamps. Plugin versions supporting v1 can import it; unknown versions are rejected without downgrade guessing. Only this exchange format is accepted: raw template exports and library backups are rejected (no external users yet, so no legacy-format support is maintained). Exchange versions are independent of npm package versions. Future v2 implementations should retain v1 support; adding layouts or removing `baseLayout` requires explicit format evolution rather than silently accepting unknown layouts in v1.
+
+Exchange is limited to one template and **32 KiB of UTF-8 input**. Files are size-checked before reading, regardless of extension or MIME. One Markdown code fence around the entire input is tolerated; JSON is never extracted from arbitrary prose. Unknown fields and library backups are rejected. The global limit is 40 templates; duplicate names get an `(Imported)` suggestion, remaining collisions require a rename, and a full library requires deleting unneeded templates. Share codes, online links, batch backups and session imports are unavailable; the composer import also writes global templates only.
+
+**Security boundary**: an external template's name and display preferences enter the prompt and may affect model behavior; the description is stored/exported only and never enters the prompt. All three are treated as untrusted text. Preview, acknowledgement and no automatic application mitigate risk without eliminating prompt injection; DSH’s tool/permission layer controls execution authority. The current implementation follows the owner-approved approach (2026-10-24): a disclaimer plus acknowledgement before retaining external content. Real-deployment Origin/CSRF and tool-privilege auditing remain recommended pre-release hardening.
 
 Once an answer has rendered, a labeled **export pill** appears at the **far right** of the message action strip (visually distinct from the native copy / like / branch icons); only answers rendered by the extension have it. It can save every card from that turn as one PNG — **Raw** (the answer alone), **Rounded** (background color and rounded padding) or **Card** (padding, rounded corners and a soft shadow) — or export them as a single-file HTML page, which opens in a browser with the interactions intact; in that page `@ToAssistant` copies the message and shows the paste-back-into-DSH hint instead of calling DSH. The image contains the rendered cards only, not the Markdown text around them and not the export control itself. See [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) for the full flow.
 
 ## Build, test and deploy
 
-For local development from a fresh clone, install dependencies, build and write the local DSH profile:
+Start at the checkout root from [Getting the code](#getting-the-code). `npm install` builds automatically through `prepare`; the local installer defaults to the `web` profile and backs up its patch. If that profile already has the npm/GitHub version, remove it first with `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` to avoid registering the plugin twice.
 
 ```bash
 npm install
-npm run build
+dsh plugin --profile web list  # check the profile; initializes it on first use
 node scripts/install.mjs
+dsh web
 ```
 
-Restart the DSH process serving the Web UI, then open the URL it prints; the **UI** control on the right of the composer means it worked. There is no development server and no watch mode; see [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for details and uninstall.
+If Web is already running, restart it after installing and open the printed URL. Once **UI** appears on the right of the composer, enable it and try a request as in [Quick start](#quick-start). There is no separate development server or watch mode; run `npm run build` and restart DSH after each change. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall and troubleshooting.
 
 Everyday checks and packaging:
 
-```bash
-npm run build       # build the prompt, Host and Client bundle
-npm run check       # build + Host/Client/packaging tests + renderer checks
-npm run pack:check  # inspect the final npm pack file list
-npm run test:browser # build first; 7 browser suites: on-demand, style panel, theme, image, interactive page, Article spacing, settings (Chrome required)
-```
+| Command | Purpose |
+|---|---|
+| `npm run build` | Generate the prompt, Host, Client and standalone export-page bundles |
+| `npm test` | Run Host, Client and packaging Node tests after a build |
+| `npm run check` | Full pre-submit check: build, Node tests and renderer checks |
+| `npm run pack:check` | Preview the final npm package file list without publishing |
+| `npm run test:browser` | Run 7 browser suites after a build; Chrome required |
 
-- Current Node tests: **179**; renderer parse/render **41/41** each, i18n **4** programs, typography **22/22**. Browser checks cover components/contracts; the on-demand main path (clear request → temporary-style card → save as template), free-form clarification when content is missing, and the real-data grounding rule have been verified with the real model in an isolated DSH Web instance; remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+- Current working-tree verification record: **207/207** Node tests (Host 89, Client 97, packaging 21); renderer parse/render **41/41** each, i18n **4** programs, typography **22/22**; **7/7** browser suites passed, including **101** settings template-exchange and **114** on-demand assertions. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
 - `node scripts/capture-screenshots.mjs` rebuilds panel, hint, temporary-result and settings captures at 2x in Chrome using fixed DSH tokens, production components and fake services. English UI; shell card glyphs use lucide stand-ins.
-- The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run.
+- The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run. Use `CHROME_BIN` for a non-default Chrome executable location (also used by the browser suites).
 
 The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall and version notes.
 
 ## Contributing
 
 - Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
-- Run `npm run check` before submitting; there is no PR CI, so the local command is the gate. Releases are published by the GitHub Actions Trusted Publishing workflow (push a `v*` tag that matches `package.json`).
-- When behavior, copy or counts change, update the Chinese and English READMEs, `CHANGELOG.md`, and the matching documents under `docs/`; the sync rules live in `.agents/skills/sync-iui-docs/SKILL.md` (development-only, not shipped in the npm package).
-- Repository maintenance skills and doc-sync rules live under `.agents/skills/` (not shipped); AI coding agents also use `npm run check` as the pre-submit gate.
+- Run `npm run check` before opening a PR; there is no PR CI, so the local command is the gate. Releases use the [GitHub Actions Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml); the development guide describes the process.
+- Contributors and AI coding agents should follow the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md): when behavior, copy or counts change, update both READMEs, `CHANGELOG.md` and the matching documents under `docs/`. In a checkout, use the local `.agents/skills/sync-iui-docs/SKILL.md`.
 - Maintainer: [@Zephinel](https://github.com/Zephinel).
 
 ## Known limitations
@@ -236,6 +253,8 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 
 ## Documentation
 
+Detailed docs, the changelog and repository maintenance skills are excluded from the npm package, so their links use absolute GitHub URLs. For uncommitted features, use the corresponding files in the checkout.
+
 - [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md): Host/Client component tree, the full switch and answer-style semantics, UI language, image and interactive-page export flows, and the Agent Skill.
 - [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md): install and uninstall, development commands, the restart tip after renaming/rebuilding, Host/Client version mismatch, release layout and community marketplace maintenance.
 - [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md): end-to-end verification, test and packaging results (historical).
@@ -244,4 +263,4 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 
 ## License
 
-This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT); the standalone interactive-page bundle also inlines React / React DOM (MIT). Full notices and license texts are in `NOTICE` and `licenses/`.
+This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT); the standalone interactive-page bundle also inlines React / React DOM (MIT). Full notices and license texts are in [NOTICE](NOTICE) and [licenses/](licenses/).

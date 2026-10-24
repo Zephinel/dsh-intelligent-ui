@@ -51,7 +51,9 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ### 结果样式契约
 
-`src/shared/style-templates.ts` 的 `StyleSnapshot` 是 schemaVersion 1（StyleSnapshotV1）：`baseLayout: card|article`、`directives`、`theme`，另有可选 `suggestedName`。`render_ui` 要求 `program` 与 `style`；可带 `title`，以及互斥的 `styleId` 或 `temporaryStyle`。临时快照的 `baseLayout` 必须等于 `style`；仅当前 Host 授权且已观察到的工具调用可使用它。解析/Article 结构校验仍照常执行。成功值含 `statements`、`style`、`styleSource: builtin|template|temporary`，以及可选 `styleId`、`warnings`；快照由工具参数承载，不在成功值中复制。
+`src/shared/style-templates.ts` 的 `StyleSnapshot` 是 schemaVersion 1（StyleSnapshotV1）：`baseLayout: card|article|free`、`directives`、`theme`，另有可选 `suggestedName`。`render_ui` 要求 `program` 与 `style`；可带 `title`，以及互斥的 `styleId` 或 `temporaryStyle`。临时快照的 `baseLayout` 必须等于 `style`；仅当前 Host 授权且已观察到的工具调用可使用它。新按需生成使用 `style: "free"` 与 `temporaryStyle.baseLayout: "free"`，由程序组合用户要求的布局，不受 Card 紧凑要求或 Article 阅读 wrapper 限制；Toc/Section 可选，解析、锚点、主题与授权校验仍保留。旧 card/article 快照继续使用原有外壳与 Article 校验；内置会话样式仍为 Auto/Card/Article；保存模板的 `baseLayout` 为 `RenderLayout`（card/article/free）。选中自由模板时传 `style: "free"` 与精确 `styleId`，不带 `temporaryStyle`；Host 保留模板 ID 与布局一致性校验。按需操作期间不注入会话外壳提示；布局由用户请求决定，有实质歧义时先问一个聚焦问题，不静默默认。成功值含 `statements`、`style`、`styleSource: builtin|template|temporary`，以及可选 `styleId`、`warnings`；快照由工具参数承载，不在成功值中复制。
+
+Host 按操作类型强制校验布局：`generate` 的 `style` 和 `temporaryStyle.baseLayout` 必须均为 `free`；`adjust` 必须均与 `parentResultId` 在结果注册表中的快照 `baseLayout` 一致（free 保持 free，旧 card/article 保持原布局）。父快照缺失（包括被最近 200 条上限淘汰）时拒绝调整，错误提示用户取消后重新按需生成；不从模型参数或对话推断父布局。拒绝不写结果、不完成操作，历史工具参数仍可重放。
 
 优先级是：当前调用已授权的临时样式 → 会话样式覆盖 → 全局默认 → Auto。临时样式不写会话/全局设置。已选自定义模板时，普通调用必须传准确的 `styleId` 和模板的基础版式。模板或 catalog 不可用时客户端降级默认主题；临时快照则独立于模板库。
 
@@ -73,19 +75,39 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 
 `result-store.ts` 把最近 200 条不可变临时快照原子写入 `<DSH_HOME>/dsh-intelligent-ui-results.json`，记录 `resultId = tool callId`、sessionId、snapshot、可选 parentResultId、createdAt。每次调整产生新 callId；当前实现没有独立 revisionId，保存的是点击结果的 ID。工具参数有完整快照时，即使注册表淘汰，历史仍可重放，但事后保存返回 `result_missing`。
 
-`style-store.ts` 把模板写入 `<DSH_HOME>/dsh-intelligent-ui-styles.json`；global 最多 40 个，session 每会话最多 20 个。`GET /api/intelligent-ui/styles?sessionId=…` 返回全局与该会话模板；同一路由 POST 支持 `save`、`saveFromResult`、`update`、`delete`。路由仅在 `webServer` 与 `connection.requestRejection` 可用时注册；先认证，JSON 请求限 64 KiB/15 秒，响应 no-store。
+`style-store.ts` 把模板写入 `<DSH_HOME>/dsh-intelligent-ui-styles.json`（仍为 `version: 1`；free 为新增布局值，无需迁移）；global 最多 40 个，session 每会话最多 20 个。`GET /api/intelligent-ui/styles?sessionId=…` 返回全局与该会话模板；同一路由 POST 支持 `save`、`saveFromResult`、`update`、`delete`。路由仅在 `webServer` 与 `connection.requestRejection` 可用时注册；先认证，JSON 请求限 64 KiB/15 秒，响应 no-store。
 
-`saveFromResult` 只收 resultId、名称、描述、范围与可选 sessionId，Host 从注册表取快照；不能由浏览器替换 directives/theme，session 范围必须与结果所属会话一致。保存不选中模板，也不写全局默认；重复名称报错，服务端没有独立幂等键。`update` 只允许名称/描述/directives，`delete` 删除模板。Composer 管理可见模板；设置页管理全局模板，另可导出 JSON。删除当前选择会尝试回退 Auto；其他会话遇到失效引用按缺失模板处理。
+`saveFromResult` 收 resultId、名称、描述、范围与可选 sessionId；不接受 `baseLayout`（包括旧客户端的布局选择），也不接受浏览器提供的 directives/theme。Host 从注册表快照精确复制 baseLayout/directives/theme；session 范围必须与结果所属会话一致。保存不选中模板，也不写全局默认；重复名称报错，服务端没有独立幂等键。`update` 只允许名称/描述/directives，`delete` 删除模板。Composer 管理可见模板；设置页管理全局模板及文件导出/导入。删除当前选择会尝试回退 Auto；其他会话遇到失效引用按缺失模板处理。
+
+### 可移植模板交换 v1（未发布）
+
+纯共享模块 `src/shared/style-template-exchange.ts` 不依赖 React、DOM 或 DSH，提供 `toPortableStyle`、`createStyleExport`、`encodeStyleExport` 与 `parseStyleExport`。Envelope 的顶层键固定为 `kind: "dsh-intelligent-ui/style-template"`、`schemaVersion: 1`、`template`；模板仅包含按序构建的 `name`、`description`、`baseLayout: card|article|free`、`directives`、`theme`。description 可缺省，解析为 `''`；其他字段必填。所有层级拒绝未知键（包括 `__proto__`、`constructor`、`prototype`）；主题复用 `isStyleTheme` 的 hex/枚举白名单，标签及规范沿用长度/字符规则。名称与描述额外剥离 Unicode `Cf` 并 trim，空名称或保留名称拒绝。主题与 palette 也显式重建并固定字段顺序，`JSON.stringify(value, null, 2)` 使同一配置产生相同字节；不带 id、scope、sessionId、时间戳、包版本、导出时间、作者、签名或校验和。
+
+输入先按 `TextEncoder` 计算 UTF-8 字节，最多 32 KiB；文件选择先检查 `File.size`，超限不读取，不依赖文件名/MIME。允许全文的一层 `json` 或无语言 Markdown 代码围栏，不在任意文字中搜索 JSON。外部名称/描述/指令剥离 `Cf`、`Default_Ignorable_Code_Point` 与 U+2800；名称/描述还把 U+2028/U+2029 归一为空格。不兼容旧版原始模板导出：原始对象、持久化库文件 `{version:1, templates:[…]}` 与其他非 Envelope 形状一律以 `invalid_structure` 拒绝，不做模糊识别。错误统一为 `StyleExchangeError` 的 `empty_input`、`too_large`、`invalid_json`、`invalid_structure`、`unsupported_version`、`invalid_template`，UI 映射双语文案，不显示原始异常。
+
+设置页「我的样式」与 Composer「显示样式」面板共用导出菜单（Composer 会话模板也可导出）：先确认名称/描述/规范全文/主题的公开范围，再用 `fileStem` 下载 `<模板名>.iui-style.json`（application/json）；anchor 临时挂载、设置 noopener、移除并延时回收 URL。两处「导入模板」入口（设置页与 Composer 面板）复用 `TemplateImport` 的文件/粘贴输入进入同一 codec，均只创建全局模板；预览可编辑名称（30）、描述（100）、规范（2000）或清空规范，显示布局、明暗 canvas/ink/accent 色板及完整规范。所有外部内容（名称、描述与规范）都必须显式阅读确认，修改名称/规范会重置确认。所有外部文本使用 React 文本节点/表单字段，不执行 HTML 或 Markdown。全局名称大小写冲突建议截断后的 `(Imported)` 名称，仍冲突阻止确认；全局满 40 个禁止导入，Host 的 duplicate_name/limit_reached 仍是权威结果。错误保留输入；busy 与同步 flight 标记防止重复提交，Popover 支持 Escape、焦点返回及键盘循环。
+
+确认后 `StyleActions.createTemplate` 复用认证的 `POST /api/intelligent-ui/styles`，请求仅为 `{op:'save', template:{name,description,baseLayout,directives,theme}, scope:'global'}`，不带 sessionId；响应须通过 `isStyleTemplate`。Host 保持五字段白名单、主题/名称/规范校验、跨范围重名、配额和原子写，重新生成 id 与时间戳。成功刷新 catalog、关闭弹窗并显示状态，不写设置、不自动应用。导入后即普通全局模板，使用现有选用/改名/编辑/删除/再导出路径。没有新增 Host 端点、存储格式或模型调用；Composer 面板复用同一导出/导入组件（导出覆盖会话模板，导入仍只写全局），会话作用域导入延后。没有分享码/链接/在线库/批量导入。
+
+**兼容承诺**：模板交换格式 v1 只含可移植样式配置及全部三种当前布局，不含本地身份与会话元数据。支持 v1 的插件版本可以导入；未知交换版本明确拒绝，不做降级猜测。原始模板导出不在兼容范围内。交换版本独立于 npm 包版本；未来 v2 应保留 v1 解析分支，新增布局值或移除 baseLayout 需要显式演进格式，v1 不静默接受未知布局。
+
+**信任边界与计划差异**：当前实现按 owner 已确认的方案（2026-10-24）用「免责声明 + 外部内容阅读确认后保留」替代计划中的「执行审计前强制仅外观」；原计划/评审记录保留。外部名称与 directives 会进入提示词，描述仅保存/导出、不进入提示词；这些外部内容都按不可信文本处理。预览、可编辑/清空、免责声明确认与不自动应用都是缓解，不能保证消除提示词注入。DISPLAY PREFERENCES/JSON 编码也不提供执行隔离。真正权限仍属于 DSH 工具/权限执行层；执行层工具权限与真实部署 Origin/CSRF 审计是发布前建议补做的加固项。本轮仅验证既有 requestRejection 委托与路由拒绝行为，不将 stub 认证测试描述为真实部署 Origin/CSRF 审计或工具越权已验证。
 
 ### 卡片主题、操作与安全边界
 
 `programs.ts` 从记录的调用参数提取并防御性校验临时快照，拒绝混合来源/版式不一致，跳过失败调用与已离开历史窗口的参数。`IntelligentUICards` 以临时快照优先、catalog 模板次之解析主题；`resolveStyleThemeVars` 只把允许的字段映射到 renderer host CSS 变量。明暗方案跟随 DSH body 标记（外部使用系统偏好）；portaled Popover 与沙盒 iframe 保留默认主题，状态语义色由 CSS 管理。
 
-临时结果显示「临时样式」标记及扩展自身渲染的「调整样式」「保存为模板」，这些操作不进入模型程序。调整关联具体 resultId，保留草稿并填入前缀，正常发送后才生成新结果。保存 Popover 只收名称/描述/可用范围，复用快照，不调用模型。设置页只做全局默认、已保存模板管理、编排与导出；生成发生在 Composer。
+临时结果显示「临时样式」标记及扩展自身渲染的「调整样式」「保存为模板」，这些操作不进入模型程序。调整关联具体 resultId，保留草稿并填入前缀，正常发送后才生成新结果。保存 Popover 收名称/描述/可用范围；不再选择 Card/Article。Host 精确保存原布局、已校验主题和偏好，原结果保持不变，不调用模型；旧快照继续原有保存流程并保留布局。自由模板有本地组合预览和「自由布局」提示，支持选用、重命名、编辑偏好与删除。模板结果保留 DSH 卡片标题栏，无临时样式标记及调整/保存操作；free 不添加 Article wrapper，不强制 Toc/Section，使用模板明暗主题。设置页只做全局默认、已保存模板管理、编排与导出；生成发生在 Composer。
 
 主题只接受 light/dark 六位 hex palette 与 font/radius/density/shadow 枚举，拒绝未知键、任意 CSS/脚本/URL；临时样式的 ink/canvas、accent/canvas 在两种方案下至少 3:1，低于 4.5:1 警告。directives 最多 2,000 字符；已保存模板注入提示词时作为 JSON 字符串包在 DISPLAY PREFERENCES 边界中，明确无权覆盖系统、工具或安全规则。临时 directives 是结果数据，不提升为系统指令。模型不能自行武装、保存模板或改变默认值；`HtmlView` 原有沙盒边界仍适用。
 
+重放解析接受带合法 styleId 的 free 模板调用，无来源的 free、无效快照与 styleId/temporaryStyle 混用仍不渲染。重放与 `programsToExportCards` 保留临时结果及模板的 free 布局；PNG 截取实际组件组合。独立 HTML 中自由结果使用可用页面宽度，Card/Article 保留 760px 宽度，包括混合导出；逐结果解析的主题与明暗模式仍内联冻结。
+
+界面状态结构：进行中的写入/命令不能折算成视觉 `disabled`。设置页没有可渲染的 pending 状态，保存只通过 `sectionRef` 命令式设置 `aria-busy`；Composer 面板拆为独立的 `StylePanel`，只接收可用性（`disabled`）与回调，父级 `busy`/`pending` 不在其作用域；On-demand 的 arming 状态在 `StylePicker` 内部。新增控件位于这些边界内时拿不到瞬时命令状态，因此无法把一次保存/切换变成整块控件的 disabled/opacity 闪烁。只有拥有该异步操作的控件可以短暂禁用自己（如 On-demand 入口、导入弹窗的提交按钮）。CSS 的 `:disabled { opacity }` 仍保留，因此新边界若重新引入瞬时 `disabled` 仍会闪；应通过可用的 `locked`/`panelDisabled` 语义表达不可用。
+
 ## 布局与间距契约
+
+free 临时结果或选中的自由模板中，下述页面形态与排版指导仅作建议，以用户要求的组合为准；组件 flow 间距、语言、主题和安全规则仍适用。
 
 - **渲染器拥有垂直节奏**：页面根 `Col`、`Section` 正文和 `Card` 内容都由渲染器的 flow 负责块间距（页面级 24px、组级 12px、内侧 8px）；模型不需要也不应该在这些位置再传 `gap`，否则会覆盖或叠加节奏。
 - **显式 gap 只用于横向/紧凑组合**：`Row`、`Grid`、`Carousel` 和小组控件栈可用 1–2（内侧）或 3–4（组级）；不要用 5–6 的嵌套 `Col` 去模仿页面级留白。

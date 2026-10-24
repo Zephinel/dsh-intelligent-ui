@@ -133,7 +133,7 @@ function IntelligentUICard({ program, onToAssistant, t, themeStyle, scheme, onAd
   }
   const bodyId = useId()
   const title = program.title !== undefined && program.title.trim() !== '' ? program.title : t('card.title')
-  const style = program.style === 'article' ? 'article' : 'card'
+  const style = program.style ?? 'card'
   return (
     <section
       className="dsh-iui-card"

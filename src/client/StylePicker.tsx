@@ -1,5 +1,5 @@
 /** Built-in and saved-template choices shared by settings and the composer. */
-import type { CSSProperties, ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { ANSWER_STYLES, isAnswerStyle, type AnswerStyle, type StylePreference } from '../shared/intelligent-ui.ts'
 import { isCustomStyleId, type StyleTemplate } from '../shared/style-templates.ts'
 import { resolveStyleThemeVars } from '../lib/style-theme.ts'
@@ -44,6 +44,22 @@ function ArticlePreview(): ReactNode {
   )
 }
 
+/** A free composition with parallel regions rather than a page shell. */
+function FreePreview(): ReactNode {
+  return <span className="dsh-iui-preview-art dsh-iui-preview-art-free" aria-hidden="true">
+    <span className="dsh-iui-preview-line is-title" />
+    <span className="dsh-iui-preview-lines">
+      <span className="dsh-iui-preview-line is-long" />
+      <span className="dsh-iui-preview-line is-short" />
+    </span>
+    <span className="dsh-iui-preview-lines">
+      <span className="dsh-iui-preview-line" />
+      <span className="dsh-iui-preview-line is-long" />
+      <span className="dsh-iui-preview-line is-short" />
+    </span>
+  </span>
+}
+
 /** Props for the shared style picker. */
 export interface StylePickerProps {
   /** Session override (`inherit` allowed) or the global style. */
@@ -57,7 +73,7 @@ export interface StylePickerProps {
   readonly note?: string
   readonly footer?: string
   readonly onChange: (value: StylePreference) => void
-  readonly onDemand?: () => void
+  readonly onDemand?: () => Promise<void> | void
   readonly showBuiltins?: boolean
   readonly showTemplates?: boolean
   readonly management?: {
@@ -80,7 +96,21 @@ export function StylePicker({
     : templates.find(template => template.id === globalStyle)?.name ?? t('style.missing.label')
   const missing = isCustomStyleId(effective) && !templates.some(template => template.id === effective)
   const choose = (style: string): void => { if (!disabled) onChange(style) }
-  const check = <span className="dsh-iui-style-check" aria-hidden="true">✓</span>
+  // On-demand arming is local to its own entry: a style choice elsewhere in the
+  // panel must never disable or dim this control.
+  const [arming, setArming] = useState(false)
+  const armOnDemand = (): void => {
+    if (disabled || arming || onDemand === undefined) return
+    setArming(true)
+    void Promise.resolve(onDemand()).finally(() => setArming(false))
+  }
+  const check = (
+    <span className="dsh-iui-style-check" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false">
+        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM17.4571 9.45711L11 15.9142L6.79289 11.7071L8.20711 10.2929L11 13.0858L16.0429 8.04289L17.4571 9.45711Z"></path>
+      </svg>
+    </span>
+  )
 
   return (
     <div className="dsh-iui-style" data-dsh-iui-style-picker>
@@ -149,7 +179,7 @@ export function StylePicker({
               onClick={() => choose(template.id)}
             >
               <span className="dsh-iui-custom-preview" style={resolveStyleThemeVars(template.theme, 'light') as CSSProperties}>
-                {template.baseLayout === 'article' ? <ArticlePreview /> : <CardPreview />}
+                {template.baseLayout === 'free' ? <FreePreview /> : template.baseLayout === 'article' ? <ArticlePreview /> : <CardPreview />}
               </span>
               <span className="dsh-iui-preview-caption">
                 <span className="dsh-iui-preview-title">{template.name}</span>
@@ -169,7 +199,7 @@ export function StylePicker({
       )}</>}
       {missing ? <p className="dsh-iui-style-note" role="status">{t('style.missing.note')}</p> : null}
       {onDemand === undefined ? null : (
-        <button type="button" className="dsh-iui-on-demand-entry" data-dsh-iui-on-demand-entry disabled={disabled} onClick={onDemand}>
+        <button type="button" className="dsh-iui-on-demand-entry" data-dsh-iui-on-demand-entry disabled={disabled || arming} onClick={armOnDemand}>
           <span aria-hidden="true">✦</span>
           <span><strong>{t('onDemand.label')}</strong><span>{t('onDemand.entryHint')}</span></span>
         </button>

@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { STYLES_ROUTE_PATH } from '../../src/shared/style-templates.ts'
 import { template, styleInput } from './style-fixtures.mjs'
+import { createStyleExport } from '../../src/shared/style-template-exchange.ts'
 
 const plugin = await import('../../lib/index.js')
 const homes = []
@@ -156,6 +157,33 @@ test('POST rejects invalid operations, fields, scope/session rules and JSON bodi
   assert.equal((await post(route, valid, { headers: { 'content-type': 'application/json; charset=utf-8' } })).status, 201)
 })
 
+test('import equivalence: portable card/article/free save creates new global identities and rejects local or unknown fields', async () => {
+  const { route } = mount()
+  for (const baseLayout of ['card', 'article', 'free']) {
+    const source = template({ name: `Imported ${baseLayout}`, baseLayout, scope: 'session', sessionId: 'private-source' })
+    const portable = createStyleExport(source).template
+    const result = await post(route, { op: 'save', template: portable, scope: 'global' })
+    assert.equal(result.status, 201)
+    const saved = JSON.parse(result.body).template
+    assert.match(saved.id, /^cs_[a-z0-9]{6,32}$/)
+    assert.notEqual(saved.id, source.id)
+    assert.ok(Number.isSafeInteger(saved.createdAt) && saved.createdAt > source.createdAt)
+    assert.equal(saved.updatedAt, saved.createdAt)
+    assert.equal(saved.scope, 'global')
+    assert.equal('sessionId' in saved, false)
+    const { id, scope, createdAt, updatedAt, ...fields } = saved
+    assert.deepEqual(fields, portable)
+    for (const key of ['id', 'scope', 'sessionId', 'createdAt', 'updatedAt', 'extra', '__proto__', 'constructor', 'prototype']) {
+      const invalid = JSON.parse(JSON.stringify(portable))
+      Object.defineProperty(invalid, key, { value: 'untrusted', enumerable: true })
+      const rejected = await post(route, { op: 'save', template: invalid, scope: 'global' })
+      assert.equal(rejected.status, 400, key)
+      assert.equal(JSON.parse(rejected.body).error.code, 'invalid_input')
+    }
+  }
+  assert.equal(JSON.parse(request(route).body).templates.length, 3)
+})
+
 const snapshot = { schemaVersion: 1, baseLayout: 'card', directives: 'Reusable hierarchy.\nPreserve this exact spacing.  ', theme: template().theme, suggestedName: 'Suggested' }
 const storedResult = { resultId: 'result-1', sessionId: 's1', snapshot, createdAt: 1 }
 const saveResult = { op: 'saveFromResult', resultId: 'result-1', name: 'Saved result', scope: 'global' }
@@ -202,6 +230,33 @@ test('saveFromResult rejects missing results, duplicates, scope limits and all c
       template({ id: `cs_limit${String(i).padStart(6, '0')}`, name: `Style ${i}`, scope, ...scope === 'session' ? { sessionId: 's1' } : {} })) })
     const limit = await post(full, { ...saveResult, scope, sessionId: 's1' })
     assert.equal(limit.status, 400); assert.equal(JSON.parse(limit.body).error.code, 'limit_reached')
+  }
+})
+
+test('saving results copies free/card/article layouts, directives and themes, rejects overrides and reloads unchanged', async () => {
+  for (const baseLayout of ['free', 'card', 'article']) {
+    const source = { ...storedResult, snapshot: { ...snapshot, baseLayout } }
+    const { route, home } = mount({ results: [source] })
+    const response = await post(route, saveResult)
+    assert.equal(response.status, 201)
+    const saved = JSON.parse(response.body).template
+    assert.equal(saved.baseLayout, baseLayout)
+    assert.deepEqual(saved.theme, source.snapshot.theme)
+    assert.equal(saved.directives, source.snapshot.directives)
+    for (const override of ['card', 'article', 'free', 'auto', '', null]) {
+      const rejected = await post(route, { ...saveResult, name: 'Override', baseLayout: override })
+      assert.equal(rejected.status, 400)
+      assert.equal(JSON.parse(rejected.body).error.code, 'invalid_input')
+    }
+    const file = JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui-styles.json'), 'utf8'))
+    assert.deepEqual(file, { version: 1, templates: [saved] })
+    const { route: reloaded } = mount({ templates: file.templates })
+    assert.deepEqual(JSON.parse(request(reloaded).body).templates, [saved])
+    assert.equal((await post(reloaded, { op: 'update', id: saved.id, patch: { name: 'Renamed free', directives: 'Edited preferences' } })).status, 200)
+    assert.equal(JSON.parse(request(reloaded).body).templates[0].baseLayout, baseLayout)
+    assert.equal((await post(reloaded, { op: 'delete', id: saved.id })).status, 200)
+    assert.deepEqual(JSON.parse(request(reloaded).body).templates, [])
+    assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui-results.json'), 'utf8')).results, [source])
   }
 })
 

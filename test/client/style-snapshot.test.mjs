@@ -9,6 +9,7 @@ test('StyleSnapshotV1 admits only bounded design data and controlled light/dark 
   assert.equal(STYLE_SNAPSHOT_VERSION, 1)
   assert.equal(isStyleSnapshot(snapshot), true)
   assert.equal(isStyleSnapshot({ ...snapshot, baseLayout: 'article', suggestedName: 'Reading notes' }), true)
+  assert.equal(isStyleSnapshot({ ...snapshot, baseLayout: 'free', suggestedName: 'Poster' }), true)
   assert.equal(isStyleSnapshot({ ...snapshot, directives: 'x'.repeat(2000) }), true)
   for (const invalid of [null, [], {}, { ...snapshot, schemaVersion: 2 }, { ...snapshot, schemaVersion: '1' },
     { ...snapshot, baseLayout: 'auto' }, { ...snapshot, directives: '' }, { ...snapshot, directives: '  ' },

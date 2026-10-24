@@ -133,16 +133,37 @@ test('only valid custom styleIds survive recorded argument extraction', () => {
 test('inline snapshots survive recorded argument replay without catalog access', async () => {
   const { THEME } = await import('../host/style-fixtures.mjs')
   const temporaryStyle = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups.', theme: THEME }
-  for (const make of [started, settled]) {
-    const [program] = programsFromToolNodes([make('temp-result', { program: PROGRAM, style: 'card', temporaryStyle })])
-    assert.deepEqual(program.temporaryStyle, temporaryStyle)
+  for (const style of ['card', 'article', 'free']) for (const make of [started, settled]) {
+    const snapshot = { ...temporaryStyle, baseLayout: style }
+    const [program] = programsFromToolNodes([make('temp-result', { program: PROGRAM, style, temporaryStyle: snapshot })])
+    assert.deepEqual(program.temporaryStyle, snapshot)
+    assert.equal(program.style, style)
     assert.equal(program.styleSource, 'temporary')
     assert.equal(program.styleId, undefined)
+    assert.deepEqual(programsFromToolNodes([make('mixed', { program: PROGRAM, style, temporaryStyle: snapshot, styleId: 'cs_abcdef' })]), [])
   }
   for (const args of [{ temporaryStyle: {} }, { temporaryStyle, style: 'article' }, { temporaryStyle, styleId: 'cs_abcdef' }]) {
     assert.deepEqual(programsFromToolNodes([settled('bad-temp', { program: PROGRAM, style: 'card', ...args })]), [])
   }
+  assert.deepEqual(programsFromToolNodes([settled('plain-free', { program: PROGRAM, style: 'free' })]), [])
   assert.equal(programsFromToolNodes([settled('builtin', { program: PROGRAM, styleSource: 'builtin' })])[0].styleSource, 'builtin')
   assert.equal(programsFromToolNodes([settled('template', { program: PROGRAM, styleSource: 'template' })])[0].styleSource, 'template')
   assert.equal(programsFromToolNodes([settled('bad-source', { program: PROGRAM, styleSource: 'unknown' })])[0].styleSource, undefined)
+})
+
+
+test('free template recordings replay with a valid styleId and no temporary snapshot', () => {
+  for (const make of [started, settled]) {
+    const [result] = programsFromToolNodes([make('saved-free', { program: PROGRAM, style: 'free', styleId: 'cs_abcdef' })])
+    assert.equal(result.style, 'free')
+    assert.equal(result.styleId, 'cs_abcdef')
+    assert.equal(result.styleSource, 'template')
+    assert.equal(result.temporaryStyle, undefined)
+    for (const styleId of [undefined, null, 'card', '', 'cs_BADBAD', 'cs_short', 42]) {
+      assert.deepEqual(programsFromToolNodes([make('bad-free', { program: PROGRAM, style: 'free', styleId })]), [])
+    }
+    for (const temporaryStyle of [null, {}, { schemaVersion: 2 }]) {
+      assert.deepEqual(programsFromToolNodes([make('mixed-free', { program: PROGRAM, style: 'free', styleId: 'cs_abcdef', temporaryStyle })]), [])
+    }
+  }
 })

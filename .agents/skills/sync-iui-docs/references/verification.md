@@ -1,19 +1,19 @@
 # Verification — dsh-intelligent-ui docs
 
-Run from the repo root. Current expected values are dated 2026-10-22; derive them from the commands, never copy them forward blindly.
+Run from the repo root. Current expected values are dated 2026-10-24; derive them from the commands, never copy them forward blindly.
 
 ## Guards
 
-| Command | Expected (2026-10-22) | What it proves |
+| Command | Expected (2026-10-24) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js 624.7 KiB`, `client lib/client.js 3.59 MiB`, `lib/standalone.js 3.27 MiB + lib/standalone.css 500.7 KiB`; tests: 179 total = Host 77 + Client 81 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41`; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
-| `npm run pack:check` | 43 files; tarball 4,036,061 bytes (~4.04 MB); unpacked 10,216,623 bytes (~10.22 MB); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run check` | build: `host lib/index.js 628.2 kB`, `client lib/client.js 3.61 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 502.8 kB`; tests: 207 total = Host 89 + Client 97 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run pack:check` | 43 files; tarball/unpacked sizes vary with the working tree (derive from the current command output); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
-| `node --test test/host/*.test.mjs` | 77 pass (mode, skill, tool, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 81 pass (programs, toggle, locales, settings, exports, follow-ups, on-demand, style-actions, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults), export message/Turn lookup, image-frame geometry and single-file page assembly |
-| `npm run test:browser` | seven suites: on-demand (85 assertions), style-panel, style-theme, image export, standalone interactive page, Article spacing and settings/template management (Chrome required; run `npm run build` first) | Browser behavior cited by docs |
+| `node --test test/host/*.test.mjs` | 89 pass (mode, skill, tool, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
+| `node --test test/client/*.test.mjs` | 97 pass (programs, toggle, locales, settings, exports, follow-ups, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, image-frame geometry and single-file page assembly |
+| `npm run test:browser` | seven suites: on-demand (114 assertions), style-panel, style-theme, image export, standalone interactive page, Article spacing and settings/template exchange/management (101 assertions; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
 | `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 
 ## Screenshot reproduction

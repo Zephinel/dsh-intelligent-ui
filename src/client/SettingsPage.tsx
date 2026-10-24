@@ -30,6 +30,7 @@ import {
   type IntelligentUISettings,
 } from '../shared/intelligent-ui.ts'
 import { StylePicker } from './StylePicker.tsx'
+import { TemplateImport } from './TemplateImport.tsx'
 import { isStyleId } from '../shared/style-templates.ts'
 import type { StyleCatalog } from './styles.ts'
 import type { StyleActions } from './style-actions.ts'
@@ -78,7 +79,7 @@ export type SettingsPageProps =
   }
 
 /** The writeable fields shown on this page. */
-type PendingField =
+type WritableField =
   | typeof GLOBAL_ENABLED_FIELD
   | typeof ANSWER_STYLE_FIELD
   | typeof FREE_COMPOSITION_FIELD
@@ -132,7 +133,6 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   useEffect(() => { void styles.ensure() }, [styles])
-  const [pending, setPending] = useState<PendingField | null>(null)
   const [failed, setFailed] = useState(false)
   const [deletedDefault, setDeletedDefault] = useState(false)
   const idPrefix = useId()
@@ -154,24 +154,30 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
   const colorPanelId = useId()
   const commitHexRef = useRef<() => void>(() => undefined)
   const ready = snapshot.status === 'ready'
-  const disabled = !ready || !snapshot.writable || pending !== null
+  const locked = !ready || !snapshot.writable
+  const savingRef = useRef(false)
+  const sectionRef = useRef<HTMLElement>(null)
 
-  const save = async (field: PendingField, value: unknown): Promise<void> => {
-    if (disabled) return
-    setPending(field)
+  const save = async (field: WritableField, value: unknown): Promise<void> => {
+    if (locked || savingRef.current) return
+    savingRef.current = true
+    // aria-busy is set imperatively: no render-visible pending state exists, so
+    // a save cannot be wired into controls' `disabled` and cause a flash.
+    sectionRef.current?.setAttribute('aria-busy', 'true')
     setFailed(false)
     try {
       if (!(await settingsForm.set(field, value))) setFailed(true)
     } catch {
       setFailed(true)
     } finally {
-      setPending(null)
+      savingRef.current = false
+      sectionRef.current?.removeAttribute('aria-busy')
     }
   }
 
   useEffect(() => {
-    if (disabled) setColorOpen(false)
-  }, [disabled])
+    if (locked) setColorOpen(false)
+  }, [locked])
 
   useEffect(() => {
     if (!colorOpen) return
@@ -218,12 +224,10 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
       ? snapshot.status === 'loading' ? t('settings.loading') : t('settings.unavailable')
       : !snapshot.writable
         ? t('settings.readonly')
-        : pending !== null
-          ? t('settings.saving')
-          : null
+        : null
 
   return (
-    <section className="dsh-iui-settings" aria-labelledby={`${idPrefix}-title`}>
+    <section ref={sectionRef} className="dsh-iui-settings" aria-labelledby={`${idPrefix}-title`}>
       <div className="dsh-iui-settings-hero">
         <span className="dsh-iui-settings-mark" aria-hidden="true">
           <svg viewBox="0 0 20 20" width="18" height="18">
@@ -249,7 +253,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           hint={globalEnabled ? t('settings.enable.on') : t('settings.enable.off')}
           idPrefix={`${idPrefix}-enable`}
           checked={globalEnabled}
-          disabled={disabled}
+          disabled={locked}
           describedBy={`${idPrefix}-enable ${noteId}`}
           onToggle={() => { void save(GLOBAL_ENABLED_FIELD, !globalEnabled) }}
         />
@@ -270,7 +274,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
             templates={catalog.templates.filter(template => template.scope === 'global')}
             showTemplates={false}
             catalogStatus={catalog.status}
-            disabled={disabled}
+            disabled={locked}
             note={t('style.global.note')}
             footer={t('style.global.footer')}
             onChange={(value) => { void save(ANSWER_STYLE_FIELD, value) }}
@@ -284,9 +288,10 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           <h3 id={`${idPrefix}-templates`} className="dsh-iui-settings-group-title">{t('template.settingsTitle')}</h3>
           <p className="dsh-iui-settings-group-hint">{t('template.settingsNote')}</p>
         </div>
+        <TemplateImport styles={styles} templates={catalog.templates} actions={styleActions} disabled={locked} t={t} />
         <StylePicker value={answerStyle} globalStyle={answerStyle}
           templates={catalog.templates.filter(template => template.scope === 'global')} catalogStatus={catalog.status}
-          showBuiltins={false} disabled={disabled} t={t}
+          showBuiltins={false} disabled={locked} t={t}
           onChange={value => { void save(ANSWER_STYLE_FIELD, value) }}
           management={{ styles, actions: styleActions, global: true, onDeleted: async id => {
             if (answerStyle !== id) return
@@ -308,7 +313,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           hint={free ? t('settings.switch.on') : t('settings.switch.off')}
           idPrefix={`${idPrefix}-free`}
           checked={free}
-          disabled={disabled}
+          disabled={locked}
           describedBy={`${idPrefix}-free ${noteId}`}
           onToggle={() => { void save(FREE_COMPOSITION_FIELD, !free) }}
         />
@@ -336,7 +341,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
               aria-haspopup="dialog"
               aria-expanded={colorOpen}
               aria-controls={colorPanelId}
-              disabled={disabled}
+              disabled={locked}
               onPointerDown={(event) => {
                 if (colorOpen) event.preventDefault()
               }}
@@ -409,7 +414,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
                 className="dsh-iui-choice"
                 aria-pressed={exportSettings.scale === scale}
                 data-selected={exportSettings.scale === scale ? 'true' : undefined}
-                disabled={disabled}
+                disabled={locked}
                 onClick={() => { void save(EXPORT_SCALE_FIELD, scale) }}
               >
                 {scale}
@@ -422,7 +427,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           hint={t('settings.export.removeFollowUps.hint')}
           idPrefix={`${idPrefix}-remove-followups`}
           checked={exportSettings.removeFollowUps}
-          disabled={disabled}
+          disabled={locked}
           describedBy={`${idPrefix}-remove-followups ${noteId}`}
           onToggle={() => { void save(EXPORT_REMOVE_FOLLOWUPS_FIELD, !exportSettings.removeFollowUps) }}
         />

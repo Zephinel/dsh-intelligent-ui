@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项，2026-10-22 R4）: `npm run check`：179/179（Host 77 + Client 81 + packaging 21）；renderer 解析 41/41、SSR 41/41、contrast OK、i18n 4 个程序、typography 22/22；`npm run pack:check`：43 个文件，tarball 4,036,061 字节，解包 10,216,623 字节。下方旧浏览器/模型记录保留为历史，当前证据与边界见末尾 R4 记录。
+- 测试（实时子项）：当前最新工作树证据见文末 2026-10-24 记录（Node 207/207；renderer 解析/渲染 41/41、contrast OK、i18n 4 个程序、typography 22/22；浏览器 7/7，settings 101、on-demand 114 条断言）。下方旧浏览器/模型记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -135,3 +135,105 @@ Codex（gpt-6.1-sol / xhigh）审查未提交工作区：**无 P0，1 个 P1、3
 - **P2 文档生命周期过时**：README、FAQ、architecture、integration 仍称“文字结束未渲染即失败”“重新武装替换活动操作”“文字提问需立即重新武装”。已改为 resume/拒绝重复 arm/下一条消息继续/失败重试的真实行为。
 
 门禁：`npm run check` **179/179**（Host 77 + Client 81 + packaging 21）；浏览器 **7/7**（on-demand **85** 断言）；packaging 21/21；`git diff --check` 通过。Review 未运行真实模型 E2E（此前真实模型路径已验证）。
+
+
+### 2026-10-23 — 按需自由布局（未提交工作树）
+
+结果契约新增 `RenderLayout = card | article | free`，普通会话和保存模板继续使用 `PageStyle = card | article`。SchemaVersion 1 快照新增 `baseLayout: "free"`，与 `style: "free"` 配对；扩展枚举避免新增并行快照格式或迁移。旧 card/article 快照及未记录 style 的普通调用继续原样重放。自由调用仍须通过 Host 绑定操作与当前 callId 授权，记录 `styleSource: "temporary"` 和精确快照。
+
+自由组合复用中立的 `OpenUIRenderer`，仍置于 DSH 卡片 chrome 内，不使用 Article wrapper、紧凑要求或强制 Toc/Section。主题、解析、锚点、样式来源互斥与绑定操作的普通渲染拦截继续保留。按需操作中不注入会话外壳提示，布局遵循用户请求，有实质歧义时提出聚焦问题。普通会话选择和 `StylePicker` 不变；现有「自由布局」设置与新的结果布局独立。生成提示通过原有生成器重新构建。
+
+重放和 HTML 数据保留 free；独立页面中自由结果使用可用宽度，混合的 Card/Article 结果保留 760px。PNG 继续截取实时 DOM，展开/还原折叠 chrome，保留主题、媒体与交互的捕获处理。自由结果主动保存为模板时，保存面板要求明确选择 Card/Article 模板外壳（新增中英图例、不预选）；只有模板接收该外壳，原始自由快照保持不可变。旧结果保存契约不变。
+
+验证：`npm run check` **183/183**（Host **81**、Client **81**、packaging **21**）；gallery 解析/渲染各 **41/41**，另含自由组合的明暗 SSR 断言，对比度通过，i18n **4** 个程序、排版 **22/22**。`npm run test:browser` **7/7** 套件通过，包含按需流程 **101** 条断言、自由/旧结果重放与保存、PNG/HTML、宽窄屏和明暗混合导出、本地交互及原 Article 行为。导出夹具显式模拟浅色系统偏好，不再假定机器外观。`npm run pack:check`：**43** 文件，压缩 **4,038,253** 字节，解压 **10,222,452** 字节；版本保持 **0.4.2**，本次仅为未发布工作树改动。`git diff --check` 与所改双语文档标题/本地链接检查通过。
+
+证据边界：Host 测试使用隔离的临时 DSH_HOME；浏览器测试使用生产组件及结构化 DSH 服务夹具。本轮未运行真实模型 DSH 会话、更新发布截图、安装、重启、提交、建分支、打标签、推送或发布。真实 DSH 中模型的布局澄清及生成质量仍未验证。计划文档、历史验证记录和已发布变更日志保留，只同步实现契约及 Unreleased 说明。
+
+真实模型验证（2026-10-23，隔离 DSH Web 实例，3086 端口，clone profile + 本地未提交构建）：请求「做一个自由布局的产品发布海报：左边大标题，右边三列要点，不要卡片或文章外壳」。模型先追问产品内容（没有编造），回答使用示例内容后调用 `render_ui`，参数为 `style: "free"` 与 `temporaryStyle.baseLayout: "free"`；DOM 为一张 `data-dsh-iui-style="free"` 卡片，保留 DSH 卡片头部，但没有 `.dsh-iui-article` / `.iui-toc` / `.iui-section`，正文为多栏海报，示例文案明确标注为虚构。结果注册表记录 `baseLayout: "free"`，会话日志中的工具参数与之一致。测试实例、clone profile、结果与会话已清理。仍未真机验证：布局歧义时的提问路径、自由结果保存模板面板、真实媒体导出和主实例视觉确认。
+
+完整改动文件列表（含原有四个提示相关未提交文件）见 [英文验证记录](verification.en.md) 的同日期段落。
+
+### 2026-10-23 — Host 布局约束修复（未提交工作树）
+
+修复 Astra P2：Host 按操作类型强制 `generate` 的 style/baseLayout 为 free，`adjust` 则必须与注册表中的父快照布局一致。父快照缺失或已淘汰时拒绝调整，要求用户取消后重新按需生成；不从对话或模型参数猜测布局。拒绝不写结果、不完成操作。已有生成夹具改用 free，旧 card/article 通过预载快照保留调整覆盖，原 Article 结构和锚点校验继续执行。三组新增回归在修复前均因缺少预期拒绝而失败，修复后通过，覆盖新生成拒绝 card/article、三种父布局的交叉布局拒绝与同布局成功、缺失父快照的拒绝及取消后重新生成。提示、Agent Skill、错误参考和中英文使用/架构文档同步，Unreleased 追加修复说明；历史记录保留。
+
+验证：`npm test` 与 `npm run check` 均 **186/186**（Host **84**、Client **81**、packaging **21**）；gallery 解析/渲染各 **41/41**，自由组合明暗 SSR、对比度、i18n **4** 个程序和排版 **22/22** 均通过。`npm run test:browser` **7/7** 套件通过（按需流程 **101** 条断言）。`npm run pack:check`：**43** 文件，压缩 **4,039,289** 字节，解压 **10,225,920** 字节。`git diff --check`、双语标题结构和本地链接检查通过。Host 测试使用隔离 DSH_HOME，浏览器使用组件夹具；本次修复未重新运行真实模型 DSH 会话。版本保持 **0.4.2**，所有改动未提交，未建分支、打标签、推送或发布。
+
+
+### 2026-10-23 — 保存模板保留结果布局修复（未提交工作树）
+
+`StyleTemplate` 与 create/patch 的 `baseLayout` 沿用 `RenderLayout`（free/card/article），存储仍为 version 1；`StyleSnapshot` 语义、主题/偏好限制、可见范围、配额、名称去重和原子写入均保留。保存路由只接受结果 ID 与名称/描述/范围元数据，从 Host 快照精确复制布局、偏好和主题；所有布局都拒绝客户端 `baseLayout`。保存弹窗移除 Card/Article 选择。选中的自由模板使用 `style: "free"` 与精确 styleId，不带 temporaryStyle；提示词允许自由编排和可选 Toc/Section。工具继续拒绝无来源的 free、与选中 Card/Article 模板不符的布局、错误 ID 和混合来源。客户端支持模板回放、自由预览及中英提示；同一程序保持 DSH 标题栏、无 Article wrapper，使用模板明暗主题，无临时标记/操作。
+
+回归证据：修复前运行保存路由测试，free 元数据保存得到 **400，而预期为 201**。修复后测试覆盖三种布局的精确保存、覆盖字段拒绝、version 1 落盘/重载/管理、自由模板工具授权、无来源及错选拒绝、回放、目录响应校验与导出主题。`npm run build && npm test` 和随后 `npm run check` 均通过 **191/191**（Host **87**、Client **83**、packaging **21**，无跳过）。gallery 解析/渲染各 **41/41**，free 明暗 SSR、contrast、i18n **4** 个程序和 typography **22/22** 通过。`npm run test:browser` **7/7** 套件通过（按需 **114** 个断言，含实际页面刷新后的自由模板回放），包括自由模板选用、PNG/HTML、真实 standalone bundle 的 free 临时/模板与旧布局混合导出、明暗模式和宽窄尺寸；Chrome 可用，未跳过。`npm run pack:check` 为 **43** 文件，压缩 **4,039,044** 字节、解包 **10,229,511** 字节。`git diff --check`、双语标题结构、截图引用、本地链接与 README 文档链接（**26** 正确、**0** 断链）均通过。
+
+验证使用隔离 DSH_HOME 与浏览器组件夹具，没有调用真实模型或操作正在运行的 DSH。本次仅查看隔离浏览器保存弹窗/模板回放截图，未重拍仓库营销截图；独立 HTML 继续原有仅正文导出、不含聊天折叠标题栏的行为。未提交功能完整保留；未修改 `docs/plans/**` 或历史验证段落，未提交、stash、tag、push、发布或重启主实例。模型后续生成是否完全遵循自由构图仍需真实会话验证；模板被删除/目录不可用时继续使用既有默认主题回退。
+
+### 2026-10-23 — 可移植模板文件导出与导入（未提交工作树）
+
+在原有按需自由结果/保存布局修复上新增单模板交换。`style-template-exchange.ts` 以固定顺序显式构造 Envelope v1 和主题，支持 card/article/free；导出只含五个可移植字段，无本地身份/范围/会话/时间戳。严格解析覆盖 kind/version/白名单/类型/长度/hex/枚举、32 KiB UTF-8 字节边界、一层完整代码围栏、标签 Cf 剥离、原型键拒绝及已知完整 legacy 对象；模板库备份拒绝。设置页导出先确认公开范围；导入支持文件/粘贴、预览、改名/描述/编辑或清空规范、非空规范阅读确认、重名建议/配额/错误重试、busy 防重复提交和成功状态。仅复用认证的 `op:'save', scope:'global'`，不带 sessionId、不自动应用、不改默认。Host 等价向量验证三种布局均生成新身份/时间戳，仍拒绝本地或未知字段。
+
+Node **24.22.0**。`npm run build && npm test`、随后 `npm run check` 均 **205/205**（Host **88**、Client **96**、packaging **21**；失败/跳过均 **0**）。新增 codec **10** 项、createTemplate **2** 项、设置入口 SSR **1** 项和 Host 导入等价性 **1** 项。gallery 解析/渲染各 **41/41**，free 明暗 SSR、contrast、i18n **4** 个程序及 typography **22/22** 通过。构建：Host **628.2 kB**、Client **3.61 MB**、standalone **3.28 MB + 502.8 kB**（构建脚本显示单位）。既有 ToggleControl SSR 的 useLayoutEffect 警告仍出现，不是失败或跳过。
+
+`npm run test:browser` **7/7** 套件通过、无跳过；按需 **114** 条断言，设置页 **92** 条。设置页覆盖下载确认/取消、文件名/Envelope/元数据剥离/free、错误版本与超大内容不 POST、超大文件不读取、粘贴及无可信 MIME 的 legacy 文件、全文纯文本预览、编辑/清空/确认重置、Host 重名/配额错误保留输入、双击只发一次保存、不改全局选择/设置、导入后选用/重命名/编辑/再导出/删除、40 个配额、中英、窄屏滚动与焦点循环/Escape。夹具编辑时间改为单调递增，避免新导入模板的 createdAt 高于固定 updatedAt。`npm run pack:check`：**43** 文件，压缩 **4,048,125** 字节、解包 **10,260,128** 字节；版本仍为 **0.4.2**。`git diff --check`、双语标题结构及本地链接检查通过。双语 README/architecture、Unreleased、浏览器测试说明及文档验证参考增量同步；计划/评审和历史段落保留。
+
+**证据边界/计划差异**：按本次明确批准的决策，非空外部规范经阅读确认后可以保留，替代原计划「审计前强制仅外观」；该差异写入 as-built 文档，不修改计划。外部规范仍是不可信提示文本，预览/确认/不自动应用不能证明提示词注入已消除。真实执行权限由 DSH 工具层控制；执行层权限审计、真实部署 Origin/CSRF 审计与模型对抗观察仍是发布前待验证事项。本次只使用隔离 DSH_HOME 和组件浏览器夹具，没有真实模型调用、正在运行的 DSH 操作、安装/重启、截图更新、提交、stash、tag、push 或发布。真实模型的样式还原效果未验证；本轮没有遗漏的 MVP 实现项。
+
+### 2026-10-23 — 模板分享移除旧版原始导出兼容（未提交工作树）
+
+产品决定：当前没有外部用户，不维护旧格式兼容。`parseStyleExport` 只接受 Envelope v1；原始 `StyleTemplate` 导出、持久化库文件与其他非 Envelope 形状统一以 `invalid_structure` 拒绝，删除 legacy 分支、`legacy` 预览标记、UI 文案与相关测试。导出确认、导入预览/阅读确认、复用 `save`、32 KiB 限制与安全边界不变；文件输入仍不信任 MIME/文件名。
+
+验证：`npm run build && npm test` 与 `npm run check` 均 **205/205**（Host **88**、Client **96**、packaging **21**，无跳过）；gallery 解析/渲染各 **41/41**，contrast、i18n **4** 个程序、typography **22/22** 通过；`npm run test:browser` **7/7**（settings **91**、on-demand **114** 断言）；`npm run pack:check` **43** 文件，压缩 **4,047,844** 字节、解包 **10,259,306** 字节；`git diff --check` 与文档链接检查通过。浏览器文件输入用例改为合法 Envelope（`.txt` + text/plain）继续覆盖不信任 MIME/文件名；原始导出/库文件拒绝由 codec 单测覆盖。版本仍为 **0.4.2**，未提交、未发布。
+
+### 2026-10-23 — Composer 模板入口（未提交工作树）
+
+Composer「显示样式」面板接入与设置页相同的模板交换入口：面板内新增「导入模板」（复用 `TemplateImport`，仍只创建全局模板，不带 sessionId）；模板 `…` 菜单的「导出文件」不再受 `global` 条件限制，Composer 中的仅本会话模板也可直接导出（设置页仍只列全局模板）。`TemplateImport` 的重名预检改为检查传入的全部可见模板，避免与当前会话模板重名；全局 40 配额、Host 重名与 session 可见性规则不变。会话作用域导入继续延后，等待 `save` 的 sessionId 授权核查。
+
+验证：`npm run build && npm test` 与 `npm run check` 均 **205/205**（Host **88**、Client **96**、packaging **21**，无跳过）；renderer、contrast、i18n **4** 个程序、typography **22/22** 通过；`npm run test:browser` **7/7**（settings **91**、on-demand **114** 断言；style-panel 覆盖 Composer 导入入口、全局/会话模板导出确认与面板保留）；`npm run pack:check` **43** 文件，压缩 **4,048,045** 字节、解包 **10,259,993** 字节；`git diff --check` 与文档链接检查通过。版本仍为 **0.4.2**，未提交、未发布。
+
+### 2026-10-23 — 独立 review 修复（未提交工作树）
+
+三份只读 review 的发现已修复：外部 name/description 现在与 directives 一样需要导入确认（名称/描述剥离全部 `\p{Cf}` 与 U+2028/U+2029，host 引用时转义行分隔符）；导入 directives 剥离全部不可见格式控制字符（含 bidi/tag/零宽）；保存进行中不可关闭导入弹窗；描述改为单行；库内不可导出名称、`(Imported)` 代理对截断、文件名格式控制均有专门处理与提示。原计划「执行层审计前强制仅外观」与当前实现的偏差当时如实标为**未经 owner 批准**；**后于 2026-10-24 获 owner 确认**，执行层/Origin 审计保留为发布前加固项（见文末记录）。
+
+验证：`npm test` 与 `npm run check` 均 **205/205**（Host **88**、Client **96**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **94**、on-demand **114** 断言，含保存中不可关闭与 acknowledgement 全外部内容）；`npm run pack:check` **43** 文件，压缩 **4,048,614** 字节、解包 **10,261,873** 字节；`git diff --check` 与文档链接检查通过。评审原文与处置见 [subagent-review-2026-10-23.md](plans/template-export-share/reviews/subagent-review-2026-10-23.md)。
+
+### 2026-10-24 — 导入免责声明与 owner 批准（未提交工作树）
+
+按 owner 决定采用 A 方案：导入风险提示强化为免责声明——预览区说明外部模板可能影响 AI 行为、导入即理解并自行承担风险、DSH 工具/权限层仍是实际执行边界；确认勾选改为「我已阅读并理解上述风险，确认导入该外部模板」。README/architecture/plan/评审记录已记录「2026-10-24 owner 确认采用免责声明 + 阅读确认方案」，替换原计划「审计前强制仅外观」；执行层工具权限与真实 Origin/CSRF 审计保留为发布前加固项（不再标记为未获批准）。
+
+验证：`npm test` 与 `npm run check` 均 **205/205**（Host **88**、Client **96**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **94**、on-demand **114** 断言，含免责声明确认与保存中不可关闭）；`npm run pack:check` **43** 文件，压缩 **4,048,935** 字节、解包 **10,262,394** 字节；`git diff --check` 与文档链接检查通过。版本仍为 **0.4.2**，未提交、未发布。
+
+### 2026-10-24 — 第二轮 review 修复（未提交工作树）
+
+第二轮两个只读 subagent review 均 **SHIP WITH CHANGES、无 P0/P1**；本轮修复并补测：
+
+- 保存中仍可从父面板关闭导入（Composer 面板外点/返回/chip、设置页切换导致 disabled）：导入 busy 上报父面板，父关闭路径与 disabled 渲染守卫在 POST 期间全部让位；保存中 Escape/禁用/焦点均保持弹窗。
+- directives 原先只剥离 bidi，tag/ZWSP/WJ 等不可见字符仍可能夹带隐藏文本：导入时剥离全部 `\p{Cf}`，并补全 12 个 bidi 控制与 tag/零宽测试。
+- 修改外部 name/description 未重置确认（与文档不符）：现在任何预览编辑都会重置；补 e2e。
+- 选择文件名残留 U+2028/U+2029/C1：显示清洗并补 e2e；`(Imported)` 截断改为共享的码点安全函数并补单测；导出失败提示、fileStem 的 Cf/行分隔符均有回归断言。
+- 文档口径校正：确认改为「每次导入都需确认」、描述仅保存/导出且不进入提示词（第三轮修正了“仅作标签”的旧表述）、执行层/Origin 审计统一表述为发布前加固；plan 中仍保留的原计划条款已加“已被 2026-10-24 owner 决定取代”说明。
+
+验证：`npm test` 与 `npm run check` 均 **206/206**（Host **88**、Client **97**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **100**、on-demand **114** 断言）；`npm run pack:check` **43** 文件，压缩 **4,049,089** 字节、解包 **10,262,652** 字节；`git diff --check` 与文档链接检查通过。评审与处置见 [subagent-review-2026-10-24.md](plans/template-export-share/reviews/subagent-review-2026-10-24.md)。
+
+### 2026-10-24 — 第三轮 review 修复（未提交工作树）
+
+第三轮两个只读 subagent review 均 **SHIP WITH CHANGES、无 P0/P1**；修复：
+
+- **父面板仍可卸载保存中的导入**：Composer 的 lock/view effect 与 `arm()` 成功路径未检查 import busy；设置页在父级持续 disabled 时失败信息会被隐藏。现在面板渲染在导入 busy 时保持、lock/arm 路径让位、导入卸载清理 busy；弹窗被隐藏时错误显示在触发按钮旁；busy 时焦点移到弹窗内状态行。
+- **默认忽略字符**（VS16/VS1、CGJ、Hangul filler、U+2065、U+2800 等）不可见却能进入提示词：导入文本现在额外剥离 `\p{Default_Ignorable_Code_Point}` 与 U+2800。
+- **描述文案**：描述并非界面标签渲染，改为“仅保存/导出、不进入提示词”。
+- **覆盖声明**：修正 review/verification 中对父关闭路径与导出失败 UI 的过度表述；新增 host `quotePromptText` 的 U+2028/U+2029 回归测试。导出失败 UI 分支仍无自动化测试，已如实记录。
+- **焦点抖动**：busy 时聚焦弹窗内状态行；settings e2e 连续 3 次 100 断言通过。
+
+验证：`npm test` 与 `npm run check` 均 **207/207**（Host **89**、Client **97**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **100**、on-demand **114** 断言；settings 另独立连续跑 3 次均通过）；`npm run pack:check` **43** 文件，压缩 **4,049,255** 字节、解包 **10,263,291** 字节；`git diff --check` 与文档链接检查通过。第三轮 review 与残余项见 [subagent-review-2026-10-24-third.md](plans/template-export-share/reviews/subagent-review-2026-10-24-third.md)。
+
+### 2026-10-24 — 第四轮 review 修复（未提交工作树）
+
+第四轮两个只读 subagent review 均 **SHIP WITH CHANGES、无 P0/P1**；修复：
+
+- **Composer 可能在保存结束后丢弃导入结果**：父面板仅在 import busy 时保留；新增 `onStatusChange` 让父级记住终态并在结果为成功/失败时保持面板，直到用户主动关闭。
+- **busy 时键盘焦点可逃出弹窗**：所有控件 disabled 导致焦点陷阱为空；取消按钮改为 `aria-disabled` 且可聚焦，busy/失败时焦点落回取消按钮，Tab 不再逃到背景设置。
+- **第三轮“隐藏失败”分支无测试**：settings harness 支持在 hold 释放后注入失败；e2e 覆盖“失败 + 父级 disabled → 弹窗隐藏、错误显示在触发按钮旁”。
+- **架构文档低估消毒范围**：补充 `Default_Ignorable_Code_Point`/U+2800/行分隔符归一说明。
+- **docs-sync 参考数字/日期滞后**：host 89、日期 2026-10-24、settings 101 已同步。
+
+验证：`npm test` 与 `npm run check` 均 **207/207**（Host **89**、Client **97**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **101**、on-demand **114** 断言）；`npm run pack:check` **43** 文件，压缩 **4,049,307** 字节、解包 **10,263,451** 字节；`git diff --check` 与文档链接检查通过。renderer 首跑因 `/tmp/oiui` 残留空目录失败，清理后重跑通过（环境问题，非代码）。评审与残余项见 [subagent-review-2026-10-24-fourth.md](plans/template-export-share/reviews/subagent-review-2026-10-24-fourth.md)。

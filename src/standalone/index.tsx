@@ -101,7 +101,8 @@ function Page({ cards, lang, hideToAssistant }: { readonly cards: readonly Expor
   }, [t])
   return (
     <div className="dsh-iui-standalone-page">
-      <div className="dsh-iui-cards dsh-iui-standalone-cards" data-dsh-intelligent-ui-list>
+      <div className="dsh-iui-cards dsh-iui-standalone-cards" data-dsh-intelligent-ui-list
+        data-dsh-iui-free-layout={cards.some(card => card.style === 'free') ? 'true' : undefined}>
         {cards.map((card, index) => (
           <CardBody key={card.callId ?? `${index}-${card.title ?? ''}`} card={card} t={t} onToAssistant={onToAssistant} hideToAssistant={hideToAssistant} />
         ))}

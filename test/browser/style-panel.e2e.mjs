@@ -153,6 +153,9 @@ try {
   const panel = await cdp.evaluate(`(() => { const p=document.querySelector('[data-dsh-iui-style-panel]'); const r=p.getBoundingClientRect(); const a=document.activeElement; return { top:r.top, bottom:r.bottom, left:r.left, right:r.right, vw:innerWidth, vh:innerHeight, focusInside:p.contains(a), focusTag:a?.tagName } })()`)
   assert.ok(panel.top >= 0 && panel.bottom <= panel.vh && panel.left >= 0 && panel.right <= panel.vw, 'panel must be inside the viewport')
   assert.equal(panel.focusInside, true, 'focus must move into the panel')
+  const alignment = await cdp.evaluate(`(() => { const p=document.querySelector('[data-dsh-iui-style-panel]'); const c=document.querySelector('[data-dsh-iui-toggle]'); return { panelRight: p.getBoundingClientRect().right, chipRight: c.getBoundingClientRect().right } })()`)
+  assert.ok(alignment.panelRight <= alignment.chipRight + 1, 'panel must not extend past the chip right edge')
+  assert.ok(alignment.chipRight - alignment.panelRight <= 12, 'panel should be right-aligned with the chip')
 
   assert.equal(await cdp.evaluate('document.querySelectorAll("input[type=range], .dsh-iui-slider").length'), 0, 'the slider is removed')
   const picker = await cdp.evaluate(`(() => {
@@ -165,9 +168,31 @@ try {
   assert.equal(picker.title, 'Display style')
   assert.equal(picker.scope, 'This session only')
   assert.equal(picker.builtins, 3)
-  assert.equal(picker.custom, 3)
+  assert.equal(picker.custom, 4)
+  assert.equal(await cdp.evaluate('!!document.querySelector("[data-style-id=cs_free004] .dsh-iui-preview-art-free")'), true)
+  assert.match(await cdp.evaluate('document.querySelector("[data-style-id=cs_free004]").textContent'), /Free layout/)
 
-  for (const value of ['article', 'auto', 'card', 'cs_ocean01', 'cs_field02']) {
+  // Composer exposes the same exchange surface as settings: global-only import,
+  // plus portable export for both global and session-scoped templates.
+  assert.equal(await cdp.evaluate('!!document.querySelector("[data-dsh-iui-style-panel] [data-dsh-iui-import]")'), true, 'composer import entry')
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-style-panel] [data-dsh-iui-import]").click()')
+  await cdp.waitFor('!!document.querySelector(".dsh-iui-style-popover[role=dialog] textarea")', 'composer import dialog')
+  await cdp.evaluate('[...document.querySelectorAll(".dsh-iui-style-popover[role=dialog] button")].find(b => b.textContent === "Cancel").click()')
+  await cdp.waitFor('!document.querySelector(".dsh-iui-style-popover[role=dialog]") && !!document.querySelector("[data-dsh-iui-style-panel]")', 'composer import closed with panel retained')
+
+  for (const id of ['cs_ocean01', 'cs_session3']) {
+    await cdp.evaluate(`document.querySelector('[data-dsh-iui-manage=${id}]').click()`)
+    await cdp.waitFor('!!document.querySelector(".dsh-iui-template-menu")', 'template menu')
+    const items = await cdp.evaluate('[...document.querySelectorAll(".dsh-iui-template-menu [role=menuitem]")].map(b => b.textContent.trim())')
+    assert.ok(items.includes('Export file'), 'export available for ' + id)
+    await cdp.evaluate('[...document.querySelectorAll(".dsh-iui-template-menu [role=menuitem]")].find(b => b.textContent.trim() === "Export file").click()')
+    await cdp.waitFor('!!document.querySelector(".dsh-iui-style-popover[role=dialog]")', 'export confirmation')
+    assert.match(await cdp.evaluate('document.querySelector(".dsh-iui-style-popover[role=dialog]").textContent'), /sensitive text/)
+    await cdp.evaluate('[...document.querySelectorAll(".dsh-iui-style-popover[role=dialog] button")].find(b => b.textContent === "Cancel").click()')
+    await cdp.waitFor('!document.querySelector(".dsh-iui-style-popover[role=dialog]") && !!document.querySelector("[data-dsh-iui-style-panel]")', 'export cancelled with panel retained')
+  }
+
+  for (const value of ['article', 'auto', 'card', 'cs_ocean01', 'cs_field02', 'cs_free004']) {
     await cdp.waitFor(`!document.querySelector('[data-style-id="${value}"]').disabled`, 'picker enabled')
     await cdp.evaluate(`document.querySelector('[data-style-id="${value}"]').click()`)
     await cdp.waitFor(`document.querySelector('[data-style-id="${value}"]').getAttribute('aria-pressed') === 'true'`, 'selection settled')
@@ -178,7 +203,7 @@ try {
   assert.equal(await cdp.evaluate(`document.querySelector('[data-style-id="auto"]').getAttribute('aria-pressed')`), 'true')
   await cdp.evaluate(`document.querySelector('[role=switch]').click()`)
   await cdp.waitFor(`document.querySelector('[role=switch]').getAttribute('aria-checked') === 'false'`, 'explicit global style')
-  assert.deepEqual(await cdp.evaluate('window.__calls'), ['enable:on', 'style:article', 'style:auto', 'style:card', 'style:cs_ocean01', 'style:cs_field02', 'style:inherit', 'style:auto'])
+  assert.deepEqual(await cdp.evaluate('window.__calls'), ['enable:on', 'style:article', 'style:auto', 'style:card', 'style:cs_ocean01', 'style:cs_field02', 'style:cs_free004', 'style:inherit', 'style:auto'])
 
   // Real keyboard activation must reach a saved template and show its focus ring.
   await cdp.waitFor(`!document.querySelector('[data-style-id="cs_session3"]').disabled`, 'custom enabled')

@@ -25,7 +25,7 @@ export function programsToExportCards(programs: readonly IntelligentUIProgram[],
     return {
     program: program.program,
     title: program.title,
-    style: program.style === 'article' ? 'article' : 'card',
+    style: program.style ?? 'card',
     callId: program.callId,
     ...theme === undefined ? {} : { themeStyle: resolveStyleThemeVars(theme, scheme), scheme },
   } })

@@ -13,7 +13,7 @@ const base: IntelligentUIModeView = {
 const seats = new Map<string, { definition: any; Component: any }>()
 const binding = { ctx: {} }
 const temporaryStyle = { schemaVersion: 1, baseLayout: 'card', directives: 'Use compact groups.', theme: templates[0].theme, suggestedName: 'Compact' }
-const nodes = [{ root: { kind: 'tool-result', callId: 'recorded-result-1', name: 'render_ui', isError: false,
+let nodes = [{ root: { kind: 'tool-result', callId: 'recorded-result-1', name: 'render_ui', isError: false,
   call: { name: 'render_ui', argsRaw: JSON.stringify({ title: 'Recorded answer', program: 'root = Card([Text("Original content")])', style: 'card', temporaryStyle }) },
 } }]
 const toolSource = { getSnapshot: () => nodes }
@@ -31,6 +31,22 @@ let view = base
 const project = (onDemand: any) => { view = { ...view, onDemand }; update() }
 w.__project = project
 w.__setView = (patch: any) => { view = { ...view, ...patch }; update() }
+w.__freeLayout = () => {
+  nodes = [...nodes, { root: { kind: 'tool-result', callId: 'free-result-1', name: 'render_ui', isError: false,
+    call: { name: 'render_ui', argsRaw: JSON.stringify({ title: 'Free composition', style: 'free',
+      program: 'root = Col([Title("Free composition"), Grid([Text("Left column"), Text("Right column")], 2), Flashcard("Front", "Back")])',
+      temporaryStyle: { ...temporaryStyle, baseLayout: 'free', suggestedName: 'Free composition' } }) },
+  } }]
+  update()
+}
+w.__replayFreeTemplate = () => {
+  const source = JSON.parse(nodes.find(node => node.root.callId === 'free-result-1')!.root.call.argsRaw)
+  const { temporaryStyle, ...args } = source
+  nodes = [...nodes, { root: { kind: 'tool-result', callId: 'free-template-result', name: 'render_ui', isError: false,
+    call: { name: 'render_ui', argsRaw: JSON.stringify({ ...args, styleId: 'cs_saved001' }) },
+  } }]
+  update()
+}
 const editor = () => document.querySelector<HTMLElement>('[contenteditable]')!
 const readEditor = () => {
   const draft = editor().textContent ?? ''
@@ -50,6 +66,13 @@ const inputActions = {
   submit: () => { w.__submits++ },
 }
 let savedTemplates = structuredClone(templates)
+const replay = sessionStorage.getItem('iui-free-replay')
+if (replay !== null) {
+  const stored = JSON.parse(replay)
+  nodes = stored.nodes
+  savedTemplates = stored.templates
+}
+w.__persistReplay = () => sessionStorage.setItem('iui-free-replay', JSON.stringify({ nodes, templates: savedTemplates }))
 w.__stylePosts = []
 w.__styleError = ''
 w.__styleDelay = false
@@ -61,9 +84,10 @@ window.fetch = async (_url, options) => {
   if (w.__styleError) return new Response(JSON.stringify({ error: { code: w.__styleError } }), { status: 400 })
   let template
   if (body.op === 'saveFromResult') {
+    const snapshot = JSON.parse(nodes.find(node => node.root.callId === body.resultId)!.root.call.argsRaw).temporaryStyle
     template = { id: 'cs_saved001', name: body.name, description: body.description ?? '', scope: body.scope,
-      ...body.scope === 'session' ? { sessionId: body.sessionId } : {}, baseLayout: temporaryStyle.baseLayout,
-      directives: temporaryStyle.directives, theme: temporaryStyle.theme, createdAt: 2, updatedAt: 2 }
+      ...body.scope === 'session' ? { sessionId: body.sessionId } : {}, baseLayout: snapshot.baseLayout,
+      directives: snapshot.directives, theme: snapshot.theme, createdAt: 2, updatedAt: 2 }
     savedTemplates = [...savedTemplates, template]
   } else if (body.op === 'update') {
     template = { ...savedTemplates.find(t => t.id === body.id)!, ...body.patch, updatedAt: 3 }

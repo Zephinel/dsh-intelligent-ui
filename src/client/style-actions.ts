@@ -1,5 +1,6 @@
 /** Authenticated template mutations shared by result cards and both managers. */
 import { STYLES_ROUTE_PATH, isStyleTemplate, type StyleTemplate } from '../shared/style-templates.ts'
+import type { PortableStyleTemplate } from '../shared/style-template-exchange.ts'
 
 export interface SaveFromResultInput {
   readonly resultId: string
@@ -10,6 +11,7 @@ export interface SaveFromResultInput {
 }
 export type TemplatePatch = Partial<Pick<StyleTemplate, 'name' | 'description' | 'directives'>>
 export interface StyleActions {
+  createTemplate(input: PortableStyleTemplate): Promise<StyleTemplate>
   saveFromResult(input: SaveFromResultInput): Promise<StyleTemplate>
   update(id: string, patch: TemplatePatch): Promise<StyleTemplate>
   delete(id: string): Promise<void>
@@ -39,6 +41,9 @@ export function createStyleActions(options: { fetch?: typeof fetch } = {}): Styl
     return value.template
   }
   return {
+    createTemplate: async input => template(await post({ op: 'save', template: {
+      name: input.name, description: input.description, baseLayout: input.baseLayout, directives: input.directives, theme: input.theme,
+    }, scope: 'global' })),
     saveFromResult: async input => template(await post({ op: 'saveFromResult', ...input })),
     update: async (id, patch) => {
       const saved = template(await post({ op: 'update', id, patch }))

@@ -7,6 +7,25 @@ been published yet.
 
 ## [Unreleased]
 
+### Added
+
+- Portable single-template `.iui-style.json` exchange in Plugin settings / My styles: deterministic Envelope v1 exports with a privacy confirmation, file/pasted-JSON import with local preview, editable labels/preferences, a disclaimer plus explicit acknowledgement for every external import, global-only save and no automatic application. Export is available in both My styles and the composer style panel (including session-scoped templates); the composer import also writes global templates only. Supports card/article/free; rejects unknown keys/versions, raw legacy exports, library backups and UTF-8 input above 32 KiB. Reuses the authenticated save route; execution-layer tool-permission and real Origin/CSRF audits remain pre-release hardening.
+- Free on-demand result layout (`style` and snapshot `baseLayout: "free"`), composed from the user request without a Card/Article shell. Material layout ambiguity prompts a focused question. Card/Article session styles, saved templates and existing temporary results retain their behavior.
+- Replay, per-result themes and PNG/HTML export preserve free compositions; standalone free results use the available page width. Saved templates preserve the source result layout, preferences and theme without changing the original result.
+
+### Changed
+
+- Right-align the composer style panel with its trigger chip instead of anchoring its left edge, increase the popup-to-trigger gap from 8px to 12px, and move both popup surfaces to the raised layer-2 background so they stay distinct from the page in dark mode without erasing the module-surface cards and rows inside them; width and viewport clamping are unchanged.
+
+### Fixed
+
+- Make the no-flash state structural: the settings page no longer holds a render-visible pending state (saves set `aria-busy` imperatively), the composer panel is a separate `StylePanel` receiving only availability, and On-demand arming lives inside `StylePicker`.
+- Remove the transient “Saving…” footer from the plugin settings page so saving no longer nudges the controls, and keep the On-demand entry enabled during style switches: only its own arming disables it.
+- Keep plugin settings and the composer style panel visually enabled while a write or command is in flight. Only the command entry that owns the pending state disables; the page and panel no longer flash every control to disabled opacity on each click.
+- Use the circle-check SVG glyph for the selected style tile instead of the text check, and remove the backdrop blur from the composer style panel and the floating menus. The translucent blur layer forced the compositor to re-snapshot the page whenever the panel repainted, which flashed the whole viewport on some GPUs; the surfaces are now opaque and share the same palette.
+- Preserve free composition when saving and reusing templates: copy the Host snapshot layout/theme/directives, reject client layout overrides, remove the shell choice, and support free templates in prompts, validation, replay, previews and themed PNG/HTML exports. Legacy Card/Article behavior is unchanged; the template store stays version 1.
+- Enforce on-demand layouts in the Host: new generation requires free style/baseLayout, adjustments must match the registered parent snapshot (including legacy Card/Article), and missing or evicted parents reject with guidance to cancel and start a new generation.
+
 ## [0.4.2] - 2026-10-22
 
 ### Fixed

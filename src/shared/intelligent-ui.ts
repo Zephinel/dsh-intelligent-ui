@@ -12,10 +12,14 @@ export const ANSWER_STYLES = ['auto', 'card', 'article'] as const
 /** Effective answer style: automatic choice, compact card, or reading article. */
 export type AnswerStyle = (typeof ANSWER_STYLES)[number]
 
-/** Concrete page styles the tool can record; `auto` is a session setting, not a page style. */
+/** Card/Article shells used by built-in session styles. */
 export const PAGE_STYLES = ['card', 'article'] as const
 /** A concrete rendered page style. */
 export type PageStyle = (typeof PAGE_STYLES)[number]
+
+/** Result and template layouts, including free composition without a Card/Article shell. */
+export const RENDER_LAYOUTS = [...PAGE_STYLES, 'free'] as const
+export type RenderLayout = (typeof RENDER_LAYOUTS)[number]
 
 /** A session's enable override; `inherit` follows the deployment-wide switch. */
 export const SESSION_ENABLES = ['inherit', 'on', 'off'] as const
@@ -34,7 +38,7 @@ export interface IntelligentUIProgram {
   /** Optional short title from the tool arguments. */
   readonly title?: string
   /** Presentation style recorded with the call; absent for older calls. */
-  readonly style?: PageStyle
+  readonly style?: RenderLayout
   /** Custom template recorded with the call, when selected by the session. */
   readonly styleId?: string
   /** Inline result-owned style; independent of the saved-template catalog. */
@@ -118,7 +122,7 @@ export interface ExportPageCard {
   /** Display title shown by the card header. */
   readonly title?: string
   /** Recorded answer style. */
-  readonly style?: 'card' | 'article'
+  readonly style?: RenderLayout
   /** Stable identity used to scope article anchors across cards. */
   readonly callId?: string
   /** Resolved tokens for the exporting scheme, independent of a live catalog. */
@@ -246,6 +250,11 @@ export function isAnswerStyle(value: unknown): value is AnswerStyle {
 /** Type guard for a concrete rendered page style. */
 export function isPageStyle(value: unknown): value is PageStyle {
   return value === 'card' || value === 'article'
+}
+
+/** Includes free composition without adding a built-in session style. */
+export function isRenderLayout(value: unknown): value is RenderLayout {
+  return isPageStyle(value) || value === 'free'
 }
 
 /** Type guard for a session style preference. */

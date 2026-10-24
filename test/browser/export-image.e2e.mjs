@@ -62,6 +62,7 @@ try {
 
     await cdp.send('Page.enable')
     await cdp.send('Runtime.enable')
+    await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] })
     await cdp.waitFor('document.readyState === "complete"', 'load')
     await cdp.waitFor('!!document.querySelector(".iui-flashcard")', 'flashcard')
     await cdp.waitFor('!!document.querySelector(".iui-image img")', 'photo element')
@@ -122,6 +123,7 @@ try {
 
     const probes = await cdp.evaluate('window.captureProbes')
     assert.equal(probes.length, 1, 'the export rasterizes the card once')
+    assert.equal(probes[0].layout, 'free', 'PNG captures the free composition without changing its layout')
     assert.equal(probes[0].flipFlattened, true, 'the flashcard flip is flattened for the capture')
     assert.equal(probes[0].frontHidden, true, 'a flipped card hides its front face')
     assert.equal(probes[0].backUnrotated, true, 'the visible back face is not rotated')
@@ -215,6 +217,7 @@ try {
     assert.match(page.text, /--standalone-css:true/, 'the fetched stylesheet is inlined')
     assert.match(page.text, /"program":"root = Col/, 'the recorded card program is embedded')
     assert.match(page.text, /"callId":"call-1"/)
+    assert.match(page.text, /"style":"free"/, 'HTML preserves the free layout')
     assert.match(page.text, /"themeStyle":\{"--iui-canvas":"#edf7ff"/, 'ExportAction snapshots temporary tokens into the page payload')
     assert.match(page.text, /"scheme":"light"/, 'the page payload fixes the exporting scheme')
     assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
@@ -261,6 +264,8 @@ try {
     await cdp.evaluate('document.querySelector("[data-export-page]").click()')
     await cdp.waitFor('window.downloads.length===7', 'saved themed HTML', { timeout: 30000 })
     assert.match(await cdp.evaluate('window.exportedBlobs[6].text()'), /"themeStyle":\{"--iui-canvas":"#f0fff4"/, 'ExportAction resolves saved theme from catalog')
+    assert.match(await cdp.evaluate('window.exportedBlobs[6].text()'), /"style":"free"/, 'saved-template HTML preserves free composition')
+    assert.equal(await cdp.evaluate('document.querySelector("[data-dsh-iui-style=free]") !== null'), true)
     console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {
