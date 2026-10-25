@@ -7,6 +7,8 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-25
+
 ### Added
 
 - Portable single-template `.iui-style.json` exchange in Plugin settings / My styles: deterministic Envelope v1 exports with a privacy confirmation, file/pasted-JSON import with local preview, editable labels/preferences, a disclaimer plus explicit acknowledgement for every external import, global-only save and no automatic application. Export is available in both My styles and the composer style panel (including session-scoped templates); the composer import also writes global templates only. Supports card/article/free; rejects unknown keys/versions, raw legacy exports, library backups and UTF-8 input above 32 KiB. Reuses the authenticated save route; execution-layer tool-permission and real Origin/CSRF audits remain pre-release hardening.

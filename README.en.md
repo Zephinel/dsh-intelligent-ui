@@ -20,9 +20,7 @@ The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.4.2`** (`latest`). Custom styles, on-demand generation and the on-demand lifecycle/content-grounding fixes described below are all included in 0.4.2.
-
-> **Unreleased (main branch)**: the free on-demand and saved-template layouts and template file import/export described below are not included in 0.4.2. New results need no Card/Article shell; if the layout is materially unclear, the model asks a focused question. Saving as a template preserves the free layout, preferences and light/dark theme without a Card/Article choice. This round also includes renderer-contract, Host-validation and export-semantics fixes, also not in 0.4.2. Build and install the local checkout to try these changes.
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.5.0`** (`latest`). Custom styles, on-demand generation, free layouts and template file import/export, plus the renderer-contract, Host-validation and export-semantics fixes, are all included in 0.5.0.
 
 [Quick start](#quick-start) · [Getting the code](#getting-the-code) · [Build, test and deploy](#build-test-and-deploy)
 
@@ -105,10 +103,10 @@ The restart examples cover a foreground `dsh web`, macOS launchd and Linux syste
 
 ## Quick start
 
-**DSH Web**: install the published 0.4.2 package and start the Web UI (first foreground run):
+**DSH Web**: install the published 0.5.0 package and start the Web UI (first foreground run):
 
 ```bash
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.4.2
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.5.0
 dsh web
 ```
 
@@ -119,7 +117,7 @@ Alternative sources replace the install command above: use `dsh plugin --profile
 **DSH Desktop** needs no terminal command — install it inside the app:
 
 1. Open **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**).
-2. Enter `@zephinel/dsh-intelligent-ui@0.4.2` (or just the package name for the latest), then click **Install**.
+2. Enter `@zephinel/dsh-intelligent-ui@0.5.0` (or just the package name for the latest), then click **Install**.
 3. When the install finishes, click **Enable now**; if the **UI** control does not appear, quit and reopen DSH Desktop.
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.
@@ -163,13 +161,13 @@ To guarantee a card (or when the model still replies in text), invoke the skill 
 
 A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global); saving preserves the result’s layout (free/card/article), preferences and explicit light/dark theme without a layout choice. A result without an explicit theme inherits the session theme and is not offered Save as template, because there is no palette to copy. Free templates have a local preview and **Free layout** hint; selecting one keeps the DSH card header without a Card/Article shell, with optional Toc/Section. Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
 
-**Main branch (unreleased)**: the Host requires free layout for new on-demand generation; adjustments preserve the parent layout (free, legacy card or article). If the parent snapshot is absent from the latest-200 result registry, adjustment returns an error; cancel it and choose **On-demand UI** again. Historical results can still replay from tool arguments.
+**Since 0.5.0**: the Host requires free layout for new on-demand generation; adjustments preserve the parent layout (free, legacy card or article). If the parent snapshot is absent from the latest-200 result registry, adjustment returns an error; cancel it and choose **On-demand UI** again. Historical results can still replay from tool arguments.
 
 ![Plugin detail page: global enable, default style, My styles management, composition and export](assets/intelligent-ui-settings.webp)
 
 The Plugin detail page groups settings into **Availability**, **Answer style**, **My styles**, **Composition** and **Export**. My styles manages saved global templates: set as default, rename, edit description/display preferences, export file, import template or delete. The composer manages global and session templates visible in that session. Generation happens in the composer; settings explain the entry without providing a generation workbench. Global values are the defaults for new sessions; a session override in the composer wins. **Free-form layout** only changes how strongly the design guidance is advisory; it is orthogonal to the answer style. **Export** stores the default background color, the 1x/2x resolution, and whether images/pages remove the `@ToAssistant` follow-up control together with its form fields (a Card with prose keeps its prose; only a pure follow-up block disappears whole; on by default).
 
-**Template file sharing (unreleased)**: in My styles, or in the composer’s **Display style** panel, choose a template’s `…` → **Export file**, review the sensitive-information notice, then **Download** to get `<template-name>.iui-style.json`. The composer panel also covers session-scoped templates, so they need no separate global copy first. The file contains the name, description, base layout, full display preferences and theme. Check all of it for personal or internal information before sharing. The recipient chooses **Import template** in My styles or the composer’s **Display style** panel, selects a file or pastes JSON → **Preview**, then checks the name, description, layout, light/dark swatches and full preferences. Rename, edit or clear the preferences as needed. Importing always requires **I have read and understood the risks above; import this external template** before **Import template**. Import creates a new global template (the composer entry also writes global templates only; importing into the current session remains deferred until session authorization is checked), never applies it or changes the current selection/global default; afterwards use, edit, delete and export it normally.
+**Template file sharing**: in My styles, or in the composer’s **Display style** panel, choose a template’s `…` → **Export file**, review the sensitive-information notice, then **Download** to get `<template-name>.iui-style.json`. The composer panel also covers session-scoped templates, so they need no separate global copy first. The file contains the name, description, base layout, full display preferences and theme. Check all of it for personal or internal information before sharing. The recipient chooses **Import template** in My styles or the composer’s **Display style** panel, selects a file or pastes JSON → **Preview**, then checks the name, description, layout, light/dark swatches and full preferences. Rename, edit or clear the preferences as needed. Importing always requires **I have read and understood the risks above; import this external template** before **Import template**. Import creates a new global template (the composer entry also writes global templates only; importing into the current session remains deferred until session authorization is checked), never applies it or changes the current selection/global default; afterwards use, edit, delete and export it normally.
 
 Template exchange format v1 contains only portable style configuration, supports `card|article|free`, and excludes local IDs, scope, sessions and timestamps. Plugin versions supporting v1 can import it; unknown versions are rejected without downgrade guessing. Only this exchange format is accepted: raw template exports and library backups are rejected (no external users yet, so no legacy-format support is maintained). Exchange versions are independent of npm package versions. Future v2 implementations should retain v1 support; adding layouts or removing `baseLayout` requires explicit format evolution rather than silently accepting unknown layouts in v1.
 

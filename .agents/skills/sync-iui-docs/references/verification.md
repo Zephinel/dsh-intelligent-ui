@@ -155,7 +155,7 @@ NODE
 - `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (43 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
-- The repository and npm package are public; the README clone and GitHub Issues links are live. The stable version `0.4.2` is intentionally tagged `latest`.
+- The repository and npm package are public; the README clone and GitHub Issues links are live. The stable version `0.5.0` is intentionally tagged `latest`.
 - Host/Client version-skew passages quote old Host strings (`Usage: /iui [on|off]`, "already off for this session") on purpose.
 - Screenshots under `assets/` are English-UI captures (card-level, captured from the real renderer with DSH theme tokens); the READMEs say so. A Chinese capture needs a live Chinese session.
 - Model-facing English text (tool description, generation prompt, Agent Skill body) and the `/iui` Host replies / command-palette description are English by design.
