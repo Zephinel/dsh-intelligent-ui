@@ -12,10 +12,14 @@ been published yet.
 - Portable single-template `.iui-style.json` exchange in Plugin settings / My styles: deterministic Envelope v1 exports with a privacy confirmation, file/pasted-JSON import with local preview, editable labels/preferences, a disclaimer plus explicit acknowledgement for every external import, global-only save and no automatic application. Export is available in both My styles and the composer style panel (including session-scoped templates); the composer import also writes global templates only. Supports card/article/free; rejects unknown keys/versions, raw legacy exports, library backups and UTF-8 input above 32 KiB. Reuses the authenticated save route; execution-layer tool-permission and real Origin/CSRF audits remain pre-release hardening.
 - Free on-demand result layout (`style` and snapshot `baseLayout: "free"`), composed from the user request without a Card/Article shell. Material layout ambiguity prompts a focused question. Card/Article session styles, saved templates and existing temporary results retain their behavior.
 - Replay, per-result themes and PNG/HTML export preserve free compositions; standalone free results use the available page width. Saved templates preserve the source result layout, preferences and theme without changing the original result.
+- Renderer contract suites (`css-contract-check`, `prop-contract-check`, extended `media-row-check` and `pressable-select-check`) plus Host tests for `@Each`-generated articles, dynamic anchors and free-layout warnings.
+- Safe CSS length expressions for `Box`/`Svg` sizes: `calc()/min()/max()/clamp()` and the full unit table, including `dvh/svh/lvh`.
 
 ### Changed
 
 - Right-align the composer style panel with its trigger chip instead of anchoring its left edge, increase the popup-to-trigger gap from 8px to 12px, and move both popup surfaces to the raised layer-2 background so they stay distinct from the page in dark mode without erasing the module-surface cards and rows inside them; width and viewport clamping are unchanged.
+- In-card display type caps are structural (Card, Grid cell or Carousel item at any depth) instead of direct-child, so wrapping a title in a Row no longer enlarges it; the HTML export card gap now matches live (12px).
+- Carousel always honours an explicit `itemWidth`, while the default item stays 240px with the 85% peek; Slider readouts keep the bound value and write clamped state back; number inputs accept decimal commas; Flashcard is a `div role="button"` so embedded controls are legal; Markdown nests lists and renders h5/h6 as h4.
 
 ### Fixed
 
@@ -25,6 +29,10 @@ been published yet.
 - Use the circle-check SVG glyph for the selected style tile instead of the text check, and remove the backdrop blur from the composer style panel and the floating menus. The translucent blur layer forced the compositor to re-snapshot the page whenever the panel repainted, which flashed the whole viewport on some GPUs; the surfaces are now opaque and share the same palette.
 - Preserve free composition when saving and reusing templates: copy the Host snapshot layout/theme/directives, reject client layout overrides, remove the shell choice, and support free templates in prompts, validation, replay, previews and themed PNG/HTML exports. Legacy Card/Article behavior is unchanged; the template store stays version 1.
 - Enforce on-demand layouts in the Host: new generation requires free style/baseLayout, adjustments must match the registered parent snapshot (including legacy Card/Article), and missing or evicted parents reject with guidance to cancel and start a new generation.
+- Media rows no longer resize program-sized photos, the card-subtitle heuristic no longer restyles body text, long list markers no longer overlap titles, `align=` now beats Badge/Button defaults, standalone dark exports get the dark select/button/check colours, and the standalone export card gap matches live.
+- Table numbers render raw, Chart defaults include number keys from every row, stacked negatives keep their sign, `aspectRatio` accepts 0.05–20, YouTube `/live/` URLs render, SVG paint tokens match the docs, raw-background contrast handles rgba/hsl/8-digit hex, and `@Sqrt`/`@FormatDate` out-of-domain inputs no longer fail the page.
+- Host validation now traverses `@Each`-generated Sections/Toc, keeps symbol-only anchors distinct, scopes the gap warning to photo row lists and skips page-rhythm warnings for free layout; the prompt states Form/@ToAssistant forwarding, HtmlView network scope and the Example gap truthfully.
+- Exporting with follow-ups removed keeps a mixed Card's prose (only the control and form fields go); theme-less temporary results inherit the session's selected template theme in live cards and HTML exports; malformed `styleId` is rejected, an unavailable template warns, and on-demand cap errors explain the cause and the re-arm action.
 
 ## [0.4.2] - 2026-10-22
 

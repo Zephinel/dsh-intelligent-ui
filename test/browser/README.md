@@ -17,7 +17,9 @@ events but not the full DSH Web integration.
   photos, an expanded/restored collapsed card, a map readiness signal (fake map
   fixture), the raw, card and rounded-2x frames, and the card frame's shadow
   bleed, temporary-result theming, free-layout temporary/saved-template PNG capture and the live HTML download. It also checks the menu's right alignment, content width, below-trigger
-  fallback and dismissal on scroll. Two `ExportAction` entries are mounted; the one whose Chat selector
+  fallback and dismissal on scroll. With the follow-up-removal toggle on it also
+  proves a mixed Card still appears in the PNG (prose pixels present) while a
+  pure follow-up Card does not (its marker colour is absent). Two `ExportAction` entries are mounted; the one whose Chat selector
   reports no rendered UI must not add a trigger.
 
 - `article-layout.e2e.mjs` renders a small Article fixture and measures the
@@ -30,7 +32,7 @@ events but not the full DSH Web integration.
 - `standalone-page.e2e.mjs` assembles the real single-file page from
   `lib/standalone.js` / `lib/standalone.css` plus three recorded cards, opens it
   in Chrome, and checks the inline-only assets, all three mounted card bodies (no
-  header/collapse chrome), inline and saved-template theme exports in forced light/dark, free temporary/template and legacy mixed-layout exports at wide/narrow widths in light/dark, the inlined theme, the `@ToAssistant` copy toast, and the hidden variant that removes the follow-up Card plus a root-level follow-up control.
+  header/collapse chrome), inline and saved-template theme exports in forced light/dark, free temporary/template and legacy mixed-layout exports at wide/narrow widths in light/dark, the inlined theme, the `@ToAssistant` copy toast, and the remove-follow-up variant: a mixed Card keeps its prose while only its follow-up control (and form fields) is hidden, a root-level follow-up hides only its control, and a pure follow-up Card disappears whole.
   Run `npm run build` first so the standalone artifacts exist.
 
 ```bash

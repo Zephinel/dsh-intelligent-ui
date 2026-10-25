@@ -265,7 +265,7 @@ These are not errors to fix in the program; they are how the card behaves when t
 | HtmlView shows `Preparing the interactive view…`（「正在准备交互视图…」） | Normal: the iframe mounts once the program has finished arriving. | Nothing. |
 | Math renders as plain text | KaTeX inherits the host's global styles; if they are absent the formula degrades. | Prefer plain text for casual math; use `Math` for real formulas. |
 | Clipboard write fails | `@CopyToClipboard` falls back to `document.execCommand("copy")`. | Nothing; it is best-effort. |
-| A `render_ui` program crashes while rendering | The card shows `This generated UI could not be rendered.`（「生成的 UI 无法渲染。」）with the message and a collapsible `Show the UI program`（「显示 UI 程序」）. | This is a runtime crash, not a parse error: simplify the offending component (usually a Chart with malformed data or an Svg with invalid path text) and re-call. |
+| A `render_ui` program crashes while rendering | The failing subtree disappears or keeps its last valid render; a renderer-level crash additionally shows `This generated UI could not be rendered.`（「生成的 UI 无法渲染。」）with the message and a collapsible `Show the UI program`（「显示 UI 程序」）. | The success result carries no finding — you cannot detect this crash yourself. Recovery is user-initiated: when the user reports it, simplify the offending component (usually a Chart with malformed data or an Svg with invalid path text) in the next turn. |
 | `@ToAssistant` follow-up misses the form values | Only the message string is forwarded in this deployment; the optional `context` object is not delivered. | Build the message from the bindings: `@ToAssistant("Plan for " + $people + " people")`. |
 
 ## Rendered but wrong
@@ -280,6 +280,7 @@ No error appears, yet the page is not what you intended. Check these in order:
 6. **Conditional nulls** — a ternary in a children array is fine, but a top-level statement that evaluates to `null` and is then referenced as a component breaks the page. Keep ternaries inside children arrays.
 7. **Empty state** — `@Sum`, `@Avg` and `@Count` over an empty array return `0`; division by a count needs a guard (`$people > 0 ? ... : 1`). `@Pick([])` returns `null`, and `@First([])` returns `null`; provide a fallback with `@Default` or a ternary.
 8. **Dates** — comparisons are numeric; order dates with `@DaysBetween(a, b) > 0`, and format them with `@FormatDate`.
+9. **Silent `null` from a function** — a `@function` call with a wrong-typed or out-of-domain argument (for example `@Sum($items.score)` when `score` holds strings, or `@Range(0, 5, 0)`) evaluates to `null` with no warning, so the surrounding `Text` or KPI renders blank while the tool reports success. Check that the fields are numbers before aggregating and fall back with `@Default(expr, neutral)` where a blank is not acceptable.
 
 If the page is merely visually weak, do not re-call for cosmetic fixes: choose better blocks next turn ([SKILL.md](../SKILL.md#design-playbook) has the composition rules).
 

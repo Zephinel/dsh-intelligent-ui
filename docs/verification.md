@@ -12,16 +12,16 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项）：当前 main 分支证据见文末 2026-10-25 的第二条记录（Node 216/216；renderer 解析/渲染 42/42、contrast OK、i18n 4 个程序、typography 22/22；浏览器 7/7，settings 101、on-demand 114 条断言）。下方旧浏览器/模型记录保留为历史。
+- 测试（实时子项）：当前 main 分支证据见文末 2026-10-25 的第三条记录（Node **247/247**；renderer 解析/渲染 42/42、CSS 契约 50/50、组件契约 63/63、typography 22/22、media-row 17/17、pressable 9/9、contrast OK、i18n 4 个程序；浏览器 7/7，settings 101、on-demand 114、交互页面 46、图片导出 65 条断言）。下方旧浏览器/模型记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
 - **Style panel 浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 先用无头 Chrome + CDP 加载 `test/browser/harness` 的 `ToggleControl`，验证 chip → menu（无「全部会话」、含「显示样式」）→ 仅本会话 → 样式面板，以及面板内返回按钮回到作用域菜单而不是关闭全部浮层、返回后焦点落在「显示样式」行；菜单宽度按内容且不小于 208px、右缘与 chip 对齐、统一最小行高与间距、分割线内缩、展开时 chevron 旋转 180°；关闭开关后「显示样式」仍显示但为 disabled，点击不能打开面板；面板矩形完全在视口内，焦点进入面板；拖动真实滑杆到 Article 后发出 `style:article`；Escape 关闭后焦点回到 chip。该测试不启动完整 DSH Web，也不替代 Host/Client 集成 E2E。
 - **图片导出浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 随后加载 `test/browser/harness/export-entry.tsx`：真实 `ExportAction` + 真实渲染器卡片 + 两个入口（其中一个的 Chat selector 经结构化快照运行真实的 `messageHasRenderUi` 并报告无渲染输出），卡片里是真实的 `SearchImage`，其 Wikipedia 查询由 harness stub 到本地 SVG。断言只有扩展回答出现导出药丸按钮（带可见「导出」文案、`order:1`、贴齐操作栏右缘）；导出菜单右缘与按钮对齐、宽度按内容，上方空间不足时翻到按钮下方，并在触发 scroll 后立即关闭；打开菜单依次导「原始」「卡片」和「圆角 2x」：卡片初始为折叠态，截图时已展开、完成后退回折叠；3D 翻面已展平为可见面、过渡/动画已冻结、lazy 图片改为 eager 且完成加载；harness 用带同样就绪属性的假地图验证导出会等待 resize 后的地图就绪；card 帧尺寸比 raw 多出两侧 padding + 阴影留白且底部留白能采到非零阴影像素，圆角 2x 帧尺寸为 raw 的 2 倍再加 2x padding。该测试不启动完整 DSH Web；跨域 Wikimedia 图片的抓取另用同一 session 程序手工复现（见下一条）。
-- **交互页面浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 的交互页面脚本把真实的 `lib/standalone.js` / `lib/standalone.css`、当前主题快照与两张卡片程序交给 `buildStandaloneHtml` 生成单文件 HTML，直接在无头 Chrome 中打开该文件：断言页面没有外部 script/stylesheet 引用、体积 ≥3.4 MB、两张卡片的正文都挂载且没有标题栏/折叠控件、内联主题改变页面背景，并点击一个 `@ToAssistant` 按钮确认页面复制兜底会弹出提示而不调用 DSH；随后打开开启「移除追问操作」的同一页面，断言包含追问的 Card 被整块隐藏（包括 Card 内 Row 里的按钮）、非追问的 `@OpenUrl` 按钮仍可见、根级追问只隐藏控件而不隐藏页面，并检查没有 `html` 级隐藏属性。图片导出 E2E 也新增开启该开关后追问 Card 不进入 PNG（截图高度变小）的断言。该测试不启动 DSH Web。
+- **交互页面浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 的交互页面脚本把真实的 `lib/standalone.js` / `lib/standalone.css`、当前主题快照与两张卡片程序交给 `buildStandaloneHtml` 生成单文件 HTML，直接在无头 Chrome 中打开该文件：断言页面没有外部 script/stylesheet 引用、体积 ≥3.4 MB、两张卡片的正文都挂载且没有标题栏/折叠控件、内联主题改变页面背景，并点击一个 `@ToAssistant` 按钮确认页面复制兜底会弹出提示而不调用 DSH；随后打开开启「移除追问操作」的同一页面，断言混排 Card 只隐藏追问控件（Form 字段随之移除）并保留正文、根级追问只隐藏控件而不隐藏页面、纯追问 Card 整块消失、非追问的 `@OpenUrl` 按钮仍可见，并检查没有 `html` 级隐藏属性。图片导出 E2E 也验证同一语义：混排 Card 保留正文、纯追问 Card 不进入 PNG（截图高度变小）。该测试不启动 DSH Web。
 - **自定义选色器浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 的 settings-picker 脚本渲染真实 Plugin 详情页，断言原生 `input[type=color]` 已移除、背景色触发器和 12 个预设色块存在；点击预设会保存 `exportBackground`，输入十六进制并按 Enter 会保存并关闭面板；真实鼠标的“hex 有焦点时点预设”和“输入后点面板外”路径分别验证预设获胜、有效草稿被提交。
 - **Article 间距浏览器 E2E（组件级，可复跑）**：第四个 `npm run test:browser` 脚本渲染一个 Article fixture，断言每个 `Section` 正文是独立 flow、正文块间距为 16px（标题到后续块 12px）且不再贴在一起；同时断言页面级 flow 没有额外的 18px flex gap，section 间距保持单一级距（约 24px）而不是双倍留白。
-- **导出追问开关**：Plugin 详情页 **导出** 分组新增「移除追问操作」开关（Host volatile `removeFollowUps`，默认开启）；开启后图片与 Standalone 页面都会隐藏包含 `@ToAssistant` 控件的语义区块（Card/Form/Carousel item/Pressable/Row），并禁用复制回调；关闭后保留区块并恢复页面复制兜底。设置对图片与页面同时生效。设置 SSR、图片导出 E2E 与 standalone-page E2E 覆盖；另有 `to-assistant` 单测锁定“裸按钮才是追问、带本地 action 的按钮不是”的语义和旧 `exportToAssistant` 迁移。
+- **导出追问开关**：Plugin 详情页 **导出** 分组新增「移除追问操作」开关（Host volatile `removeFollowUps`，默认开启）；开启后图片与 Standalone 页面都会移除 `@ToAssistant` 追问控件及其最小包裹（Form 字段随之移除），含正文的 Card 保留正文、只有纯追问区块整块消失，并禁用复制回调；关闭后保留控件并恢复页面复制兜底。设置对图片与页面同时生效。设置 SSR、图片导出 E2E 与 standalone-page E2E 覆盖；另有 `to-assistant` 单测锁定“裸按钮才是追问、带本地 action 的按钮不是”的语义和旧 `exportToAssistant` 迁移。
 - **布局/间距契约**：生成提示词与 Agent Skill 增加布局与间距条目；Host `layoutWarnings` 对根 `gap`、纵向 `Spacer()`、空 `Section`/`Text`、`gap: 0` 块栈返回非致命 warning（Host 单测覆盖）；Article 的 Section 正文改为嵌套 flow、页面根不再叠加 flex gap，article-layout E2E 用实测间距（16/16/12/16px，section 约 24px）护栏。
 - **图片导出（2026-10-22，组件级 + 浏览器实验）**：底部导出入口与图片导出已实现并构建通过。用无头 Chrome + CDP 在临时 harness（真实 `ExportAction` + 真实渲染器卡片）上验证：导出按钮只在记录过 `render_ui` 的消息出现；菜单含原始 / 圆角 / 卡片；折叠卡片在截取时展开、完成后恢复；2x 圆角美化输出 1616×2348 PNG、背景色生效、文件名带标题与本地时间。MapLibre 截图实验：默认 `preserveDrawingBuffer: false` 时 canvas `toDataURL` 为空白（约 9 KB），开启 `canvasContextAttributes.preserveDrawingBuffer` 后为完整地图（约 449 KB），`render` 事件内抓帧同样可行。该验证不启动完整 DSH Web；重启 DSH Web 后的真实会话人工点验尚未进行。随后用会话 `c3a17e93-b553-4f6f-8734-3997fa02a751` 的历史程序复现并修复了真实导出中发现的两个缺陷：翻卡片 3D 双面重叠（截图中文字重叠）与图片搜索/加载未完成导致的空图片框；修复后的翻卡片展平与图片落定路径由 `npm run test:browser` 的 `export-image` E2E 覆盖（图片搜索用本地 stub、跨域 Wikimedia 抓取另行手工复现）；同一 E2E 也用尺寸与像素质检覆盖 card 阴影帧。
 - **界面语言**：zh/en 字典 key 对齐、档位控件中文 SSR、渲染器组件（Code / Timer / Map / 空程序兜底）中文与英文回退 SSR 均由自动检查覆盖；尚未在运行中的 Web UI 里手动切换语言做人工点验。
@@ -270,3 +270,21 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | 文档/截图检查 | README 与三组 docs 标题层级一致；本地链接/锚点、截图引用（13 assets）、clone URL、CHANGELOG 链接通过；`git diff --check` PASS |
 
 本轮同步的 as-built 内容：README/dev 文档把 `npm run check` 改为包含 typecheck 并补充 `npm run typecheck`；Host schema 校验现在在注册前执行，失败会整体拒绝激活并指出关键字；`StyleSnapshot.theme` 改为可选，无主题结果继承会话主题、不能保存模板且客户端隐藏保存入口；Host `saveFromResult` 对无主题快照返回 400 `no_theme`；verification references 的测试/构建/计数同步。历史记录与计划文档不改。
+
+## 2026-10-25 — R5 渲染契约、Host 校验与导出语义修复（sync-iui-docs）
+
+本条对应当前 main 工作树中尚未提交的隐患排查与修复增量（渲染器契约、Host 校验/警告、导出与提示词一致性），不是发布验收；npm `latest` 仍为 `0.4.2`。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；`tsc --noEmit` 通过（`src/client` 排除）；单测 **247/247** = Host **117** + Client **109** + packaging **21**，0 失败/跳过；renderer 解析/渲染各 **42/42**、CSS 契约 **50/50**、组件契约 **63/63**、排版 **22/22**、media-row **17/17**、pressable **9/9**；contrast OK、i18n 4 |
+| `npm run test:browser` | PASS；**7/7** 套件（settings 101、on-demand 114、交互页面 46、图片导出 65 条断言） |
+| `npm run pack:check` | PASS；**43** 文件，压缩 **4,076,474** 字节，解包 **10,318,189** 字节 |
+| 构建产物（脚本显示单位） | Host **635.9 kB**、Client **3.63 MB**（js 3.49 MB + css 143.0 kB）、standalone **3.28 MB + 503.5 kB** |
+| 文档/结构检查 | README 与三组 docs 标题层级一致；本地链接/锚点、截图引用（13 assets）、clone URL、CHANGELOG 链接通过；`git diff --check` PASS |
+
+本轮修复（均有新增检查覆盖）：媒体行不再覆盖程序指定的图片尺寸；卡片副标题启发式不再改写正文；列表长 marker 在轨道内换行；`align=` 优先于 Badge/Button 默认；深色独立导出补齐 select/按钮/勾选颜色；Carousel 显式 `itemWidth` 生效、默认 240px + 85% peek；Table 数字原样输出；Chart 默认 series 跨行并集、stacked 负值保留符号；`aspectRatio` 接受 0.05–20；YouTube `/live/` 可渲染；SVG paint token 与文档一致；raw 背景对比度支持 rgba/hsl/8 位 hex；Length 支持安全的 `calc()/min()/max()/clamp()`；Slider 显示绑定值并回写越界状态；数字 Input 接受小数逗号；Flashcard 改为 `div role=button` 以允许内嵌控件；Markdown 保留嵌套列表、h5/h6 按 h4；`@Sqrt`/`@FormatDate` 等域外输入不再让整卡 fallback；`@Each` 生成的 Section/Toc 通过 article 校验、符号 anchor 不再冲突、free 布局不再收到页面节奏警告、gap 警告仅针对图片行列表；提示词修正 Form/@ToAssistant 转发、HtmlView 网络声明与 Example gap；导出「移除追问」保留含正文 Card；无主题临时结果继承会话选中模板主题；非法 `styleId` 被拒绝、不可用模板给出 warning；on-demand 上限错误说明原因与重新武装动作。完整审计与修复记录在未跟踪的 `.tmp-audit/`，独立复核见 `.tmp-verify/round4/REPORT.md`。
+
+独立 verifier 复核：6/6 项 PASS（旧 CSS/组件变异下新检查会失败；High/Max 布局数值不变）；本轮未运行真实模型 DSH 会话。

@@ -14,9 +14,9 @@ Complete reference for the OpenUI Lang vocabulary this extension ships: **57 com
 
 **Token types**
 
-- **Color**: `"ink"`, `"muted"`, `"faint"`, `"canvas"`, `"on-ink"`, `"info"`, `"success"`, `"warning"`, `"danger"`, `"purple"`, `"pink"`, `"chart1"`…`"chart6"`, or any CSS color. As a background, status colors are soft tints; as text/stroke they are strong. `"surface"`, `"surface-strong"` and `"border"` are surface/paint tokens — use them as backgrounds or SVG fills, never as text/icon colors (they are washes and would vanish). A background of `"ink"` is an inverted fill and a background of `"chart1"`…`"chart6"` is a solid brand fill: in both cases their content switches to a readable color automatically, so leave child text colors unset (or use `"on-ink"`).
+- **Color**: `"ink"`, `"muted"`, `"faint"`, `"canvas"`, `"on-ink"`, `"info"`, `"success"`, `"warning"`, `"danger"`, `"purple"`, `"pink"`, `"chart1"`…`"chart6"`, or any CSS color. As a background, status colors are soft tints; as text/stroke they are strong. `"surface"`, `"surface-strong"`, `"border"`, `"canvas"` and `"on-ink"` are background/paint tokens — use them as backgrounds or SVG fills; as text/icon colors they are ignored and the theme ink is used instead (they are washes and would vanish as text). A background of `"ink"` is an inverted fill and a background of `"chart1"`…`"chart6"` is a solid brand fill: in both cases their content switches to a readable color automatically, so leave child text colors unset (or use `"on-ink"`).
 - **Radius**: `"sm"`, `"md"`, `"lg"`, `"xl"`, `"full"`, or a pixel number.
-- **Length**: a pixel number or a CSS length string such as `"100%"`.
+- **Length**: a pixel number, or a CSS length string — `px`, `%`, `em`, `rem`, `vh`, `vw`, `vmin`, `vmax` (and `dvh`/`svh`/`lvh`), `ch`, `ex`, `lh`, `pt`, `pc`, `cm`, `mm`, `in`, `fr` — or a safe `calc()`/`min()`/`max()`/`clamp()` built from them, e.g. `"calc(100% - 32px)"`. `var()`, `url()`, `attr()` and `env()` are rejected, and an unsupported string is ignored (the default size applies).
 - **Spacing**: every `gap` and `padding` argument counts **4px steps** (`gap: 3` = 12px). Inner gap 1–2, group gap 3–4, section gap 5–6. Do not use one gap everywhere.
 
 **Rules that apply to every component**
@@ -66,7 +66,7 @@ Grid(children: Node[], columns?: number, minChildWidth?: number, gap?: number)
 
 Equal columns (default 2). With minChildWidth (px), columns drop on narrow screens.
 
-**Notes.** Equal columns, default 2. `minChildWidth` (px) lets columns drop on the narrow chat card — prefer it over a fixed column count for anything wide.
+**Notes.** Equal columns, default 2. `minChildWidth` (px) lets columns drop on the narrow chat card — prefer it over a fixed column count for anything wide. `columns` is rounded and clamped to 1–12: values above 12 silently become 12.
 
 ### `Card`
 
@@ -86,7 +86,7 @@ Carousel(children: Node[], itemWidth?: number, gap?: number)
 
 Horizontal row that scrolls and snaps, each child an item itemWidth px wide (default 240): photos, cards, options, days.
 
-**Notes.** Horizontal snap-scrolling row: photos, choices, days. Each child becomes one item `itemWidth` px wide (default 240).
+**Notes.** Horizontal snap-scrolling row: photos, choices, days. Each child becomes one item `itemWidth` px wide (default 240; values below 80 are raised to 80). An explicit `itemWidth` is honored and is not capped to the 85% peek that applies to unsized items.
 
 ### `Popover`
 
@@ -96,7 +96,7 @@ Popover(trigger: string | Node[], content: string | Node[])
 
 Shows content in a small panel when the trigger is clicked: a definition, a source, details behind an Icon("info", "sm").
 
-**Notes.** Keep the trigger short (an icon or a word); put the aside in the content. Good for sources, definitions and caveats.
+**Notes.** Keep the trigger short (an icon or a word); put the aside in the content. Good for sources, definitions and caveats. The panel is at most 280px wide (narrower on small viewports).
 
 ### `Divider`
 
@@ -146,7 +146,7 @@ Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Co
 
 Heading; md for a card title, lg for a section, 2xl for a big number.
 
-**Notes.** Page title `xl`/`2xl`; card or block title `md`/`sm`. Inside a Card, display sizes use a capped scale — `lg` 18px, `xl` 22px, `2xl` 26px, `3xl` 30px — so `xl` reads as a big number (a KPI) without turning the panel into a page; use it for one number, not for the card heading.
+**Notes.** Page title `xl`/`2xl`; card or block title `md`/`sm`. Inside a `Card`, a `Grid` cell or a `Carousel` item — at any nesting depth, e.g. inside a `Row` — display sizes use a capped scale — `lg` 18px, `xl` 22px, `2xl` 26px, `3xl` 30px — so `xl` reads as a big number (a KPI) without turning the panel into a page; use it for one number, not for the card heading. A nested Card does not apply the scale twice, and a body `Text` inside those containers is 15px.
 
 ### `Text`
 
@@ -226,7 +226,7 @@ Markdown(text: string)
 
 Prose with headings, lists, quotes, code and tables.
 
-**Notes.** Prose with headings, lists, quotes, tables and code fences. Use for long-form notes; build UI with components, not Markdown.
+**Notes.** Prose with headings, lists, quotes, tables and code fences. Lists nest by indentation, keeping ordered and unordered levels; only h1–h4 have display styles, so h5 and h6 render at the h4 size. Use for long-form notes; build UI with components, not Markdown.
 
 ### `Quote`
 
@@ -298,7 +298,7 @@ Input(value: $binding<string | number>, label?: string, type?: "text" | "number"
 
 Text or number field; a number field stores numbers.
 
-**Notes.** Text or number field bound to `$var`; a number field stores numbers. Guard counts with `@Default`/`@Clamp` before dividing.
+**Notes.** Text or number field bound to `$var`; a number field stores numbers. A number field accepts a decimal comma — "1,5" is 1.5 — while other commas group digits ("1,000" is 1000); unparseable text keeps the old value. Guard counts with `@Default`/`@Clamp` before dividing.
 
 ### `TextArea`
 
@@ -306,7 +306,7 @@ Text or number field; a number field stores numbers.
 TextArea(value: $binding<string>, label?: string, placeholder?: string, rows?: number)
 ```
 
-**Notes.** Multi-line text bound to `$var`.
+**Notes.** Multi-line text bound to `$var`. `rows` defaults to 3 and is clamped to 2–20.
 
 ### `Select`
 
@@ -336,7 +336,7 @@ Slider(value: $binding<number>, min: number, max: number, step?: number, label?:
 
 Shows label and value; unit like "%" or "$" formats the value.
 
-**Notes.** Numeric range bound to `$var`. `unit` formats the value ("%", "$", " kg"); `marks` labels positions.
+**Notes.** Numeric range bound to `$var`. `unit` formats the value ("%", "$", " kg"); `marks` labels positions. The readout shows the bound number as-is (no locale rounding), and an out-of-range bound value is clamped and written back once, so the readout and the state agree.
 
 ### `Checkbox`
 
@@ -384,9 +384,9 @@ Countdown with start, pause and reset. It counts the bound seconds down to 0, so
 Form(children: Node[])
 ```
 
-Groups fields; their values go with any @ToAssistant inside.
+Groups fields; only a Button's @ToAssistant message text is forwarded, so write the values it needs into that message.
 
-**Notes.** Groups fields for a submit Button. See the deployment note in [troubleshooting.md](troubleshooting.md) for how @ToAssistant forwards values here.
+**Notes.** Groups fields for a submit Button. See the deployment note in [troubleshooting.md](troubleshooting.md) for what @ToAssistant forwards here. In an export with follow-up removal on, the submit Button is removed together with the Form's fields, while prose in the same Card stays.
 
 ## Media and data (8 components)
 
@@ -396,9 +396,9 @@ Groups fields; their values go with any @ToAssistant inside.
 SearchImage(query: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain")
 ```
 
-A real photo the app finds for query; it needs no URL and no tool. Name the exact thing in 2 to 4 words: "Belém Tower Lisbon", "iPhone 17", "pastel de nata". Use one for every place, dish, product or thing with a look.
+A real photo the app finds for query; it needs no URL and no tool. Name the exact thing in 2 to 4 words: "Belém Tower Lisbon", "iPhone 17", "pastel de nata". Use one for a place, dish, product or thing with a look; treat it as feature media, not one photo per list row.
 
-**Notes.** A real photo found by the app. Name the exact subject in 2–4 words; there is no URL and no tool call. Offline it degrades to an icon placeholder.
+**Notes.** A real photo found by the app. Name the exact subject in 2–4 words; there is no URL and no tool call. Offline it degrades to an icon placeholder. `aspectRatio` is clamped to 0.05–20.
 
 ### `Image`
 
@@ -408,7 +408,7 @@ Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "co
 
 Photo from a URL the user or a tool gave; if it fails, a photo is found for alt.
 
-**Notes.** Photo from a URL the user or a tool gave; if it fails, the app searches by `alt`.
+**Notes.** Photo from a URL the user or a tool gave; if it fails, the app searches by `alt`. `aspectRatio` is clamped to 0.05–20.
 
 ### `Icon`
 
@@ -428,7 +428,7 @@ Table(columns: string[], rows: any[][])
 
 Each row lists its cells in column order; a cell may be a component. Number columns align right.
 
-**Notes.** Rows are cell arrays in column order; a cell may be a component (Badge, Text). Number columns right-align.
+**Notes.** Rows are cell arrays in column order; a cell may be a component (Badge, Text). Number columns right-align. A number cell renders raw — no grouping or rounding — so format values with `@Format` yourself. Right-alignment is a heuristic: a column goes numeric only when every non-empty cell is a number or a numeric-looking string, so IDs, years and ranks ("007", "2024") align right too, with no per-column override — one non-numeric cell (a name, "TBD") turns the column left.
 
 ### `Chart`
 
@@ -436,9 +436,9 @@ Each row lists its cells in column order; a cell may be a component. Number colu
 Chart(type: "bar" | "line" | "area" | "pie" | "donut" | "scatter", data: Record<string, string | number>[], x?: string, series?: string[], format?: "number" | "currency" | "percent", currency?: string, stacked?: boolean, height?: number)
 ```
 
-Rows of data; x is the category key (a number key for scatter), series the value keys (default: every number key). percent values are like 45; currency is a code like "EUR".
+Rows of data; x is the category key (a number key for scatter), series the value keys (default: every numeric key across rows, in first-seen order). percent values are like 45; currency is a code like "EUR".
 
-**Notes.** Rows of `{xKey: category, seriesKey: number}`. `x` names the category key, `series` the value keys (default: every number key), `format` "number"|"currency"|"percent", `stacked` for bars/areas, `height` in px.
+**Notes.** Rows of `{xKey: category, seriesKey: number}`. `x` names the category key, `series` the value keys (default: every numeric key across rows), `format` "number"|"currency"|"percent", `stacked` for bars/areas, `height` in px (default 240, clamped 140–480; pie/donut ignore it). Stacked bars/areas accumulate positive and negative values separately, so negatives stay visible below zero. Category labels are sampled (every n-th band) so they never overlap: a skipped label is not drawn, has no tooltip, and cannot be forced on. Pie/donut use only `series[0]` — extra numeric keys are ignored, so give a pie one explicit value key.
 
 ### `Map`
 
@@ -448,7 +448,7 @@ Map(markers: MapMarker[], route?: boolean, selected?: $binding<string>, height?:
 
 Street map fitted to its markers. route draws the road path in marker order; selected holds the clicked marker's label.
 
-**Notes.** Needs MapMarker children. `route` draws a street route in marker order; `selected` is a `$` binding holding the clicked label. Tiles or routing failing degrades to a place list/direct lines.
+**Notes.** Needs MapMarker children. `route` draws a street route in marker order; `selected` is a `$` binding holding the clicked label. Tiles or routing failing degrades to a place list/direct lines. `height` in px (default 400, clamped 200–720 and capped at `max(280px, 82vw)`).
 
 ### `MapMarker`
 
@@ -458,7 +458,7 @@ MapMarker(label: string, lat: number, lng: number, category?: string, icon?: str
 
 A place on a Map; icon is one emoji, else the pin shows its number.
 
-**Notes.** A pin: label, lat, lng, optional category, optional emoji icon. Numbered pins are drawn with a digit.
+**Notes.** A pin: label, lat, lng, optional category, optional emoji icon. Numbered pins are drawn with a digit. Long labels are ellipsized on one line (max 160px, 120px on viewports ≤520px), so keep labels short and recognizable.
 
 ### `YouTube`
 
@@ -468,7 +468,7 @@ YouTube(video: string, title?: string)
 
 Embedded YouTube video by id or URL. Only a video you know exists.
 
-**Notes.** Embed by video id or URL. Only videos that are known to exist.
+**Notes.** Embed by video id, or a `watch`, `youtu.be`, `/embed/`, `/shorts/` or `/live/` URL. Only videos that are known to exist.
 
 ## Play (2 components)
 
@@ -480,7 +480,7 @@ Flashcard(front: string | Node[], back: string | Node[], hint?: string)
 
 Card that flips between front and back when tapped. Put several in a Carousel or Grid.
 
-**Notes.** Tap to flip. Put several in a Carousel or Grid for a deck. `hint` shows before the flip.
+**Notes.** Tap, or press Enter/Space, to flip. The outer control is a `div role="button"`, so a card may contain its own interactive controls (`Button`, `Pressable`, `Input`) without invalid nesting. Put several in a Carousel or Grid for a deck. `hint` shows before the flip.
 
 ### `Celebration`
 
@@ -502,7 +502,7 @@ Svg(children: Node[], viewBox: string, width?: Length, height?: Length)
 
 A drawing for steps, parts, mechanisms, diagrams and layouts. Scales to its width; its shapes take expressions, so state can move them.
 
-**Notes.** Scaled drawing canvas. `viewBox` like "0 0 240 160"; shapes take expressions, so state can move them.
+**Notes.** Scaled drawing canvas. `viewBox` like "0 0 240 160"; shapes take expressions, so state can move them. An explicit `width` larger than the available column renders at the column width — a responsive cap, not a bug — so split the drawing or use a `Grid` when the canvas must be larger; without a `width` it fills the column up to about 1.5× its viewBox (at least 280px), and an unsupported width string is ignored (the default sizing applies).
 
 ### `G`
 
@@ -584,7 +584,7 @@ SvgText(text: string, x: number, y: number, size?: number, fill?: Color, anchor?
 HtmlView(html: string, height?: number, title?: string)
 ```
 
-Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set.
+Sandboxed HTML page with inline JS, for games and canvas. The sandbox loads CDN scripts and styles, Google Fonts and any https image; no other network. Fits its content unless height is set.
 
 **Notes.** The iframe has an opaque origin (no access to the chat or its storage), its CSP allows inline code, a few script/style/font CDNs and https images, but no other network. Its height is clamped to 80–2400 px, and it mounts once the program has finished arriving.
 
@@ -611,7 +611,7 @@ Provided by the language runtime; available everywhere. Data functions compose: 
 
 ## Library `@functions` (59)
 
-Shipped with this component library (generated from `vendor/spec.json`). These are the ONLY functions available beyond the core set — you cannot define your own.
+Shipped with this component library (generated from `vendor/spec.json`). These are the ONLY functions available beyond the core set — you cannot define your own. A call with invalid or out-of-domain arguments evaluates to `null` instead of failing the page — guard the value with `@Default` when a blank is not acceptable.
 
 | Function | Signature | Use |
 | --- | --- | --- |
@@ -658,7 +658,7 @@ Shipped with this component library (generated from `vendor/spec.json`). These a
 | `@MixColor` | `MixColor(from: string, to: string, t: number) → string` | The hex color a fraction t of the way from one hex color to another, e.g. @MixColor("#ffffff", "#0285ff", 0.5) for a heatmap or a tint |
 | `@Now` | `Now() → string` | The current date and time as an ISO string |
 | `@Today` | `Today() → string` | Today's date in the viewer's time zone, as "YYYY-MM-DD" |
-| `@FormatDate` | `FormatDate(date: string \| number, style?: "date" \| "short" \| "long" \| "weekday" \| "month" \| "time" \| "datetime" \| "iso") → string` | A date as text: "date" Oct 9, 2026 (default), "short" Oct 9, "long" Friday, October 9, 2026, "weekday" Fri, "month" Oct 2026, "time" 9:30 PM, "datetime", "iso" 2026-10-09. Dates are "YYYY-MM-DD", ISO or a timestamp |
+| `@FormatDate` | `FormatDate(date: string \| number, style?: "date" \| "short" \| "long" \| "weekday" \| "month" \| "time" \| "datetime" \| "iso") → string` | A date as text: "date" Oct 9, 2026 (default), "short" Oct 9, "long" Friday, October 9, 2026, "weekday" Fri, "month" Oct 2026, "time" 9:30 PM, "datetime", "iso" 2026-10-09. Dates are "YYYY-MM-DD", ISO or a timestamp. An empty or invalid value returns "" instead of failing the card |
 | `@AddDays` | `AddDays(date: string \| number, days: number) → string` | The date days later (negative: earlier), as "YYYY-MM-DD" |
 | `@AddMonths` | `AddMonths(date: string \| number, months: number) → string` | The date months later (negative: earlier), kept within the month (Jan 31 + 1 is Feb 28), as "YYYY-MM-DD"; 12 months is a year |
 | `@DaysBetween` | `DaysBetween(from: string \| number, to: string \| number) → number` | Calendar days from one date to another (negative if to is earlier) |

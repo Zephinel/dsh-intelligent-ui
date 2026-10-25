@@ -6,15 +6,15 @@ Run from the repo root. Current expected values are dated 2026-10-25; derive the
 
 | Command | Expected (2026-10-25) | What it proves |
 | --- | --- | --- |
-| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 631.4 kB`, `client lib/client.js 3.62 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 502.6 kB`; tests: 216 total = Host 98 + Client 97 + packaging 21; `check: 42/42` gallery parsed; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 635.9 kB`, `client lib/client.js 3.63 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 503.5 kB`; tests: 247 total = Host 117 + Client 109 + packaging 21; `check: 42/42` gallery parsed; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22`; `media-row-check: 17/17`; `pressable-select-check: 9/9`; `css-contract-check: 50/50`; `prop-contract-check: 63/63` | Build artifacts, behavior, docs/consistency guards, renderer, i18n, typography and contract claims |
 | `npm run pack:check` | 43 files; tarball/unpacked sizes vary with the working tree (derive from the current command output); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
-| `node --test test/host/*.test.mjs` | 98 pass (mode, skill, tool, tool-schema, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
-| `node --test test/client/*.test.mjs` | 97 pass (programs, toggle, locales, settings, exports, follow-ups, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, image-frame geometry and single-file page assembly |
-| `npm run test:browser` | seven suites: on-demand (114 assertions), style-panel, style-theme, image export, standalone interactive page, Article spacing and settings/template exchange/management (101 assertions; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
-| `npm run test:renderer` | `42/42` parse, `42/42` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
+| `node --test test/host/*.test.mjs` | 117 pass (mode, skill, tool, tool-schema, export-routes, layout, validation, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config, `@Each`-generated article validation and warning scope |
+| `node --test test/client/*.test.mjs` | 109 pass (programs, toggle, locales, settings, exports, followups, followup-hide, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, follow-up hiding semantics, HTML-export theme resolution, image-frame geometry and single-file page assembly |
+| `npm run test:browser` | seven suites: on-demand (114 assertions), style-panel, style-theme, image export (65 assertions incl. the follow-up-removal toggle), standalone interactive page (46 assertions incl. remove-follow-up semantics), Article spacing and settings/template exchange/management (101 assertions; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
+| `npm run test:renderer` | `42/42` parse, `42/42` render, contrast OK, i18n 4 programs, typography 22/22, media-row 17/17, pressable-select 9/9, CSS contract 50/50, prop contract 63/63 (Chrome for the latter group) | Renderer behavior cited by docs |
 
 ## Screenshot reproduction
 
@@ -139,7 +139,7 @@ NODE
 ## Updating counts after a test or packaging change
 
 1. Run `npm run check` and `npm run pack:check`; read the real numbers.
-2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `42/42` pairs, typography `22/22`, i18n program count, pack file count and sizes.
+2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `42/42` pairs plus the contract checks (`media-row 17/17`, `pressable-select 9/9`, `CSS contract 50/50`, `prop contract 63/63`), typography `22/22`, i18n program count, pack file count and sizes.
 3. If the change introduced a new test file or suite, keep the totals inside the same sentence and verify `npm test` totals match the sum.
 4. Never adjust a count by arithmetic on a previous docs value.
 5. Append the user-visible change to `CHANGELOG.md`; move `Unreleased` entries under the new version when publishing.
@@ -159,7 +159,7 @@ NODE
 - Host/Client version-skew passages quote old Host strings (`Usage: /iui [on|off]`, "already off for this session") on purpose.
 - Screenshots under `assets/` are English-UI captures (card-level, captured from the real renderer with DSH theme tokens); the READMEs say so. A Chinese capture needs a live Chinese session.
 - Model-facing English text (tool description, generation prompt, Agent Skill body) and the `/iui` Host replies / command-palette description are English by design.
-- `npm run typecheck` exists but has no `tsconfig.json`; don't cite it as a working check until it is wired.
+- `npm run typecheck` is wired through `tsconfig.json` and `npm run check`; it excludes `src/client` because DSH platform packages are runtime-provided. Do not claim the browser half is type-checked.
 - There is no PR CI; `.github/workflows/publish.yml` is the only workflow and publishes on `v*` tags via Trusted Publishing (OIDC + provenance). `npm run check` remains the local gate, and the workflow itself checks that the tag matches `package.json`.
 - Release verification is manual: after pushing a `v*` tag, watch `gh run list --workflow=publish.yml`; then confirm the registry version and `npm audit signatures` from a temporary install. See the release bullet in `docs/verification*.md`.
 - `lib/` is gitignored; artifact sizes are build outputs and must come from a fresh `npm run check`.

@@ -2,8 +2,9 @@
 
 Most of these scripts cover the `src/lib` half (the OpenUI Lang renderer) without a
 browser; the typography check uses headless Chrome. They are not part of the client
-bundle. `npm run test:renderer` runs the parser, render, contrast, i18n and typography
-checks in order; `npm run check` runs them after the build and the Node test suites.
+bundle. `npm run test:renderer` runs the parser, render, contrast, i18n, typography,
+media-row, pressable-select, CSS-contract and prop-contract checks in order;
+`npm run check` runs them after the build and the Node test suites.
 
 ## Parser check
 
@@ -77,6 +78,54 @@ binary is available (`CHROME_BIN` overrides the default path) and is part of
 
 These checks bundle their harness into `test/renderer/.build/` (git-ignored) and are
 never part of the client bundle used by DSH.
+
+## Media-row check
+
+```sh
+node test/renderer/media-row-check.mjs
+```
+
+Renders photos inside Rows through headless Chrome and asserts the media-row
+defaults yield to explicit program sizing: a `Box` with an inline width keeps it,
+`SearchImage(aspectRatio)` wins over the 4:3 default, and Row gap/align still
+apply. It covers plain photos, captioned boxes and Pressable-wrapped photos, so a
+stylesheet default can no longer shrink or resize a program-sized image.
+
+## Pressable select check
+
+```sh
+node test/renderer/pressable-select-check.mjs
+```
+
+Checks the selected-tile treatment in headless Chrome: compact text chips keep
+their label fully visible (inset ring, no corner badge) while textless tiles keep
+the corner check, with no overlap at 360px and default width.
+
+## CSS contract check
+
+```sh
+node test/renderer/css-contract-check.mjs
+```
+
+Renders minimal fixtures against the real stylesheet and pins layout contracts
+that CSS heuristics used to break: media-row defaults, card subtitle scoping,
+the list marker lane (wide and <=640px), badge/button alignment yielding to
+`align=`, structural in-card display type caps, carousel width/peek, table
+alignment, dark host colours on `data-iui-scheme="dark"`, and the standalone
+export card gap (12px).
+
+## Prop contract check
+
+```sh
+node test/renderer/prop-contract-check.mjs
+```
+
+Renders the component/function seam in headless Chrome and asserts explicit
+props and documented behavior win: SVG paint tokens, raw-background contrast,
+carousel `itemWidth`, chart series inference and stacked negatives, aspect ratio,
+raw table numbers, YouTube URL forms, safe CSS lengths, slider state, Flashcard
+semantics, decimal-comma input, Markdown nesting and out-of-domain `@function`
+calls rendering empty instead of failing the card.
 
 ## Theme torture
 

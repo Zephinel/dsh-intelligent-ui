@@ -41,7 +41,7 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ![输入框右侧的 UI 控件：三档开关与分隔线下的 Display style](../assets/intelligent-ui-toggle.png)
 
-- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article 或已保存的全局模板）、「自由布局」开关，以及导出的默认值（图片背景色、1x/2x、图片/交互页面是否移除包含 `@ToAssistant` 追问的整个区块（默认移除））。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **我的样式** / **编排方式** / **导出** 分组。
+- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article 或已保存的全局模板）、「自由布局」开关，以及导出的默认值（图片背景色、1x/2x、图片/交互页面是否移除 `@ToAssistant` 追问控件及其表单字段（含正文的卡片保留正文，只有纯追问区块整块消失；默认移除））。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **我的样式** / **编排方式** / **导出** 分组。
 - **会话覆盖**：输入框 UI 控件只改当前会话。`/iui on` / `off` / `inherit` 设置启用覆盖；`/iui style auto|card|article|inherit|<cs_id>` 设置样式覆盖。会话覆盖优先于全局，`inherit` 跟随全局。
 - **答案样式**：`Card` 为紧凑交互卡片；`Article` 为 `render_ui` 卡片内的阅读版式（`Toc` + 可折叠 `Section` + 长 Markdown 正文）；`Auto` 由模型按请求选择。Article 的 `Section` 正文是一个嵌套 flow，块间距使用 group 级节奏；页面级 flow 只靠 margin 排版，不再叠加 flex gap，避免 section 前后出现双倍留白。
 - 状态：全局启用/样式/自由布局在 Host 设置文档；会话启用、关闭与样式覆盖原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`（`sessions`、`offSessions`、`styles`）。旧版 `{ "global": true, "sessions": [...] }` 仍可读取为全局/会话迁移值。
@@ -96,13 +96,13 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 
 ### 卡片主题、操作与安全边界
 
-`programs.ts` 从记录的调用参数提取并防御性校验临时快照，拒绝混合来源/版式不一致，跳过失败调用与已离开历史窗口的参数。`IntelligentUICards` 以临时快照优先、catalog 模板次之解析主题；`resolveStyleThemeVars` 只把允许的字段映射到 renderer host CSS 变量。明暗方案跟随 DSH body 标记（外部使用系统偏好）；portaled Popover 与沙盒 iframe 保留默认主题，状态语义色由 CSS 管理。
+`programs.ts` 从记录的调用参数提取并防御性校验临时快照，拒绝混合来源/版式不一致，跳过失败调用与已离开历史窗口的参数。`IntelligentUICards` 以临时快照主题优先，其次按 `styleId` 解析已保存模板，无 `theme` 的临时快照再继承会话当前选中模板的主题（live 卡片与 HTML 导出共用同一解析），最后回退内置主题；`resolveStyleThemeVars` 只把允许的字段映射到 renderer host CSS 变量。明暗方案跟随 DSH body 标记（外部使用系统偏好）；portaled Popover 与沙盒 iframe 保留默认主题，状态语义色由 CSS 管理。
 
 临时结果显示「临时样式」标记及扩展自身渲染的「调整样式」「保存为模板」，这些操作不进入模型程序。调整关联具体 resultId，保留草稿并填入前缀，正常发送后才生成新结果。保存 Popover 收名称/描述/可用范围；不再选择 Card/Article。Host 精确保存原布局、已校验主题和偏好，原结果保持不变，不调用模型；旧快照继续原有保存流程并保留布局。自由模板有本地组合预览和「自由布局」提示，支持选用、重命名、编辑偏好与删除。模板结果保留 DSH 卡片标题栏，无临时样式标记及调整/保存操作；free 不添加 Article wrapper，不强制 Toc/Section，使用模板明暗主题。设置页只做全局默认、已保存模板管理、编排与导出；生成发生在 Composer。
 
 主题只接受 light/dark 六位 hex palette 与 font/radius/density/shadow 枚举，拒绝未知键、任意 CSS/脚本/URL；临时样式的 ink/canvas、accent/canvas 在两种方案下至少 3:1，低于 4.5:1 警告。directives 最多 2,000 字符；已保存模板注入提示词时作为 JSON 字符串包在 DISPLAY PREFERENCES 边界中，明确无权覆盖系统、工具或安全规则。临时 directives 是结果数据，不提升为系统指令。模型不能自行武装、保存模板或改变默认值；`HtmlView` 原有沙盒边界仍适用。
 
-重放解析接受带合法 styleId 的 free 模板调用，无来源的 free、无效快照与 styleId/temporaryStyle 混用仍不渲染。重放与 `programsToExportCards` 保留临时结果及模板的 free 布局；PNG 截取实际组件组合。独立 HTML 中自由结果使用可用页面宽度，Card/Article 保留 760px 宽度，包括混合导出；逐结果解析的主题与明暗模式仍内联冻结。
+重放解析接受带合法 styleId 的 free 模板调用，无来源的 free、无效快照与 styleId/temporaryStyle 混用仍不渲染。重放与 `programsToExportCards` 保留临时结果及模板的 free 布局；PNG 截取实际组件组合。独立 HTML 中自由结果使用可用页面宽度，Card/Article 保留 760px 宽度、卡片列间距与 live 一致（12px），包括混合导出；逐结果解析的主题与明暗模式仍内联冻结。
 
 界面状态结构：进行中的写入/命令不能折算成视觉 `disabled`。设置页没有可渲染的 pending 状态，保存只通过 `sectionRef` 命令式设置 `aria-busy`；Composer 面板拆为独立的 `StylePanel`，只接收可用性（`disabled`）与回调，父级 `busy`/`pending` 不在其作用域；On-demand 的 arming 状态在 `StylePicker` 内部。新增控件位于这些边界内时拿不到瞬时命令状态，因此无法把一次保存/切换变成整块控件的 disabled/opacity 闪烁。只有拥有该异步操作的控件可以短暂禁用自己（如 On-demand 入口、导入弹窗的提交按钮）。CSS 的 `:disabled { opacity }` 仍保留，因此新边界若重新引入瞬时 `disabled` 仍会闪；应通过可用的 `locked`/`panelDisabled` 语义表达不可用。
 
@@ -139,8 +139,8 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - **入口**：与图片导出共用操作栏的「导出」药丸与菜单；菜单底部用分割线与三个图片框分开的一项是 **交互页面**。
 - **资产供应**：`scripts/build.mjs` 额外构建 `lib/standalone.js` / `lib/standalone.css`（React + 渲染器 + KaTeX/MapLibre 样式）。Host 通过可选注入的 `webServer` 注册两个 same-origin 精确路由（`/api/intelligent-ui/export/standalone.js` 与 `.../standalone.css`）并在请求时读取这两个构建产物；部署没有 `webServer` 时路由不注册，客户端会报页面构建失败。
 - **生成**：浏览器在点击时并行拉取两个资产，扫描当前页面样式表收集自定义属性并用计算值拼出主题快照，再由 `export-html-plan.ts` 把卡片程序、资产与主题内联进一个 HTML；页面大小约 3.4–4.9 MB。下载文件名带回答标题与本地时间。
-- **结果主题快照**：`programsToExportCards` 优先读取内联 temporaryStyle.theme，其次解析当前可见模板，再把已解析的 themeStyle 与 scheme 逐卡片内联；导出后不再查询 catalog。无显式主题的临时结果沿用当前模板或内置主题；已保存模板缺失时按默认主题导出。
-- **页面运行时**：`src/standalone/index.tsx` 只渲染真实 `OpenUIRenderer` 的卡片正文（不导出 DSH 的标题栏与折叠控件），因此地图、图表、表单等交互与 DSH 内一致；`@OpenUrl` 照常打开链接，`@ToAssistant` 退化为「复制消息 + toast 提示回到 DSH 粘贴继续」，剪贴板失败时 toast 保留原消息；插件详情页的「移除追问操作」默认开启，导出图片和页面时会移除包含追问的整个区块；关闭后保留并由页面复制消息。页面只保存导出时的主题（当前 light/dark），不跟随之后的 DSH 主题切换。
+- **结果主题快照**：`programsToExportCards` 优先读取内联 temporaryStyle.theme，其次按 styleId 解析已保存模板，再把已解析的 themeStyle 与 scheme 逐卡片内联；导出后不再查询 catalog。无显式主题的临时结果沿用会话当前选中模板的主题（与 live 卡片同一解析），无模板时用内置主题；已保存模板缺失时按默认主题导出。
+- **页面运行时**：`src/standalone/index.tsx` 只渲染真实 `OpenUIRenderer` 的卡片正文（不导出 DSH 的标题栏与折叠控件），因此地图、图表、表单等交互与 DSH 内一致；`@OpenUrl` 照常打开链接，`@ToAssistant` 退化为「复制消息 + toast 提示回到 DSH 粘贴继续」，剪贴板失败时 toast 保留原消息；插件详情页的「移除追问操作」默认开启，导出图片和页面时会移除追问控件及其最小包裹（Form 的字段随之移除；含正文的 Card 保留正文，只有纯追问区块整块消失）；关闭后保留并由页面复制消息。页面只保存导出时的主题（当前 light/dark），不跟随之后的 DSH 主题切换。
 
 ## 界面语言
 
