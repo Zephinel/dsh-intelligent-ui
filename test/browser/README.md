@@ -40,4 +40,8 @@ npm run build && npm run test:browser
 # CHROME_BIN=/path/to/chrome npm run test:browser  # non-macOS / custom Chrome
 ```
 
+The shared launcher retries a headless Chrome start up to three times with a fresh
+profile when no page target appears (CI cold starts); only a repeated failure exits
+nonzero.
+
 The suites are outside `npm run check`; CI does not need a browser.

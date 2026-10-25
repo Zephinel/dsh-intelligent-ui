@@ -35,6 +35,7 @@ been published yet.
 - Table numbers render raw, Chart defaults include number keys from every row, stacked negatives keep their sign, `aspectRatio` accepts 0.05–20, YouTube `/live/` URLs render, SVG paint tokens match the docs, raw-background contrast handles rgba/hsl/8-digit hex, and `@Sqrt`/`@FormatDate` out-of-domain inputs no longer fail the page.
 - Host validation now traverses `@Each`-generated Sections/Toc, keeps symbol-only anchors distinct, scopes the gap warning to photo row lists and skips page-rhythm warnings for free layout; the prompt states Form/@ToAssistant forwarding, HtmlView network scope and the Example gap truthfully.
 - Exporting with follow-ups removed keeps a mixed Card's prose (only the control and form fields go); theme-less temporary results inherit the session's selected template theme in live cards and HTML exports; malformed `styleId` is rejected, an unavailable template warns, and on-demand cap errors explain the cause and the re-arm action.
+- Retry headless-Chrome launch when Chrome exposes no page target (three attempts with fresh profiles), fixing the one-off CI failure seen in the 0.5.0 publish rerun.
 
 ## [0.4.2] - 2026-10-22
 

@@ -67,7 +67,8 @@ node test/renderer/typography-check.mjs
 ```
 
 Renders a small fixture in headless Chrome and asserts the text rules static checks
-cannot see: a leading currency sign keeps normal tracking inside a tracked display
+cannot see (the shared launcher retries a Chrome start up to three times when no
+page target appears, so a wedged headless cold start does not fail the check): a leading currency sign keeps normal tracking inside a tracked display
 title, CJK titles and Markdown headings drop the Latin display tracking, long badges
 and buttons wrap inside a 360px card instead of clipping, an over-long chart category
 label is trimmed with an ellipsis while keeping the full text in its `<title>`,

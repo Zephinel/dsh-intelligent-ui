@@ -298,3 +298,9 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **签名**：publish 记录了 provenance，透明日志 logIndex **3460086916**；一次性临时目录安装 `@0.5.0` 后 `npm audit signatures` 报告 **4 个包 registry signature 验证通过、2 个包 attestation 验证通过**。
 - **GitHub Release**：[0.5.0 — 2026-10-25](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.5.0)。
 - **发布门禁**（发布提交所在树）：`npm run check` PASS，Node 测试 **247/247**（Host **117**、Client **109**、packaging **21**）；renderer 解析/渲染各 **42/42**、CSS 契约 **50/50**、组件契约 **63/63**、排版 **22/22**、media-row **17/17**、pressable **9/9**；浏览器 **7/7**；`npm pack` **43** 个文件。版本说明包含自由布局、模板文件导入/导出以及本轮的渲染契约、Host 校验/警告、导出语义修复。本次发布未运行真实模型 DSH 会话。
+
+## 2026-10-25 — CI Chrome 启动重试加固（0.5.0 之后）
+
+0.5.0 首次发布尝试在 CI 的 `typography-check` 出现一次瞬时失败（`Chrome did not expose the page target`），重跑成功。`test/support/browser.mjs` 现在在启动后 10 秒内未出现 page target 时会杀掉进程、换新 profile 与端口重启 Chrome，最多 3 次；`connectCdp` 复用同一等待逻辑。这是测试基础设施改动，不影响发布物。
+
+验证（本地，macOS + Chrome）：`npm run check` PASS（Node **247/247**；renderer 解析/渲染各 **42/42**、CSS 契约 **50/50**、组件契约 **63/63**、typography **22/22**、media-row **17/17**、pressable **9/9**）；`npm run test:browser` **7/7**（on-demand 114、settings 101、standalone 46、export-image 65 条断言）。本轮未发布新版本；下次打 tag 会包含该加固。

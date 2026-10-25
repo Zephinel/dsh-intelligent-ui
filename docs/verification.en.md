@@ -318,3 +318,9 @@ Independent verification: 6/6 PASS (old CSS/component mutations fail the new che
 - **Signatures**: publish recorded provenance (transparency log logIndex **3460086916**); after installing `@0.5.0` in a throwaway directory, `npm audit signatures` reported **4 packages with verified registry signatures and 2 with verified attestations**.
 - **GitHub Release**: [0.5.0 — 2026-10-25](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.5.0).
 - **Release gate** (tree at the release commit): `npm run check` PASS, Node tests **247/247** (Host **117**, Client **109**, packaging **21**); renderer parse/render **42/42** each, CSS contract **50/50**, prop contract **63/63**, typography **22/22**, media-row **17/17**, pressable **9/9**; browser **7/7**; `npm pack` **43** files. The release notes include free layouts, template file import/export and this round's renderer-contract, Host-validation/warning and export-semantics fixes. This release did not run a real-model DSH session.
+
+## 2026-10-25 — CI Chrome launch retry hardening (after 0.5.0)
+
+The first 0.5.0 publish attempt hit a transient `typography-check` failure in CI (`Chrome did not expose the page target`); the rerun succeeded. `test/support/browser.mjs` now kills the process and relaunches Chrome with a fresh profile and port when no page target appears within 10 seconds, up to three attempts; `connectCdp` reuses the same wait helper. This is test-infrastructure-only and does not change the published artifact.
+
+Validation (local, macOS + Chrome): `npm run check` PASS (Node **247/247**; renderer parse/render **42/42** each, CSS contract **50/50**, prop contract **63/63**, typography **22/22**, media-row **17/17**, pressable **9/9**); `npm run test:browser` **7/7** (on-demand 114, settings 101, standalone 46, image-export 65 assertions). No new version was published; the next tag carries this hardening.

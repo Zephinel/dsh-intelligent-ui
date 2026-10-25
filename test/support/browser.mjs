@@ -74,32 +74,68 @@ async function freePort() {
 }
 
 /**
+ * Wait until Chrome exposes its page target.
+ * @param port - DevTools port.
+ * @param timeoutMs - how long one launch gets to expose a page.
+ * @returns the page target, or undefined when it never appears.
+ */
+async function waitForPageTarget(port, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      const target = list.find(entry => entry.type === 'page' && (entry.url.startsWith('http://127.0.0.1:') || entry.url.startsWith('file://')))
+      if (target !== undefined) return target
+    } catch { /* Chrome is still starting */ }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  return undefined
+}
+
+/**
  * Launch headless Chrome with a disposable profile.
+ *
+ * CI runners occasionally start Chrome without ever exposing a page target
+ * (the 0.5.0 publish hit it once). A wedged process cannot be fixed by waiting
+ * longer, so kill it and relaunch with a fresh profile and port, up to three
+ * attempts, before surfacing the failure.
+ *
  * @param options - page URL and window size.
  * @returns the debug port, Chrome process, profile path and cleanup function.
  */
 export async function launchChrome({ url, width = 1200, height = 1200 }) {
   if (!(await chromeExists())) return null
-  const port = await freePort()
-  const profile = await mkdtemp(join(tmpdir(), 'dsh-browser-'))
-  const process = spawn(chromeBinary, [
-    '--headless=new',
-    '--disable-gpu',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--disable-sync',
-    '--disable-extensions',
-    `--window-size=${width},${height}`,
-    `--remote-debugging-port=${port}`,
-    '--remote-allow-origins=*',
-    `--user-data-dir=${profile}`,
-    url,
-  ], { stdio: 'ignore' })
-  const cleanup = async () => {
-    try { process.kill('SIGKILL') } catch { /* already gone */ }
-    await rm(profile, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 }).catch(() => {})
+  const attempts = 3
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const port = await freePort()
+    const profile = await mkdtemp(join(tmpdir(), 'dsh-browser-'))
+    const process = spawn(chromeBinary, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-sync',
+      '--disable-extensions',
+      `--window-size=${width},${height}`,
+      `--remote-debugging-port=${port}`,
+      '--remote-allow-origins=*',
+      `--user-data-dir=${profile}`,
+      url,
+    ], { stdio: 'ignore' })
+    const cleanup = async () => {
+      try { process.kill('SIGKILL') } catch { /* already gone */ }
+      await rm(profile, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 }).catch(() => {})
+    }
+    const page = await waitForPageTarget(port)
+    if (page !== undefined) return { port, process, profile, cleanup }
+    await cleanup()
+    if (attempt < attempts) {
+      console.warn(`[browser] Chrome exposed no page target (attempt ${attempt}/${attempts}); relaunching`)
+      continue
+    }
+    throw new Error(`Chrome did not expose the page target after ${attempts} launch attempts`)
   }
-  return { port, process, profile, cleanup }
+  throw new Error('Chrome did not start')
 }
 
 /**
@@ -108,14 +144,7 @@ export async function launchChrome({ url, width = 1200, height = 1200 }) {
  * @returns a tiny CDP client.
  */
 export async function connectCdp(port) {
-  let target
-  for (let attempt = 0; attempt < 100 && target === undefined; attempt += 1) {
-    try {
-      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-      target = list.find(entry => entry.type === 'page' && (entry.url.startsWith('http://127.0.0.1:') || entry.url.startsWith('file://')))
-    } catch { /* Chrome is still starting */ }
-    if (target === undefined) await new Promise(resolve => setTimeout(resolve, 100))
-  }
+  const target = await waitForPageTarget(port)
   if (target === undefined) throw new Error('Chrome did not expose the page target')
 
   const socket = new WebSocket(target.webSocketDebuggerUrl)
