@@ -12,7 +12,7 @@ End-to-end verification was performed on a second, isolated DSH Web instance (po
 - The component overview page, the San Francisco itinerary, the coffee calculator and the SVG origami tutorial all render correctly; photos (Wikipedia/Wikimedia), MapLibre maps + pins, charts, forms, timers, flip cards, confetti and HtmlView animations work.
 - Interaction: checking timeline items updates counts, the SegmentedControl stays in sync, and form and button states behave; the dark theme switches automatically.
 - Responsive: no horizontal overflow at 390 / 546 / 768 / 1092 px (the scoped `box-sizing` reset the component library relies on was added).
-- Tests (live subclaims): the latest working-tree evidence is in the 2026-10-24 record appended at the end (Node 207/207; renderer parse/render 41/41, contrast OK, i18n 4 programs, typography 22/22; browser 7/7 with settings 101 and on-demand 114 assertions). Older browser/model records below remain historical.
+- Tests (live subclaims): the current main-branch evidence is in the second 2026-10-25 record appended at the end (Node 216/216; renderer parse/render 42/42, contrast OK, i18n 4 programs, typography 22/22; browser 7/7 with settings 101 and on-demand 114 assertions). Older browser/model records below remain historical.
 - **Agent Skill end-to-end**: in a real DSH session the model called `skill { name: "intelligent-ui" }` and successfully loaded `<skill_content>` (15 KB body + a hint about the references base directory), then used `render_ui` as described by the skill to generate and render a verification page.
 - **Bundle install path**: the `npm pack` artifact was installed into a throwaway profile (`~/.dsh/profiles/zbundle-test`, depending on `file:/tmp/…tgz` + `dsh.profile.bundles`); `dsh --profile zbundle-test --dump-config` exited 0, and its output contained `# == @zephinel/dsh-intelligent-ui` and the inserted row `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'` (cleaned up after verification).
 - **Three-state switch end-to-end (0.2.1-era record):** with the default "Off", requests contain no `render_ui` and the prompt is empty; after choosing "This session only", requests in that session carry the tool and the prompt and render a card, while a newly opened session is still off; after choosing "All sessions", newly opened sessions carry the tool and prompt directly; after choosing "Off", the file is cleared and new sessions again have neither tool nor prompt; control state syncs between two tabs over BroadcastChannel; the state file `{ "global": false, "sessions": [] }` and the projection behave as expected. The 0.3 session switch/style overrides and Article page still need live verification.
@@ -257,3 +257,36 @@ Two independent read-only subagent reviews both returned **SHIP WITH CHANGES, no
 - **Docs-sync reference was stale**: host 89, date 2026-10-24 and settings 101 updated.
 
 Validation: `npm test` and `npm run check` both passed **207/207** (Host **89**, Client **97**, packaging **21**, no skips); renderer 41/41, contrast OK, i18n **4** programs, typography **22/22**; `npm run test:browser` passed **7/7** (settings **101**, on-demand **114** assertions); `npm run pack:check`: **43** files, **4,049,307** bytes packed and **10,263,451** bytes unpacked; `git diff --check` and doc link checks passed. The first renderer run failed on a stale empty `/tmp/oiui` directory; removing it made the run pass (environment issue, not code). Reviews and residual items: [subagent-review-2026-10-24-fourth.md](plans/template-export-share/reviews/subagent-review-2026-10-24-fourth.md).
+
+## 2026-10-25 — Full documentation and screenshot sync (sync-iui-docs)
+
+This is a full-audit + sync delta record for sync-iui-docs, not release acceptance. The baseline is `f5840d9`, already pushed to main (after 0.4.2, not published); npm `latest` remains `0.4.2`. This stage only synced as-built docs and screenshots; it changed no behavior, dependencies or version.
+
+### Automated results
+
+| Command / check | Result in this stage |
+| --- | --- |
+| `npm run check` | PASS; **207/207** Node tests = Host **89** + Client **97** + packaging **21**, 0 failed, 0 skipped; `check`/`render-check` both **42/42**, free-composition light/dark SSR; contrast OK; i18n **4** programs; typography **22/22** |
+| `npm run pack:check` | PASS; **43** files, **4,061,684** bytes packed, **10,277,299** bytes unpacked |
+| `npm run test:browser` | PASS; **7/7** suites; settings **101**, on-demand **114** assertions |
+| `node scripts/capture-screenshots.mjs` | PASS; all seven fixtures recaptured; assets remain **13** files, all referenced by both READMEs |
+| README / docs structure checks | Matching heading depth in the README pair and all three docs pairs; valid local links/anchors, absolute GitHub doc paths, language switchers, clone URL and CHANGELOG links; `git diff --check` PASS |
+
+Screenshot output sizes: layout 1616×4040, settings 1336×3082, toggle 1080×800, panel 1080×1860, hint 1520×598, temporary result and dark 1536×1032 each. These are 2× component fixtures, not real-model DSH evidence.
+
+As-built content synced here: the README and bilingual detailed docs now say main-branch (unreleased) instead of working-tree; the renderer count moved from 41/41 to 42/42; the architecture docs describe the right-aligned style panel, 12px trigger gap and the layer-2/module surface split; the sync-iui-docs maintenance references carry the current counts and classify the new plan directory. Browser and real-model gaps remain as previously recorded.
+
+## 2026-10-25 — Typecheck/tool-schema and optional-theme delta sync (sync-iui-docs)
+
+This record covers the uncommitted source delta on main (typecheck + `@types/node`/`tsconfig.json`, pre-registration `tool-schema.ts` validation, optional `temporaryStyle.theme`, and no template save for theme-less results). It is not release acceptance; npm `latest` remains `0.4.2`.
+
+### Automated results
+
+| Command / check | Result in this stage |
+| --- | --- |
+| `npm run check` | PASS; runs `tsc --noEmit` first (passes; `src/client` is excluded because DSH platform types are not local dependencies), then builds and tests; **216/216** Node tests = Host **98** + Client **97** + packaging **21**, 0 failed/skipped; `check`/`render-check` both **42/42**; contrast OK, i18n 4, typography 22/22 |
+| `npm run test:browser` | PASS; **7/7**; settings 101, on-demand 114 assertions |
+| `npm run pack:check` | PASS; 43 files, **4,066,380** bytes packed, **10,292,278** bytes unpacked |
+| Docs/screenshot checks | Matching README and three docs-pair heading levels; local links/anchors, screenshot references (13 assets), clone URL and CHANGELOG links pass; `git diff --check` PASS |
+
+As-built content synced here: README/dev docs now say `npm run check` includes typecheck and list `npm run typecheck`; the Host validates schemas before registration and fails activation as a unit with the offending keyword; `StyleSnapshot.theme` is optional, theme-less results inherit the session theme, cannot be saved as templates and hide Save in the client; Host `saveFromResult` answers 400 `no_theme` for theme-less snapshots; verification references carry the new test/build/count values. Historical records and plans are unchanged.

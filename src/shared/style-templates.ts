@@ -20,7 +20,13 @@ export interface StyleSnapshot {
   readonly schemaVersion: 1
   readonly baseLayout: RenderLayout
   readonly directives: string
-  readonly theme: StyleTheme
+  /**
+   * Optional: when absent the result inherits the session's theme (the selected
+   * template, or the built-in theme when the session has none). A snapshot with
+   * a theme is self-contained and can back a saved style template; a theme-less
+   * one cannot, because there is no palette to copy.
+   */
+  readonly theme?: StyleTheme
   readonly suggestedName?: string
 }
 export type StyleId = AnswerStyle | string
@@ -94,17 +100,23 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): b
   return Object.keys(value).every(key => keys.includes(key))
 }
 
+/** Controlled token names: one source for validation and for the failure text. */
+const PALETTE_TOKENS = ['canvas', 'ink', 'accent', 'muted', 'surface', 'border'] as const
+const REQUIRED_PALETTE_TOKENS = ['canvas', 'ink', 'accent'] as const
+const THEME_FIELDS = ['light', 'dark', 'font', 'radius', 'density', 'shadow'] as const
+const SNAPSHOT_FIELDS = ['schemaVersion', 'baseLayout', 'directives', 'theme', 'suggestedName'] as const
+
 function isPalette(value: unknown): value is StyleThemePalette {
   return isRecord(value)
-    && hasOnlyKeys(value, ['canvas', 'ink', 'accent', 'muted', 'surface', 'border'])
-    && ['canvas', 'ink', 'accent'].every(key => isHexColor(value[key]))
+    && hasOnlyKeys(value, PALETTE_TOKENS)
+    && REQUIRED_PALETTE_TOKENS.every(key => isHexColor(value[key]))
     && ['muted', 'surface', 'border'].every(key => !(key in value) || isHexColor(value[key]))
 }
 
 /** Validate the complete controlled theme, rejecting arbitrary CSS or extra tokens. */
 export function isStyleTheme(value: unknown): value is StyleTheme {
   return isRecord(value)
-    && hasOnlyKeys(value, ['light', 'dark', 'font', 'radius', 'density', 'shadow'])
+    && hasOnlyKeys(value, THEME_FIELDS)
     && isPalette(value.light) && isPalette(value.dark)
     && STYLE_THEME_FONTS.some(font => font === value.font)
     && STYLE_RADII.some(radius => radius === value.radius)
@@ -117,18 +129,91 @@ export function isLabel(value: unknown, min: number, max: number): value is stri
     && value.length >= min && value.length <= max && !/[\u0000-\u001f\u007f-\u009f]/.test(value)
 }
 
+/** Name the first broken palette rule, so a rejection says which token to fix. */
+function describePaletteProblem(value: unknown, path: string): string | undefined {
+  if (!isRecord(value)) return `${path} is required (an object of six-digit hex colors)`
+  const extra = Object.keys(value).find(key => !PALETTE_TOKENS.some(token => token === key))
+  if (extra !== undefined) {
+    return `${path}.${extra} is not a theme token (allowed: ${PALETTE_TOKENS.join(', ')})`
+  }
+  for (const key of REQUIRED_PALETTE_TOKENS) {
+    if (!isHexColor(value[key])) return `${path}.${key} must be a six-digit hex color such as #1a1a1a`
+  }
+  for (const key of ['muted', 'surface', 'border']) {
+    if (key in value && !isHexColor(value[key])) return `${path}.${key} must be a six-digit hex color such as #6b6b6b`
+  }
+  return undefined
+}
+
+/** Name the first broken theme rule. */
+function describeThemeProblem(value: unknown): string | undefined {
+  if (!isRecord(value)) return `theme is required (light and dark palettes plus font, radius, density and shadow)`
+  const extra = Object.keys(value).find(key => !THEME_FIELDS.some(field => field === key))
+  if (extra !== undefined) return `theme.${extra} is not a theme field (allowed: ${THEME_FIELDS.join(', ')})`
+  for (const scheme of ['light', 'dark']) {
+    const problem = describePaletteProblem(value[scheme], `theme.${scheme}`)
+    if (problem !== undefined) return problem
+  }
+  const choices: [key: string, allowed: readonly string[]][] = [
+    ['font', STYLE_THEME_FONTS],
+    ['radius', STYLE_RADII],
+    ['density', STYLE_DENSITIES],
+    ['shadow', STYLE_SHADOWS],
+  ]
+  for (const [key, allowed] of choices) {
+    if (!allowed.some(option => option === value[key])) {
+      return `theme.${key} must be one of ${allowed.map(option => `"${option}"`).join(', ')}`
+    }
+  }
+  return undefined
+}
+
+/**
+ * Why `value` is not a valid {@link StyleSnapshot}, or `undefined` when it is.
+ *
+ * The Host reports this reason instead of one generic sentence. A model that
+ * omits `directives` or `theme` otherwise only learns that *something* is wrong
+ * and retries the same payload; naming the field lets it self-correct in one
+ * attempt.
+ */
+export function describeStyleSnapshotProblem(value: unknown): string | undefined {
+  if (!isRecord(value)) return 'temporaryStyle is required (an object, not a string or array)'
+  const extra = Object.keys(value).find(key => !SNAPSHOT_FIELDS.some(field => field === key))
+  if (extra !== undefined) return `unknown field "${extra}" (allowed: ${SNAPSHOT_FIELDS.join(', ')})`
+  if (value.schemaVersion !== STYLE_SNAPSHOT_VERSION) return `schemaVersion must be ${STYLE_SNAPSHOT_VERSION}`
+  if (value.baseLayout !== 'card' && value.baseLayout !== 'article' && value.baseLayout !== 'free') {
+    return 'baseLayout must be "card", "article" or "free"'
+  }
+  if (typeof value.directives !== 'string' || value.directives.trim().length === 0) {
+    return `directives is required (${STYLE_DIRECTIVES_MAX_LENGTH} characters max of reusable design rules)`
+  }
+  if (value.directives.length > STYLE_DIRECTIVES_MAX_LENGTH) {
+    return `directives must be at most ${STYLE_DIRECTIVES_MAX_LENGTH} characters`
+  }
+  if (/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(value.directives)) {
+    return 'directives must not contain control characters'
+  }
+  // The theme is optional: a snapshot may inherit the session theme. When it is
+  // present it must be complete, so a snapshot that can back a saved template
+  // always carries a real palette.
+  if ('theme' in value) {
+    const themeProblem = describeThemeProblem(value.theme)
+    if (themeProblem !== undefined) return themeProblem
+  }
+  if ('suggestedName' in value) {
+    const suggestedName = value.suggestedName
+    if (!isLabel(suggestedName, STYLE_NAME_MIN_LENGTH, STYLE_NAME_MAX_LENGTH)) {
+      return `suggestedName must be ${STYLE_NAME_MIN_LENGTH}-${STYLE_NAME_MAX_LENGTH} characters`
+    }
+    if (/[\u0080-\u009f]/.test(suggestedName)) return 'suggestedName must not contain control characters'
+    if (isReservedStyleName(suggestedName)) return 'suggestedName must not be Auto, Card or Article'
+  }
+  return undefined
+}
+
 /** Admit only bounded data and controlled tokens; directives never become prompt instructions. */
 export function isStyleSnapshot(value: unknown): value is StyleSnapshot {
-  return isRecord(value) && hasOnlyKeys(value, ['schemaVersion', 'baseLayout', 'directives', 'theme', 'suggestedName'])
-    && value.schemaVersion === STYLE_SNAPSHOT_VERSION
-    && (value.baseLayout === 'card' || value.baseLayout === 'article' || value.baseLayout === 'free')
-    && typeof value.directives === 'string' && value.directives.trim().length > 0
-    && value.directives.length <= STYLE_DIRECTIVES_MAX_LENGTH
-    && !/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(value.directives)
-    && isStyleTheme(value.theme)
-    && (!('suggestedName' in value) || (isLabel(value.suggestedName, STYLE_NAME_MIN_LENGTH, STYLE_NAME_MAX_LENGTH)
-      && !/[\u0080-\u009f]/.test(value.suggestedName)
-      && !isReservedStyleName(value.suggestedName)))
+  return describeStyleSnapshotProblem(value) === undefined
 }
 
 /** WCAG contrast ratio for two validated six-digit sRGB colors. */

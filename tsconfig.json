@@ -1,0 +1,37 @@
+{
+  // Type-check only: esbuild emits the artifacts (`node scripts/build.mjs`), so
+  // `tsc` runs with `noEmit` and never becomes a second build system.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Source imports carry explicit `.ts`/`.tsx` extensions (the bundler and
+    // Node's type stripping both accept them), which requires noEmit + this flag.
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "vendor/**/*.json"],
+  // Two boundaries are excluded, both for dependency reasons rather than taste:
+  //  - `src/lib/functions/__tests__` is a leftover vitest suite; the shipped tests
+  //    run under `node --test`, and vitest is not a dependency here.
+  //  - `src/client` binds to DSH's frozen platform table (React slots, stores,
+  //    primitives). Those packages are resolved at runtime by the web shell and
+  //    are not devDependencies, so `tsc` cannot resolve them. Install
+  //    `@deepseek-ai/dsh-client-*` (matching the running DSH version) and drop
+  //    this entry to type-check the browser half too.
+  "exclude": ["node_modules", "lib", "test", "scripts", "src/lib/functions/__tests__", "src/client"]
+}

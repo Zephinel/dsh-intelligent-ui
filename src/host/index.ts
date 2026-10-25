@@ -42,13 +42,14 @@ import {
 import type { AnswerStyle, RenderLayout } from '../shared/intelligent-ui.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
-  contrastRatio, isStyleSnapshot, type StyleTemplate,
+  contrastRatio, describeStyleSnapshotProblem, isStyleSnapshot, type StyleTemplate,
 } from '../shared/style-templates.ts'
 import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
 import { createOnDemandController } from './on-demand.ts'
 import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
+import { assertDshToolSchema } from './tool-schema.ts'
 
 export const name = 'intelligent-ui'
 
@@ -195,8 +196,9 @@ const PARAMETERS = {
     },
     temporaryStyle: {
       type: 'object',
-      description: 'Only for a Host-authorized on-demand operation. A complete result-owned style; omit styleId. '
-        + 'Use reusable design rules, not copies of the current content. Both ink/canvas and accent/canvas need >= 3:1 contrast in each scheme (>= 4.5:1 recommended).',
+      description: 'Only for a Host-authorized on-demand operation. A result-owned style; omit styleId. '
+        + 'Use reusable design rules, not copies of the current content. `theme` is optional: omit it to inherit the session theme. '
+        + 'When a theme is passed it must be complete, and both ink/canvas and accent/canvas need >= 3:1 contrast in each scheme (>= 4.5:1 recommended).',
       properties: {
         schemaVersion: { type: 'integer', const: 1 },
         baseLayout: { type: 'string', enum: RENDER_LAYOUTS, description: 'Use "free" for on-demand generation: the program composes the user-requested layout without a Card/Article shell. Must equal the top-level style. If the layout is materially unclear, ask before rendering; never silently default. Adjustments must match the parent snapshot layout (free, card or article); the Host rejects missing parents.' },
@@ -216,7 +218,7 @@ const PARAMETERS = {
         },
         suggestedName: { type: 'string', description: 'Optional label suggestion (1-30 chars), excluding Auto, Card and Article. No naming step is required.' },
       },
-      required: ['schemaVersion', 'baseLayout', 'directives', 'theme'],
+      required: ['schemaVersion', 'baseLayout', 'directives'],
       additionalProperties: false,
     },
   },
@@ -384,6 +386,13 @@ export function apply(ctx: {
   // The switch decides whether the prompt section and the tool are visible.
   // A deployment without session projections/commands cannot persist a switch,
   // and `enabledFor` then reports legacy always-on.
+  //
+  // Validate both tool schemas before anything is registered. DSH rejects a
+  // keyword outside its subset when the tool registers — the last step below —
+  // which would leave the prompt section and the routes live with no tool at
+  // all. Failing here instead makes the whole entry fail with the keyword named.
+  assertDshToolSchema(PARAMETERS, 'parameters')
+  assertDshToolSchema(OUTPUT, 'output.schema')
   const store = createStyleStore(ctx)
   const results = createResultStore(ctx)
   const onDemand = createOnDemandController(ctx as never)
@@ -525,7 +534,9 @@ ${section}`
         if (sessionId === undefined || typeof exec?.callId !== 'string' || !onDemand.allowsTemporaryStyle(sessionId, exec.callId)) {
           throw new Error('render_ui: temporaryStyle requires a bound, running on-demand operation and its current tool call. The model cannot authorize one.')
         }
-        if (!isStyleSnapshot(args.temporaryStyle)) throw new Error('render_ui: invalid temporaryStyle snapshot; use schemaVersion 1, a baseLayout, reusable directives and controlled theme tokens.')
+        // Name the broken field: a model that omits directives/theme cannot tell
+        // which part is missing and otherwise retries the identical payload.
+        if (!isStyleSnapshot(args.temporaryStyle)) throw new Error(`render_ui: invalid temporaryStyle: ${describeStyleSnapshotProblem(args.temporaryStyle) ?? 'snapshot rejected'}. Pass schemaVersion 1, baseLayout, and non-empty directives; add a theme (light and dark palettes plus font, radius, density and shadow) only when the page should not inherit the session theme.`)
         if (args.temporaryStyle.baseLayout !== args.style) throw new Error('render_ui: temporaryStyle.baseLayout must match style.')
         const operation = onDemand.view(sessionId)!
         if (operation.kind === 'generate') {
@@ -537,12 +548,16 @@ ${section}`
           const layout = parent.snapshot.baseLayout
           if (args.style !== layout) throw new Error(`render_ui: on-demand adjustment must preserve the parent result layout; pass style: "${layout}" and temporaryStyle.baseLayout: "${layout}".`)
         }
-        for (const scheme of ['light', 'dark'] as const) {
-          const palette = args.temporaryStyle.theme[scheme]
-          for (const token of ['ink', 'accent'] as const) {
-            const ratio = contrastRatio(palette[token], palette.canvas)
-            if (ratio < 3) throw new Error(`render_ui: temporaryStyle ${scheme} ${token}/canvas contrast must be at least 3:1.`)
-            if (ratio < 4.5) warnings.push(`Temporary style ${scheme} ${token}/canvas contrast is ${ratio.toFixed(2)}:1; 4.5:1 is recommended.`)
+        // The theme is optional (inherit the session theme); only a passed one is checked.
+        const snapshotTheme = args.temporaryStyle.theme
+        if (snapshotTheme !== undefined) {
+          for (const scheme of ['light', 'dark'] as const) {
+            const palette = snapshotTheme[scheme]
+            for (const token of ['ink', 'accent'] as const) {
+              const ratio = contrastRatio(palette[token], palette.canvas)
+              if (ratio < 3) throw new Error(`render_ui: temporaryStyle ${scheme} ${token}/canvas contrast must be at least 3:1.`)
+              if (ratio < 4.5) warnings.push(`Temporary style ${scheme} ${token}/canvas contrast is ${ratio.toFixed(2)}:1; 4.5:1 is recommended.`)
+            }
           }
         }
       }

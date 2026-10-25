@@ -1,24 +1,24 @@
 # Verification — dsh-intelligent-ui docs
 
-Run from the repo root. Current expected values are dated 2026-10-24; derive them from the commands, never copy them forward blindly.
+Run from the repo root. Current expected values are dated 2026-10-25; derive them from the commands, never copy them forward blindly.
 
 ## Guards
 
-| Command | Expected (2026-10-24) | What it proves |
+| Command | Expected (2026-10-25) | What it proves |
 | --- | --- | --- |
-| `npm run check` | build: `host lib/index.js 628.2 kB`, `client lib/client.js 3.61 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 502.8 kB`; tests: 207 total = Host 89 + Client 97 + packaging 21; `check: 41/41` gallery parsed; `render-check: 41/41` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
+| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 631.4 kB`, `client lib/client.js 3.62 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 502.6 kB`; tests: 216 total = Host 98 + Client 97 + packaging 21; `check: 42/42` gallery parsed; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22` | Build artifacts, behavior, docs/consistency guards, renderer, i18n and typography claims |
 | `npm run pack:check` | 43 files; tarball/unpacked sizes vary with the working tree (derive from the current command output); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
-| `node --test test/host/*.test.mjs` | 89 pass (mode, skill, tool, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
+| `node --test test/host/*.test.mjs` | 98 pass (mode, skill, tool, tool-schema, export-routes, layout, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config |
 | `node --test test/client/*.test.mjs` | 97 pass (programs, toggle, locales, settings, exports, follow-ups, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, image-frame geometry and single-file page assembly |
 | `npm run test:browser` | seven suites: on-demand (114 assertions), style-panel, style-theme, image export, standalone interactive page, Article spacing and settings/template exchange/management (101 assertions; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
-| `npm run test:renderer` | `41/41` parse, `41/41` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
+| `npm run test:renderer` | `42/42` parse, `42/42` render, contrast OK, i18n 4 programs, typography 22/22 (Chrome) | Renderer behavior cited by docs |
 
 ## Screenshot reproduction
 
-`node scripts/capture-screenshots.mjs` captures seven production-component fixtures at 2x (layout, settings, toggle, panel, armed hint, temporary result, dark temporary result), retaining 13 README assets in total. `node scripts/capture-screenshots.mjs --dark --out-dir=/tmp/iui-r4-dark` checks all seven against fixed dark tokens without overwriting shipped light captures. Services are deterministic fakes; shell card glyphs use lucide stand-ins because DSH primitives are supplied by the live loader. These are component captures, not real-model DSH evidence.
+`node scripts/capture-screenshots.mjs` captures seven production-component fixtures at 2x (layout, settings, toggle, panel, armed hint, temporary result, dark temporary result), retaining 13 README assets in total. `node scripts/capture-screenshots.mjs --dark --out-dir=/tmp/iui-r4-dark` checks all seven against fixed dark tokens without overwriting shipped light captures. Services are deterministic fakes; shell card glyphs use lucide stand-ins because DSH primitives are supplied by the live loader. The script also asserts that `DARK_THEME` defines every `--dsw-alias-*` token present in `THEME`; a missing `bg-module-platform` override previously produced a white-on-dark Temporary-style badge in the dark capture. These are component captures, not real-model DSH evidence.
 
 ## README and changelog structural checks
 
@@ -139,7 +139,7 @@ NODE
 ## Updating counts after a test or packaging change
 
 1. Run `npm run check` and `npm run pack:check`; read the real numbers.
-2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `41/41` pairs, typography `22/22`, i18n program count, pack file count and sizes.
+2. Update the 已验证 / verification bullet in **both** `docs/verification.md` and `docs/verification.en.md`: Host / Client / packaging counts, renderer `42/42` pairs, typography `22/22`, i18n program count, pack file count and sizes.
 3. If the change introduced a new test file or suite, keep the totals inside the same sentence and verify `npm test` totals match the sum.
 4. Never adjust a count by arithmetic on a previous docs value.
 5. Append the user-visible change to `CHANGELOG.md`; move `Unreleased` entries under the new version when publishing.

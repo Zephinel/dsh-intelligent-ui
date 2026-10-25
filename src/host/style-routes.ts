@@ -154,6 +154,11 @@ export function registerStyleRoutes(ctx: {
               error(res, 400, 'invalid_input', 'The session must match the result.'); return
             }
             const { baseLayout, directives, theme } = result.snapshot
+            // A template needs a palette of its own; a theme-less result has none to copy.
+            if (theme === undefined) {
+              error(res, 400, 'no_theme', 'This result has no explicit theme, so it cannot become a style template. Adjust it with a theme first, then save.')
+              return
+            }
             const input = saveInput({ op: 'save', template: { name: body.name, description: body.description, baseLayout, directives, theme }, scope: body.scope, sessionId: body.sessionId })
             if (input === undefined) { error(res, 400, 'invalid_input', 'Invalid style name, description or scope.'); return }
             try { json(res, 201, { template: store.create(input) }) }

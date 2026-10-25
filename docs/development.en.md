@@ -50,7 +50,8 @@ node scripts/install.mjs --uninstall   # then restart the DSH Web process the sa
 npm run build          # full build of prompt + host + client
 npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
-npm run check          # build + Host/Client/packaging tests + renderer checks
+npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
+npm run check          # typecheck + build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 npm run test:browser   # 7 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings
 ```
@@ -97,7 +98,7 @@ When you see this mixed state, first **restart the DSH process that serves the W
 
 ### Tool JSON Schema subset (activation failure triage)
 
-DSH 0.2.1's `dsh-tools` accepts only `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` plus annotations (`description` / `title` / `default` / `examples`). If `render_ui` parameters or output use `maxLength` / `minLength` / `pattern` / `format`, registration throws `JsonSchemaError`: the plugin entry shows **Problem**, the settings page reports no settings service, and the composer UI control disappears. Put limits in `description` and enforce them in execute; `test/host/tool.test.mjs` guards the parameter and output schemas with the same subset rules, and the installed `dsh-tools` `assertSupportedJsonSchema` can verify the build directly. These errors surface only when the Host activates; restart the host after fixing.
+DSH 0.2.1's `dsh-tools` accepts only `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` plus annotations (`description` / `title` / `default` / `examples`). `src/host/tool-schema.ts` validates the `render_ui` parameter and output schemas against the same subset before registering any tool, route or prompt section, so an invalid schema fails the whole plugin activation and names the offending keyword instead of leaving the prompt enabled with a missing tool. Put limits in `description` and enforce them in execute; `test/host/tool-schema.test.mjs` pins the subset and failure shape, while `test/host/tool.test.mjs` keeps guarding the actual parameter/output schemas. These errors surface only when the Host activates; restart the host after fixing.
 
 ## Layout (release-related)
 

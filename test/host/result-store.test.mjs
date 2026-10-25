@@ -23,6 +23,15 @@ afterEach(() => {
 const snapshot = { schemaVersion: 1, baseLayout: 'card', directives: 'Clear hierarchy.', suggestedName: 'Notes', theme: THEME }
 const result = (overrides = {}) => ({ resultId: 'call-1', sessionId: 's1', snapshot: structuredClone(snapshot), createdAt: 1, ...overrides })
 
+test('a theme-less snapshot records, reloads and stays immutable', () => {
+  const { store } = mount()
+  const themeLess = { schemaVersion: 1, baseLayout: 'free', directives: 'Compact groups, no palette of its own.' }
+  store.record(result({ snapshot: themeLess }))
+  assert.deepEqual(createResultStore().get('call-1').snapshot, themeLess)
+  const detached = store.get('call-1'); detached.snapshot.directives = 'mutated'
+  assert.deepEqual(store.get('call-1').snapshot, themeLess)
+})
+
 test('result snapshots round trip across restart, clone reads/writes, remain immutable, and only write the result file', () => {
   const { store, home, file } = mount()
   const first = result()

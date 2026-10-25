@@ -69,7 +69,7 @@ Claim groups for this extension:
 - **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria.
 - **UI copy**: zh/en labels and menu text from `src/shared/locales.ts`; zh docs quote zh labels, English docs quote English labels.
 - **Vocabulary and counts**: 57 components, 73 functions (14 core + 59 library), 5 action steps; component signatures; prompt size (~9.5K tokens, approximate).
-- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 74 / Client 80 / packaging 21, total 175), renderer 41/41 parse and render, typography 22/22, i18n 4 programs, pack 43 files (~4.03 MB tarball, ~10.20 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
+- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 98 / Client 97 / packaging 21, total 216), renderer 42/42 parse and render, typography 22/22, i18n 4 programs, pack 43 files (~4.07 MB tarball, ~10.29 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
 - **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, UI language and Agent Skill; `docs/development*.md` expands install/uninstall, development commands, restart tips, the release layout and the tag-driven Trusted Publishing release flow. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
 - **Repository and contribution**: the README clone URL is the HTTPS equivalent of `git config remote.origin.url`; GitHub Issues is the contribution channel; `npm run check` is the local gate (there is no PR CI); releases are published by the tag-triggered GitHub Actions Trusted Publishing workflow (`.github/workflows/publish.yml`, OIDC + provenance); docs changes follow `.agents/skills/sync-iui-docs/SKILL.md`.
 - **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
@@ -110,7 +110,7 @@ Completion criterion: guards pass or their failures are explained; the report le
 - **Screenshots are English-UI captures.** Every image under `assets/` must be referenced by both READMEs; the set is now a card-level component tour plus examples (WebP, captured with the real renderer at 2× against DSH theme tokens). `node scripts/capture-screenshots.mjs` rebuilds the component-tour, menu/panel, armed hint, temporary-result and settings captures; the example captures come from real sessions. Re-run the script or recapture from a session — never hand-edit an image. A Chinese-UI capture needs a live Chinese session and cannot be faked.
 - **Generated and vendored files are caches.** `src/generated/prompt.txt` comes from `vendor/system-prompt.txt` via `scripts/generate-prompt.mjs`; `vendor/spec.json` drives the validator and `references/components.md` is hand-maintained against it. Never hand-edit the generated side.
 - **`lib/` is gitignored but packaged.** Build before `npm run pack:check` or any claim about artifacts; the browser half and host bundle sizes are build outputs.
-- **`npm run typecheck` exists but has no `tsconfig.json`.** Do not cite it as a working check until it is wired (the command list in `docs/development*.md` is the source for what works).
+- **`npm run typecheck` is wired** through `tsconfig.json` and `npm run check`; it excludes `src/client` because DSH platform packages are runtime-provided. Do not claim the browser half is type-checked.
 - **`references/components.md` has no generator script.** It is hand-maintained and guarded by `references.test.mjs`; update both in the same change.
 
 ## Ask the Owner Before
@@ -146,6 +146,6 @@ Questions:
 - [`references/doc-map.md`](references/doc-map.md) — per-doc class, truth source, and existing guard for this repository. Load in step 2.
 - [`references/verification.md`](references/verification.md) — guard commands, expected outputs, README structural checks, and known non-bugs. Load in step 1 and before reporting.
 
-These two references describe the repo as of 2026-10-22. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
+These two references describe the repo as of 2026-10-25. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
 
 This skill lives at `.agents/skills/sync-iui-docs/` for project-local discovery. It is not listed in `package.json` `files` and is not shipped to npm.

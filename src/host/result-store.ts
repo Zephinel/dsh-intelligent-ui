@@ -31,8 +31,9 @@ function validRecord(value: unknown): value is ResultRecord {
     && (!('parentResultId' in r) || (isResultIdentity(r.parentResultId) && r.parentResultId !== r.resultId))
     && typeof r.createdAt === 'number' && Number.isSafeInteger(r.createdAt) && r.createdAt >= 0
     && isStyleSnapshot(r.snapshot)
-    && [r.snapshot.theme.light, r.snapshot.theme.dark].every(p =>
-      contrastRatio(p.ink, p.canvas) >= 3 && contrastRatio(p.accent, p.canvas) >= 3)
+    // A theme-less snapshot inherits the session theme; only a stored palette is contrast-checked.
+    && (r.snapshot.theme === undefined || [r.snapshot.theme.light, r.snapshot.theme.dark].every(p =>
+      contrastRatio(p.ink, p.canvas) >= 3 && contrastRatio(p.accent, p.canvas) >= 3))
 }
 
 function validate(results: unknown): asserts results is ResultRecord[] {

@@ -26,8 +26,8 @@ try {
   })
   await writeFile(join(temp, 'index.html'), `<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="./bundle.css"><style>
-:root { --dsw-alias-bg-layer-1:#ffffff; --dsw-alias-label-primary:#111111; --dsw-font-family:Arial,sans-serif; }
-body[data-ds-dark-theme] { --dsw-alias-bg-layer-1:#181818; --dsw-alias-label-primary:#eeeeee; }
+:root { --dsw-alias-bg-layer-1:#ffffff; --dsw-alias-bg-module-platform:#f5f6f7; --dsw-alias-label-primary:#111111; --dsw-font-family:Arial,sans-serif; }
+body[data-ds-dark-theme] { --dsw-alias-bg-layer-1:#181818; --dsw-alias-bg-module-platform:#353638; --dsw-alias-label-primary:#eeeeee; }
 body { margin:20px; } #root { max-width:700px; }
 </style></head><body><div id="root"></div><script>if (location.search.includes("dsh")) window.__DSH_BOOT__ = {}</script><script type="module" src="./bundle.js"></script></body></html>`)
   server = await startStaticServer(temp)

@@ -50,7 +50,8 @@ node scripts/install.mjs --uninstall   # 然后同样重启 DSH Web 进程
 npm run build          # prompt + host + client 全量构建
 npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
-npm run check          # build + Host/Client/打包测试 + renderer 检查
+npm run typecheck      # tsc --noEmit；浏览器 src/client 因运行时平台包类型不可解析而排除
+npm run check          # typecheck + build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run test:browser   # 7 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置
 ```
@@ -97,7 +98,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 
 ### 工具 JSON Schema 子集（激活失败排查）
 
-DSH 0.2.1 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`render_ui` 参数或输出里出现 `maxLength` / `minLength` / `pattern` / `format` 等关键字时，注册会抛 `JsonSchemaError`，插件条目显示 **Problem**、设置页提示没有 settings service、composer 的 UI 控件消失。限制写进 `description` 并在 execute 中校验；`test/host/tool.test.mjs` 用同一子集规则守护参数与输出 schema，也可用已安装 `dsh-tools` 的 `assertSupportedJsonSchema` 自检。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
+DSH 0.2.1 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`src/host/tool-schema.ts` 在注册任何工具/路由/提示词之前先用同一子集验证 `render_ui` 参数与输出 schema，因此不合法的 schema 会让整个插件激活失败并指出具体关键字，而不是留下“工具缺失但提示词已启用”的半活状态。限制写进 `description` 并在 execute 中校验；`test/host/tool-schema.test.mjs` 守护子集与失败形态，`test/host/tool.test.mjs` 继续守护实际参数/输出 schema。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
 
 ## 目录（发布相关）
 

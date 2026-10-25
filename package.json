@@ -45,7 +45,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/host/*.test.mjs test/client/*.test.mjs test/packaging/*.test.mjs",
     "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs",
-    "check": "npm run build && npm test && npm run test:renderer",
+    "check": "npm run typecheck && npm run build && npm test && npm run test:renderer",
     "pack:check": "npm pack --dry-run --json",
     "prepare": "node scripts/build.mjs",
     "check:theme": "node test/renderer/theme-torture.mjs",
@@ -78,6 +78,7 @@
   "devDependencies": {
     "@openuidev/lang-core": "^1.0.1",
     "@openuidev/react-lang": "^1.0.1",
+    "@types/node": "^22.20.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@zumer/snapdom": "^3.3.6",

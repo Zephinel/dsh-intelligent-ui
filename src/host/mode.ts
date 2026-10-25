@@ -209,6 +209,8 @@ interface ScopedServices {
   readonly commands: {
     readonly register: (definition: unknown) => unknown
   }
+  /** Present for the `agents` injection only (session restore can outrun plugin boot). */
+  readonly agents?: { list?: () => Iterable<unknown> }
 }
 
 /** One agent shape the restriction management and command handler touch. */

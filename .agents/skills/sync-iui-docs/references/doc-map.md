@@ -44,6 +44,7 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 | Future `docs/roadmap*`, `docs/plans/**`, `.agents/notes/**`, `ROADMAP*` | As-planned or historical | Don't sync with code. Flag unmarked plans; append, never rewrite |
 | `docs/plans/custom-ui-styles/README.md` + `mockup-*.jpg` | As-planned spec for the custom UI styles (templates) feature, 2026-10-22 | Leave the plan intent; design mockups are references, not shipped assets. Once implemented, behavior belongs in the as-built docs |
 | `docs/plans/custom-ui-styles/reviews/gpt-review-2026-10-22.md` | Historical architecture review used by approved §14 | Preserve verbatim; implementation differences belong in as-built docs and verification, not edits to this review |
+| `docs/plans/template-export-share/**` | As-planned spec plus historical review records for the portable template exchange (2026-10-23/24) | Leave plan intent and review text; implemented behavior belongs in the as-built docs and verification record |
 | `vendor/**` docs and upstream links | External / vendored | Don't align with this implementation |
 
 ## Classification rules for a new doc

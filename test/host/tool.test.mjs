@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { template, THEME } from './style-fixtures.mjs'
+import { assertDshToolSchema } from '../../src/host/tool-schema.ts'
 
 const plugin = await import('../../lib/index.js')
 const homes = []
@@ -265,7 +266,9 @@ function onDemandMount({ selected = 'card', templates = [], results = [] } = {})
 test('temporaryStyle has a complete nested model schema and source output', () => {
   const { tool } = mount()
   const snapshot = tool.parameters.properties.temporaryStyle
-  assert.deepEqual(snapshot.required, ['schemaVersion', 'baseLayout', 'directives', 'theme'])
+  // theme is optional: omitting it inherits the session theme.
+  assert.deepEqual(snapshot.required, ['schemaVersion', 'baseLayout', 'directives'])
+  assert.match(snapshot.description, /theme.*optional/i)
   assert.equal(snapshot.properties.schemaVersion.const, 1)
   assert.deepEqual(snapshot.properties.baseLayout.enum, ['card', 'article', 'free'])
   assert.deepEqual(tool.output.schema.properties.style.enum, snapshot.properties.baseLayout.enum)
@@ -369,6 +372,49 @@ test('temporary validation rejects mixed sources, layout mismatch, invalid token
   assert.equal(m.view().onDemand.status, 'running')
 })
 
+test('a rejected snapshot names the broken field so the model can repair it in one retry', async () => {
+  const m = onDemandMount()
+  /** Each case re-arms: one operation bounds how many render calls it accepts. */
+  const reject = async (temporaryStyle, expected) => {
+    m.command('on-demand off')
+    m.bind()
+    await assert.rejects(() => m.execute({ temporaryStyle }), expected)
+    assert.equal(m.view().onDemand.status, 'running', 'a rejected snapshot leaves the operation armed for the retry')
+  }
+  // The production payload: schemaVersion + baseLayout only, sent three times
+  // because the old message never said which parts were missing.
+  await reject({ schemaVersion: 1, baseLayout: 'free' }, /invalid temporaryStyle: directives is required \(2000 characters max/)
+  for (const [temporaryStyle, expected] of [
+    [{ ...SNAPSHOT, schemaVersion: 2 }, /schemaVersion must be 1/],
+    [{ ...SNAPSHOT, baseLayout: 'wide' }, /baseLayout must be "card", "article" or "free"/],
+    [{ ...SNAPSHOT, extra: true }, /unknown field "extra"/],
+    [{ ...SNAPSHOT, theme: { ...THEME, light: { ...THEME.light, canvas: 'red' } } },
+      /theme\.light\.canvas must be a six-digit hex color/],
+    [{ ...SNAPSHOT, theme: { ...THEME, light: { ...THEME.light, glow: '#ffffff' } } },
+      /theme\.light\.glow is not a theme token/],
+    [{ ...SNAPSHOT, theme: { ...THEME, font: 'comic' } }, /theme\.font must be one of "sans", "serif", "mono"/],
+    [{ ...SNAPSHOT, directives: '   ' }, /directives is required/],
+  ]) await reject(temporaryStyle, expected)
+  // The repaired snapshot is accepted afterwards.
+  m.command('on-demand off')
+  m.bind()
+  assert.equal((await m.execute({ temporaryStyle: SNAPSHOT })).style, 'free')
+})
+
+test('a theme-less snapshot is accepted, recorded without a palette and inherits the session theme', async () => {
+  const m = onDemandMount()
+  m.bind()
+  const temporaryStyle = { schemaVersion: 1, baseLayout: 'free', directives: 'Reusable rules.' }
+  const result = await m.execute({ temporaryStyle }, 'no-theme-result')
+  assert.equal(result.style, 'free')
+  assert.equal(result.styleSource, 'temporary')
+  // No palette means no contrast warnings either.
+  assert.equal(result.warnings, undefined)
+  const [record] = JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-results.json'), 'utf8')).results
+  assert.deepEqual(record.snapshot, temporaryStyle)
+  assert.equal('theme' in record.snapshot, false)
+})
+
 test('temporary success records its exact snapshot without changing templates or settings, warns and consumes authorization', async () => {
   const m = onDemandMount({ selected: template().id, templates: [template({ baseLayout: 'article' })] })
   const { readFileSync, readdirSync } = await import('node:fs')
@@ -445,37 +491,10 @@ test('only successful temporary renders enter the registry, with immutable paren
   assert.equal(existsSync(join(custom.home, 'dsh-intelligent-ui-results.json')), false, 'template results are not persisted')
 })
 
-/**
- * DSH 0.2.1 registers tools with a restricted JSON Schema subset
- * (`dsh-tools` assertSupportedJsonSchema): only these keywords and annotations
- * are accepted. Extra keywords such as maxLength/minLength/pattern abort plugin
- * activation, so the Host schemas must stay inside this subset.
- */
-const DSH_SCHEMA_KEYWORDS = new Set([
-  'type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const',
-  'description', 'title', 'default', 'examples',
-])
-const DSH_SCHEMA_TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null'])
-
-function assertDshSchema(node, path) {
-  assert.equal(typeof node, 'object', `${path} must be a schema object`)
-  assert.ok(node !== null && !Array.isArray(node), `${path} must be a schema object`)
-  for (const key of Object.keys(node)) assert.ok(DSH_SCHEMA_KEYWORDS.has(key), `${path}.${key} is not supported by DSH tool schemas`)
-  if (!('type' in node)) return
-  assert.ok(DSH_SCHEMA_TYPES.has(node.type), `${path}.type is not a supported JSON Schema type`)
-  if (node.type === 'object') {
-    const properties = node.properties ?? {}
-    for (const [name, child] of Object.entries(properties)) assertDshSchema(child, `${path}.properties.${name}`)
-    for (const name of node.required ?? []) assert.ok(Object.hasOwn(properties, name), `${path}.required names an undeclared property`)
-  } else if (node.type === 'array' && 'items' in node) {
-    assertDshSchema(node.items, `${path}.items`)
-  }
-}
-
 test('tool parameter and output schemas stay inside the DSH JSON Schema subset', () => {
   const { tool } = mount()
-  assertDshSchema(tool.parameters, 'parameters')
-  assertDshSchema(tool.output.schema, 'output.schema')
+  assertDshToolSchema(tool.parameters, 'parameters')
+  assertDshToolSchema(tool.output.schema, 'output.schema')
 })
 
 test('a bound on-demand turn rejects a plain render instead of silently bypassing the snapshot', async () => {

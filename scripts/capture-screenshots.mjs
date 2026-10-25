@@ -67,12 +67,26 @@ const DARK_THEME = `body[data-ds-dark-theme]{
   color-scheme:dark;
   --dsw-alias-bg-base:#141414; --dsw-alias-bg-layer-1:#1b1b1b;
   --dsw-alias-bg-layer-2:#242424; --dsw-alias-bg-layer-3:#2c2c2c;
+  --dsw-alias-bg-module-platform:#353638;
   --dsw-alias-label-primary:#f2f2f2; --dsw-alias-label-secondary:#b8b8b8;
   --dsw-alias-label-tertiary:#929292; --dsw-alias-label-caption:#777;
+  --dsw-alias-label-dimmed:#43454a;
   --dsw-alias-label-primary-foreground:#141414; --dsw-alias-brand-primary:#f2f2f2;
   --dsw-alias-border-l1:#323232; --dsw-alias-border-l2:#3c3c3c;
   --dsw-alias-border-l3:#444; --dsw-alias-interactive-bg-hover:#ffffff12;
+  --dsw-alias-state-business-primary:#7aaaff; --dsw-alias-state-error-primary:#f25a5a;
+  --dsw-alias-switch-thumb:#adb2b8; --dsw-focus-ring-color:#7aaaff;
 }`
+
+// A new alias token added to THEME must get a dark value too. The badge bug this
+// guards against was a missing bg-module-platform override: the dark capture
+// silently inherited the light surface.
+const aliasTokens = css => new Set([...css.matchAll(/(--dsw-alias-[\w-]+)\s*:/g)].map(match => match[1]))
+const lightAliases = aliasTokens(THEME)
+const darkAliases = aliasTokens(DARK_THEME)
+const missingDarkAliases = [...lightAliases].filter(token => !darkAliases.has(token))
+assert.deepEqual(missingDarkAliases, [], `DARK_THEME must override every THEME alias token: ${missingDarkAliases.join(', ')}`)
+
 
 /** The component-tour program. Counts and group members must match the current vocabulary. */
 const LAYOUT_PROGRAM = String.raw`
@@ -163,13 +177,13 @@ const SHOTS = [
     wait:'!!document.querySelector(".dsh-iui-body") && document.querySelector(".dsh-iui-body").innerText.length > 400',
     expect:['57 components','Section & Toc','12 components'], out:'intelligent-ui-components-layout.webp' },
   { name:'settings', surface:'settings', width:668, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
-    wait:'document.querySelectorAll("[data-dsh-iui-manage]").length === 2', expect:['Global defaults','My styles','Remove follow-up actions','#ffffff'], out:'intelligent-ui-settings.webp' },
+    wait:'document.querySelectorAll("[data-dsh-iui-manage]").length === 3', expect:['Global defaults','My styles','Remove follow-up actions','#ffffff'], out:'intelligent-ui-settings.webp' },
   { name:'toggle', surface:'toggle', width:540, fixedHeight:400,
     wait:'!!document.querySelector("[data-dsh-iui-toggle]")', setup:['document.querySelector("[data-dsh-iui-toggle]").click()'],
     expect:['Off','This session only','Display style'], out:'intelligent-ui-toggle.png' },
   { name:'panel', surface:'panel', width:540, fixedHeight:930,
     wait:'!!document.querySelector("[data-dsh-iui-toggle]")', setup:['document.querySelector("[data-dsh-iui-toggle]").click()', 'document.querySelector("[data-style-entry]").click()'],
-    settled:'!!document.querySelector("[data-dsh-iui-on-demand-entry]")', expect:['Built-in styles','Custom styles (3)','Ocean notes','On-demand UI'], out:'intelligent-ui-style-panel.webp' },
+    settled:'!!document.querySelector("[data-dsh-iui-on-demand-entry]")', expect:['Built-in styles','Custom styles (4)','Ocean notes','On-demand UI'], out:'intelligent-ui-style-panel.webp' },
   { name:'hint', surface:'hint', width:760, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
     wait:'!!document.querySelector("[data-dsh-iui-on-demand-hint]")', expect:['On-demand UI','Cancel on-demand UI','Highlight the key metrics'], out:'intelligent-ui-on-demand-hint.webp' },
   { name:'result', surface:'result', width:768, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",

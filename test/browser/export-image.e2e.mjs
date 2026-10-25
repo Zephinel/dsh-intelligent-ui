@@ -280,7 +280,7 @@ function html() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="./bundle.css">
 <style>
-  :root { color-scheme: light; --dsw-alias-bg-base:#fff; --dsw-alias-bg-layer-1:#fff; --dsw-alias-bg-layer-2:#f6f6f6;
+  :root { color-scheme: light; --dsw-alias-bg-base:#fff; --dsw-alias-bg-layer-1:#fff; --dsw-alias-bg-layer-2:#f6f6f6;--dsw-alias-bg-module-platform:#f5f6f7;
     --dsw-alias-border-l1:#e6e6e6; --dsw-alias-border-l2:#d9d9d9; --dsw-alias-label-primary:#111;
     --dsw-alias-label-secondary:#555; --dsw-alias-label-tertiary:#777; --dsw-alias-label-caption:#8a8a8a;
     --dsw-alias-label-primary-foreground:#fff; --dsw-alias-interactive-bg-hover:#eee;

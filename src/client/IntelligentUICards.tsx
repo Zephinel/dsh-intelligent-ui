@@ -91,9 +91,12 @@ export function IntelligentUICards({
             t={t}
             scheme={scheme}
             onAdjust={adjustStyle === undefined ? undefined : adjust}
-            saveAction={program.temporaryStyle === undefined ? undefined : <SaveResultAction resultId={program.callId}
+            // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
+            saveAction={program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={program.callId}
               snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
-            themeStyle={program.temporaryStyle ? resolveStyleThemeVars(program.temporaryStyle.theme, scheme) as CSSProperties
+            // Snapshot theme wins; a theme-less snapshot inherits the selected template, then the built-in theme.
+            themeStyle={program.temporaryStyle?.theme !== undefined
+              ? resolveStyleThemeVars(program.temporaryStyle.theme, scheme) as CSSProperties
               : template === undefined ? undefined : resolveStyleThemeVars(template.theme, scheme) as CSSProperties}
           />
         )

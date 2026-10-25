@@ -97,22 +97,22 @@ interface BoundaryProps {
 
 /** Catches render/lifecycle errors from the renderer and the model's program. */
 class RendererBoundary extends Component<BoundaryProps, { failure: string | null }> {
-  state: { failure: string | null } = { failure: null }
+  override state: { failure: string | null } = { failure: null }
 
   static getDerivedStateFromError(error: unknown): { failure: string | null } {
     return { failure: error instanceof Error ? error.message : String(error) }
   }
 
-  componentDidCatch(error: unknown, info: ErrorInfo): void {
+  override componentDidCatch(error: unknown, info: ErrorInfo): void {
     console.error('[intelligent-ui] renderer crashed', error, info.componentStack)
   }
 
-  componentDidUpdate(previous: BoundaryProps): void {
+  override componentDidUpdate(previous: BoundaryProps): void {
     // A new program (e.g. the model retried) gets a fresh attempt.
     if (previous.program !== this.props.program && this.state.failure !== null) this.setState({ failure: null })
   }
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (this.state.failure !== null) return <ProgramFallback message={this.state.failure} program={this.props.program} />
     return this.props.children
   }

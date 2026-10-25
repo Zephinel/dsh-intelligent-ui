@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项）：当前最新工作树证据见文末 2026-10-24 记录（Node 207/207；renderer 解析/渲染 41/41、contrast OK、i18n 4 个程序、typography 22/22；浏览器 7/7，settings 101、on-demand 114 条断言）。下方旧浏览器/模型记录保留为历史。
+- 测试（实时子项）：当前 main 分支证据见文末 2026-10-25 的第二条记录（Node 216/216；renderer 解析/渲染 42/42、contrast OK、i18n 4 个程序、typography 22/22；浏览器 7/7，settings 101、on-demand 114 条断言）。下方旧浏览器/模型记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -237,3 +237,36 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **docs-sync 参考数字/日期滞后**：host 89、日期 2026-10-24、settings 101 已同步。
 
 验证：`npm test` 与 `npm run check` 均 **207/207**（Host **89**、Client **97**、packaging **21**，无跳过）；renderer 41/41、contrast OK、i18n **4** 个程序、typography **22/22**；`npm run test:browser` **7/7**（settings **101**、on-demand **114** 断言）；`npm run pack:check` **43** 文件，压缩 **4,049,307** 字节、解包 **10,263,451** 字节；`git diff --check` 与文档链接检查通过。renderer 首跑因 `/tmp/oiui` 残留空目录失败，清理后重跑通过（环境问题，非代码）。评审与残余项见 [subagent-review-2026-10-24-fourth.md](plans/template-export-share/reviews/subagent-review-2026-10-24-fourth.md)。
+
+## 2026-10-25 — 完整文档与截图同步（sync-iui-docs）
+
+本条是 sync-iui-docs 的 full audit + sync 增量记录，不是发布验收。基线为已推送到 main 的 `f5840d9`（0.4.2 之后、尚未发布）；npm `latest` 仍为 `0.4.2`。本阶段只同步 as-built 文档与截图，不改变行为、依赖或版本。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；**207/207** Node 测试 = Host **89** + Client **97** + packaging **21**，0 失败、0 跳过；`check`/`render-check` 各 **42/42**，free composition 明暗 SSR；contrast OK；i18n **4** 个程序；typography **22/22** |
+| `npm run pack:check` | PASS；**43** 个文件，压缩 **4,061,684** 字节，解包 **10,277,299** 字节 |
+| `npm run test:browser` | PASS；**7/7** 套件；settings **101**、on-demand **114** 条断言 |
+| `node scripts/capture-screenshots.mjs` | PASS；七个 fixture 全部重拍；assets 仍为 **13** 张，全部被两份 README 引用 |
+| README / docs 结构检查 | README 与三组 docs 双语标题层级一致；本地链接/锚点、绝对 GitHub 文档路径、语言切换、clone URL、CHANGELOG 链接有效；`git diff --check` PASS |
+
+截图输出尺寸：layout 1616×4040、settings 1336×3082、toggle 1080×800、panel 1080×1860、hint 1520×598、temporary result 与 dark 各 1536×1032。均为 2× 组件 fixture，不是真实模型 DSH 会话证据。
+
+本轮同步的 as-built 内容：README 与双语 detailed docs 的状态从“当前工作树”改为 main 分支未发布；renderer 计数 41/41 更新为 42/42；架构文档补充样式面板右对齐、12px 间距与 layer-2/module 表面分层；sync-iui-docs 的维护参考同步计数与新的计划目录分类。浏览器与真实模型未覆盖项仍按原记录保留。
+
+## 2026-10-25 — typecheck/tool-schema 与可选主题增量同步（sync-iui-docs）
+
+本条对应当前 main 工作树中尚未提交的源码增量（typecheck + `@types/node`/`tsconfig.json`、`tool-schema.ts` 注册前校验、temporaryStyle.theme 可选、无主题结果禁止保存模板），不是发布验收；npm `latest` 仍为 `0.4.2`。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；先执行 `tsc --noEmit`（通过；`src/client` 因 DSH 平台类型不是本地依赖而排除），再构建并测试；**216/216** Node 测试 = Host **98** + Client **97** + packaging **21**，0 失败/跳过；`check`/`render-check` 各 **42/42**；contrast OK、i18n 4、typography 22/22 |
+| `npm run test:browser` | PASS；**7/7**；settings 101、on-demand 114 条断言 |
+| `npm run pack:check` | PASS；43 文件，压缩 **4,066,380** 字节，解包 **10,292,278** 字节 |
+| 文档/截图检查 | README 与三组 docs 标题层级一致；本地链接/锚点、截图引用（13 assets）、clone URL、CHANGELOG 链接通过；`git diff --check` PASS |
+
+本轮同步的 as-built 内容：README/dev 文档把 `npm run check` 改为包含 typecheck 并补充 `npm run typecheck`；Host schema 校验现在在注册前执行，失败会整体拒绝激活并指出关键字；`StyleSnapshot.theme` 改为可选，无主题结果继承会话主题、不能保存模板且客户端隐藏保存入口；Host `saveFromResult` 对无主题快照返回 400 `no_theme`；verification references 的测试/构建/计数同步。历史记录与计划文档不改。

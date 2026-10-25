@@ -23,7 +23,7 @@ let server
 let browser
 let cdp
 
-const TOKENS = `:root{color-scheme:light;--dsw-alias-bg-base:#fff;--dsw-alias-bg-layer-1:#fff;--dsw-alias-bg-layer-2:#f6f6f6;--dsw-alias-border-l1:#e6e6e6;--dsw-alias-border-l2:#d9d9d9;--dsw-alias-border-l3:#c9c9c9;--dsw-alias-label-primary:#111;--dsw-alias-label-secondary:#555;--dsw-alias-label-tertiary:#888;--dsw-alias-label-caption:#8a8a8a;--dsw-alias-label-dimmed:#bbb;--dsw-alias-label-primary-foreground:#fff;--dsw-alias-interactive-bg-hover:#eee;--dsw-alias-state-business-primary:#4176e6;--dsw-alias-state-error-primary:#d33;--dsw-brand-primary:#111;--dsw-radius-xs:4px;--dsw-radius-sm:6px;--dsw-radius-md:10px;--dsw-radius-lg:14px;--dsw-radius-xl:18px;--dsw-focus-ring-width:2px;--dsw-focus-ring-color:#4176e6;--dsw-font-family:system-ui,-apple-system,"PingFang SC",sans-serif}`
+const TOKENS = `:root{color-scheme:light;--dsw-alias-bg-base:#fff;--dsw-alias-bg-layer-1:#fff;--dsw-alias-bg-layer-2:#f6f6f6;--dsw-alias-bg-module-platform:#f5f6f7;--dsw-alias-border-l1:#e6e6e6;--dsw-alias-border-l2:#d9d9d9;--dsw-alias-border-l3:#c9c9c9;--dsw-alias-label-primary:#111;--dsw-alias-label-secondary:#555;--dsw-alias-label-tertiary:#888;--dsw-alias-label-caption:#8a8a8a;--dsw-alias-label-dimmed:#bbb;--dsw-alias-label-primary-foreground:#fff;--dsw-alias-interactive-bg-hover:#eee;--dsw-alias-state-business-primary:#4176e6;--dsw-alias-state-error-primary:#d33;--dsw-brand-primary:#111;--dsw-radius-xs:4px;--dsw-radius-sm:6px;--dsw-radius-md:10px;--dsw-radius-lg:14px;--dsw-radius-xl:18px;--dsw-focus-ring-width:2px;--dsw-focus-ring-color:#4176e6;--dsw-font-family:system-ui,-apple-system,"PingFang SC",sans-serif}`
 
 try {
   await build({

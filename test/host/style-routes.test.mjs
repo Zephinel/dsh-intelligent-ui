@@ -209,6 +209,15 @@ test('saveFromResult copies exactly the Host snapshot across restart, never writ
   assert.equal(JSON.parse(session.body).template.description, 'Stored locally')
 })
 
+test('saveFromResult refuses a theme-less result: a template needs a palette of its own', async () => {
+  const themeLess = { resultId: 'no-theme', sessionId: 's1', snapshot: { schemaVersion: 1, baseLayout: 'free', directives: 'Compact groups.' }, createdAt: 1 }
+  const { route } = mount({ results: [themeLess] })
+  const response = await post(route, { op: 'saveFromResult', resultId: 'no-theme', name: 'Theme-less', scope: 'global' })
+  assert.equal(response.status, 400)
+  assert.equal(JSON.parse(response.body).error.code, 'no_theme')
+  assert.match(JSON.parse(response.body).error.message, /no explicit theme/)
+})
+
 test('saveFromResult rejects missing results, duplicates, scope limits and all client snapshot fields', async () => {
   const { route } = mount({ results: [storedResult] })
   const missing = await post(route, { ...saveResult, resultId: 'unknown' })

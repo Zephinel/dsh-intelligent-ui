@@ -274,7 +274,7 @@ function html() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="./bundle.css"><link rel="stylesheet" href="./index.css">
 <style>
-  :root { color-scheme: dark; --dsw-alias-bg-layer-1:#1b1b1b; --dsw-alias-bg-layer-2:#242424;
+  :root { color-scheme: dark; --dsw-alias-bg-layer-1:#1b1b1b; --dsw-alias-bg-layer-2:#242424; --dsw-alias-bg-module-platform:#353638;
     --dsw-alias-border-l1:#323232; --dsw-alias-border-l2:#3c3c3c; --dsw-alias-border-l3:#505050;
     --dsw-alias-label-primary:#f2f2f2; --dsw-alias-label-secondary:#b8b8b8; --dsw-alias-label-tertiary:#8b8b8b;
     --dsw-alias-label-dimmed:#666; --dsw-alias-label-primary-foreground:#111; --dsw-alias-interactive-bg-hover:#2e2e2e;

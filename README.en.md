@@ -22,7 +22,7 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 > [!NOTE]
 > **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.4.2`** (`latest`). Custom styles, on-demand generation and the on-demand lifecycle/content-grounding fixes described below are all included in 0.4.2.
 
-> **Unreleased (working tree)**: the free on-demand and saved-template layouts and template file import/export described below are not included in 0.4.2. New results need no Card/Article shell; if the layout is materially unclear, the model asks a focused question. Saving as a template preserves the free layout, preferences and light/dark theme without a Card/Article choice. Build and install the local checkout to try these changes.
+> **Unreleased (main branch)**: the free on-demand and saved-template layouts and template file import/export described below are not included in 0.4.2. New results need no Card/Article shell; if the layout is materially unclear, the model asks a focused question. Saving as a template preserves the free layout, preferences and light/dark theme without a Card/Article choice. Build and install the local checkout to try these changes.
 
 [Quick start](#quick-start) · [Getting the code](#getting-the-code) · [Build, test and deploy](#build-test-and-deploy)
 
@@ -161,9 +161,9 @@ To guarantee a card (or when the model still replies in text), invoke the skill 
 
 ![The same temporary result under the fixed dark theme](assets/intelligent-ui-temporary-result-dark.webp)
 
-A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global); saving preserves the result’s layout (free/card/article), preferences and light/dark theme without a layout choice. Free templates have a local preview and **Free layout** hint; selecting one keeps the DSH card header without a Card/Article shell, with optional Toc/Section. Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
+A temporary result is ready to use. **Adjust style** binds that result and fills an adjustment prompt while preserving your draft; send it normally. **Save as template** optionally asks for a name, description and availability (this session or global); saving preserves the result’s layout (free/card/article), preferences and explicit light/dark theme without a layout choice. A result without an explicit theme inherits the session theme and is not offered Save as template, because there is no palette to copy. Free templates have a local preview and **Free layout** hint; selecting one keeps the DSH card header without a Card/Article shell, with optional Toc/Section. Saving reuses the validated result style, makes no new model request, and neither selects the template nor changes the global default. No preview, naming or saving is required before use.
 
-**Working tree (unreleased)**: the Host requires free layout for new on-demand generation; adjustments preserve the parent layout (free, legacy card or article). If the parent snapshot is absent from the latest-200 result registry, adjustment returns an error; cancel it and choose **On-demand UI** again. Historical results can still replay from tool arguments.
+**Main branch (unreleased)**: the Host requires free layout for new on-demand generation; adjustments preserve the parent layout (free, legacy card or article). If the parent snapshot is absent from the latest-200 result registry, adjustment returns an error; cancel it and choose **On-demand UI** again. Historical results can still replay from tool arguments.
 
 ![Plugin detail page: global enable, default style, My styles management, composition and export](assets/intelligent-ui-settings.webp)
 
@@ -198,11 +198,12 @@ Everyday checks and packaging:
 |---|---|
 | `npm run build` | Generate the prompt, Host, Client and standalone export-page bundles |
 | `npm test` | Run Host, Client and packaging Node tests after a build |
-| `npm run check` | Full pre-submit check: build, Node tests and renderer checks |
+| `npm run typecheck` | Run `tsc --noEmit` (the browser `src/client` half is currently excluded: its DSH platform types are runtime-provided) |
+| `npm run check` | Full pre-submit check: typecheck, build, Node tests and renderer checks |
 | `npm run pack:check` | Preview the final npm package file list without publishing |
 | `npm run test:browser` | Run 7 browser suites after a build; Chrome required |
 
-- Current working-tree verification record: **207/207** Node tests (Host 89, Client 97, packaging 21); renderer parse/render **41/41** each, i18n **4** programs, typography **22/22**; **7/7** browser suites passed, including **101** settings template-exchange and **114** on-demand assertions. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
+- Current main-branch verification record: **216/216** Node tests (Host 98, Client 97, packaging 21); renderer parse/render **42/42** each, i18n **4** programs, typography **22/22**; **7/7** browser suites passed, including **101** settings template-exchange and **114** on-demand assertions. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
 - `node scripts/capture-screenshots.mjs` rebuilds panel, hint, temporary-result and settings captures at 2x in Chrome using fixed DSH tokens, production components and fake services. English UI; shell card glyphs use lucide stand-ins.
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run. Use `CHROME_BIN` for a non-default Chrome executable location (also used by the browser suites).
 
@@ -235,7 +236,7 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - Operations are in memory: armed intent expires after 10 minutes; active operations cannot resume after restart and must be re-armed. Completed results survive. There is one active operation per session: re-arming replaces it while armed, while a bound running/clarifying operation rejects re-arming until explicitly cancelled. Clarification is limited to two rounds. A text-only completion without rendering returns to the pending/resume state and the next message continues; failed/interrupted turns show Retry/Dismiss guidance.
 - Multi-tab binding is conservative: only the arming tab shows the hint, but the Host binds the next human message in the session without verifying its sending tab. Send from the arming tab and avoid concurrent messages in another tab.
 - Custom themes apply to the renderer host; portaled popovers and sandboxed iframes keep the default theme, and semantic status colors remain renderer-owned. Exported pages freeze the light/dark scheme at export time.
-- Saved-template directives are bounded display preferences (2,000 characters), with no authority over system, tool or safety rules. Limits are 40 global templates and 20 per session. Missing/deleted saved templates fall back to the default theme; inline temporary replay/export is catalog-independent.
+- Saved-template directives are bounded display preferences (2,000 characters), with no authority over system, tool or safety rules. Limits are 40 global templates and 20 per session. Missing/deleted saved templates fall back to the default theme; a theme-less temporary result inherits the session template or built-in theme, while a snapshot with an explicit theme remains catalog-independent.
 
 ## FAQ
 

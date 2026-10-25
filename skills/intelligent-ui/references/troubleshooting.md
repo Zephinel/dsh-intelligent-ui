@@ -44,7 +44,7 @@ These messages are copied from the current Host. Authorization and schema failur
 ```text
 render_ui: styleId and temporaryStyle are mutually exclusive.
 render_ui: temporaryStyle requires a bound, running on-demand operation and its current tool call. The model cannot authorize one.
-render_ui: invalid temporaryStyle snapshot; use schemaVersion 1, a baseLayout, reusable directives and controlled theme tokens.
+render_ui: invalid temporaryStyle: <field-specific reason>. Pass schemaVersion 1, baseLayout, and non-empty directives; add a theme (light and dark palettes plus font, radius, density and shadow) only when the page should not inherit the session theme.
 render_ui: temporaryStyle.baseLayout must match style.
 render_ui: on-demand generation requires style: "free" and temporaryStyle.baseLayout: "free"; card/article layouts are only supported when adjusting an existing result.
 render_ui: on-demand operation was cancelled or replaced before completion.
@@ -88,6 +88,7 @@ Invalid on-demand adjustment parent result id.
 An on-demand UI operation is already running in this session; wait for it to finish or cancel it first.
 Too many active on-demand operations. Cancel one and retry.
 This result snapshot is no longer available.
+This result has no explicit theme, so it cannot become a style template. Adjust it with a theme first, then save.
 A style with this name already exists.
 The style library has reached its scope limit.
 The session must match the result.
@@ -285,4 +286,4 @@ If the page is merely visually weak, do not re-call for cosmetic fixes: choose b
 
 ### Free saved templates
 
-A selected free template requires `style: "free"` and its exact `styleId`, without `temporaryStyle`. A Card/Article selection still rejects free; a built-in selection cannot authorize free by adding an arbitrary styleId. Free templates require no Toc/Section or Article wrapper. Saving a result copies the registered layout, directives and theme; a legacy client sending `baseLayout` receives `invalid_input` and must reload the updated client. Missing/deleted templates retain the existing default-theme fallback.
+A selected free template requires `style: "free"` and its exact `styleId`, without `temporaryStyle`. A Card/Article selection still rejects free; a built-in selection cannot authorize free by adding an arbitrary styleId. Free templates require no Toc/Section or Article wrapper. Saving a result copies the registered layout, directives and theme; a theme-less result has no palette to copy, so the client hides Save and the API answers `no_theme`. A legacy client sending `baseLayout` receives `invalid_input` and must reload the updated client. Missing/deleted templates retain the existing default-theme fallback.
