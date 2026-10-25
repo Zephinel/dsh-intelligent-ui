@@ -3,9 +3,14 @@ import { randomUUID } from 'node:crypto'
 import type { OnDemandView } from '../shared/intelligent-ui.ts'
 
 export const ON_DEMAND_ARM_TTL = 10 * 60 * 1000
+/** Render attempts one bound on-demand operation allows before it fails. */
+export const MAX_RENDER_CALLS = 8
+/** Clarification rounds one bound on-demand operation allows before it fails. */
+export const MAX_CLARIFICATION_ROUNDS = 2
 const MAX_SESSIONS = 256
-const MAX_RENDER_CALLS = 8
-const MAX_CLARIFICATION_ROUNDS = 2
+
+/** Why a bound operation ended at a hard cap; the Host names this in its error. */
+export type OnDemandCapFailure = 'render-attempts' | 'clarification-rounds'
 
 /** Structural subset of installed SessionEvent, including the nested ToolResultMessage. */
 export interface OnDemandSessionEvent {
@@ -36,6 +41,8 @@ interface Entry {
   lastSeq?: number
   questionCallId?: string
   readonly renderCalls: Set<string>
+  /** Set only when a cap ended the operation, so the next render can say why. */
+  capFailure?: OnDemandCapFailure
 }
 
 export interface OnDemandController {
@@ -47,6 +54,8 @@ export interface OnDemandController {
   bound(sessionId?: string): boolean
   promptNote(sessionId?: string): string | undefined
   complete(sessionId: string, result: { resultId: string; revisionId?: string }): boolean
+  /** Why the latest operation failed at a cap, until a new operation replaces it. */
+  capFailure(sessionId?: string): OnDemandCapFailure | undefined
   view(sessionId: string): Operation | null
   projection(sessionId: string): OnDemandView | null
 }
@@ -99,10 +108,12 @@ export function createOnDemandController(ctx: {
   const now = options.now ?? Date.now
   const entries = new Map<string, Entry>()
 
-  const finish = (entry: Entry, status: Operation['status']): void => {
+  const finish = (entry: Entry, status: Operation['status'], cap?: OnDemandCapFailure): void => {
     entry.operation = { ...entry.operation, status, updatedAt: now() }
     entry.renderCalls.clear()
     delete entry.questionCallId
+    if (cap === undefined) delete entry.capFailure
+    else entry.capFailure = cap
   }
   const get = (sessionId?: string): Entry | undefined => {
     if (sessionId === undefined) return undefined
@@ -150,11 +161,11 @@ export function createOnDemandController(ctx: {
     if (event.type === 'tool/call' && validId(data.callId)) {
       if (data.name === 'ask_user_question' && entry.operation.status === 'running') {
         const rounds = entry.operation.clarificationRounds + 1
-        if (rounds > MAX_CLARIFICATION_ROUNDS) { finish(entry, 'failed'); return }
+        if (rounds > MAX_CLARIFICATION_ROUNDS) { finish(entry, 'failed', 'clarification-rounds'); return }
         entry.questionCallId = data.callId
         entry.operation = { ...entry.operation, status: 'clarifying', clarificationRounds: rounds, updatedAt: now() }
       } else if (data.name === 'render_ui' && entry.operation.status === 'running') {
-        if (entry.renderCalls.size >= MAX_RENDER_CALLS) { finish(entry, 'failed'); return }
+        if (entry.renderCalls.size >= MAX_RENDER_CALLS) { finish(entry, 'failed', 'render-attempts'); return }
         entry.renderCalls.add(data.callId)
         entry.operation = { ...entry.operation, updatedAt: now() }
       }
@@ -251,6 +262,7 @@ export function createOnDemandController(ctx: {
         : PROMPT_NOTE
     },
     complete,
+    capFailure(sessionId) { return get(sessionId)?.capFailure },
     view(sessionId) { const entry = get(sessionId); return entry ? structuredClone(entry.operation) : null },
     projection(sessionId) {
       const entry = get(sessionId)

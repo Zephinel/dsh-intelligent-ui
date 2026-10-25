@@ -580,3 +580,52 @@ test('free layout cannot bypass built-in or Card/Article template selections', a
     await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId: custom.id }), /answer style is/)
   }
 })
+
+test('a malformed styleId is rejected instead of silently ignored', async () => {
+  const { tool } = mount({ answerStyle: { get: () => 'card' } })
+  for (const styleId of ['not-a-style-id', 'CS_UPPER123', 42, null]) {
+    await assert.rejects(() => tool.execute({ program: VALID, style: 'card', styleId }),
+      /styleId must be a custom style id such as "cs_abcdef123456" from the session prompt, or be omitted for a built-in style/)
+  }
+})
+
+test('a well-formed styleId with no visible template renders built-in with a non-fatal warning', async () => {
+  const { tool } = mount({ answerStyle: { get: () => 'card' } })
+  const result = await tool.execute({ program: VALID, style: 'card', styleId: 'cs_missing123456' })
+  assert.equal(result.styleSource, 'builtin')
+  assert.equal(Object.hasOwn(result, 'styleId'), false)
+  assert.equal(result.warnings.length, 1)
+  assert.match(result.warnings[0], /Style template "cs_missing123456" is not available in this session; using the built-in theme\./)
+  assert.match(tool.output.render({}, result)[0].text, /Notes: Style template "cs_missing123456" is not available/)
+})
+
+test('an on-demand render-attempt cap ends with a re-arm error naming the cap', async () => {
+  const m = onDemandMount()
+  m.bind()
+  const invalid = { ...SNAPSHOT, directives: '   ' }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await assert.rejects(() => m.execute({ style: 'free', temporaryStyle: invalid }), /invalid temporaryStyle/)
+  }
+  assert.equal(m.view().onDemand.status, 'running', 'eight observed attempts are allowed')
+  // The ninth attempt is observed before execution, ends the operation, and the
+  // Host then explains the cap instead of the generic authorization error.
+  await assert.rejects(() => m.execute({ style: 'free', temporaryStyle: SNAPSHOT }),
+    /ended because it reached the 8-render-attempt cap\. Ask the user to re-arm On-demand UI in the composer and retry; the model cannot re-arm it\./)
+  assert.equal(m.view().onDemand.status, 'failed')
+})
+
+test('a clarification-round cap ends with a re-arm error naming the cap', async () => {
+  const m = onDemandMount()
+  m.bind()
+  const ask = id => m.event('tool/call', { turn: 1, step: 1, name: 'ask_user_question', callId: id })
+  const answer = id => m.event('tool/result', { turn: 1, step: 1,
+    message: { toolCallId: id, isError: false, content: [{ type: 'text', text: JSON.stringify({ answers: [] }) }] } })
+  ask('q1')
+  answer('q1')
+  ask('q2')
+  answer('q2')
+  ask('q3')
+  assert.equal(m.view().onDemand.status, 'failed')
+  await assert.rejects(() => m.execute({ style: 'free', temporaryStyle: SNAPSHOT }),
+    /ended because it reached the 2-clarification-round cap\. Ask the user to re-arm On-demand UI/)
+})

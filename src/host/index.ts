@@ -42,12 +42,12 @@ import {
 import type { AnswerStyle, RenderLayout } from '../shared/intelligent-ui.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
-  contrastRatio, describeStyleSnapshotProblem, isStyleSnapshot, type StyleTemplate,
+  contrastRatio, describeStyleSnapshotProblem, isCustomStyleId, isStyleSnapshot, type StyleTemplate,
 } from '../shared/style-templates.ts'
 import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
-import { createOnDemandController } from './on-demand.ts'
+import { MAX_CLARIFICATION_ROUNDS, MAX_RENDER_CALLS, createOnDemandController } from './on-demand.ts'
 import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
 import { assertDshToolSchema } from './tool-schema.ts'
 
@@ -256,17 +256,17 @@ interface ParseFinding {
 }
 
 /** Parse one complete program; returns model-readable findings plus statement count. */
-function inspectProgram(program: string): {
+function inspectProgram(program: string, options: { readonly free?: boolean } = {}): {
   statements: number
   findings: ParseFinding[]
   types: ReadonlySet<string>
-  anchors: { section: string[]; toc: string[]; issues: string[] }
+  anchors: { section: string[]; toc: string[]; issues: string[]; dynamicSection: boolean; dynamicToc: boolean }
 } {
   let result: ReturnType<typeof parser.parse>
   try {
     result = parser.parse(program)
   } catch (error) {
-    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }], types: new Set(), anchors: { section: [], toc: [], issues: [] } }
+    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }], types: new Set(), anchors: { section: [], toc: [], issues: [], dynamicSection: false, dynamicToc: false } }
   }
   const meta = result.meta as {
     readonly incomplete?: boolean
@@ -289,9 +289,9 @@ function inspectProgram(program: string): {
   }
   const types = new Set<string>()
   collectComponentTypes(result.root, types)
-  const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[] }
-  collectArticleAnchors(result.root, anchors.section, anchors.toc, anchors.issues)
-  for (const message of layoutWarnings(result.root)) findings.push({ message, fatal: false })
+  const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[], dynamicSection: false, dynamicToc: false }
+  collectArticleAnchors(result.root, anchors)
+  for (const message of layoutWarnings(result.root, options)) findings.push({ message, fatal: false })
   return { statements: meta.statementCount ?? 0, findings, types, anchors }
 }
 
@@ -532,6 +532,14 @@ ${section}`
       if (temporary) {
         if ('styleId' in args) throw new Error('render_ui: styleId and temporaryStyle are mutually exclusive.')
         if (sessionId === undefined || typeof exec?.callId !== 'string' || !onDemand.allowsTemporaryStyle(sessionId, exec.callId)) {
+          // A cap ended the operation; name the cause and the only recovery the user can take.
+          const cap = sessionId === undefined ? undefined : onDemand.capFailure(sessionId)
+          if (cap === 'render-attempts') {
+            throw new Error(`render_ui: the on-demand operation ended because it reached the ${MAX_RENDER_CALLS}-render-attempt cap. Ask the user to re-arm On-demand UI in the composer and retry; the model cannot re-arm it.`)
+          }
+          if (cap === 'clarification-rounds') {
+            throw new Error(`render_ui: the on-demand operation ended because it reached the ${MAX_CLARIFICATION_ROUNDS}-clarification-round cap. Ask the user to re-arm On-demand UI in the composer and retry; the model cannot re-arm it.`)
+          }
           throw new Error('render_ui: temporaryStyle requires a bound, running on-demand operation and its current tool call. The model cannot authorize one.')
         }
         // Name the broken field: a model that omits directives/theme cannot tell
@@ -566,6 +574,14 @@ ${section}`
       if (template !== undefined && args.styleId !== template.id) {
         throw new Error(`render_ui: this session uses custom style ${quotePromptText(template.name)}; pass styleId: "${template.id}" and style: "${template.baseLayout}".`)
       }
+      // No selected template: a styleId is either malformed (a model mistake) or
+      // names a template this session cannot see. Never silently ignore either.
+      if (!temporary && template === undefined && 'styleId' in args) {
+        if (!isCustomStyleId(args.styleId)) {
+          throw new Error('render_ui: styleId must be a custom style id such as "cs_abcdef123456" from the session prompt, or be omitted for a built-in style; the model cannot invent one.')
+        }
+        warnings.push(`Style template ${JSON.stringify(args.styleId)} is not available in this session; using the built-in theme.`)
+      }
       if (!isRenderLayout(args.style) || (!temporary && template === undefined && !isPageStyle(args.style))) {
         const expected = effective === 'auto' ? '"card" or "article"' : `"${effective}"`
         throw new Error(`render_ui: pass style ${expected} for this session.`)
@@ -578,7 +594,7 @@ ${section}`
       const requestedStyle: RenderLayout = args.style
       const program = typeof args.program === 'string' ? args.program.trim() : ''
       if (program === '') throw new Error('render_ui: program must be a non-empty openui-lang program.')
-      const { statements, findings, types, anchors } = inspectProgram(program)
+      const { statements, findings, types, anchors } = inspectProgram(program, { free: requestedStyle === 'free' })
       const fatal = findings.filter(finding => finding.fatal)
       if (fatal.length > 0) {
         throw new Error(
