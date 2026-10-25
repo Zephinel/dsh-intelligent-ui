@@ -63,7 +63,7 @@ On a narrow screen (about 380 px) the card switches to a single column, and maps
 | Switch and style | Global defaults on the Plugin detail page; composer overrides per session; built-in Auto / Card / Article and custom templates |
 | Custom templates and visual themes | Reusable display preferences with light/dark palettes, font, radius, density and shadow; use, rename, edit or delete in My styles |
 | Chat-native on-demand UI | No template required; choose On-demand UI in the UI panel, send a normal message, clarify with the built-in question tool when needed |
-| Free on-demand layouts (unreleased) | Compose the page from the user's request; saved templates keep the free layout, preferences and theme without a Card/Article shell |
+| Free on-demand layouts | Compose the page from the user's request; saved templates keep the free layout, preferences and theme without a Card/Article shell |
 | Temporary results and optional saving | Inline style snapshots are ready to use, adjust or save later; no required preview, naming or saving |
 | Bilingual UI | Follows DSH's Chinese or English UI language |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |

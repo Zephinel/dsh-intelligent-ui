@@ -80,7 +80,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 
 `saveFromResult` 收 resultId、名称、描述、范围与可选 sessionId；不接受 `baseLayout`（包括旧客户端的布局选择），也不接受浏览器提供的 directives/theme。Host 从注册表快照精确复制 baseLayout/directives/theme；无主题快照返回 400 `no_theme`，客户端也不显示「保存为模板」，因为模板需要自己的 palette。session 范围必须与结果所属会话一致。保存不选中模板，也不写全局默认；重复名称报错，服务端没有独立幂等键。`update` 只允许名称/描述/directives，`delete` 删除模板。Composer 管理可见模板；设置页管理全局模板及文件导出/导入。删除当前选择会尝试回退 Auto；其他会话遇到失效引用按缺失模板处理。
 
-### 可移植模板交换 v1（未发布）
+### 可移植模板交换 v1
 
 纯共享模块 `src/shared/style-template-exchange.ts` 不依赖 React、DOM 或 DSH，提供 `toPortableStyle`、`createStyleExport`、`encodeStyleExport` 与 `parseStyleExport`。Envelope 的顶层键固定为 `kind: "dsh-intelligent-ui/style-template"`、`schemaVersion: 1`、`template`；模板仅包含按序构建的 `name`、`description`、`baseLayout: card|article|free`、`directives`、`theme`。description 可缺省，解析为 `''`；其他字段必填。所有层级拒绝未知键（包括 `__proto__`、`constructor`、`prototype`）；主题复用 `isStyleTheme` 的 hex/枚举白名单，标签及规范沿用长度/字符规则。名称与描述额外剥离 Unicode `Cf` 并 trim，空名称或保留名称拒绝。主题与 palette 也显式重建并固定字段顺序，`JSON.stringify(value, null, 2)` 使同一配置产生相同字节；不带 id、scope、sessionId、时间戳、包版本、导出时间、作者、签名或校验和。
 

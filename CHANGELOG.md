@@ -36,6 +36,7 @@ been published yet.
 - Host validation now traverses `@Each`-generated Sections/Toc, keeps symbol-only anchors distinct, scopes the gap warning to photo row lists and skips page-rhythm warnings for free layout; the prompt states Form/@ToAssistant forwarding, HtmlView network scope and the Example gap truthfully.
 - Exporting with follow-ups removed keeps a mixed Card's prose (only the control and form fields go); theme-less temporary results inherit the session's selected template theme in live cards and HTML exports; malformed `styleId` is rejected, an unavailable template warns, and on-demand cap errors explain the cause and the re-arm action.
 - Retry headless-Chrome launch when Chrome exposes no page target (three attempts with fresh profiles), fixing the one-off CI failure seen in the 0.5.0 publish rerun.
+- Stop labelling the free on-demand layout and template-file exchange as unreleased in the README pair and architecture docs; both shipped in 0.5.0.
 
 ## [0.4.2] - 2026-10-22
 
