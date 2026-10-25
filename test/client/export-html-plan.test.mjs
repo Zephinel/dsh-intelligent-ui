@@ -142,3 +142,44 @@ test('an unavailable catalog falls back to default export themes like the live c
   assert.deepEqual(exportTemplatesFor({ status: 'unavailable', templates: [globalTemplate, sessionTemplate] }, 's1'), [])
   assert.deepEqual(exportTemplatesFor({ status: 'ready', templates: [globalTemplate, sessionTemplate, otherSession] }, 's1'), [globalTemplate, sessionTemplate])
 })
+
+test('a theme-less result snapshot inherits the session selected template theme', async () => {
+  const { resolveCardTheme, programsToExportCards } = await import('../../src/client/export-html-plan.ts')
+  const { THEME, template } = await import('../host/style-fixtures.mjs')
+  const sessionTemplate = template({ id: 'cs_session12345', baseLayout: 'free',
+    theme: { ...THEME, light: { ...THEME.light, canvas: '#101010' }, dark: { ...THEME.dark, canvas: '#010101' } } })
+  const snapshot = { schemaVersion: 1, baseLayout: 'free', directives: 'Reusable page rules.' }
+  const temporary = { callId: 'temp', program: 'root = Text("Result")', style: 'free', running: false, temporaryStyle: snapshot }
+
+  // Live card + HTML export share this decision.
+  assert.equal(resolveCardTheme(temporary, [sessionTemplate], sessionTemplate.id), sessionTemplate.theme)
+  const [card] = programsToExportCards([temporary], 'dark', [sessionTemplate], sessionTemplate.id)
+  assert.equal(card.themeStyle['--iui-canvas'], '#010101', 'the session template palette is used, per scheme')
+  assert.equal(card.scheme, 'dark')
+  assert.equal(card.style, 'free')
+})
+
+test('card theme priority: snapshot theme, then saved styleId, then session template', async () => {
+  const { resolveCardTheme } = await import('../../src/client/export-html-plan.ts')
+  const { THEME, template } = await import('../host/style-fixtures.mjs')
+  const sessionTemplate = template({ id: 'cs_session12345', baseLayout: 'free' })
+  const saved = template({ id: 'cs_saved123456', baseLayout: 'card',
+    theme: { ...THEME, light: { ...THEME.light, canvas: '#222222' }, dark: { ...THEME.dark, canvas: '#333333' } } })
+  const explicitTheme = { ...THEME, light: { ...THEME.light, canvas: '#444444' }, dark: { ...THEME.dark, canvas: '#555555' } }
+  const explicit = { temporaryStyle: { schemaVersion: 1, baseLayout: 'free', directives: 'x', theme: explicitTheme } }
+  assert.equal(resolveCardTheme(explicit, [saved, sessionTemplate], sessionTemplate.id), explicitTheme, 'an explicit snapshot theme wins')
+  assert.equal(resolveCardTheme({ styleId: saved.id }, [saved, sessionTemplate], sessionTemplate.id), saved.theme, 'a saved styleId keeps its own theme')
+  assert.equal(resolveCardTheme({ styleId: 'cs_missing123456' }, [saved, sessionTemplate], sessionTemplate.id), undefined, 'a missing saved style does not borrow the session theme')
+  assert.equal(resolveCardTheme({ temporaryStyle: { schemaVersion: 1, baseLayout: 'free', directives: 'x' } }, [saved, sessionTemplate], 'cs_unknown12345'), undefined, 'an unknown session style falls back to built-in')
+})
+
+test('built-in cards and a missing catalog keep the built-in theme', async () => {
+  const { resolveCardTheme } = await import('../../src/client/export-html-plan.ts')
+  const { THEME, template } = await import('../host/style-fixtures.mjs')
+  const sessionTemplate = template({ id: 'cs_session12345', baseLayout: 'free' })
+  assert.equal(resolveCardTheme({}, [sessionTemplate], sessionTemplate.id), undefined, 'a plain card keeps the built-in theme')
+  const temporary = { temporaryStyle: { schemaVersion: 1, baseLayout: 'free', directives: 'x' } }
+  assert.equal(resolveCardTheme(temporary, [], sessionTemplate.id), undefined, 'no visible catalog means no template theme')
+  assert.equal(resolveCardTheme(temporary, [sessionTemplate], undefined), undefined, 'no selected session style means no template theme')
+  assert.notEqual(THEME.light.canvas, '#101010')
+})

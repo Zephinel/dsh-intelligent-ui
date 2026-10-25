@@ -18,9 +18,11 @@ import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   BEAUTIFY_STYLES,
+  MODE_PROJECTION_KEY,
   type BeautifyStyle,
   type ImageExportSettings,
   type IntelligentUIProgram,
+  type IntelligentUIModeView,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { messageHasRenderUi, type ExportChatSnapshot } from './export-data.ts'
@@ -58,6 +60,8 @@ export type ExportActionProps =
     readonly t?: Translate
     /** Session-standard Chat selector hook, supplied by the slot kit. */
     readonly useChat: UseChatSelector
+    /** Session projection reader supplied by the slot kit (session-scoped slots). */
+    readonly useProjection?: (key: string) => IntelligentUIModeView | undefined
   }
 
 /** One frame row in the export menu. */
@@ -79,16 +83,22 @@ function ExportIcon(): ReactNode {
 /** Menu lifecycle: idle, one frame exporting, nothing exportable, success, or failure. */
 type ExportStatus = 'idle' | 'working' | 'empty' | 'done' | 'error'
 
+/** Harness/no-projection fallback; a stable function keeps the render hook order fixed. */
+const noProjection = (): undefined => undefined
+
 /**
  * One answer's export control and menu.
  * @param props - owner message identity, injected lookups, Chat selector hook and locale seat.
  * @returns the icon button plus its portal menu, or null for answers that never rendered UI.
  */
 export function ExportAction({
-  messageId, programsFor, settings, styles, sessionId, useChat, t = fallbackT,
+  messageId, programsFor, settings, styles, sessionId, useChat, useProjection, t = fallbackT,
 }: ExportActionProps): ReactNode {
   const visible = useChat(snapshot => messageHasRenderUi(snapshot, String(messageId)))
   const scheme = useStyleScheme()
+  // A theme-less result snapshot inherits the session's selected template; the
+  // projection publishes the effective style id (a template id for saved styles).
+  const sessionStyle = (useProjection ?? noProjection)(MODE_PROJECTION_KEY)?.style
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<BeautifyStyle | 'page' | null>(null)
   const [status, setStatus] = useState<ExportStatus>('idle')
@@ -223,7 +233,7 @@ export function ExportAction({
     try {
       await styles?.ensure(sessionId)
       const templates = exportTemplatesFor(styles?.getSnapshot(), sessionId)
-      const cards = programsToExportCards(programs, scheme, templates)
+      const cards = programsToExportCards(programs, scheme, templates, sessionStyle)
       await exportCardsHtml({
         cards,
         title: programs[0]?.title,

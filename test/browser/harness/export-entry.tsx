@@ -26,10 +26,15 @@ import { EXPORT_STANDALONE_CSS_PATH, EXPORT_STANDALONE_JS_PATH } from '../../../
 import '../../../src/client/index.css'
 
 const PHOTO = `${location.origin}/photo.svg`
-const PROGRAM = `root = Col([quizCard, photoCard, followCard], 3)
+// Two follow-up shapes, each with a solid colour marker so the PNG can prove
+// what the capture kept: a Card with prose keeps its prose marker (#00ff00) and
+// loses only its control; a Card that is only a follow-up block disappears,
+// taking its marker (#ff00ff) with it.
+const PROGRAM = `root = Col([quizCard, photoCard, mixedFollowCard, onlyFollowCard], 3)
 quizCard = Flashcard("front question", "back answer")
 photoCard = SearchImage("harness search photo", 1.35)
-followCard = Card([Title("Follow-up card", "sm"), Text("This card should disappear when follow-ups are off.", "sm", "muted"), Button("Continue")])
+mixedFollowCard = Card([Title("Follow-up card", "sm"), Text("This card keeps its prose when follow-ups are off.", "sm", "muted"), Box([Text("Kept prose map")], null, 2, null, "#00ff00"), Button("Continue")])
+onlyFollowCard = Card([Box([Button("Continue only")], null, 2, null, "#ff00ff")])
 `
 
 /** Answer both export entries look up: Turn 1 rendered UI, Turn 2 did not. */
@@ -189,6 +194,12 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
   const back = card?.querySelector<HTMLElement>('.iui-flashcard-face.is-back')
   const photo = element.querySelector<HTMLImageElement>('.iui-image img')
   const body = element.querySelector<HTMLElement>('.dsh-iui-body')
+  const cards = [...element.querySelectorAll<HTMLElement>('.iui-card')]
+  const mixedCard = cards.find(node => node.textContent?.includes('Follow-up card'))
+  const pureCard = cards.find(node => node.textContent?.includes('Continue only'))
+  const mixedTitle = mixedCard === undefined ? undefined : [...mixedCard.querySelectorAll<HTMLElement>('.iui-title')].find(node => node.textContent?.includes('Follow-up card'))
+  const mixedProse = mixedCard === undefined ? undefined : [...mixedCard.querySelectorAll<HTMLElement>('.iui-text')].find(node => node.textContent?.includes('keeps its prose'))
+  const followButtons = [...element.querySelectorAll<HTMLButtonElement>('button')].filter(node => node.textContent?.trim() === 'Continue')
   ;(window as unknown as { captureProbes: unknown[] }).captureProbes.push({
     layout: element.querySelector('[data-dsh-iui-style]')?.getAttribute('data-dsh-iui-style'),
     themeCanvas: getComputedStyle(element.querySelector('.dsh-iui-host')!).getPropertyValue('--iui-canvas').trim(),
@@ -200,6 +211,13 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
     expandedAtCapture: body !== null && body !== undefined && !body.hidden,
     mapReadyAtCapture: element.querySelector<HTMLElement>('[data-iui-map]')?.dataset.iuiMapReady === 'true',
     hiddenFollowUps: element.querySelectorAll('[data-iui-followup-hidden]').length,
+    mixedTitleVisible: mixedTitle !== undefined && mixedTitle.getClientRects().length > 0,
+    mixedProseVisible: mixedProse !== undefined && mixedProse.getClientRects().length > 0,
+    mixedFollowVisible: followButtons.some(node => node.getClientRects().length > 0),
+    pureFollowCardVisible: pureCard !== undefined && pureCard.getClientRects().length > 0,
+    pureFollowCardMarked: pureCard !== undefined
+      && (pureCard.getAttribute('data-iui-followup-hidden') !== null
+        || pureCard.closest('[data-iui-followup-hidden]') !== null),
     photoEager: photo?.loading === 'eager',
     photoComplete: photo?.complete === true && (photo?.naturalWidth ?? 0) > 0,
   })

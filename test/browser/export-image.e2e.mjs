@@ -143,14 +143,23 @@ try {
       canvas.width = bitmap.width; canvas.height = bitmap.height
       const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0)
       const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
-      let themedPixels = 0
-      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] === 237 && pixels[i + 1] === 247 && pixels[i + 2] === 255 && pixels[i + 3] === 255) themedPixels++
-      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height, themedPixels }
+      let themedPixels = 0, green = 0, magenta = 0
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
+        if (r === 237 && g === 247 && b === 255 && a === 255) themedPixels++
+        if (a === 255 && Math.abs(r - 0) <= 2 && Math.abs(g - 255) <= 2 && Math.abs(b - 0) <= 2) green++
+        if (a === 255 && Math.abs(r - 255) <= 2 && Math.abs(g - 0) <= 2 && Math.abs(b - 255) <= 2) magenta++
+      }
+      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height, themedPixels, green, magenta }
     })()`)
     assert.equal(raw.type, 'image/png', 'the download is a PNG')
     assert.ok(raw.size > 1000, 'the PNG carries pixels')
     assert.ok(raw.themedPixels > 1000, 'the PNG paints the inline theme canvas color')
     assert.ok(raw.width > 0 && raw.height > 0, 'the PNG has dimensions')
+    // Positive controls for the remove-follow-ups comparison below: both marker
+    // colours are painted when nothing is hidden.
+    assert.ok(raw.green > 100, 'the prose-card body marker is painted normally')
+    assert.ok(raw.magenta > 100, 'the pure follow-up card marker is painted normally')
 
     // A second export with the card frame must reserve room for the soft shadow
     // instead of painting the background edge-to-edge and clipping it.
@@ -222,8 +231,9 @@ try {
     assert.match(page.text, /"scheme":"light"/, 'the page payload fixes the exporting scheme')
     assert.match(page.text, /hideToAssistant:false/, 'the exported page carries the ToAssistant visibility option')
 
-    // With the remove-follow-ups switch on, the image capture removes the whole
-    // follow-up card instead of just its button.
+    // With the remove-follow-ups switch on, the capture keeps a Card that carries
+    // prose and removes only its follow-up control; a Card that is only a
+    // follow-up block disappears whole.
     await cdp.evaluate('window.setExportRemoveFollowUps(true)')
     await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'menu closed before follow-up export')
     await cdp.evaluate('document.querySelector("[data-dsh-iui-export]").click()')
@@ -234,10 +244,34 @@ try {
       const probe = window.captureProbes[3]
       const blob = window.exportedBlobs[4]
       const bitmap = await createImageBitmap(blob)
-      return { hidden: probe.hiddenFollowUps, width: bitmap.width, height: bitmap.height }
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width; canvas.height = bitmap.height
+      const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0)
+      const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
+      let green = 0, magenta = 0
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
+        if (a !== 255) continue
+        if (Math.abs(r - 0) <= 2 && Math.abs(g - 255) <= 2 && Math.abs(b - 0) <= 2) green++
+        if (Math.abs(r - 255) <= 2 && Math.abs(g - 0) <= 2 && Math.abs(b - 255) <= 2) magenta++
+      }
+      return { hidden: probe.hiddenFollowUps, mixedTitleVisible: probe.mixedTitleVisible,
+        mixedProseVisible: probe.mixedProseVisible, mixedFollowVisible: probe.mixedFollowVisible,
+        pureCardVisible: probe.pureFollowCardVisible, pureCardMarked: probe.pureFollowCardMarked,
+        width: bitmap.width, height: bitmap.height, green, magenta }
     })()`)
-    assert.ok(noFollow.hidden >= 1, 'the image capture hides the whole follow-up block')
-    assert.ok(noFollow.height < raw.height, 'the hidden follow-up block is not part of the PNG')
+    // The mixed card's control and the whole pure follow-up card are hidden.
+    assert.equal(noFollow.hidden, 2, 'the capture hides the follow-up control and the pure follow-up card')
+    assert.equal(noFollow.mixedTitleVisible, true, 'a Card with prose keeps its title during the capture')
+    assert.equal(noFollow.mixedProseVisible, true, 'a Card with prose keeps its prose during the capture')
+    assert.equal(noFollow.mixedFollowVisible, false, 'the mixed card follow-up control is not painted')
+    assert.equal(noFollow.pureCardVisible, false, 'the pure follow-up card is not rendered')
+    assert.equal(noFollow.pureCardMarked, true, 'the pure follow-up card is the hidden block')
+    // Pixel proof, not just a shorter image: the prose-card marker survives while
+    // the pure follow-up card marker never enters the PNG.
+    assert.ok(noFollow.green > 100, 'the prose-bearing card body is still painted in the PNG')
+    assert.equal(noFollow.magenta, 0, 'the pure follow-up card never enters the PNG')
+    assert.ok(noFollow.height < raw.height, 'removing the follow-up blocks also shrinks the PNG')
 
     const probesAfterAll = await cdp.evaluate('window.captureProbes')
     assert.equal(probesAfterAll.length, 4, 'the four image exports rasterized the card')

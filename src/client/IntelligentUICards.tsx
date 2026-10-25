@@ -13,10 +13,11 @@ import { IconChevronDownOutlineRegular, IconSparkleRegular } from '@deepseek-ai/
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { MODE_PROJECTION_KEY, type IntelligentUIModeView, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { OpenUIRenderer } from '../lib/render.tsx'
 import { resolveStyleThemeVars } from '../lib/style-theme.ts'
+import { resolveCardTheme } from './export-html-plan.ts'
 import type { StyleCatalog } from './styles.ts'
 import { useStyleScheme } from './theme-mode.ts'
 import { programsFromToolNodes, type ToolCallNode } from './programs.ts'
@@ -42,20 +43,29 @@ export interface IntelligentUICardsInjected {
   }
 }
 
+/** Session projection reader supplied by the slot kit to every session-scoped slot. */
+type SessionProjectionReader = (key: string) => IntelligentUIModeView | undefined
+
+/** Harness/no-projection fallback; a stable function keeps the render hook order fixed. */
+const noProjection: SessionProjectionReader = () => undefined
+
 /**
  * Render every `render_ui` program recorded by the closing Turn.
- * @param props - closing Turn, Session input actions, injected program hook, and locale seat.
+ * @param props - closing Turn, Session input actions, injected program hook, projection reader and locale seat.
  * @returns one card per program, or null for a Turn that called no render_ui tool.
  */
 export function IntelligentUICards({
-  turn, inputActions, usePrograms, sessionId, styles, styleActions = defaultStyleActions, adjustStyle, readInput, focusComposer, t = fallbackT,
+  turn, inputActions, usePrograms, sessionId, styles, styleActions = defaultStyleActions, adjustStyle, readInput, focusComposer, useProjection, t = fallbackT,
 }: PropsRuntime<'conversation.chat.turnTail'>
   & InjectFace<IntelligentUICardsInjected>
-  & { readonly t?: Translate }): ReactNode {
+  & { readonly t?: Translate; readonly useProjection?: SessionProjectionReader }): ReactNode {
   const nodes = usePrograms(String(turn.turn))
   const programs = useMemo(() => programsFromToolNodes(nodes), [nodes])
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   const scheme = useStyleScheme()
+  // A theme-less result snapshot inherits the session's selected template; the
+  // projection publishes the effective style id (a template id for saved styles).
+  const sessionStyle = (useProjection ?? noProjection)(MODE_PROJECTION_KEY)?.style
   useEffect(() => { void styles.ensure(sessionId) }, [styles, sessionId])
   // The renderer calls this when an in-card action should continue in the
   // composer: seed the draft with the model-authored message and submit it.
@@ -81,8 +91,8 @@ export function IntelligentUICards({
   return (
     <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
       {programs.map(program => {
-        const template = program.styleId === undefined || catalog.status === 'unavailable' ? undefined
-          : catalog.templates.find(template => template.id === program.styleId && (template.scope === 'global' || template.sessionId === sessionId))
+        const templates = catalog.status === 'unavailable' ? [] : catalog.templates
+        const theme = resolveCardTheme(program, templates, sessionStyle)
         return (
           <IntelligentUICard
             key={program.callId}
@@ -94,10 +104,9 @@ export function IntelligentUICards({
             // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
             saveAction={program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={program.callId}
               snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
-            // Snapshot theme wins; a theme-less snapshot inherits the selected template, then the built-in theme.
-            themeStyle={program.temporaryStyle?.theme !== undefined
-              ? resolveStyleThemeVars(program.temporaryStyle.theme, scheme) as CSSProperties
-              : template === undefined ? undefined : resolveStyleThemeVars(template.theme, scheme) as CSSProperties}
+            // Snapshot theme wins; a theme-less snapshot inherits the session's
+            // selected template, then the built-in theme.
+            themeStyle={theme === undefined ? undefined : resolveStyleThemeVars(theme, scheme) as CSSProperties}
           />
         )
       })}

@@ -1121,7 +1121,7 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* Export setting: remove the whole block that carries a follow-up control. */
+/* Export setting: hide a follow-up control (and its wrapper when that wrapper exists only for it). */
 [data-iui-followup-hidden] {
   display: none !important;
 }

@@ -9,7 +9,7 @@
 import type { ExportPageCard, IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 import { resolveStyleThemeVars } from '../lib/style-theme.ts'
 import { fileStem } from './export-image-plan.ts'
-import type { StyleTemplate } from '../shared/style-templates.ts'
+import type { StyleTemplate, StyleTheme } from '../shared/style-templates.ts'
 import type { StyleCatalogSnapshot } from './styles.ts'
 
 /** Resolve only templates the live cards would currently use; an unavailable catalog falls back to defaults. */
@@ -18,10 +18,33 @@ export function exportTemplatesFor(catalog: StyleCatalogSnapshot | undefined, se
   return catalog.templates.filter(template => template.scope === 'global' || template.sessionId === sessionId)
 }
 
+/**
+ * Resolve the theme one card renders with, in priority order: the snapshot's own
+ * theme, the saved template named by its styleId, then (only for a theme-less
+ * result snapshot) the template the session currently selects. The last step
+ * makes an on-demand result inherit the session look instead of the built-in
+ * theme, as the style contract documents.
+ * @param program - recorded render_ui call, as the client replays it.
+ * @param templates - templates visible to the session.
+ * @param sessionStyle - the session's effective style id from its projection.
+ * @returns the theme to apply, or undefined for the built-in theme.
+ */
+export function resolveCardTheme(
+  program: Pick<IntelligentUIProgram, 'temporaryStyle' | 'styleId'>,
+  templates: readonly StyleTemplate[],
+  sessionStyle?: string,
+): StyleTheme | undefined {
+  if (program.temporaryStyle?.theme !== undefined) return program.temporaryStyle.theme
+  const saved = program.styleId === undefined ? undefined : templates.find(template => template.id === program.styleId)?.theme
+  if (saved !== undefined) return saved
+  if (program.temporaryStyle === undefined || sessionStyle === undefined) return undefined
+  return templates.find(template => template.id === sessionStyle)?.theme
+}
+
 /** Inline snapshots take priority; saved styles resolve from the visible catalog. */
-export function programsToExportCards(programs: readonly IntelligentUIProgram[], scheme: 'light' | 'dark', templates: readonly StyleTemplate[] = []): ExportPageCard[] {
+export function programsToExportCards(programs: readonly IntelligentUIProgram[], scheme: 'light' | 'dark', templates: readonly StyleTemplate[] = [], sessionStyle?: string): ExportPageCard[] {
   return programs.map(program => {
-    const theme = program.temporaryStyle?.theme ?? templates.find(template => template.id === program.styleId)?.theme
+    const theme = resolveCardTheme(program, templates, sessionStyle)
     return {
     program: program.program,
     title: program.title,

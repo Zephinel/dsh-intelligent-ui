@@ -29,6 +29,7 @@ const cards = [
   { program: 'root = Col([Card([Title("Standalone harness", "xl"), Text("Interactive page body"), Row([Button("Continue")])])], 2)', title: 'First card', style: 'card', callId: 'call-1' },
   { program: 'root = Col([Text("Root follow-up body"), Button("Continue")], 2)', title: 'Second card', style: 'card', callId: 'call-2' },
   { program: 'root = Card([Title("Action card"), Button("Open docs", @OpenUrl("https://example.com"))])', title: 'Third card', style: 'card', callId: 'call-3' },
+  { program: 'root = Card([Button("Continue only")])', title: 'Fourth card', style: 'card', callId: 'call-4' },
 ]
 
 try {
@@ -108,7 +109,7 @@ try {
     // Older Chrome: the copy path still has its selection fallback.
   }
   await cdp.waitFor('document.readyState === "complete"', 'load', { timeout: 60000 })
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 3', 'exported cards', { timeout: 60000 })
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 4', 'exported cards', { timeout: 60000 })
 
   const mounted = await cdp.evaluate(`(() => {
     return {
@@ -118,7 +119,7 @@ try {
       background: getComputedStyle(document.body).backgroundColor,
     }
   })()`)
-  assert.equal(mounted.cards, 3, 'all recorded cards render')
+  assert.equal(mounted.cards, 4, 'all recorded cards render')
   assert.equal(mounted.headers, 0, 'the exported page drops the collapsible card header')
   assert.match(mounted.text, /Standalone harness/)
   assert.match(mounted.text, /Root follow-up body/)
@@ -134,19 +135,35 @@ try {
 
   await cdp.send('Page.navigate', { url: server.url + 'hidden.html' })
   await cdp.waitFor('document.readyState === "complete"', 'hidden page load', { timeout: 60000 })
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 3', 'hidden page cards', { timeout: 60000 })
-  const hidden = await cdp.evaluate(`(() => ({
-    blocks: document.querySelectorAll('[data-iui-followup-hidden]').length,
-    htmlHidden: document.documentElement.hasAttribute('data-iui-followup-hidden'),
-    visibleButtons: [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0).length,
-    text: document.body.innerText,
-  }))()`)
-  assert.equal(hidden.blocks, 2, 'the follow-up card and the root-level control are hidden')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 4', 'hidden page cards', { timeout: 60000 })
+  // Wait for the standalone observer's hide pass before reading the page.
+  await cdp.waitFor("document.querySelectorAll('[data-iui-followup-hidden]').length === 3", 'follow-up hide pass')
+  const hidden = await cdp.evaluate(`(() => {
+    const cards = [...document.querySelectorAll('.dsh-iui-standalone-card')]
+    const followButtons = [...document.querySelectorAll('button')].filter(button => /^Continue/.test(button.textContent.trim()))
+    return {
+      blocks: document.querySelectorAll('[data-iui-followup-hidden]').length,
+      htmlHidden: document.documentElement.hasAttribute('data-iui-followup-hidden'),
+      visibleButtons: [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0).length,
+      visibleCards: cards.filter(card => card.getClientRects().length > 0).length,
+      visibleFollowButtons: followButtons.filter(button => button.getClientRects().length > 0).length,
+      pureCardHidden: cards[3].getAttribute('data-iui-followup-hidden') === 'true' && cards[3].getClientRects().length === 0,
+      text: document.body.innerText,
+    }
+  })()`)
+  // Card 1 hides its follow-up Row, card 2 hides its root-level Button, card 4
+  // (only a follow-up) hides as a whole.
+  assert.equal(hidden.blocks, 3, 'the mixed follow-up row, the root-level control and the pure follow-up card are hidden')
   assert.equal(hidden.htmlHidden, false, 'the helper never hides the document element')
+  assert.equal(hidden.visibleCards, 3, 'the three cards with content stay rendered')
+  assert.equal(hidden.pureCardHidden, true, 'the pure follow-up card is not rendered at all')
+  assert.equal(hidden.visibleFollowButtons, 0, 'no follow-up control stays visible')
   assert.equal(hidden.visibleButtons, 1, 'the non-follow-up action button remains visible')
-  assert.doesNotMatch(hidden.text, /Standalone harness/, 'the hidden card contributes no text')
+  assert.match(hidden.text, /Standalone harness/, 'a Card with prose keeps its title')
+  assert.match(hidden.text, /Interactive page body/, 'a Card with prose keeps its body')
   assert.match(hidden.text, /Root follow-up body/, 'prose next to a root-level follow-up is preserved')
   assert.match(hidden.text, /Action card/, 'the normal action card stays visible')
+  assert.doesNotMatch(hidden.text, /Continue only/, 'the pure follow-up card contributes no text')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] })
   await cdp.send('Page.navigate', { url: server.url + 'themed.html' })
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-host").length === 4', 'inline and saved themed exports')

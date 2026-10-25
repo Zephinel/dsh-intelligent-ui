@@ -142,7 +142,7 @@ export interface ImageExportSettings {
   readonly background: string
   /** Output pixel scale. */
   readonly scale: ExportScale
-  /** Whether exports remove the whole @ToAssistant follow-up block. */
+  /** Whether exports remove @ToAssistant follow-up controls (and the smallest wrapper that exists only for them). */
   readonly removeFollowUps: boolean
 }
 
@@ -158,7 +158,7 @@ export interface IntelligentUISettings {
   readonly exportBackground?: string
   /** Pixel scale for exported images. */
   readonly exportScale?: ExportScale
-  /** Whether exports remove the whole @ToAssistant follow-up block. */
+  /** Whether exports remove @ToAssistant follow-up controls (and the smallest wrapper that exists only for them). */
   readonly removeFollowUps?: boolean
   /** Legacy keep/remove switch from before the setting was inverted. */
   readonly exportToAssistant?: boolean
