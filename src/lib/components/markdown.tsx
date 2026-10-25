@@ -3,7 +3,8 @@ import { CURRENCY_PREFIX, hasCjk, webUrl } from "./style";
 
 // A small Markdown renderer that builds React elements and never injects HTML.
 // Inline: **bold**, *italic*, ~~strike~~, `code`, [text](https://...).
-// Blocks: paragraphs, # headings, - and 1. lists, > quotes, ``` code, ---, | tables |.
+// Blocks: paragraphs, # headings (h5/h6 render at the h4 size), nested - and 1.
+// lists, > quotes, ``` code, ---, | tables |.
 
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+?\*\*|__[^_\n]+?__)|(~~[^~\n]+?~~)|(\*[^*\s][^*\n]*?\*|_[^_\s][^_\n]*?_)|(\[[^\]\n]+\]\([^)\s]+\))/;
 
@@ -54,16 +55,56 @@ export function inline(text: string, key = "i"): ReactNode {
   return out.length === 1 ? out[0] : out;
 }
 
+type ListItem = { text: string; children: Block[] };
 type Block =
   | { kind: "p" | "quote"; text: string }
   | { kind: "h"; level: number; text: string }
-  | { kind: "list"; ordered: boolean; start: number; items: string[] }
+  | { kind: "list"; ordered: boolean; start: number; items: ListItem[] }
   | { kind: "code"; text: string }
   | { kind: "hr" }
   | { kind: "table"; head: string[]; rows: string[][] };
 
-const LIST_ITEM = /^\s{0,3}([-*+]|(\d+)[.)])\s+(.*)$/;
+// The marker is captured with its indentation: a deeper marker is a child list
+// of the item above it, not another item of the same list.
+const LIST_ITEM = /^(\s*)([-*+]|(\d+)[.)])\s+(.*)$/;
+const indentOf = (line: string) => line.match(/^[ \t]*/)![0].replace(/\t/g, "    ").length;
 const cells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+
+/** One list and its nested lists: the items at the first marker's indentation. */
+function parseList(lines: string[], start: number): { block: Block; next: number } {
+  const first = LIST_ITEM.exec(lines[start])!;
+  const base = indentOf(lines[start]);
+  const ordered = first[3] !== undefined;
+  const items: ListItem[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i];
+    const match = LIST_ITEM.exec(line);
+    if (!match) {
+      // An indented line that is not a marker continues the item text.
+      if (items.length && line.trim() && indentOf(line) > base) {
+        items[items.length - 1].text += ` ${line.trim()}`;
+        i++;
+        continue;
+      }
+      break;
+    }
+    const indent = indentOf(line);
+    if (indent < base) break;
+    if (indent > base) {
+      if (!items.length) break;
+      const nested = parseList(lines, i);
+      items[items.length - 1].children.push(nested.block);
+      i = nested.next;
+      continue;
+    }
+    // A different marker kind at the same indentation starts another list.
+    if ((match[3] !== undefined) !== ordered) break;
+    items.push({ text: match[4], children: [] });
+    i++;
+  }
+  return { block: { kind: "list", ordered, start: ordered ? Number(first[3]) : 1, items }, next: i };
+}
 
 function blocks(source: string): Block[] {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
@@ -82,7 +123,7 @@ function blocks(source: string): Block[] {
       i++;
       continue;
     }
-    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       out.push({ kind: "h", level: heading[1].length, text: heading[2] });
       i++;
@@ -106,77 +147,75 @@ function blocks(source: string): Block[] {
       out.push({ kind: "quote", text: body.join(" ") });
       continue;
     }
-    const item = LIST_ITEM.exec(line);
-    if (item) {
-      const ordered = !!item[2];
-      const items: string[] = [];
-      for (; i < lines.length; i++) {
-        const next = LIST_ITEM.exec(lines[i]);
-        if (next && !!next[2] === ordered) items.push(next[3]);
-        else if (lines[i].trim() && /^\s{2,}/.test(lines[i]) && items.length) items[items.length - 1] += ` ${lines[i].trim()}`;
-        else break;
-      }
-      out.push({ kind: "list", ordered, start: ordered ? Number(item[2]) : 1, items });
+    if (LIST_ITEM.test(line)) {
+      const list = parseList(lines, i);
+      out.push(list.block);
+      i = list.next;
       continue;
     }
     const body: string[] = [];
-    for (; i < lines.length && lines[i].trim() && !LIST_ITEM.test(lines[i]) && !/^(#{1,4})\s|^\s*```|^\s*>/.test(lines[i]); i++) body.push(lines[i].trim());
+    for (; i < lines.length && lines[i].trim() && !LIST_ITEM.test(lines[i]) && !/^(#{1,6})\s|^\s*```|^\s*>/.test(lines[i]); i++) body.push(lines[i].trim());
     out.push({ kind: "p", text: body.join(" ") });
   }
   return out;
 }
 
+function renderBlock(b: Block, key: string): ReactNode {
+  switch (b.kind) {
+    case "p":
+      return <p key={key}>{inline(b.text, key)}</p>;
+    case "quote":
+      return <blockquote key={key}>{inline(b.text, key)}</blockquote>;
+    case "h": {
+      // h5/h6 are visually h4: the reference only promises four display sizes.
+      const level = Math.min(4, b.level);
+      return (
+        <div key={key} role="heading" aria-level={level + 1} className={`iui-md-h iui-md-h${level}${hasCjk(b.text) ? " iui-title-cjk" : ""}`}>
+          {inline(b.text, key)}
+        </div>
+      );
+    }
+    case "code":
+      return (
+        <pre key={key} className="iui-code-block">
+          <code>{b.text}</code>
+        </pre>
+      );
+    case "hr":
+      return <hr key={key} className="iui-divider" />;
+    case "list": {
+      const items = b.items.map((item, j) => (
+        <li key={j}>
+          {inline(item.text, `${key}-${j}`)}
+          {item.children.map((child, c) => renderBlock(child, `${key}-${j}-${c}`))}
+        </li>
+      ));
+      return b.ordered ? (
+        <ol key={key} start={b.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul key={key}>{items}</ul>
+      );
+    }
+    case "table":
+      return (
+        <div key={key} className="iui-table-scroll">
+          <table className="iui-table">
+            <thead>
+              <tr>{b.head.map((h, j) => <th key={j}>{inline(h, `${key}-h${j}`)}</th>)}</tr>
+            </thead>
+            <tbody>
+              {b.rows.map((r, j) => (
+                <tr key={j}>{r.map((c, m) => <td key={m}>{inline(c, `${key}-${j}-${m}`)}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+  }
+}
+
 export function MarkdownBlocks({ text }: { text: string }) {
-  return (
-    <>
-      {blocks(text).map((b, i) => {
-        const k = `b${i}`;
-        switch (b.kind) {
-          case "p":
-            return <p key={k}>{inline(b.text, k)}</p>;
-          case "quote":
-            return <blockquote key={k}>{inline(b.text, k)}</blockquote>;
-          case "h":
-            return (
-              <div key={k} role="heading" aria-level={b.level + 1} className={`iui-md-h iui-md-h${b.level}${hasCjk(b.text) ? " iui-title-cjk" : ""}`}>
-                {inline(b.text, k)}
-              </div>
-            );
-          case "code":
-            return (
-              <pre key={k} className="iui-code-block">
-                <code>{b.text}</code>
-              </pre>
-            );
-          case "hr":
-            return <hr key={k} className="iui-divider" />;
-          case "list": {
-            const items = b.items.map((t, j) => <li key={j}>{inline(t, `${k}-${j}`)}</li>);
-            return b.ordered ? (
-              <ol key={k} start={b.start}>
-                {items}
-              </ol>
-            ) : (
-              <ul key={k}>{items}</ul>
-            );
-          }
-          case "table":
-            return (
-              <div key={k} className="iui-table-scroll">
-                <table className="iui-table">
-                  <thead>
-                    <tr>{b.head.map((h, j) => <th key={j}>{inline(h, `${k}-h${j}`)}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {b.rows.map((r, j) => (
-                      <tr key={j}>{r.map((c, m) => <td key={m}>{inline(c, `${k}-${j}-${m}`)}</td>)}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-        }
-      })}
-    </>
-  );
+  return <>{blocks(text).map((b, i) => renderBlock(b, `b${i}`))}</>;
 }

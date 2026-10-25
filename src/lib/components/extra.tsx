@@ -9,6 +9,7 @@ import katex from "katex";
 // and re-declare the same global `.katex` / KaTeX_* font faces.
 import { Check, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { z } from "zod/v4";
 import { inline } from "./markdown";
@@ -32,7 +33,11 @@ export const Carousel = defineComponent({
     const ref = useRef<HTMLDivElement>(null);
     const [edges, setEdges] = useState({ start: true, end: true });
     const items = (Array.isArray(props.children) ? props.children.flat() : []).filter((c) => c != null);
-    const width = Math.min(640, Math.max(80, props.itemWidth ?? 240));
+    // A program itemWidth is honored (only a tiny width is raised to the
+    // minimum) and written inline, so the stylesheet's 85% "peek" cap never
+    // overrides it. Omitting itemWidth leaves the 240px default + peek cap to
+    // the stylesheet.
+    const width = props.itemWidth == null ? undefined : Math.max(80, props.itemWidth);
     useLayoutEffect(() => {
       const el = ref.current;
       if (!el) return;
@@ -183,7 +188,8 @@ export const MathBlock = defineComponent({
 });
 
 // Media
-const YT = /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})|^([\w-]{11})$/;
+// Video id from a bare id or a watch / youtu.be / embed / shorts / live URL.
+const YT = /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})|^([\w-]{11})$/;
 
 export const YouTube = defineComponent({
   name: "YouTube",
@@ -218,8 +224,22 @@ export const Flashcard = defineComponent({
     const t = useT();
     const [flipped, setFlipped] = useState(false);
     const face = (value: unknown) => (typeof value === "string" ? <span className={cx("iui-flashcard-word", hasCjk(value) && "iui-flashcard-word-cjk")}>{inline(value)}</span> : renderSlot(value, renderNode));
+    // The card flips itself, but its content may be interactive (a Button, a
+    // Pressable, an Input). Button semantics on a div keep those elements
+    // valid, where the old wrapping <button> nested a button inside a button.
+    const toggle = () => setFlipped((on) => !on);
+    const onClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+      // Clicks meant for a control inside the card stay with that control.
+      const target = (event.target as Element).closest("button,a,input,select,textarea,label,[role=button]");
+      if (target === event.currentTarget) toggle();
+    };
+    const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      toggle();
+    };
     return (
-      <button type="button" className={cx("iui-flashcard", flipped && "is-flipped")} aria-pressed={flipped} onClick={() => setFlipped(!flipped)}>
+      <div role="button" tabIndex={0} className={cx("iui-flashcard", flipped && "is-flipped")} aria-pressed={flipped} onClick={onClick} onKeyDown={onKeyDown}>
         <span className="iui-flashcard-inner">
           <span className="iui-flashcard-face is-front" aria-hidden={flipped}>
             {face(props.front)}
@@ -229,7 +249,7 @@ export const Flashcard = defineComponent({
             {face(props.back)}
           </span>
         </span>
-      </button>
+      </div>
     );
   },
 });

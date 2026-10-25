@@ -34,10 +34,18 @@ function useFieldName(label: unknown, statementId?: string) {
   return (typeof label === "string" && label) || statementId || id;
 }
 
-const numberText = (value: unknown) => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "";
-  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
-};
+/**
+ * A number field stores what the text means. A single comma with one or two
+ * digits after it (and no dot) is a decimal comma: "1,5" is 1.5. Every other
+ * comma is grouping: "1,000" is 1000. Unparseable text keeps the old value.
+ */
+function parseNumberInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  const decimalComma = /^[-+]?\d*,\d{1,2}$/.test(trimmed);
+  const parsed = Number(decimalComma ? trimmed.replace(",", ".") : trimmed.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function Field({ label, children: content }: { label?: string; children: ReactNode }) {
   if (!label) return <>{content}</>;
@@ -196,9 +204,9 @@ export const Input = defineComponent({
             const text = event.target.value;
             if (!numeric) return field.setValue(text);
             setDraft(text);
-            const parsed = Number(text.replace(/,/g, ""));
+            const parsed = parseNumberInput(text);
             if (text.trim() === "") field.setValue(null as unknown as number);
-            else if (Number.isFinite(parsed)) field.setValue(parsed);
+            else if (parsed !== null) field.setValue(parsed);
           }}
           onBlur={() => setDraft(null)}
         />
@@ -314,9 +322,18 @@ export const Slider = defineComponent({
     const step = props.step && props.step > 0 ? props.step : 1;
     const raw = typeof field.value === "number" ? field.value : Number(field.value);
     const value = Number.isFinite(raw) ? Math.min(max, Math.max(min, raw)) : min;
+    // An out-of-range bound value is written back once, so the readout and the
+    // bound state never disagree (the page used to show two numbers). Only a
+    // real number is written back: before the store initializes the literal,
+    // the binding reads as undefined and must not be overwritten with the floor.
+    useEffect(() => {
+      if (typeof field.value === "number" && Number.isFinite(field.value) && field.value !== value) field.setValue(value);
+    }, [field.value, value, field.setValue]);
     const unit = props.unit ?? "";
     const prefix = /^[$€£¥₹]/.test(unit);
-    const readout = prefix ? `${unit}${numberText(value)}` : `${numberText(value)}${unit}`;
+    // The readout is the bound value itself, not a locale-rounded copy: a fine
+    // step keeps its precision and a fine value is not shown as a coarser one.
+    const readout = prefix ? `${unit}${value}` : `${value}${unit}`;
     const marks = (props.marks ?? []).filter((m) => m && Number.isFinite(m.value) && m.value >= min && m.value <= max);
     const id = useId();
     return (

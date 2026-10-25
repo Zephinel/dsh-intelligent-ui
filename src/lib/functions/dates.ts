@@ -32,6 +32,20 @@ export function isoDay(day: number): string {
   return new Date(day * DAY).toISOString().slice(0, 10);
 }
 
+/**
+ * parseDate for data that may still be empty. A program's documented dynamic
+ * flow (a DatePicker bound to `$d = ""`) reaches these functions on first paint;
+ * an unparseable value returns null and the date function returns its neutral
+ * empty value instead of throwing, which would replace the whole card.
+ */
+export function tryParseDate(value: string | number): Parsed | null {
+  try {
+    return parseDate(value);
+  } catch {
+    return null;
+  }
+}
+
 const STYLES: Record<string, Intl.DateTimeFormatOptions> = {
   date: { month: "short", day: "numeric", year: "numeric" },
   short: { month: "short", day: "numeric" },
@@ -60,7 +74,9 @@ export const FormatDate = defineFunction({
   }),
   returns: z.string(),
   fn: ({ date, style = "date" }) => {
-    const { day, instant } = parseDate(date);
+    const parsed = tryParseDate(date);
+    if (parsed === null) return "";
+    const { day, instant } = parsed;
     if (style === "iso") return isoDay(day);
     // A calendar date formats in UTC so its day never shifts with the viewer's zone
     const at = instant ?? new Date(day * DAY);
@@ -73,15 +89,21 @@ export const AddDays = defineFunction({
   description: 'The date days later (negative: earlier), as "YYYY-MM-DD"',
   params: z.object({ date: date(), days: z.number() }),
   returns: z.string(),
-  fn: ({ date, days }) => isoDay(parseDate(date).day + Math.trunc(days)),
+  fn: ({ date, days }) => {
+    const parsed = tryParseDate(date);
+    return parsed === null ? "" : isoDay(parsed.day + Math.trunc(days));
+  },
 });
 
 export const DaysBetween = defineFunction({
   name: "DaysBetween",
   description: "Calendar days from one date to another (negative if to is earlier)",
   params: z.object({ from: date(), to: date() }),
-  returns: z.number(),
-  fn: ({ from, to }) => parseDate(to).day - parseDate(from).day,
+  returns: z.number().nullable(),
+  fn: ({ from, to }) => {
+    const [a, b] = [tryParseDate(from), tryParseDate(to)];
+    return a === null || b === null ? null : b.day - a.day;
+  },
 });
 
 export const Today = defineFunction({
@@ -104,7 +126,9 @@ export const AddMonths = defineFunction({
   params: z.object({ date: date(), months: z.number() }),
   returns: z.string(),
   fn: ({ date, months }) => {
-    const [y, m, d] = ymd(parseDate(date).day);
+    const parsed = tryParseDate(date);
+    if (parsed === null) return "";
+    const [y, m, d] = ymd(parsed.day);
     const target = m + Math.trunc(months);
     const last = new Date(Date.UTC(y, target + 1, 0)).getUTCDate();
     return isoDay(Date.UTC(y, target, Math.min(d, last)) / DAY);
@@ -115,10 +139,12 @@ export const MonthsBetween = defineFunction({
   name: "MonthsBetween",
   description: "Whole months from one date to another (negative if to is earlier); @Floor(@MonthsBetween(birthday, @Today()) / 12) is an age",
   params: z.object({ from: date(), to: date() }),
-  returns: z.number(),
+  returns: z.number().nullable(),
   fn: ({ from, to }) => {
-    const [y1, m1, d1] = ymd(parseDate(from).day);
-    const [y2, m2, d2] = ymd(parseDate(to).day);
+    const [a, b] = [tryParseDate(from), tryParseDate(to)];
+    if (a === null || b === null) return null;
+    const [y1, m1, d1] = ymd(a.day);
+    const [y2, m2, d2] = ymd(b.day);
     let months = (y2 - y1) * 12 + (m2 - m1);
     if (months > 0 && d2 < d1) months -= 1;
     if (months < 0 && d2 > d1) months += 1;
@@ -132,7 +158,9 @@ export const StartOf = defineFunction({
   params: z.object({ date: date(), unit: z.enum(["week", "month", "year"]) }),
   returns: z.string(),
   fn: ({ date, unit }) => {
-    const day = parseDate(date).day;
+    const parsed = tryParseDate(date);
+    if (parsed === null) return "";
+    const day = parsed.day;
     const [y, m] = ymd(day);
     if (unit === "week") return isoDay(day - ((new Date(day * DAY).getUTCDay() + 6) % 7));
     return isoDay(Date.UTC(y, unit === "month" ? m : 0, 1) / DAY);

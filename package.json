@@ -44,7 +44,7 @@
     "build:prompt": "node scripts/generate-prompt.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/host/*.test.mjs test/client/*.test.mjs test/packaging/*.test.mjs",
-    "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs",
+    "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs && node test/renderer/media-row-check.mjs && node test/renderer/pressable-select-check.mjs && node test/renderer/css-contract-check.mjs && node test/renderer/prop-contract-check.mjs",
     "check": "npm run typecheck && npm run build && npm test && npm run test:renderer",
     "pack:check": "npm pack --dry-run --json",
     "prepare": "node scripts/build.mjs",

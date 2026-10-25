@@ -159,10 +159,11 @@ export const MovingAvg = defineFunction({
   name: "MovingAvg",
   description: 'Copy of the rows with field replaced by the average of its last window values (field "" for a list of numbers)',
   params: z.object({ rows: list(), field: z.string(), window: z.number() }),
-  returns: list(),
+  returns: list().nullable(),
   fn: ({ rows, field, window }) => {
     const w = Math.trunc(window);
-    if (w < 1) throw new Error("window must be at least 1");
+    // A window below one row is null, not a fatal error.
+    if (!(w >= 1) || !Number.isFinite(w)) return null;
     const values = rows.map((row) => toNum(read(row, field)) ?? 0);
     const averages = values.map((_, i) => {
       const span = values.slice(Math.max(0, i - w + 1), i + 1);
@@ -186,11 +187,12 @@ export const Histogram = defineFunction({
   description:
     "Counts numbers into equal-width bins (value is the count); min and max fix the range, default the data's",
   params: z.object({ values: numbers(), bins: z.number(), min: z.number().optional(), max: z.number().optional() }),
-  returns: z.array(z.object({ key: z.string(), value: z.number(), start: z.number(), end: z.number() })),
+  returns: z.array(z.object({ key: z.string(), value: z.number(), start: z.number(), end: z.number() })).nullable(),
   fn: ({ values: raw, bins, min, max }) => {
     const values = finiteOnly(raw);
     const n = Math.trunc(bins);
-    if (n < 1 || n > 500) throw new Error("bins must be from 1 to 500");
+    // A bin count outside 1-500 is null, not a fatal error.
+    if (!(n >= 1) || n > 500 || !Number.isFinite(n)) return null;
     const lo = min ?? (values.length ? Math.min(...values) : 0);
     let hi = max ?? (values.length ? Math.max(...values) : 1);
     if (hi <= lo) hi = lo + 1;

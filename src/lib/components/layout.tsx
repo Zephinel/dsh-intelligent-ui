@@ -53,8 +53,9 @@ export const Box = defineComponent({
           width: size(props.width),
           height: size(props.height),
           // null, like an omitted argument, means no flex.
-          // A width in px is meant: a Row with long text beside it must not squeeze it.
-          flex: props.flex != null ? `${Math.max(0, props.flex)} 1 0%` : typeof props.width === "number" ? "0 0 auto" : undefined,
+          // A width is meant, in px or as a length: a Row with long text beside
+          // it must not squeeze it (flex shrink was renegotiating "50%").
+          flex: props.flex != null ? `${Math.max(0, props.flex)} 1 0%` : props.width != null ? "0 0 auto" : undefined,
         }}
       >
         {renderNode(props.children)}

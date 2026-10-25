@@ -23,8 +23,9 @@ export const Table = defineComponent({
       const cells = rows.map((r) => r[c]).filter((v) => v != null && v !== "" && !(typeof v === "string" && /^(n\/a|\u2014|\u2013|-)$/i.test(v.trim())));
       return cells.length > 0 && cells.every((v) => typeof v === "number" || (typeof v === "string" && NUMERIC.test(v.trim())));
     });
-    const cell = (value: unknown) =>
-      isElement(value) ? renderNode(value) : typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : inline(String(value ?? ""));
+    // A number renders as the program wrote it: no locale regrouping or
+    // rounding here (that is @Format's job), only the documented alignment.
+    const cell = (value: unknown) => (isElement(value) ? renderNode(value) : typeof value === "number" ? String(value) : inline(String(value ?? "")));
     return (
       <div className="iui-table-scroll">
         <table className="iui-table">

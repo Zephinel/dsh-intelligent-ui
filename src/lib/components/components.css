@@ -30,9 +30,9 @@
 }
 .iui-card-soft { border-color: transparent; background: var(--iui-surface); padding: 20px; }
 .iui-card .iui-card { border-radius: var(--iui-radius-lg); padding: 16px; }
-/* A small or medium title that opens a card reads as the card title: 14/20 Medium, with a 13/18 secondary subtitle. */
-.iui-card > :is(.iui-title-sm, .iui-title-md):first-child, .iui-card > .iui-row:first-child :is(.iui-title-sm, .iui-title-md) { font-size: 14px; line-height: 20px; font-weight: 560; }
-.iui-card > :is(.iui-title-sm, .iui-title-md):first-child + :is(.iui-caption, .iui-text), .iui-card > .iui-row:first-child :is(.iui-title-sm, .iui-title-md) + :is(.iui-caption, .iui-text) { margin-top: 2px; color: var(--iui-content-muted); font-size: 13px; line-height: 18px; }
+/* A small or medium title that opens a card reads as the card title: 14/20 Medium, with a 13/18 secondary caption. Only a direct child or the first child of the card's header row is restyled; a paragraph or a Box nested inside that row keeps the type the program asked for. */
+.iui-card > :is(.iui-title-sm, .iui-title-md):first-child, .iui-card > .iui-row:first-child > :is(.iui-title-sm, .iui-title-md):first-child { font-size: 14px; line-height: 20px; font-weight: 560; }
+.iui-card > :is(.iui-title-sm, .iui-title-md):first-child + .iui-caption, .iui-card > .iui-row:first-child > :is(.iui-title-sm, .iui-title-md):first-child + .iui-caption { margin-top: 2px; color: var(--iui-content-muted); font-size: 13px; line-height: 18px; }
 .iui-divider { width: 100%; height: 0; margin: 4px 0; border: 0; border-top: 1px solid var(--iui-border); }
 .iui-form { display: flex; flex-direction: column; gap: var(--iui-field-gap); min-width: 0; }
 .iui-form > .iui-row:last-child:has(> .iui-button), .iui-form > .iui-button:last-child { margin-top: calc(var(--iui-action-gap) - var(--iui-field-gap)); }
@@ -93,7 +93,10 @@
 /* Short custom markers ("1", "2", "A") read as steps: white numerals on an ink chip. */
 .iui-list-marker-chip > span { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--iui-ink); color: var(--iui-on-ink); font-size: 12px; line-height: 1; font-weight: 560; font-variant-numeric: tabular-nums; }
 .iui-list:has(.iui-list-marker-chip):not(.iui-list-wide) > li { grid-template-columns: 24px minmax(0, 1fr); column-gap: 12px; }
-.iui-list-marker-text { justify-content: flex-start; color: var(--iui-content-muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A marker longer than the 76px lane (a time range) wraps inside its own
+   column instead of painting over the title. The timeline dot and line stay
+   anchored to the lane: they are positioned from the list item, not the text. */
+.iui-list-marker-text { justify-content: flex-start; align-self: start; height: auto; min-height: 1.55em; color: var(--iui-content-muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
 .iui-list-rich .iui-list-title { font-weight: 560; }
 .iui-list-description { margin-top: 2px; color: var(--iui-content-muted); font-size: 0.93em; line-height: 1.55; }
 .iui-list-children { margin-top: 8px; }
@@ -130,6 +133,11 @@
 /* Buttons */
 .iui-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; align-self: flex-start; flex: 0 1 auto; max-width: 100%; min-height: 36px; padding: 8px 16px; border: 1px solid transparent; border-radius: 999px; font-size: 14px; line-height: 1.2; font-weight: 560; text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
 .iui-row > .iui-button { align-self: center; }
+/* The defaults above only apply where the program left alignment to the
+   renderer: Row/Col/Box with an explicit align= write inline align-items, and
+   align-self:auto then follows it instead of pinning the item to start/center. */
+.iui-row[style*="align-items"] > :is(.iui-badge, .iui-button),
+.iui-col[style*="align-items"] > :is(.iui-badge, .iui-button) { align-self: auto; }
 .iui-button-sm { min-height: 32px; padding: 6px 12px; font-size: 13px; }
 .iui-button-lg { min-height: 44px; padding: 10px 20px; font-size: 15px; }
 .iui-button-solid { background: var(--iui-ink); color: var(--iui-on-ink); }
@@ -141,7 +149,10 @@
 .iui-button-soft:not(:disabled):hover, :is(.iui-button-outline, .iui-button-ghost):not(:disabled):active { background: var(--iui-pressed); }
 .iui-button-solid.iui-button-danger { background: var(--iui-danger); color: #fff; }
 .iui-button-solid.iui-button-success { background: var(--iui-success); color: #fff; }
-body[data-ds-dark-theme] .iui-button-solid:is(.iui-button-danger, .iui-button-success) { color: #121212; }
+/* Dark-only colour rules follow both scheme sources: DSH flips the body
+   attribute, while a standalone/free export sets data-iui-scheme on the
+   renderer host itself. Light rendering is unchanged. */
+:is(body[data-ds-dark-theme], .dsh-iui-host[data-iui-scheme="dark"]) .iui-button-solid:is(.iui-button-danger, .iui-button-success) { color: #121212; }
 .iui-button-solid:is(.iui-button-danger, .iui-button-success):not(:disabled):hover { filter: brightness(1.08); }
 :is(.iui-button-outline, .iui-button-soft, .iui-button-ghost).iui-button-danger { color: var(--iui-danger); }
 :is(.iui-button-outline, .iui-button-soft, .iui-button-ghost).iui-button-success { color: var(--iui-success); }
@@ -158,7 +169,8 @@ body[data-ds-dark-theme] .iui-button-solid:is(.iui-button-danger, .iui-button-su
 /* The hover and selection rings are outlines drawn inside the tile (painted over
    its content), so a scrolling row, a clipped Box or a Table cell never cuts them off. */
 /* Pressable: an ink wash on hover (5%) and press (8%) with a small scale; a selected tile
-   keeps a light wash, a hairline ring and a check badge instead of a heavy outline. */
+   keeps a light wash, a hairline ring and — only on content without text — a check badge
+   instead of a heavy outline. */
 .iui-pressable { position: relative; display: flex; flex-direction: column; min-width: 0; border-radius: var(--iui-radius-lg); cursor: pointer; outline: none; transition: transform 120ms ease-out, box-shadow 120ms ease-out; }
 .iui-pressable::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--iui-content-ink); opacity: 0; pointer-events: none; transition: opacity 120ms ease-out; }
 .iui-pressable:not([aria-disabled="true"]):hover { transform: scale(1.01); }
@@ -167,6 +179,13 @@ body[data-ds-dark-theme] .iui-button-solid:is(.iui-button-danger, .iui-button-su
 .iui-pressable:not([aria-disabled="true"]):active::after { opacity: 0.08; }
 .iui-pressable.is-selected { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--iui-ink) 20%, transparent); }
 .iui-pressable.is-selected::after { opacity: 0.06; }
+/* Selected text chips and tiles read from the ring. An 18px corner badge on a
+   compact chip (two CJK characters, 44px wide) covers the label, so the badge
+   is reserved for content with no text to overlap: photo tiles and swatches. */
+.iui-pressable.is-selected:not(:has(> .iui-row)):has(.iui-text, .iui-title, .iui-caption, .iui-label, .iui-markdown, .iui-list) { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--iui-ink) 45%, transparent); }
+.iui-pressable.is-selected:not(:has(> .iui-row))::before { content: ""; position: absolute; top: 8px; right: 8px; z-index: 1; width: 18px; height: 18px; border-radius: 50%; background: var(--iui-ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5'/%3E%3C/svg%3E") center / 12px no-repeat; }
+.iui-pressable.is-selected:not(:has(> .iui-row)):has(.iui-text, .iui-title, .iui-caption, .iui-label, .iui-markdown, .iui-list)::before { content: none; }
+:is(body[data-ds-dark-theme], .dsh-iui-host[data-iui-scheme="dark"]) .iui-pressable.is-selected:not(:has(> .iui-row))::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23171717' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5'/%3E%3C/svg%3E"); }
 /* A row (a checklist line) shows its own check icon, so selected adds no fill,
    ring or badge: the row keeps its size and its text stays readable. */
 .iui-pressable.is-selected:has(> .iui-row) { box-shadow: none; }
@@ -174,8 +193,6 @@ body[data-ds-dark-theme] .iui-button-solid:is(.iui-button-danger, .iui-button-su
 .iui-pressable .iui-text[style*="line-through"] { color: var(--iui-content-muted); }
 /* Rows in a list keep still: the wash alone shows hover and press. */
 .iui-pressable:has(> .iui-row):not([aria-disabled="true"]):is(:hover, :active) { transform: none; }
-.iui-pressable.is-selected:not(:has(> .iui-row))::before { content: ""; position: absolute; top: 8px; right: 8px; z-index: 1; width: 18px; height: 18px; border-radius: 50%; background: var(--iui-ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5'/%3E%3C/svg%3E") center / 12px no-repeat; }
-body[data-ds-dark-theme] .iui-pressable.is-selected:not(:has(> .iui-row))::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23171717' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5'/%3E%3C/svg%3E"); }
 .iui-pressable[aria-disabled="true"] { cursor: default; }
 .iui-pressable:focus-visible { outline: 2px solid var(--iui-focus); outline-offset: 2px; }
 
@@ -186,7 +203,7 @@ body[data-ds-dark-theme] .iui-pressable.is-selected:not(:has(> .iui-row))::befor
 .iui-input:focus, .iui-input:focus-visible { border-color: var(--iui-focus); box-shadow: 0 0 0 2px color-mix(in srgb, var(--iui-focus) 18%, transparent); outline: none; }
 .iui-textarea { min-height: 96px; resize: vertical; }
 .iui-select { appearance: none; padding-right: 38px; cursor: pointer; background: var(--iui-canvas) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23676767' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E") no-repeat right 12px center / 16px; }
-body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ababab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); }
+:is(body[data-ds-dark-theme], .dsh-iui-host[data-iui-scheme="dark"]) .iui-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ababab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); }
 .iui-date::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
 
 .iui-segmented { display: inline-flex; align-self: flex-start; gap: 2px; max-width: 100%; padding: 3px; overflow-x: auto; border-radius: 999px; background: var(--iui-surface); scrollbar-width: none; }
@@ -240,7 +257,9 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .iui-choice:has(:focus-visible) { outline: 2px solid var(--iui-focus); outline-offset: 2px; }
 
 /* Media and data */
-.iui-image { position: relative; display: grid; place-items: center; width: 100%; min-width: 0; overflow: hidden; background: var(--iui-photo-empty); }
+/* Default 3:2 ratio. A program aspectRatio is set inline and wins; a media row
+   is the only stylesheet rule allowed to suggest a different default. */
+.iui-image { position: relative; display: grid; place-items: center; width: 100%; min-width: 0; aspect-ratio: 1.5; overflow: hidden; background: var(--iui-photo-empty); }
 .iui-image:not(.is-loaded)::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--iui-canvas) 55%, transparent) 50%, transparent 70%) 0 0 / 220% 100%; animation: iui-shimmer 1.4s linear infinite; }
 .iui-image:has(.iui-image-empty)::before { display: none; }
 @keyframes iui-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
@@ -292,7 +311,11 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .iui-carousel { position: relative; min-width: 0; }
 .iui-carousel-track { display: flex; gap: 12px; margin-block: -4px; padding-block: 4px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .iui-carousel-track::-webkit-scrollbar { display: none; }
-.iui-carousel-item { flex: none; max-width: 85%; min-width: 0; scroll-snap-align: start; display: flex; flex-direction: column; }
+/* An item with an inline width is the itemWidth the program asked for; only
+   the component's own default item (240px) falls back to the 85% "peek next
+   item" cap. */
+.iui-carousel-item { flex: none; width: 240px; min-width: 0; scroll-snap-align: start; display: flex; flex-direction: column; }
+.iui-carousel-item:not([style*="width"]) { max-width: 85%; }
 .iui-carousel-item > .iui-card, .iui-carousel-item > .iui-pressable { height: 100%; }
 .iui-carousel-nav { position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px; margin-top: -17px; border: 1px solid var(--iui-border); border-radius: 50%; background: var(--iui-canvas); color: var(--iui-content-ink); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); cursor: pointer; }
 /* Same frosted glass as the map controls, since these sit over photos. */
@@ -380,20 +403,42 @@ body[data-ds-dark-theme] .iui-select { background-image: url("data:image/svg+xml
 .iui-flow > .iui-title + :is(.iui-text, .iui-caption, .iui-row:has(> .iui-badge)) { margin-top: var(--iui-space-inner); }
 .iui-flow > .iui-caption + .iui-title { margin-top: var(--iui-space-tight); }
 
-/* Inside a card or a grid cell, display titles use a capped scale (18/24 → 30/36)
-   instead of the page scale, so a section heading and a KPI number keep their
-   relative hierarchy without turning a panel into a mini landing page. */
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-lg { font-size: 18px; line-height: 24px; letter-spacing: -0.3px; }
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-xl { font-size: 22px; line-height: 28px; letter-spacing: -0.4px; }
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-2xl { font-size: 26px; line-height: 32px; letter-spacing: -0.5px; }
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-title-3xl { font-size: 30px; line-height: 36px; letter-spacing: -0.6px; }
-:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) > .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) { font-size: 15px; line-height: 22px; }
+/* Inside a card, a grid cell or a carousel item, display titles use a capped
+   scale (18/24 → 30/36) instead of the page scale, so a section heading and a
+   KPI number keep their relative hierarchy without turning a panel into a mini
+   landing page. The cap is structural: a Row or a Box between the container and
+   the heading does not bring the page size back, and a nested card reuses the
+   same fixed values instead of shrinking a step further. Page-level titles keep
+   the page scale. */
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) .iui-title-lg { font-size: 18px; line-height: 24px; letter-spacing: -0.3px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) .iui-title-xl { font-size: 22px; line-height: 28px; letter-spacing: -0.4px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) .iui-title-2xl { font-size: 26px; line-height: 32px; letter-spacing: -0.5px; }
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) .iui-title-3xl { font-size: 30px; line-height: 36px; letter-spacing: -0.6px; }
+/* The same structural scope settles body copy at 15px, but a program-chosen
+   xs/sm/lg size is left alone. */
+:is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow) .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) { font-size: 15px; line-height: 22px; }
 
-/* Media row: a photo beside text. The photo is a fixed 4:3, a third of the row
-   (120-200px), 16px from text that starts at the photo's top edge. */
-.iui-row:has(> :is(.iui-image, .iui-box:has(> .iui-image:only-child))) { align-items: flex-start !important; gap: var(--iui-space-group-lg) !important; }
-.iui-row > :is(.iui-image, .iui-box:has(> .iui-image:only-child)) { flex: none !important; width: clamp(120px, 33%, 200px) !important; }
-.iui-row > .iui-box:has(> .iui-image:only-child) > .iui-image, .iui-row > .iui-image { aspect-ratio: 4 / 3 !important; height: auto !important; }
+/* Media row default: a photo beside copy is top-aligned, sits 16px from the
+   text, and takes a third of the row (120-200px) — but only where the program
+   left that choice to the renderer. The components set their own values inline
+   (Box width, SearchImage aspectRatio, Row gap/align) and those always win:
+   a compact thumbnail row (rank + 44px photo + text) stays compact instead of
+   being forced into a 200px 4:3 block. The photo may carry a caption or sit in
+   a Pressable tile, so the default matches any Box/Pressable that holds one,
+   not only a Box whose image is its only child. Two rules, not one nested
+   `:has()`: the selector inside `:has()` must not contain another `:has()`. */
+.iui-row:has(> .iui-image),
+.iui-row:has(> .iui-box > .iui-image),
+.iui-row:has(> .iui-pressable .iui-image) { align-items: flex-start; gap: var(--iui-space-group-lg); }
+.iui-row > :is(.iui-image, .iui-box:has(> .iui-image), .iui-pressable:has(.iui-image)):not([style*="width"]) { flex: none; width: clamp(120px, 33%, 200px); }
+.iui-row > .iui-box:has(> .iui-image) > .iui-image,
+.iui-row > .iui-pressable:has(.iui-image) .iui-image,
+.iui-row > .iui-image { aspect-ratio: 4 / 3; }
+/* A media slot never paints over its neighbours: a photo box may be shorter than
+   the photo's aspect height, and without clipping that overflow lands on the rows
+   above and below. */
+.iui-row > .iui-box:has(> .iui-image),
+.iui-row > .iui-pressable:has(.iui-image) { overflow: clip; }
 
 /* Renderer host and failure fallback. `.dsh-iui-host` only carries the theme
    tokens (portaled panels use it too); layout lives on the root wrapper. */

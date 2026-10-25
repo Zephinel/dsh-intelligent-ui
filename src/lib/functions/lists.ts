@@ -146,11 +146,12 @@ export const Range = defineFunction({
   name: "Range",
   description: "Numbers from start up to end (not included) by step (default 1), e.g. @Range(0, 3) is [0, 1, 2]",
   params: z.object({ start: z.number(), end: z.number(), step: z.number().optional() }),
-  returns: z.array(z.number()),
+  returns: z.array(z.number()).nullable(),
   fn: ({ start, end, step = 1 }) => {
-    if (step === 0 || !Number.isFinite(step)) throw new Error("step must be a non-zero number");
+    // A zero/non-finite step is a null range, not a fatal error.
+    if (step === 0 || !Number.isFinite(step) || !Number.isFinite(start) || !Number.isFinite(end)) return null;
     const count = Math.max(0, Math.ceil((end - start) / step));
-    if (count > MAX_ITEMS) throw new Error(`more than ${MAX_ITEMS} items`);
+    if (count > MAX_ITEMS) return null;
     const whole = Number.isInteger(start) && Number.isInteger(step);
     // Rounding keeps fractional steps clean: 0.1 * 3 is 0.30000000000000004
     return Array.from({ length: count }, (_, i) => (whole ? start + i * step : Number((start + i * step).toPrecision(12))));
@@ -196,10 +197,11 @@ export const Chunk = defineFunction({
   name: "Chunk",
   description: "The list cut into lists of size items, e.g. for weeks of 7 days or pages",
   params: z.object({ list: list(), size: z.number() }),
-  returns: z.array(list()),
+  returns: z.array(list()).nullable(),
   fn: ({ list, size }) => {
     const n = Math.trunc(size);
-    if (n < 1) throw new Error("size must be 1 or more");
+    // A chunk smaller than one item is null, not a fatal error.
+    if (!(n >= 1) || !Number.isFinite(n)) return null;
     const out: unknown[][] = [];
     for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n));
     return out;

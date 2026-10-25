@@ -21,6 +21,14 @@ const COLORS = 6;
 const seriesColor = (i: number) => `var(--iui-chart-${(i % COLORS) + 1})`;
 const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value) || 0);
 const label = (row: Row, x: string) => String(row[x] ?? "");
+// Half the widest tooltip the stylesheet allows (max-width 240px): the tooltip
+// is centered with translateX(-50%), so its center must stay one half-width
+// inside the chart or the card's horizontal clip cuts it off.
+const TOOLTIP_HALF = 120;
+const tooltipLeft = (center: number, width: number) => {
+  const half = Math.min(TOOLTIP_HALF, width / 2);
+  return Math.min(Math.max(center, half), Math.max(half, width - half));
+};
 
 function makeFormat(kind: string | undefined, currency: string | undefined): Format {
   const code = typeof currency === "string" && /^[A-Za-z]{3}$/.test(currency) ? currency.toUpperCase() : "USD";
@@ -75,11 +83,21 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
   const [hover, setHover] = useState<number | null>(null);
   const { rows, series, type, height, format, x } = spec;
   const stacked = spec.stacked && type !== "line";
-  const tops = rows.map((row) => {
+  // Stacked bars/areas accumulate positive and negative values separately: a
+  // negative series stacks below zero instead of being clamped away.
+  const positive = rows.map((row) => {
     let total = 0;
     return series.map((s) => (total += Math.max(0, num(row[s]))));
   });
-  const values = stacked ? tops.map((t) => t[t.length - 1] ?? 0) : rows.flatMap((row) => series.map((s) => num(row[s])));
+  const negative = rows.map((row) => {
+    let total = 0;
+    return series.map((s) => (total += Math.min(0, num(row[s]))));
+  });
+  const stackTop = (row: number, si: number) => (num(rows[row][series[si]]) < 0 ? negative[row][si] : positive[row][si]);
+  const stackBase = (row: number, si: number) => (num(rows[row][series[si]]) < 0 ? (negative[row][si - 1] ?? 0) : (positive[row][si - 1] ?? 0));
+  const values = stacked
+    ? rows.flatMap((_, i) => [positive[i][positive[i].length - 1] ?? 0, negative[i][negative[i].length - 1] ?? 0])
+    : rows.flatMap((row) => series.map((s) => num(row[s])));
   const step = niceStep((Math.max(0, ...values) - Math.min(0, ...values)) / 5);
   const lo = Math.floor(Math.min(0, ...values) / step) * step;
   const hi = Math.max(lo + step, Math.ceil(Math.max(0, ...values) / step) * step);
@@ -143,9 +161,19 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
             const inner = Math.min(band * 0.7, 72 * Math.max(1, stacked ? 1 : series.length));
             if (stacked)
               return series.map((s, si) => {
-                const top = y(tops[i][si]);
-                const base = y(tops[i][si - 1] ?? 0);
-                return <rect key={`${i}-${s}`} x={xAt(i) - inner / 2} y={top} width={inner} height={Math.max(0, base - top)} fill={seriesColor(si)} rx={si === series.length - 1 ? 4 : 0} />;
+                const top = y(stackTop(i, si));
+                const base = y(stackBase(i, si));
+                return (
+                  <rect
+                    key={`${i}-${s}`}
+                    x={xAt(i) - inner / 2}
+                    y={Math.min(top, base)}
+                    width={inner}
+                    height={Math.max(0, Math.abs(base - top))}
+                    fill={seriesColor(si)}
+                    rx={si === series.length - 1 ? 4 : 0}
+                  />
+                );
               });
             const each = inner / series.length;
             return series.map((s, si) => {
@@ -155,8 +183,8 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
           })}
         {(type === "line" || type === "area") &&
           series.map((s, si) => {
-            const top = (i: number) => (stacked ? tops[i][si] : num(rows[i][s]));
-            const base = (i: number) => (stacked ? (tops[i][si - 1] ?? 0) : 0);
+            const top = (i: number) => (stacked ? stackTop(i, si) : num(rows[i][s]));
+            const base = (i: number) => (stacked ? stackBase(i, si) : 0);
             const points = rows.map((_, i) => `${xAt(i).toFixed(1)},${y(top(i)).toFixed(1)}`);
             const under = rows.map((_, i) => `${xAt(i).toFixed(1)},${y(base(i)).toFixed(1)}`).reverse();
             return (
@@ -171,7 +199,7 @@ function Cartesian({ spec, width }: { spec: Spec; width: number }) {
         {hover !== null && type !== "bar" && <line x1={xAt(hover)} x2={xAt(hover)} y1={pad.top} y2={pad.top + h} className="iui-chart-guide" />}
       </svg>
       {tip && (
-        <div className="iui-chart-tooltip" style={{ left: Math.min(Math.max(xAt(hover!), 70), width - 70), top: pad.top }}>
+        <div className="iui-chart-tooltip" style={{ left: tooltipLeft(xAt(hover!), width), top: pad.top }}>
           <strong>{label(tip, x)}</strong>
           {series.map((s, si) => (
             <span key={s}>
@@ -228,7 +256,7 @@ function Scatter({ spec, width }: { spec: Spec; width: number }) {
         )}
       </svg>
       {tip && hover && (
-        <div className="iui-chart-tooltip" style={{ left: Math.min(Math.max(px(num(tip[x])), 70), width - 70), top: Math.max(0, py(num(tip[series[hover.si]])) - 70) }}>
+        <div className="iui-chart-tooltip" style={{ left: tooltipLeft(px(num(tip[x])), width), top: Math.max(0, py(num(tip[series[hover.si]])) - 70) }}>
           <strong>{name ? String(tip[name]) : series[hover.si]}</strong>
           <span>{x} <b>{num(tip[x]).toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></span>
           <span><i style={{ background: seriesColor(hover.si) }} />{series[hover.si]} <b>{format(num(tip[series[hover.si]]))}</b></span>
@@ -296,12 +324,27 @@ const chartProps = z.object({
   height: z.number().optional(),
 });
 
+/** Every numeric key in the rows, in first-seen order, so a key that only
+ *  appears in a later row is still a series (docs: default every number key). */
+function inferSeries(rows: Row[], x: string): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (key === x || seen.has(key) || typeof row[key] !== "number") continue;
+      seen.add(key);
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
 function toSpec(props: z.infer<typeof chartProps>): Spec | null {
   const rows = ((Array.isArray(props.data) ? props.data : []) as unknown[]).filter((r): r is Row => !!r && typeof r === "object" && !Array.isArray(r));
   const first = rows[0];
   if (!first) return null;
   const x = (props.x && props.x in first ? props.x : null) ?? Object.keys(first).find((k) => (props.type === "scatter" ? typeof first[k] === "number" : typeof first[k] === "string")) ?? Object.keys(first)[0];
-  const series = (props.series?.length ? props.series.filter((s) => typeof s === "string") : Object.keys(first).filter((k) => k !== x && typeof first[k] === "number")).slice(0, 8);
+  const series = props.series?.length ? props.series.filter((s) => typeof s === "string") : inferSeries(rows, x);
   const type = (["bar", "line", "area", "pie", "donut", "scatter"] as const).includes(props.type) ? props.type : "bar";
   return {
     type,

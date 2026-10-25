@@ -20,7 +20,9 @@ body {
 .dsh-iui-standalone-cards {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  /* Same 12px rhythm as the live `.dsh-iui-cards` column, so the exported page
+     keeps the chat's card spacing. */
+  gap: 12px;
   width: min(100%, 760px);
   min-width: 0;
 }

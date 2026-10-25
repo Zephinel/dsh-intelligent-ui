@@ -188,11 +188,19 @@ function Photo(props: PhotoProps) {
   const found = useImageSearch(needSearch ? alt : null);
   const current = [src, ...(found ?? [])].find((url): url is string => !!url && !failed.includes(url));
   const settled = !current && (!needSearch || found !== undefined);
-  const ratio = typeof props.aspectRatio === "number" && props.aspectRatio > 0.2 && props.aspectRatio < 5 ? props.aspectRatio : 1.5;
+  // The default ratio lives in the stylesheet, not inline: the media-row rule
+  // may suggest a 4:3 default without overriding a ratio the program asked
+  // for. An explicit aspectRatio stays inline, so no stylesheet rule can win
+  // over it. Any finite positive ratio is accepted, clamped to a wide sane
+  // range: docs promise a number, not a 0.2-5 window.
+  const ratio =
+    typeof props.aspectRatio === "number" && Number.isFinite(props.aspectRatio) && props.aspectRatio > 0
+      ? Math.min(20, Math.max(0.05, props.aspectRatio))
+      : null;
   return (
     <div
       className={cx("iui-image", props.fit === "contain" && "is-contain", loaded === current && "is-loaded")}
-      style={{ aspectRatio: ratio, borderRadius: radius(props.radius ?? "lg") }}
+      style={{ ...(ratio === null ? {} : { aspectRatio: ratio }), borderRadius: radius(props.radius ?? "lg") }}
       role={current ? undefined : "img"}
       aria-label={current ? undefined : alt}
     >
