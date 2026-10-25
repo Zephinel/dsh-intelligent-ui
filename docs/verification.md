@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项）：当前 main 分支证据见文末 2026-10-25 的第三条记录（Node **247/247**；renderer 解析/渲染 42/42、CSS 契约 50/50、组件契约 63/63、typography 22/22、media-row 17/17、pressable 9/9、contrast OK、i18n 4 个程序；浏览器 7/7，settings 101、on-demand 114、交互页面 46、图片导出 65 条断言）。下方旧浏览器/模型记录保留为历史。
+- 测试（实时子项）：当前 0.5.0 发布证据见文末 2026-10-25 的 0.5.0 发布记录（Node **247/247**；renderer 解析/渲染 42/42、CSS 契约 50/50、组件契约 63/63、typography 22/22、media-row 17/17、pressable 9/9、contrast OK、i18n 4 个程序；浏览器 7/7，settings 101、on-demand 114、交互页面 46、图片导出 65 条断言）。下方旧浏览器/模型记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -288,3 +288,13 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 本轮修复（均有新增检查覆盖）：媒体行不再覆盖程序指定的图片尺寸；卡片副标题启发式不再改写正文；列表长 marker 在轨道内换行；`align=` 优先于 Badge/Button 默认；深色独立导出补齐 select/按钮/勾选颜色；Carousel 显式 `itemWidth` 生效、默认 240px + 85% peek；Table 数字原样输出；Chart 默认 series 跨行并集、stacked 负值保留符号；`aspectRatio` 接受 0.05–20；YouTube `/live/` 可渲染；SVG paint token 与文档一致；raw 背景对比度支持 rgba/hsl/8 位 hex；Length 支持安全的 `calc()/min()/max()/clamp()`；Slider 显示绑定值并回写越界状态；数字 Input 接受小数逗号；Flashcard 改为 `div role=button` 以允许内嵌控件；Markdown 保留嵌套列表、h5/h6 按 h4；`@Sqrt`/`@FormatDate` 等域外输入不再让整卡 fallback；`@Each` 生成的 Section/Toc 通过 article 校验、符号 anchor 不再冲突、free 布局不再收到页面节奏警告、gap 警告仅针对图片行列表；提示词修正 Form/@ToAssistant 转发、HtmlView 网络声明与 Example gap；导出「移除追问」保留含正文 Card；无主题临时结果继承会话选中模板主题；非法 `styleId` 被拒绝、不可用模板给出 warning；on-demand 上限错误说明原因与重新武装动作。完整审计与修复记录在未跟踪的 `.tmp-audit/`，独立复核见 `.tmp-verify/round4/REPORT.md`。
 
 独立 verifier 复核：6/6 项 PASS（旧 CSS/组件变异下新检查会失败；High/Max 布局数值不变）；本轮未运行真实模型 DSH 会话。
+
+## 2026-10-25 — 0.5.0 发布
+
+`@zephinel/dsh-intelligent-ui@0.5.0` 已发布到 npm（`latest`）与 GitHub Release。
+
+- **发布链路**：annotated tag `v0.5.0`（tag 对象 `5045afc`）指向发布提交 `c2a375f`，触发 `.github/workflows/publish.yml` [run 40190003142](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/40190003142)。首次尝试在 CI 的 typography Chrome 启动上出现一次瞬时失败（`Chrome did not expose the page target`，本地同一提交通过，重跑即成功，无代码改动），重跑 51 s 成功并完成 Trusted Publishing。
+- **registry**：`latest` = `0.5.0`；tarball `dsh-intelligent-ui-0.5.0.tgz`，**43** 个文件，shasum `b1567cb8448191054ae6787d5a46a85129bd0456`，约 4.1 MB（解包 10.3 MB）。网络可见时间约在 publish 后 3–4 分钟（传播延迟，不是失败）。
+- **签名**：publish 记录了 provenance，透明日志 logIndex **3460086916**；一次性临时目录安装 `@0.5.0` 后 `npm audit signatures` 报告 **4 个包 registry signature 验证通过、2 个包 attestation 验证通过**。
+- **GitHub Release**：[0.5.0 — 2026-10-25](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.5.0)。
+- **发布门禁**（发布提交所在树）：`npm run check` PASS，Node 测试 **247/247**（Host **117**、Client **109**、packaging **21**）；renderer 解析/渲染各 **42/42**、CSS 契约 **50/50**、组件契约 **63/63**、排版 **22/22**、media-row **17/17**、pressable **9/9**；浏览器 **7/7**；`npm pack` **43** 个文件。版本说明包含自由布局、模板文件导入/导出以及本轮的渲染契约、Host 校验/警告、导出语义修复。本次发布未运行真实模型 DSH 会话。
