@@ -1,0 +1,353 @@
+#!/usr/bin/env node
+/**
+ * Browser check for Artifact block arrangement and editing.
+ *
+ * Covers the structure list, conditional request list, per-block popovers,
+ * keyboard and pointer reordering, reset order, the combined order + edit
+ * envelope, Host-normalized revision replay, hover request cards, composer chip
+ * label shapes and the narrow/light-dark chrome. No real model is called.
+ *
+ *   node test/browser/artifact-edit.e2e.mjs
+ */
+import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { build } from 'esbuild'
+import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
+import { DST_PROGRAM } from './fixtures/dst-artifact.ts'
+import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
+
+const root = new URL('../../', import.meta.url).pathname
+const temp = await mkdtemp(join(tmpdir(), 'iui-artifact-edit-e2e-'))
+let server, browser, cdp
+let checks = 0
+const check = (value, expected, message) => { assert.deepEqual(value, expected, message); checks += 1 }
+
+/** Edited revision returned by the model: digital clock block + first-year column. */
+const DIGITAL_PROGRAM = DST_PROGRAM
+  .replace(/^clockCard = .*$/m, 'clockCard = Card([Title("同一时刻，两个读数", "sm"), Text("选一个状态，看同一时刻的数字时间。", "sm", "muted"), SegmentedControl($clock, ["冬令时", "夏令时"], true), Col([Title($clock == "夏令时" ? "08:00" : "07:00", "2xl"), Text("2026-11-04", "sm", "muted")], 1)])')
+  .replace(/^rulesTable = .*$/m, 'rulesTable = Table(["地区", "首次实施年份", "切换规则", "状态"], [["欧盟", "1980", "3 月最后一个周日 → 10 月最后一个周日", "实行"], ["中国", "1986", "1986–1991 年实行，1992 年起取消", "不实行"]])')
+
+/** Platform primitives stub: the shell seeds the real module at runtime. */
+const PRIMITIVES_STUB = `
+import { createElement } from 'react'
+export const IconChevronDownOutlineRegular = () => null
+export const IconSparkleRegular = () => null
+export const IconCloseOutlineRegular = () => null
+export const IconEditOutlineRegular = () => null
+export const IconTrashOutlineRegular = () => null
+export const IconPlusOutlineRegular = () => null
+export const IconArrowLeftOutlineRegular = () => null
+export const DisclosureRow = () => null
+export function ReferenceChip({ label, title }) {
+  return createElement('span', { 'data-reference-chip': 'true', title }, label)
+}
+`
+
+try {
+  await build({
+    entryPoints: [join(root, 'test/browser/harness/artifact-edit-entry.tsx')], outfile: join(temp, 'bundle.js'),
+    bundle: true, platform: 'browser', format: 'esm', target: 'chrome120', jsx: 'automatic', absWorkingDir: root,
+    define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent',
+    plugins: [{
+      name: 'platform-stubs',
+      setup(build) {
+        build.onResolve({ filter: /^@deepseek-ai\/dsh-client-ui-primitives$/ }, () => ({ path: 'primitives', namespace: 'fixture' }))
+        build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: PRIMITIVES_STUB, resolveDir: root }))
+      },
+    }],
+  })
+  await writeFile(join(temp, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="bundle.css"><style>
+:root { color-scheme:light;
+  --dsw-alias-bg-base:#fff; --dsw-alias-bg-layer-1:#fff; --dsw-alias-bg-layer-2:#f5f6f7; --dsw-alias-bg-layer-3:#eceef1;
+  --dsw-alias-bg-module-platform:#f5f6f7; --dsw-alias-label-primary:#171717; --dsw-alias-label-secondary:#555;
+  --dsw-alias-label-tertiary:#888; --dsw-alias-label-caption:#999;
+  --dsw-alias-border-l1:#e4e4e4; --dsw-alias-border-l2:#d4d4d4; --dsw-alias-border-l3:#c4c4c4;
+  --dsw-alias-interactive-bg-hover:#eee; --dsw-alias-interactive-bg-hover-solid:#e8e8e8;
+  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708;
+  --dsw-alias-button-floating-fill:#fff; --dsw-alias-button-floating-hover:#f2f2f2;
+  --dsw-specific-menu:#fff; --dsw-specific-bubble:#eef2f7; --dsw-specific-input-major:#fff;
+  --dsw-radius-sm:6px; --dsw-radius-md:10px; --dsw-radius-lg:14px; --dsw-radius-xl:18px;
+  --dsw-focus-ring-color:#1265bb; --dsw-focus-ring-width:2px; --dsw-font-family:system-ui;
+  --dsw-elevation-panel:0 6px 24px rgb(0 0 0 / 12%); --dsw-elevation-prominent:0 10px 36px rgb(0 0 0 / 16%);
+  --dsh-chat-content-width:748px; --dsh-composer-side-clearance:0px; --dsh-content-font-size:14px;
+}
+body[data-ds-dark-theme] { color-scheme:dark;
+  --dsw-alias-bg-base:#111; --dsw-alias-bg-layer-1:#1b1b1b; --dsw-alias-bg-layer-2:#242424; --dsw-alias-bg-layer-3:#2e2e2e;
+  --dsw-alias-bg-module-platform:#353638; --dsw-alias-label-primary:#f2f2f2; --dsw-alias-label-secondary:#b8b8b8;
+  --dsw-alias-label-tertiary:#8a8a8a; --dsw-alias-label-caption:#777;
+  --dsw-alias-border-l1:#323232; --dsw-alias-border-l2:#3c3c3c; --dsw-alias-border-l3:#4a4a4a;
+  --dsw-alias-interactive-bg-hover:#2e2e2e; --dsw-alias-interactive-bg-hover-solid:#333;
+  --dsw-specific-menu:#242424; --dsw-specific-bubble:#2b3440; --dsw-specific-input-major:#1f1f1f;
+}
+body { margin:0; background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary); font:14px/1.5 var(--dsw-font-family); }
+main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
+[data-composer-card] { position:fixed; bottom:16px; left:16px; right:16px; max-width:748px; margin:auto; border:1px solid var(--dsw-alias-border-l2); border-radius:14px; background:var(--dsw-alias-bg-layer-1); padding:8px 12px; }
+[data-composer-draft] { min-height:20px; white-space:pre-wrap; color:var(--dsw-alias-label-secondary); font-size:13px; }
+[data-composer-chips] { display:flex; gap:6px; }
+[data-chip] { border:1px solid var(--dsw-alias-border-l2); border-radius:6px; padding:1px 6px; font-size:12px; color:var(--dsw-alias-label-primary); }
+[data-sent-summary] { margin-top:6px; }
+</style></head><body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`)
+  server = await startStaticServer(temp)
+  browser = await launchChrome({ url: server.url, width: 1500, height: 1000 })
+  assert.ok(browser, 'Chrome required')
+  cdp = await connectCdp(browser.port)
+  await cdp.send('Page.enable')
+  await cdp.send('Runtime.enable')
+  const read = expression => cdp.evaluate(expression)
+  const wait = (expression, message = expression, options) => cdp.waitFor(expression, message, options)
+  const click = selector => read(`document.querySelector(${JSON.stringify(selector)}).click()`)
+  const text = selector => read(`(document.querySelector(${JSON.stringify(selector)})?.textContent ?? '')`)
+  const count = selector => read(`document.querySelectorAll(${JSON.stringify(selector)}).length`)
+  const report = join(root, '.tmp-report')
+  await mkdir(report, { recursive: true })
+  const shot = async name => {
+    const result = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(join(report, name), Buffer.from(result.data, 'base64'))
+  }
+  const typeInto = async (selector, value) => {
+    await read(`(() => {
+      const field = document.querySelector(${JSON.stringify(selector)});
+      const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(field, ${JSON.stringify(value)});
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`)
+  }
+  const arrangementOrder = () => read(`[...document.querySelectorAll('[data-dsh-iui-edit-arrangement-row]')].map(row => row.getAttribute('data-block-id'))`)
+  const chipLabel = () => read(`document.querySelector('[data-chip="artifact-edit"]')?.getAttribute('data-chip-label') ?? null`)
+  const arrangementSelector = id => `[data-dsh-iui-edit-arrangement-row][data-block-id="${id}"]`
+  const openArrangementEditor = id => click(`${arrangementSelector(id)} [data-dsh-iui-edit-arrangement-edit]`)
+  const saveInstruction = async value => {
+    await typeInto('[data-dsh-iui-edit-instruction]', value)
+    await click('[data-dsh-iui-edit-save]')
+    await wait('!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover closed')
+  }
+  const moveWithKeyboard = (id, key, times) => read(`(() => {
+    const grip = document.querySelector('${arrangementSelector(id)} [data-dsh-iui-edit-grip]');
+    grip.focus();
+    for (let index = 0; index < ${times}; index += 1) grip.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true, cancelable: true }));
+  })()`)
+  const dragRowToTop = id => read(`(() => {
+    const rows = [...document.querySelectorAll('[data-dsh-iui-edit-arrangement-row]')];
+    const row = rows.find(item => item.getAttribute('data-block-id') === ${JSON.stringify(id)});
+    const grip = row.querySelector('[data-dsh-iui-edit-grip]');
+    const rect = grip.getBoundingClientRect();
+    const base = { bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, pointerType: 'mouse', button: 0, clientX: rect.left + 4, clientY: rect.top + 4 };
+    const fire = (target, type, extra) => target.dispatchEvent(new PointerEvent(type, { ...base, ...extra }));
+    try { grip.setPointerCapture(7) } catch { /* synthetic pointer */ }
+    fire(grip, 'pointerdown', { buttons: 1 });
+    const first = rows[0].getBoundingClientRect();
+    fire(document, 'pointermove', { buttons: 1, clientY: first.top + 2 });
+    fire(document, 'pointerup', { buttons: 0, clientY: first.top + 2 });
+  })()`)
+
+  // 1. Card entry.
+  await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'edit entry')
+  check(await count('[data-dsh-iui-block]'), 0, 'no edit wrappers before editing')
+  check(await text('[data-dsh-iui-edit-entry]'), '编辑', 'edit entry label')
+
+  // 2. Edit mode: no request list, arrangement always complete, summary empty.
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit view')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 8', 'eight blocks')
+  check(await count('[data-dsh-iui-block]'), 8, 'all top-level blocks recognized')
+  check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
+  check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
+  check(await count('[data-dsh-iui-edit-arrangement-row]'), 8, 'arrangement lists every block')
+  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], 'arrangement starts in page order')
+  check(await count('[data-dsh-iui-edit-arrangement-row] .dsh-iui-edit-tag'), 0, 'no edited tags yet')
+  check(await text('[data-dsh-iui-edit-reset-order]'), '重置顺序', 'reset order control')
+  check((await text('[data-dsh-iui-edit-panel]')).includes('区块编排'), true, 'arrangement section title')
+  check((await text('[data-dsh-iui-edit-panel]')).includes('Artifact 编辑器'), true, 'panel title')
+  check(await count('[data-dsh-iui-edit-send-info]'), 1, 'send summary card')
+  check((await text('[data-dsh-iui-edit-send-info]')).includes('保持原样'), true, 'summary reports unchanged order')
+  await shot('harness-arrangement-empty.png')
+
+  // 3. Opening a popover does not create a request.
+  await click('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover opened')
+  check(await count('[data-dsh-iui-edit-request-list]'), 0, 'draft popover creates no request')
+  await click('[data-dsh-iui-edit-cancel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-popover]")', 'draft popover closed')
+  check(await count('[data-dsh-iui-edit-request-list]'), 0, 'still no request after cancel')
+
+  // 4. Saving a block instruction creates the request entry, number and colour.
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover from arrangement')
+  check((await text('[data-dsh-iui-edit-popover]')).includes('同一时刻，两个读数'), true, 'popover shows block name')
+  await saveInstruction('把模拟时钟改为数字时钟，并显示当前日期')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-request-list]")', 'request list appears')
+  check(await count('[data-dsh-iui-edit-request-row]'), 1, 'one request row')
+  check(await read('document.querySelector("[data-dsh-iui-edit-request-row]").getAttribute("data-block-id")'), 'b3', 'request row binds b3')
+  check((await text('[data-dsh-iui-edit-request-row]')).includes('把模拟时钟改为数字时钟'), true, 'request row shows instruction')
+  check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
+  check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-badge')?.textContent ?? null`), '1', 'arrangement badge number 1')
+  check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-tag')?.textContent ?? null`), '已编辑', 'arrangement edited tag')
+  check(await chipLabel(), '编辑 Artifact · 1 项修改', 'chip shows one edit')
+  check(await count('[data-dsh-iui-edit-clear-all]'), 1, 'clear-all control appears')
+
+  // 5. A second request.
+  await click('[data-dsh-iui-block="b5"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'second popover')
+  await saveInstruction('增加首次实施年份')
+  await wait('document.querySelectorAll("[data-dsh-iui-edit-request-row]").length === 2', 'two request rows')
+  check(await read('document.querySelector("[data-dsh-iui-block=\\"b5\\"]").getAttribute("data-dsh-iui-block-order")'), '2', 'canvas badge number 2')
+  check(await chipLabel(), '编辑 Artifact · 2 项修改', 'chip shows two edits')
+  check(await count('[data-dsh-iui-edit-arrangement-row] .dsh-iui-edit-tag'), 2, 'two edited tags')
+  await shot('harness-arrangement-requests.png')
+
+  // 6. Hovering an edited row shows the compact request card.
+  await read(`(() => {
+    const row = document.querySelector('${arrangementSelector('b3')}');
+    row.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+  })()`)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-hover-card]")', 'hover card', { timeout: 5000 })
+  check((await text('[data-dsh-iui-edit-hover-card]')).includes('把模拟时钟改为数字时钟'), true, 'hover card shows the request')
+  check(await count('[data-dsh-iui-edit-hover-card] .dsh-iui-edit-card-action'), 2, 'hover card edit + delete actions')
+  await shot('harness-arrangement-hover.png')
+  await read(`document.querySelector('${arrangementSelector('b3')}').dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse' }))`)
+  await wait('!document.querySelector("[data-dsh-iui-edit-hover-card]")', 'hover card hides', { timeout: 3000 }).catch(() => undefined)
+
+  // 7. Keyboard reordering moves b5 to the top; edit numbers/colours stay.
+  await moveWithKeyboard('b5', 'ArrowUp', 4)
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b5'`, 'keyboard reorder')
+  check((await arrangementOrder()).indexOf('b5'), 0, 'b5 moved to the top')
+  check(await chipLabel(), '编辑 Artifact · 2 项修改 + 排序', 'chip reports order + edits')
+  check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'b3 keeps number 1 after reorder')
+  check(await read('document.querySelector("[data-dsh-iui-block=\\"b5\\"]").getAttribute("data-dsh-iui-block-order")'), '2', 'b5 keeps number 2 after reorder')
+  check(await read(`document.querySelector('[data-dsh-iui-block]').getAttribute('data-dsh-iui-block')`), 'b5', 'edit canvas previews the target order')
+  check(await count('[data-dsh-iui-edit-preview]'), 1, 'preview marker visible')
+  check((await text('[data-dsh-iui-edit-send-info]')).includes('已调整'), true, 'summary reports adjusted order')
+  await shot('harness-arrangement-reordered.png')
+
+  // 8. Pointer drag also reorders; arrangement body locates without opening a popover.
+  await dragRowToTop('b2')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'pointer drag reorder', { timeout: 4000 })
+  check(await read(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id')`), 'b2', 'pointer drag moves b2 to the top')
+  await read(`document.querySelector('${arrangementSelector('b3')} [data-dsh-iui-edit-arrangement-body]').click()`)
+  await wait('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-flash") === "true"', 'canvas flash')
+  check(await count('[data-dsh-iui-edit-popover]'), 0, 'arrangement body click does not open the popover')
+
+  // 9. Reset restores page order but keeps edits, numbers and global note.
+  await click('[data-dsh-iui-edit-reset-order]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b1'`, 'reset order')
+  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], 'reset restores page order')
+  check(await chipLabel(), '编辑 Artifact · 2 项修改', 'reset removes the reorder chip part')
+  check(await count('[data-dsh-iui-edit-request-row]'), 2, 'reset keeps saved requests')
+  check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'reset keeps numbering')
+  check(await read(`document.querySelector('[data-dsh-iui-block]').getAttribute('data-dsh-iui-block')`), 'b1', 'reset restores the canvas preview order')
+  await typeInto('[data-dsh-iui-edit-global]', '保持页面其余内容不变')
+  check((await text('[data-dsh-iui-edit-send-info]')).includes('已填写'), true, 'summary reports the global instruction')
+
+  // 10. Reorder again and send edits + order + global in one envelope.
+  await moveWithKeyboard('b5', 'ArrowUp', 4)
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b5'`, 'second reorder')
+  await read('window.__appendDraft("请突出这两项修改的差异，保持其他内容和交互不变。")')
+  const envelope = await read('window.__serializeChip()')
+  check(envelope.includes('"blockId":"b3"'), true, 'envelope carries the b3 edit')
+  check(envelope.includes('"blockId":"b5"'), true, 'envelope carries the b5 edit')
+  check(envelope.includes('"targetOrder":["b5","b1","b2","b3","b4","b6","b7","b8"]'), true, 'envelope carries the target order')
+  check(envelope.includes('"orderChanged":true'), true, 'envelope flags the reorder')
+  check(envelope.includes('保持页面其余内容不变'), true, 'envelope carries the global instruction')
+  check(envelope.includes('root = Col('), true, 'envelope carries the original program')
+  check(envelope.includes('edit_ui_blocks'), true, 'content-edit envelope targets the block tool')
+  check(await count('[data-dsh-iui-edit-view]'), 0, 'edit mode ends after send')
+  await wait('document.querySelector("[data-chip=\\"artifact-edit\\"]") === null', 'chip removed after send')
+  await wait('!!document.querySelector("[data-sent-summary] [data-reference-chip]")', 'sent summary chip')
+  check((await text('[data-sent-summary]')).includes('2 项修改 + 排序 + 整体说明'), true, 'sent chip reports edits + order + global')
+  check(await read('window.__input().draft'), '', 'draft cleared after send')
+
+  // 11. Host-normalized revision: edited content in the target order.
+  const targetOrder = ['b5', 'b2', 'b1', 'b3', 'b4', 'b6', 'b7', 'b8']
+  const baseExtraction = extractArtifactBlocks(DST_PROGRAM)
+  const normalized = reorderProgramToTargetOrder(DIGITAL_PROGRAM, targetOrder, baseExtraction)
+  assert.ok(normalized, 'fixture reorder computes')
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ program: normalized, editedBlockIds: ['b3', 'b5'] })})`)
+  await wait('document.querySelectorAll("[data-dsh-intelligent-ui=card]").length === 2', 'edited revision card')
+  check(await count('[data-dsh-iui-revision]'), 1, 'revision badge on the edited card')
+  check(await text('[data-dsh-iui-revision]'), '修订 2', 'revision number')
+  const revisedText = await text('[data-dsh-intelligent-ui-list] [data-dsh-intelligent-ui="card"]:last-of-type')
+  check(revisedText.includes('首次实施年份'), true, 'edited block content renders')
+  check(revisedText.indexOf('首次实施年份') < revisedText.indexOf('同一时刻'), true, 'normalized program puts the rules table first')
+  await shot('harness-arrangement-revision-2.png')
+
+  // 12. Pure order-only request: request list stays hidden, chip is order-only.
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit mode again')
+  check(await count('[data-dsh-iui-edit-request-list]'), 0, 'fresh session has no requests')
+  await moveWithKeyboard('b2', 'ArrowUp', 1)
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'order-only reorder')
+  check(await chipLabel(), '编辑 Artifact · 调整区块顺序', 'order-only chip label')
+  await read('window.__appendDraft("只调整顺序，内容保持不变。")')
+  const orderEnvelope = await read('window.__serializeChip()')
+  check(orderEnvelope.includes('"edits":[]'), true, 'order-only envelope has no block edits')
+  check(orderEnvelope.includes('"targetOrder":["b2","b1"'), true, 'order-only envelope carries the target order')
+  check(orderEnvelope.includes('"orderChanged":true'), true, 'order-only envelope flags the reorder')
+  check(orderEnvelope.includes('render_ui'), true, 'order-only envelope keeps the full-program render_ui path')
+  await wait('document.querySelector("[data-chip=\\"artifact-edit\\"]") === null', 'order-only chip removed after send')
+  check((await text('[data-sent-summary]')).includes('调整区块顺序'), true, 'sent chip reports the order-only request')
+
+  // 13. Conflict still blocks the send after arrangement work.
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit mode for conflict')
+  await openArrangementEditor('b6')
+  await saveInstruction('补充一个例子')
+  await wait('!!document.querySelector("[data-chip=\\"artifact-edit\\"]")', 'chip before conflict')
+  await read('window.__conflict = true')
+  // A background probe (window focus) surfaces the conflict before sending.
+  await read('window.dispatchEvent(new Event("focus"))')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-conflict]")', 'background conflict banner')
+  check((await text('[data-dsh-iui-edit-conflict]')).includes('更新的版本'), true, 'background probe shows the conflict banner')
+  const conflict = await read('window.__serializeChip().then(() => null, error => String(error))')
+  check(conflict.includes('Artifact 在编辑期间更新了'), true, 'conflict blocks the send')
+  check(await count('[data-dsh-iui-edit-view]'), 1, 'edit mode stays after a blocked send')
+  await read('window.__conflict = false')
+  await click('[data-dsh-iui-edit-retry]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-conflict]")', 'retry clears the conflict')
+  check(await count('[data-dsh-iui-edit-conflict]'), 0, 'retry clears the conflict banner')
+
+  // 14. Dark scheme and narrow drawer.
+  await read('document.body.setAttribute("data-ds-dark-theme", "")')
+  check(await read('getComputedStyle(document.querySelector("[data-dsh-iui-edit-panel]")).backgroundColor !== "rgba(0, 0, 0, 0)"'), true, 'panel surface in dark scheme')
+  await shot('harness-arrangement-dark.png')
+  await read('document.body.removeAttribute("data-ds-dark-theme")')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 1000, deviceScaleFactor: 1, mobile: false })
+  check(await read('getComputedStyle(document.querySelector("[data-dsh-iui-edit-panel]")).display'), 'none', 'desktop rail hidden on narrow')
+  await click('[data-dsh-iui-edit-drawer-toggle]')
+  await wait('document.querySelector("[data-dsh-iui-edit-panel]").getAttribute("data-open") === "true"', 'drawer open')
+  await shot('harness-arrangement-drawer.png')
+  await cdp.send('Emulation.clearDeviceMetricsOverride')
+
+  // 15. Below 720px block editing is unavailable: an explanation replaces the
+  // editor, and the card explains the limit before entering.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 600, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await wait('!!document.querySelector("[data-dsh-iui-edit-narrow]")', 'narrow editor notice')
+  check(await count('[data-dsh-iui-edit-view]'), 0, 'editor hidden below the minimum width')
+  check((await text('[data-dsh-iui-edit-narrow]')).includes('720'), true, 'narrow notice names the minimum width')
+  await shot('harness-edit-too-narrow.png')
+  await click('[data-dsh-iui-edit-narrow-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-narrow]")', 'left narrow edit mode')
+  check(await count('[data-dsh-iui-edit-view]'), 0, 'edit mode closed after the notice')
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-narrow-notice]")', 'card narrow notice')
+  check(await count('[data-dsh-iui-edit-view]'), 0, 'tiny viewport never opens the editor')
+  check((await text('[data-dsh-iui-edit-narrow-notice]')).includes('720'), true, 'card notice names the minimum width')
+  await click('.dsh-iui-edit-narrow-dismiss')
+  await wait('!document.querySelector("[data-dsh-iui-edit-narrow-notice]")', 'card notice dismissed')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await read('window.dispatchEvent(new Event("resize"))')
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'wide viewport reopens the editor')
+  check(await count('[data-dsh-iui-edit-narrow]'), 0, 'no narrow notice on a wide viewport')
+  await click('[data-dsh-iui-edit-exit]')
+  await cdp.send('Emulation.clearDeviceMetricsOverride')
+
+  console.log(`artifact-edit e2e: ${checks} checks passed`)
+} finally {
+  try { cdp?.close() } catch { /* already closed */ }
+  await browser?.cleanup()
+  server?.close()
+  await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+}

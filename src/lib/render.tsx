@@ -30,7 +30,7 @@ import { ArticleScope } from './components/article'
 // Scoped upstream globals reset; must be evaluated before the library sheets.
 import './components/reset.css'
 import { webUrl } from './components/style'
-import { library } from './library'
+import { blockEditLibrary, library } from './library'
 import { I18nProvider, useT } from './i18n'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
@@ -45,6 +45,8 @@ export interface OpenUIRendererProps {
   readonly onToAssistant?: (message: string) => void
   /** DSH locale seat; omitted in tests and standalone embeds (English copy). */
   readonly t?: Translate
+  /** Render through the edit-mode library so internal block wrappers resolve. */
+  readonly blockSlots?: boolean
 }
 
 /** Open an @OpenUrl action, if the model wrote an http(s) URL. */
@@ -122,7 +124,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false }: OpenUIRendererProps): ReactElement {
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
   // Warnings still render; only real errors get the fallback note.
@@ -140,7 +142,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
             <>
               <Renderer
                 response={program}
-                library={library}
+                library={blockSlots ? blockEditLibrary : library}
                 isStreaming={false}
                 onAction={(event) => handleAction(event as ActionEvent, onToAssistant)}
                 onError={onError}

@@ -113,3 +113,20 @@ test('the message index is cached per immutable snapshot', () => {
   other.nodes.values = () => { throw new Error('should not rebuild') }
   assert.equal(turnForMessage(other, MESSAGE), TURN)
 })
+
+test('a Turn whose revision came from edit_ui_blocks is exportable', () => {
+  const node = settled('call-2', { program: 'root = Col([Title("fragment only")])' }, { name: 'edit_ui_blocks' })
+  node.root.meta = {
+    artifactId: 'call-1',
+    revisionId: 'call-2',
+    baseRevisionId: 'call-1',
+    revision: 2,
+    program: 'root = Card([Text("composed")])',
+    title: 'Composed',
+    style: 'card',
+  }
+  const programs = programsForMessage(snapshot({ toolNodes: () => [node] }), MESSAGE)
+  assert.equal(programs.length, 1)
+  assert.equal(programs[0].program, node.root.meta.program)
+  assert.equal(programs[0].revision, 2)
+})

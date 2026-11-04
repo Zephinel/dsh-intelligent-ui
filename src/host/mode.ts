@@ -38,6 +38,7 @@ import {
   isStylePreference,
 } from '../shared/intelligent-ui.ts'
 import { isCustomStyleId, isStyleId, type StyleId, type StyleTemplate } from '../shared/style-templates.ts'
+import { BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
 import type { StyleStore } from './style-store.ts'
 import { createOnDemandController, validOnDemandResultId, type OnDemandController } from './on-demand.ts'
 import type {
@@ -378,7 +379,7 @@ export function installSessionControls(ctx: ModeHostContext, config: Intelligent
     try {
       // Call on the scoped service object: extracting the method would lose
       // the `this.ctx` the restriction registers against.
-      const dispose = tools.restrict({ deny: [RENDER_UI_TOOL] })
+      const dispose = tools.restrict({ deny: [RENDER_UI_TOOL, BLOCK_EDIT_TOOL] })
       if (typeof dispose === 'function') restrictions.set(key, dispose)
     } catch (error) {
       if (!warned.has(key)) {

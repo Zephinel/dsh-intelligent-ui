@@ -40,6 +40,8 @@ import {
   isAnswerStyle,
 } from '../shared/intelligent-ui.ts'
 import type { AnswerStyle, RenderLayout } from '../shared/intelligent-ui.ts'
+import { BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
+import { spliceBlockBundle } from '../shared/artifact-block-bundle.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
   contrastRatio, describeStyleSnapshotProblem, isCustomStyleId, isStyleSnapshot, type StyleTemplate,
@@ -47,6 +49,8 @@ import {
 import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
+import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
+import { createArtifactEditController } from './artifact-edit.ts'
 import { MAX_CLARIFICATION_ROUNDS, MAX_RENDER_CALLS, createOnDemandController } from './on-demand.ts'
 import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
 import { assertDshToolSchema } from './tool-schema.ts'
@@ -241,14 +245,84 @@ const OUTPUT = {
     warnings: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Non-fatal parser findings or temporary theme contrast warnings.',
+      description: 'Non-fatal parser findings, block-preservation notes or temporary theme contrast warnings.',
     },
+    artifactId: { type: 'string', description: 'Artifact identity of an edited page: the first revision render_ui call id. Present only when this result applied a block edit.' },
+    revisionId: { type: 'string', description: 'Revision identity of this result; equals the tool call id. Present only when this result applied a block edit.' },
+    baseRevisionId: { type: 'string', description: 'Revision id this block edit was based on.' },
+    revision: { type: 'integer', description: '1-based artifact revision number of this result. Present only when this result applied a block edit.' },
+    editedBlockIds: { type: 'array', items: { type: 'string' }, description: 'Root-level block ids the user asked to change.' },
+    program: { type: 'string', description: 'Host-normalized complete openui-lang program; present only when the Host adjusted the top-level block order.' },
   },
   required: ['statements', 'style'],
   additionalProperties: false,
 } as const
 
+/** JSON Schema for the block-level edit's one model-facing argument. */
+const BLOCK_EDIT_PARAMETERS = {
+  type: 'object',
+  properties: {
+    program: {
+      type: 'string',
+      description:
+        'The complete mini openui-lang program for this block edit: `root = Col([...])` with exactly one top-level '
+        + 'expression per selected block, in the request order, with the requested changes applied, plus any new helper '
+        + 'statements. Do not return the whole page; the Host splices these expressions back into the unchanged page.',
+    },
+  },
+  required: ['program'],
+  additionalProperties: false,
+} as const
+
+/** Canonical output of one block-level edit; the composed full page travels in the result meta. */
+const BLOCK_EDIT_OUTPUT = {
+  type: 'object',
+  properties: {
+    statements: { type: 'number', description: 'Number of parsed openui-lang statements in the composed page.' },
+    style: { type: 'string', enum: RENDER_LAYOUTS, description: 'Recorded answer presentation style of the artifact.' },
+    styleId: { type: 'string', description: 'Recorded custom style template id, absent for built-in styles.' },
+    title: { type: 'string', description: 'Recorded page title, when the artifact had one.' },
+    warnings: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Non-fatal block-preservation notes for unselected blocks.',
+    },
+    artifactId: { type: 'string', description: 'Artifact identity of the edited page: the first revision render_ui call id.' },
+    revisionId: { type: 'string', description: 'Revision identity of this result; equals the tool call id.' },
+    baseRevisionId: { type: 'string', description: 'Revision id this block edit was based on.' },
+    revision: { type: 'integer', description: '1-based artifact revision number of this result.' },
+    editedBlockIds: { type: 'array', items: { type: 'string' }, description: 'Root-level block ids the user asked to change.' },
+    program: { type: 'string', description: 'Host-composed complete page program for this revision; the client renders this program.' },
+  },
+  required: ['statements', 'style', 'program', 'artifactId', 'revisionId', 'revision'],
+  additionalProperties: false,
+} as const
+
+/** Canonical value of one block-level edit result. */
+interface BlockEditValue {
+  readonly statements: number
+  readonly style: RenderLayout
+  readonly styleId?: string
+  readonly title?: string
+  readonly warnings?: readonly string[]
+  readonly artifactId: string
+  readonly revisionId: string
+  readonly baseRevisionId?: string
+  readonly revision: number
+  readonly editedBlockIds: readonly string[]
+  readonly program: string
+}
+
 const parser = createParser((librarySpec as { readonly schema: unknown }).schema as never, 'Col')
+
+/** Statement count of one already-validated program. */
+function countStatements(program: string): number {
+  try {
+    return (parser.parse(program).meta as { readonly statementCount?: number }).statementCount ?? 0
+  } catch {
+    return 0
+  }
+}
 
 interface ParseFinding {
   readonly message: string
@@ -311,6 +385,17 @@ const FREE_COMPOSITION_NOTE =
   '\n\nFree-form layout is on for this deployment: the layout and typography playbook in the intelligent-ui skill, '
   + 'and the design guidance above, are advisory rather than a template. Choose the page shape, hierarchy, density '
   + 'and blocks the content needs, and vary them between answers. The hard rules, the theme tokens and readable text still apply.'
+
+/** Routing note for artifact block-edit requests observed by the Host. */
+const ARTIFACT_EDIT_NOTE =
+  '\n\nArtifact edit requests: when the latest user message contains an <artifact-edit-request> envelope that lists target blocks, '
+  + 'do not rewrite the whole page with render_ui. Call `edit_ui_blocks` exactly once with a mini program `root = Col([...])` '
+  + 'holding only those selected blocks\' updated top-level expressions in request order, plus any new helper statements; '
+  + 'the Host splices them back into the unchanged page. The full page in the envelope is read-only reference. '
+  + 'Requests that only change block order or the global instruction still use render_ui once with the complete updated program.'
+
+/** Recovery sentence for an unusable pending block edit request. */
+const REQUEST_RELOAD = 'Ask the user to reload the rendered page and make the edit again.'
 
 /**
  * Read the free-composition preference from its live config reference.
@@ -393,11 +478,16 @@ export function apply(ctx: {
   // all. Failing here instead makes the whole entry fail with the keyword named.
   assertDshToolSchema(PARAMETERS, 'parameters')
   assertDshToolSchema(OUTPUT, 'output.schema')
+  assertDshToolSchema(BLOCK_EDIT_PARAMETERS, 'edit_ui_blocks.parameters')
+  assertDshToolSchema(BLOCK_EDIT_OUTPUT, 'edit_ui_blocks.output.schema')
   const store = createStyleStore(ctx)
   const results = createResultStore(ctx)
+  const revisions = createArtifactRevisionStore(ctx)
+  const artifactEdits = createArtifactEditController(ctx as never, revisions)
   const onDemand = createOnDemandController(ctx as never)
   const mode = installSessionControls(ctx as never, config, store, onDemand)
   registerStyleRoutes(ctx as never, store, results)
+  registerArtifactRevisionRoutes(ctx as never, revisions)
   // The extension ships its own configuration on the Plugins detail page, so ask
   // the Host settings service to suppress its generated form. Optional: minimal deployments without the
   // settings service keep the tool and prompt working.
@@ -424,7 +514,7 @@ export function apply(ctx: {
       const operationNote = onDemand.promptNote(sessionId)
       const note = operationNote ? '' : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
       // Keep the style instruction near the top, before the long DSL reference.
-      return `${ENABLED_SESSION_PREFIX}${operationNote ? `${operationNote}\n\n` : ''}${note}
+      return `${ENABLED_SESSION_PREFIX}${operationNote ? `${operationNote}\n\n` : ''}${note}${ARTIFACT_EDIT_NOTE}
 
 ${section}`
     },
@@ -487,6 +577,86 @@ ${section}`
     })
   })
 
+  // Registered before render_ui: the render_ui contract is the stable tool, and
+  // single-slot test stubs must keep capturing it last.
+  ctx.tools.register({
+    name: BLOCK_EDIT_TOOL,
+    description:
+      'Apply one pending Artifact block edit request. Use it instead of render_ui when the latest user message is an '
+      + '<artifact-edit-request> envelope with selected target blocks: pass a mini openui-lang program `root = Col([...])` '
+      + 'containing exactly one top-level expression per selected block, in the request order, with the requested changes '
+      + 'applied, plus any new helper statements. The Host splices those block expressions back into the unchanged page, '
+      + 'verifies it and records the new revision; never return the whole page. Call it at most once per turn. '
+      + 'Order-only or global-instruction-only artifact requests still use render_ui once with the complete page program.',
+    parameters: BLOCK_EDIT_PARAMETERS,
+    output: {
+      schema: BLOCK_EDIT_OUTPUT,
+      render: (_args: unknown, value: BlockEditValue) => [{
+        type: 'text' as const,
+        text: value.warnings === undefined || value.warnings.length === 0
+          ? `Interactive UI updated for the user (revision ${value.revision} of the artifact, ${value.editedBlockIds.length} blocks edited).`
+          : `Interactive UI updated for the user (revision ${value.revision} of the artifact, ${value.editedBlockIds.length} blocks edited). Notes: ${value.warnings.join('; ')}`,
+      }],
+      presentationMeta: (_args: unknown, value: BlockEditValue) => ({
+        artifactId: value.artifactId,
+        revisionId: value.revisionId,
+        ...value.baseRevisionId === undefined ? {} : { baseRevisionId: value.baseRevisionId },
+        revision: value.revision,
+        editedBlockIds: [...value.editedBlockIds],
+        program: value.program,
+        ...value.title === undefined ? {} : { title: value.title },
+        style: value.style,
+        ...value.styleId === undefined ? {} : { styleId: value.styleId },
+      }),
+    },
+    async execute(args: { program: string }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
+      const sessionId = exec?.agent?.session?.id
+      if (!mode.enabledFor(sessionId)) {
+        throw new Error(
+          'edit_ui_blocks is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|inherit.',
+        )
+      }
+      if (sessionId === undefined) throw new Error('edit_ui_blocks: a session is required for a block-level edit.')
+      const pendingEdit = artifactEdits.pending(sessionId)
+      if (pendingEdit === undefined) {
+        throw new Error('edit_ui_blocks: no block edit request is pending for this session; use render_ui for an ordinary answer.')
+      }
+      if (pendingEdit.request === undefined) {
+        const reason = pendingEdit.invalidReason
+        throw new Error(reason === undefined
+          ? `edit_ui_blocks: the pending block edit request cannot be applied. ${REQUEST_RELOAD}`
+          : `edit_ui_blocks: ${reason.replace(/^render_ui: /, '')}`)
+      }
+      const request = pendingEdit.request
+      if (request.edits.length === 0) {
+        throw new Error('edit_ui_blocks: this edit request only changes block order or the global instruction; call render_ui once with the complete updated page program instead.')
+      }
+      const fragment = typeof args.program === 'string' ? args.program.trim() : ''
+      if (fragment === '') throw new Error('edit_ui_blocks: program must be a non-empty mini openui-lang program with root = Col([...]).')
+      const spliced = spliceBlockBundle(request.program, request.edits.map(edit => edit.blockId), fragment)
+      if (!spliced.ok) {
+        throw new Error(`edit_ui_blocks: the block program does not fit this edit (${spliced.error}). Return exactly one complete top-level expression per selected block in request order, use only existing or newly defined statement names, keep every statement name unique, and call edit_ui_blocks again.`)
+      }
+      const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, composedProgram: spliced.program })
+      const program = applied.lineage.program ?? spliced.program
+      const lineage = applied.lineage
+      const value: BlockEditValue = {
+        statements: countStatements(program),
+        style: request.style,
+        ...request.styleId === undefined ? {} : { styleId: request.styleId },
+        ...request.title === undefined ? {} : { title: request.title },
+        ...applied.warnings.length === 0 ? {} : { warnings: applied.warnings },
+        artifactId: lineage.artifactId,
+        revisionId: lineage.revisionId,
+        ...lineage.baseRevisionId === undefined ? {} : { baseRevisionId: lineage.baseRevisionId },
+        revision: lineage.revision,
+        editedBlockIds: lineage.editedBlockIds ?? [],
+        program,
+      }
+      return value
+    },
+  })
+
   ctx.tools.register({
     name: RENDER_UI_TOOL,
     description:
@@ -503,16 +673,56 @@ ${section}`
       + 'the Host rejects missing parents. Ask a focused layout question if materially unclear. '
       + 'Never fabricate data, figures, dates or sources: ground them in the conversation or tool results, or ask the user first; '
       + 'missing data is material ambiguity, not a reason for placeholder content. '
+      + 'For a pending Artifact block edit request with selected target blocks, call edit_ui_blocks instead with only those '
+      + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page. '
       + 'Call it at most once per turn, after any brief introductory sentence.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT,
-      render: (_args: unknown, value: { statements: number; style: RenderLayout; warnings?: readonly string[] }) => [{
-        type: 'text' as const,
-        text: value.warnings === undefined || value.warnings.length === 0
-          ? `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style).`
-          : `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style). Notes: ${value.warnings.join('; ')}`,
-      }],
+      render: (_args: unknown, value: {
+        statements: number
+        style: RenderLayout
+        warnings?: readonly string[]
+        revision?: number
+        editedBlockIds?: readonly string[]
+        program?: string
+      }) => {
+        if (value.revision !== undefined) {
+          const edited = value.editedBlockIds?.length ?? 0
+          const rendered = edited === 0 && value.program !== undefined
+            ? `Interactive UI updated for the user (revision ${value.revision} of the artifact, block order adjusted).`
+            : `Interactive UI updated for the user (revision ${value.revision} of the artifact, ${edited} blocks edited).`
+          return [{
+            type: 'text' as const,
+            text: value.warnings === undefined || value.warnings.length === 0
+              ? rendered
+              : `${rendered} Notes: ${value.warnings.join('; ')}`,
+          }]
+        }
+        return [{
+          type: 'text' as const,
+          text: value.warnings === undefined || value.warnings.length === 0
+            ? `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style).`
+            : `Interactive UI rendered for the user (${value.statements} statements, ${value.style} style). Notes: ${value.warnings.join('; ')}`,
+        }]
+      },
+      presentationMeta: (_args: unknown, value: {
+        artifactId?: string
+        revisionId?: string
+        baseRevisionId?: string
+        revision?: number
+        editedBlockIds?: readonly string[]
+        program?: string
+      }) => value.artifactId === undefined || value.revisionId === undefined || value.revision === undefined
+        ? null
+        : {
+            artifactId: value.artifactId,
+            revisionId: value.revisionId,
+            ...value.baseRevisionId === undefined ? {} : { baseRevisionId: value.baseRevisionId },
+            revision: value.revision,
+            ...value.editedBlockIds === undefined ? {} : { editedBlockIds: [...value.editedBlockIds] },
+            ...value.program === undefined ? {} : { program: value.program },
+          },
     },
     async execute(args: { program: string; style?: unknown; styleId?: unknown; temporaryStyle?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
       const sessionId = exec?.agent?.session?.id
@@ -612,6 +822,26 @@ ${section}`
       // duplicate id is invalid DOM regardless of the card chrome.
       const anchorError = articleAnchorError(anchors, types)
       if (anchorError !== undefined) throw new Error(anchorError)
+      // A user-sent block edit must produce exactly one updated program; apply it
+      // after every ordinary validation so a rejected render cannot consume it.
+      let lineage: {
+        artifactId: string
+        revisionId: string
+        baseRevisionId?: string
+        revision: number
+        editedBlockIds?: readonly string[]
+        program?: string
+      } | undefined
+      const pendingEdit = sessionId === undefined ? undefined : artifactEdits.pending(sessionId)
+      if (sessionId !== undefined && pendingEdit !== undefined) {
+        // A content edit must go through the structural block path, not a full rewrite.
+        if (pendingEdit.request !== undefined && pendingEdit.request.edits.length > 0) {
+          throw new Error('render_ui: this artifact edit request has selected blocks to change; call edit_ui_blocks once with a mini program containing only the selected blocks\' updated expressions instead of the whole page. The request stays armed, so do not answer in prose.')
+        }
+        const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args })
+        lineage = applied.lineage
+        warnings.push(...applied.warnings)
+      }
       if (temporary && isStyleSnapshot(args.temporaryStyle)) {
         const parentResultId = onDemand.view(sessionId!)?.parentResultId
         // No await between the authorization check, durable write and completion.
@@ -621,7 +851,15 @@ ${section}`
       }
       warnings.push(...findings.map(finding => finding.message))
       return { statements, style: requestedStyle, styleSource: temporary ? 'temporary' : template === undefined ? 'builtin' : 'template',
-        ...template === undefined ? {} : { styleId: template.id }, ...warnings.length === 0 ? {} : { warnings } }
+        ...template === undefined ? {} : { styleId: template.id }, ...warnings.length === 0 ? {} : { warnings },
+        ...lineage === undefined ? {} : {
+          artifactId: lineage.artifactId,
+          revisionId: lineage.revisionId,
+          ...lineage.baseRevisionId === undefined ? {} : { baseRevisionId: lineage.baseRevisionId },
+          revision: lineage.revision,
+          ...lineage.editedBlockIds === undefined ? {} : { editedBlockIds: [...lineage.editedBlockIds] },
+          ...lineage.program === undefined ? {} : { program: lineage.program },
+        } }
     },
   })
 }

@@ -7,6 +7,10 @@
  * binds the Session's Chat target and reads the closing Turn's `tool-call`
  * nodes through the keyed `programs` hook. The slot owner passes the resolved
  * Turn location; components never see `ctx`.
+ *
+ * A card whose program exposes recognizable root blocks also offers block
+ * editing: entering edit mode swaps the read-only body for the edit view while
+ * the card itself (header, revision badge, collapse) stays in place.
  */
 import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { IconChevronDownOutlineRegular, IconSparkleRegular } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -25,6 +29,30 @@ import { RendererBoundary } from './RendererBoundary.tsx'
 import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
+import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
+import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions } from './artifact-edit/contracts.ts'
+import {
+  blocksForProgram,
+  closeArtifactBlockEditor,
+  closeArtifactEditor,
+  clearAllArtifactEdits,
+  clearArtifactBlockInstruction,
+  moveArtifactBlock,
+  moveArtifactBlockBy,
+  openArtifactBlockEditor,
+  openArtifactEditor,
+  removeArtifactSelection,
+  resetArtifactOrder,
+  retryArtifactRevisionCheck,
+  saveArtifactBlockInstruction,
+  selectArtifactBlock,
+  setArtifactDrawerOpen,
+  setArtifactGlobalInstruction,
+  supportsBlockEditing,
+  undoArtifactRemove,
+  updateArtifactBlockDraft,
+  useArtifactEditSession,
+} from './artifact-edit/store.ts'
 
 /** Session-bound, Turn-keyed program source supplied by the plugin's registration. */
 export interface IntelligentUICardsInjected {
@@ -97,6 +125,7 @@ export function IntelligentUICards({
           <IntelligentUICard
             key={program.callId}
             program={program}
+            sessionId={sessionId}
             onToAssistant={toAssistant}
             t={t}
             scheme={scheme}
@@ -116,6 +145,7 @@ export function IntelligentUICards({
 
 interface IntelligentUICardProps {
   readonly program: IntelligentUIProgram
+  readonly sessionId: string
   readonly onToAssistant: (message: string) => void
   readonly t: Translate
   readonly themeStyle?: CSSProperties
@@ -131,10 +161,12 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Block editing needs a usable two-pane width; tiny viewports get a hint.
+  const [narrowNotice, setNarrowNotice] = useState(false)
   const adjust = async (): Promise<void> => {
     if (onAdjust === undefined || adjusting) return
     setAdjusting(true)
@@ -146,6 +178,38 @@ function IntelligentUICard({ program, onToAssistant, t, themeStyle, scheme, onAd
   const bodyId = useId()
   const title = program.title !== undefined && program.title.trim() !== '' ? program.title : t('card.title')
   const style = program.style ?? 'card'
+  const baseRevisionId = program.revisionId ?? program.callId
+  const editKey = `${sessionId}:${baseRevisionId}`
+  const editSession = useArtifactEditSession(sessionId, baseRevisionId)
+  const editing = editSession?.editing === true
+  const blocks = useMemo(() => blocksForProgram(program.program).blocks, [program.program])
+  const editable = !program.running && blocks.length > 0 && supportsBlockEditing(program)
+  const editActions = useMemo<ArtifactEditActions>(() => ({
+    openBlockEditor: blockId => { openArtifactBlockEditor(editKey, blockId) },
+    closeBlockEditor: () => { closeArtifactBlockEditor(editKey) },
+    updateBlockDraft: (blockId, text) => { updateArtifactBlockDraft(editKey, blockId, text) },
+    saveBlockInstruction: (blockId, text) => { saveArtifactBlockInstruction(editKey, blockId, text) },
+    clearBlockInstruction: blockId => { clearArtifactBlockInstruction(editKey, blockId) },
+    removeSelection: blockId => { removeArtifactSelection(editKey, blockId) },
+    undoRemove: () => { undoArtifactRemove(editKey) },
+    moveBlock: (blockId, toIndex) => { moveArtifactBlock(editKey, blockId, toIndex) },
+    moveBlockBy: (blockId, delta) => { moveArtifactBlockBy(editKey, blockId, delta) },
+    resetOrder: () => { resetArtifactOrder(editKey) },
+    clearAllEdits: () => { clearAllArtifactEdits(editKey) },
+    setGlobalInstruction: text => { setArtifactGlobalInstruction(editKey, text) },
+    closeEditor: () => { closeArtifactEditor(editKey) },
+    setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
+    retryCheck: () => { retryArtifactRevisionCheck(editKey) },
+  }), [editKey])
+  const toggleEditing = (): void => {
+    if (editing) { closeArtifactEditor(editKey); return }
+    if (typeof window !== 'undefined' && !isEditViewportWideEnough(window.innerWidth)) {
+      setNarrowNotice(true)
+      return
+    }
+    setNarrowNotice(false)
+    openArtifactEditor(sessionId, program)
+  }
   return (
     <section
       className="dsh-iui-card"
@@ -156,26 +220,67 @@ function IntelligentUICard({ program, onToAssistant, t, themeStyle, scheme, onAd
       data-dsh-iui-temp-style={program.temporaryStyle ? 'true' : undefined}
       data-dsh-iui-running={program.running ? 'true' : undefined}
       data-dsh-iui-collapsed={collapsed ? 'true' : undefined}
+      data-dsh-iui-editing={editing ? 'true' : undefined}
     >
-      <button
-        type="button"
-        className="dsh-iui-header"
-        aria-expanded={!collapsed}
-        aria-controls={bodyId}
-        onClick={() => { setCollapsed(value => !value) }}
-      >
-        <span className="dsh-iui-icon" aria-hidden="true"><IconSparkleRegular size={14} /></span>
-        <span className="dsh-iui-title" data-dsh-iui-title>{title}</span>
-        {program.temporaryStyle && <span className="dsh-iui-temporary-badge" title={program.temporaryStyle.suggestedName}>{t('onDemand.badge')}</span>}
-        {program.running && <span className="dsh-iui-state">{t('state.rendering')}</span>}
-        <span className="dsh-iui-chevron" aria-hidden="true"><IconChevronDownOutlineRegular size={14} /></span>
-      </button>
-      <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed}>
-        <RendererBoundary t={t}>
-          <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
-            <OpenUIRenderer program={program.program} title={program.title} scopeId={program.callId} onToAssistant={onToAssistant} themeStyle={themeStyle} scheme={scheme} t={t} />
+      <div className="dsh-iui-card-head">
+        <button
+          type="button"
+          className="dsh-iui-header"
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          onClick={() => { if (!editing) setCollapsed(value => !value) }}
+        >
+          <span className="dsh-iui-icon" aria-hidden="true"><IconSparkleRegular size={14} /></span>
+          <span className="dsh-iui-title" data-dsh-iui-title>{title}</span>
+          {program.temporaryStyle && <span className="dsh-iui-temporary-badge" title={program.temporaryStyle.suggestedName}>{t('onDemand.badge')}</span>}
+          {program.running && <span className="dsh-iui-state">{t('state.rendering')}</span>}
+          <span className="dsh-iui-chevron" aria-hidden="true"><IconChevronDownOutlineRegular size={14} /></span>
+        </button>
+        <div className="dsh-iui-head-actions">
+          {program.revision !== undefined && program.revision > 1
+            ? <span className="dsh-iui-revision" data-dsh-iui-revision>{t('edit.revision', { n: program.revision })}</span>
+            : null}
+          {editable
+            ? <button
+                type="button"
+                className="dsh-iui-edit-entry"
+                data-dsh-iui-edit-entry
+                aria-pressed={editing}
+                onClick={toggleEditing}
+              >{editing ? t('edit.exit') : t('edit.entry')}</button>
+            : null}
+        </div>
+      </div>
+      {narrowNotice && !editing
+        ? <div className="dsh-iui-edit-narrow-notice" role="status" data-dsh-iui-edit-narrow-notice>
+            <div className="dsh-iui-edit-narrow-copy">
+              <strong>{t('edit.narrowTitle')}</strong>
+              <span>{t('edit.narrowBody', { width: MIN_EDIT_WIDTH })}</span>
+            </div>
+            <button type="button" className="dsh-iui-edit-narrow-dismiss" onClick={() => { setNarrowNotice(false) }}>
+              {t('edit.narrowDismiss')}
+            </button>
           </div>
-        </RendererBoundary>
+        : null}
+      <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed && !editing}>
+        {editing && editSession !== undefined ? (
+          <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
+            <ArtifactEditView
+              t={t}
+              session={editSession}
+              actions={editActions}
+              themeStyle={themeStyle}
+              scheme={scheme}
+              onToAssistant={onToAssistant}
+            />
+          </div>
+        ) : (
+          <RendererBoundary t={t}>
+            <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
+              <OpenUIRenderer program={program.program} title={program.title} scopeId={program.callId} onToAssistant={onToAssistant} themeStyle={themeStyle} scheme={scheme} t={t} />
+            </div>
+          </RendererBoundary>
+        )}
       </div>
       {program.temporaryStyle ? (
         <div className="dsh-iui-result-actions">

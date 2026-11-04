@@ -11,6 +11,7 @@
  * Tool name and argument contract live in src/shared/intelligent-ui.ts.
  */
 import { RENDER_UI_TOOL, isRenderLayout, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { BLOCK_EDIT_TOOL, isArtifactRevisionMeta } from '../shared/artifact-edit.ts'
 import { isCustomStyleId, isStyleSnapshot } from '../shared/style-templates.ts'
 
 /** The subset of `PreparingToolCall` this extractor reads. */
@@ -38,6 +39,8 @@ export interface ToolResultNode {
   readonly isError: boolean
   /** Paired call head; null when window truncation dropped the arguments. */
   readonly call: { readonly name: string; readonly argsRaw: string } | null
+  /** Replayable presentation meta; carries revision lineage for edited results. */
+  readonly meta?: unknown
 }
 
 /** One root Tool lifecycle, exactly the `turnDataSource(turn, 'tool-call')` value. */
@@ -70,21 +73,46 @@ function programFromNode(node: ToolCallNode | undefined): IntelligentUIProgram |
   const root = node?.root
   if (root === undefined) return undefined
   if ('kind' in root) {
-    if (root.kind !== 'tool-result' || root.name !== RENDER_UI_TOOL) return undefined
+    if (root.kind !== 'tool-result') return undefined
+    // A block-level edit returns only the changed block program; the Host
+    // composes the full revision and projects it as result meta.
+    if (root.name === BLOCK_EDIT_TOOL) return blockEditProgram(root)
+    if (root.name !== RENDER_UI_TOOL) return undefined
     // A failed render_ui call was rejected before the user ever saw a page
     // (host validation error, interruption); the Tool row owns that failure
     // state and the Turn tail shows only answers that actually rendered.
     if (root.isError) return undefined
     // The paired tool/call left the loaded window, so the program is gone.
     if (root.call === null) return undefined
-    return programFromArgs(root.call.argsRaw, root.callId, false)
+    return programFromArgs(root.call.argsRaw, root.callId, false, root.meta)
   }
   if (root.phase !== 'start' || root.name !== RENDER_UI_TOOL) return undefined
   return programFromArgs(root.argsRaw, root.callId, true)
 }
 
+/** Read one completed block-level edit result, which carries the full revision in meta. */
+function blockEditProgram(root: ToolResultNode): IntelligentUIProgram | undefined {
+  if (root.isError) return undefined
+  const meta = root.meta
+  if (!isArtifactRevisionMeta(meta) || meta.program === undefined || meta.program.trim() === '') return undefined
+  const style = meta.style ?? 'card'
+  return {
+    callId: root.callId,
+    program: meta.program,
+    ...meta.title === undefined ? {} : { title: meta.title },
+    style,
+    ...meta.styleId === undefined ? {} : { styleId: meta.styleId, styleSource: 'template' as const },
+    ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
+    artifactId: meta.artifactId,
+    revisionId: meta.revisionId,
+    revision: meta.revision,
+    ...meta.editedBlockIds === undefined ? {} : { editedBlockIds: meta.editedBlockIds },
+    running: false,
+  }
+}
+
 /** Parse model-authored arguments defensively; props are unknown until checked. */
-function programFromArgs(argsRaw: string, callId: string, running: boolean): IntelligentUIProgram | undefined {
+function programFromArgs(argsRaw: string, callId: string, running: boolean, meta?: unknown): IntelligentUIProgram | undefined {
   let args: unknown
   try {
     args = JSON.parse(argsRaw)
@@ -109,6 +137,28 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean): Int
       : isCustomStyleId(styleId) ? { styleSource: 'template' as const }
       : styleSource === 'builtin' || styleSource === 'template' ? { styleSource } : {},
     running,
+    ...revisionLineage(meta),
   }
-  return base
+  // A Host-normalized revision (for example a deterministically reordered page)
+  // is the record the user sees, so render/export/edit from that program.
+  const normalized = normalizedProgram(meta)
+  return normalized === undefined ? base : { ...base, program: normalized }
+}
+
+/** Host-normalized program carried by an arrangement result, when present. */
+function normalizedProgram(meta: unknown): string | undefined {
+  if (!isArtifactRevisionMeta(meta) || meta.program === undefined) return undefined
+  return meta.program.trim() === '' ? undefined : meta.program
+}
+
+/** Replayable revision lineage projected by the Host on an edited result. */
+function revisionLineage(meta: unknown): Pick<IntelligentUIProgram, 'artifactId' | 'revisionId' | 'baseRevisionId' | 'revision' | 'editedBlockIds'> {
+  if (!isArtifactRevisionMeta(meta)) return {}
+  return {
+    artifactId: meta.artifactId,
+    revisionId: meta.revisionId,
+    ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
+    revision: meta.revision,
+    ...meta.editedBlockIds === undefined ? {} : { editedBlockIds: meta.editedBlockIds },
+  }
 }

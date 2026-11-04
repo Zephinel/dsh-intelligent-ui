@@ -1,0 +1,181 @@
+/**
+ * Edit-mode block wrappers.
+ *
+ * Normal card rendering has no block context, so these rules are inert there
+ * (`dsh-iui-block` is layout-transparent). In edit mode the wrapper adds a
+ * selection overlay, a numbered badge and per-block actions. Colours come from
+ * a six-hue palette that is never the only signal: every selected block also
+ * carries a number, a title in the request panel and a solid outline.
+ */
+
+.dsh-iui-block {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--iui-radius-lg, 12px);
+}
+
+.dsh-iui-block-body {
+  min-width: 0;
+}
+
+/* One short settle animation on entering edit mode, then static. */
+.dsh-iui-block-editing {
+  animation: dsh-iui-block-settle 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dsh-iui-block-settle {
+  from {
+    transform: scale(0.985);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-block-editing {
+    animation: none;
+  }
+}
+
+/* Click-capture surface: selecting wins over operating a component inside. */
+.dsh-iui-block-layer {
+  position: absolute;
+  inset: -6px;
+  z-index: 3;
+  border: 1.5px dashed transparent;
+  border-radius: calc(var(--iui-radius-lg, 12px) + 4px);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.dsh-iui-block-editing:hover .dsh-iui-block-layer {
+  border-color: color-mix(in srgb, var(--iui-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--iui-accent) 4%, transparent);
+}
+
+.dsh-iui-block-selected .dsh-iui-block-layer {
+  border: 2px solid var(--iui-edit-block-color, var(--iui-accent));
+  background: color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent)) 5%, transparent);
+}
+
+.dsh-iui-block-active .dsh-iui-block-layer {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent)) 16%, transparent);
+}
+
+.dsh-iui-block-editing:focus-visible {
+  outline: none;
+}
+
+.dsh-iui-block-editing:focus-visible .dsh-iui-block-layer {
+  border-color: var(--iui-edit-block-color, var(--iui-accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent)) 30%, transparent);
+}
+
+/* Numbered badge: the selection order, matching the request panel. */
+.dsh-iui-block-badge {
+  position: absolute;
+  top: -12px;
+  left: -8px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 2px solid var(--iui-canvas, #fff);
+  border-radius: 999px;
+  background: var(--iui-edit-block-color, var(--iui-accent));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+
+/* Per-block actions: edit and deselect. */
+.dsh-iui-block-tools {
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  z-index: 6;
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--iui-border);
+  border-radius: 8px;
+  background: var(--iui-canvas, #fff);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.dsh-iui-block-tool {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--iui-edit-block-color, var(--iui-accent));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dsh-iui-block-tool:hover {
+  background: color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent)) 12%, transparent);
+}
+
+.dsh-iui-block-tool:focus-visible {
+  outline: 2px solid var(--iui-edit-block-color, var(--iui-accent));
+  outline-offset: 1px;
+}
+
+/* Selection palette: numbered blue, purple, green, orange, pink, cyan. */
+.dsh-iui-host {
+  --iui-edit-color-1: #2f6feb;
+  --iui-edit-color-2: #8b5cf6;
+  --iui-edit-color-3: #10b981;
+  --iui-edit-color-4: #f59e0b;
+  --iui-edit-color-5: #ec4899;
+  --iui-edit-color-6: #06b6d4;
+}
+
+.dsh-iui-host[data-iui-scheme="dark"] {
+  --iui-edit-color-1: #6a9bff;
+  --iui-edit-color-2: #a78bfa;
+  --iui-edit-color-3: #34d399;
+  --iui-edit-color-4: #fbbf24;
+  --iui-edit-color-5: #f472b6;
+  --iui-edit-color-6: #22d3ee;
+}
+
+/* Instruction popover open on a block that has no saved request yet. */
+.dsh-iui-block-active:not(.dsh-iui-block-selected) .dsh-iui-block-layer {
+  border: 2px dashed var(--iui-accent);
+  background: color-mix(in srgb, var(--iui-accent) 4%, transparent);
+}
+
+/* Arrangement row clicked: briefly identify the corresponding canvas block. */
+.dsh-iui-block[data-dsh-iui-block-flash='true'] .dsh-iui-block-layer {
+  border: 2px solid var(--iui-accent);
+  background: color-mix(in srgb, var(--iui-accent) 10%, transparent);
+  animation: dsh-iui-block-flash 900ms ease-out both;
+}
+
+@keyframes dsh-iui-block-flash {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--iui-accent) 55%, transparent); }
+  60% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--iui-accent) 20%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-block[data-dsh-iui-block-flash='true'] .dsh-iui-block-layer {
+    animation: none;
+  }
+}

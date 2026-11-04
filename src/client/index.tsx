@@ -42,6 +42,9 @@ import type { ComposerAccess } from './composer.ts'
 import { styleCatalog } from './styles.ts'
 import { styleActions } from './style-actions.ts'
 import { programsForMessage, type ExportChatSnapshot } from './export-data.ts'
+import { registerArtifactEditChip } from './artifact-edit/composer.ts'
+import { ArtifactEditSummary, artifactEditSummaryRule } from './artifact-edit/user-text.tsx'
+import { ARTIFACT_EDIT_SUMMARY, BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
 import {
   HOST_ENTRY_ID,
   PACKAGE_NAME,
@@ -49,7 +52,7 @@ import {
   type SessionEnable,
   type StylePreference,
 } from '../shared/intelligent-ui.ts'
-import { NS, en, zh } from '../shared/locales.ts'
+import { NS, en, zh, fallbackT } from '../shared/locales.ts'
 import './index.css'
 
 /** Client plugin name shown by the shell. */
@@ -97,6 +100,30 @@ export function apply(ctx: ClientContext): void {
   // Both dictionaries go in one registration so every slot below can translate
   // through the `t` seat. A later locale switch re-renders the mounted outlets.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'intelligent-ui: dictionaries')
+  // Artifact block editing: the edit request is one composer reference chip, so
+  // an ordinary Send serializes it into the structured model-facing envelope.
+  // The same envelope collapses back into one chip in the sent message.
+  const localeSeat = (): typeof fallbackT => typeof ctx.locale.bind === 'function'
+    ? ctx.locale.bind(NS) as typeof fallbackT
+    : fallbackT
+  registerArtifactEditChip(ctx, {
+    readInput: sessionId => composerFor(sessionId).readInput(),
+    inputFor: sessionId => {
+      const binding = ctx.sessions.binding(sessionId)
+      return binding === undefined ? undefined : ctx.conversation.input.for(binding.ctx) as never
+    },
+  }, localeSeat)
+  // The sent-message chip needs the user-text registry; a minimal host without
+  // it keeps the envelope as text, which is degraded but never broken.
+  const userText = (ctx.uiConversation as { userText?: { register(rule: unknown): () => void } }).userText
+  if (typeof userText?.register === 'function') {
+    ctx.effect(() => userText.register(artifactEditSummaryRule), 'intelligent-ui: artifact edit summary rule')
+    ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
+      name: 'conversation.user.text.node',
+      key: ARTIFACT_EDIT_SUMMARY,
+      locale: NS,
+    }, ArtifactEditSummary))
+  }
   /** Resolve the Chat target for one Session binding, or fail loudly. */
   const chatFor = (sessionId: SessionId) => {
     const binding = ctx.sessions.binding(sessionId)

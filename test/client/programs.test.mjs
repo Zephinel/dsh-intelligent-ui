@@ -9,6 +9,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { programsFromToolNodes } from '../../src/client/programs.ts'
+import { BLOCK_EDIT_TOOL } from '../../src/shared/artifact-edit.ts'
 
 const PROGRAM = 'root = Card([Text("hello")])'
 
@@ -166,4 +167,34 @@ test('free template recordings replay with a valid styleId and no temporary snap
       assert.deepEqual(programsFromToolNodes([make('mixed-free', { program: PROGRAM, style: 'free', styleId: 'cs_abcdef', temporaryStyle })]), [])
     }
   }
+})
+
+test('block-level edit results render from result meta', () => {
+  const meta = {
+    artifactId: 'call-1',
+    revisionId: 'call-2',
+    baseRevisionId: 'call-1',
+    revision: 2,
+    editedBlockIds: ['b3'],
+    program: 'root = Col([Card([Text("edited")])])',
+    title: 'Edited page',
+    style: 'card',
+  }
+  const nodes = [{ root: {
+    kind: 'tool-result',
+    callId: 'call-2',
+    name: BLOCK_EDIT_TOOL,
+    isError: false,
+    meta,
+    call: { name: BLOCK_EDIT_TOOL, argsRaw: JSON.stringify({ program: 'root = Col([Card([Text("edited")])])' }) },
+  } }]
+  const programs = programsFromToolNodes(nodes)
+  assert.equal(programs.length, 1)
+  assert.equal(programs[0].program, meta.program)
+  assert.equal(programs[0].title, 'Edited page')
+  assert.equal(programs[0].revision, 2)
+  assert.deepEqual(programs[0].editedBlockIds, ['b3'])
+  // Failed or meta-less block edits never render a card.
+  assert.deepEqual(programsFromToolNodes([{ root: { ...nodes[0].root, isError: true } }]), [])
+  assert.deepEqual(programsFromToolNodes([{ root: { ...nodes[0].root, meta: undefined } }]), [])
 })

@@ -44,6 +44,16 @@ export interface IntelligentUIProgram {
   /** Inline result-owned style; independent of the saved-template catalog. */
   readonly temporaryStyle?: StyleSnapshot
   readonly styleSource?: 'builtin' | 'template' | 'temporary'
+  /** Root artifact identity carried by an edited revision (first revision's result id). */
+  readonly artifactId?: string
+  /** Result id of this revision; equals `callId` when the Host recorded lineage. */
+  readonly revisionId?: string
+  /** Parent revision this result was edited from. */
+  readonly baseRevisionId?: string
+  /** 1-based revision number; absent for artifacts that were never edited. */
+  readonly revision?: number
+  /** Blocks the user asked to change in this revision. */
+  readonly editedBlockIds?: readonly string[]
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
 }

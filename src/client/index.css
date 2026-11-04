@@ -1473,3 +1473,134 @@
 .dsh-iui-template-directives { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin-block: 8px; }
 .dsh-iui-template-acknowledge { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; }
 .dsh-iui-template-acknowledge input { flex: none; margin-top: 4px; }
+
+/*
+ * Artifact block editing entry and card header layout. The header itself stays a
+ * button (collapse + accessible name); the edit entry and revision badge sit in
+ * a sibling action strip so neither nests interactive elements.
+ */
+.dsh-iui-card-head {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg) var(--dsw-radius-lg) 0 0;
+}
+
+.dsh-iui-card-head .dsh-iui-header {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+  border-radius: var(--dsw-radius-lg) 0 0 var(--dsw-radius-lg);
+}
+
+.dsh-iui-head-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 4px;
+}
+
+.dsh-iui-revision {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-entry {
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.dsh-iui-edit-entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-entry:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-edit-entry[aria-pressed='true'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dsh-iui-card[data-dsh-iui-collapsed='true'] .dsh-iui-card-head {
+  border-bottom-color: transparent;
+  border-radius: var(--dsw-radius-lg);
+}
+
+.dsh-iui-card[data-dsh-iui-collapsed='true'] .dsh-iui-card-head .dsh-iui-header {
+  border-radius: var(--dsw-radius-lg) 0 0 var(--dsw-radius-lg);
+}
+
+.dsh-iui-card[data-dsh-iui-collapsed='true'] .dsh-iui-head-actions {
+  border-radius: 0 var(--dsw-radius-lg) var(--dsw-radius-lg) 0;
+}
+
+/*
+ * Minimum-width notice for Artifact block editing. Below 720px the canvas and
+ * request panel cannot sit side by side, so the card explains the limit instead
+ * of offering an unusable editor.
+ */
+.dsh-iui-edit-narrow-notice {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-edit-narrow-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dsh-iui-edit-narrow-copy strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.dsh-iui-edit-narrow-dismiss {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-narrow-dismiss:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-narrow-dismiss:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}

@@ -171,7 +171,7 @@ test('the session switch gates prompt and tool visibility', async () => {
 
   assert.equal(rec.sections[0].text(promptContext('s1')), '')
   rec.handlers['agent/created']({ agent: s1 })
-  assert.deepEqual(rec.restrictions, [{ deny: ['render_ui'] }])
+  assert.deepEqual(rec.restrictions, [{ deny: ['render_ui', 'edit_ui_blocks'] }])
   await assert.rejects(
     () => rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 }),
     /render_ui is disabled/,

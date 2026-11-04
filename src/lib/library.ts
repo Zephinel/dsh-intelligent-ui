@@ -28,26 +28,20 @@ import { Icon, Image, SearchImage } from "./components/media";
 import { svgComponents } from "./components/svg";
 import { Table } from "./components/table";
 import { Badge, Caption, Label, Link, List, ListItem, Markdown, Text, Title } from "./components/text";
+import { BlockSlot } from "./components/block-slot";
 
-/**
- * Primitives the model arranges itself, plus a few widgets for what a model
- * cannot draw (a street map, a sandboxed HTML page). Layout is never fixed here.
- * Generic @functions let a page compute with its own state, so an answer can be
- * a working tool rather than a form sent back to the assistant.
- */
-export const library = createLibrary({
-  root: "Col",
-  components: [
-    Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer, Section, Toc,
-    Title, Text, Caption, Label, Badge, Link, List, ListItem, Markdown, Quote, Code, MathBlock,
-    Button, IconButton, Pressable, Input, TextArea, Select, SegmentedControl, Slider, Checkbox, RadioGroup, DatePicker, Timer, Form,
-    SearchImage, Image, Icon, Table, Chart, MapView, MapMarker, YouTube,
-    Flashcard, Celebration,
-    ...svgComponents, HtmlView,
-  ],
-  functions,
-  actions,
-  componentGroups: [
+/** The model-facing component catalog, in prompt order. */
+const components = [
+  Col, Row, Box, Grid, Card, Carousel, Popover, Divider, Spacer, Section, Toc,
+  Title, Text, Caption, Label, Badge, Link, List, ListItem, Markdown, Quote, Code, MathBlock,
+  Button, IconButton, Pressable, Input, TextArea, Select, SegmentedControl, Slider, Checkbox, RadioGroup, DatePicker, Timer, Form,
+  SearchImage, Image, Icon, Table, Chart, MapView, MapMarker, YouTube,
+  Flashcard, Celebration,
+  ...svgComponents, HtmlView,
+];
+
+/** Prompt groups; the internal block wrapper is deliberately absent. */
+const componentGroups = [
     {
       name: "Layout",
       components: ["Col", "Row", "Box", "Grid", "Card", "Carousel", "Popover", "Divider", "Spacer", "Section", "Toc"],
@@ -67,6 +61,26 @@ export const library = createLibrary({
     },
     { name: "Media and data", components: ["SearchImage", "Image", "Icon", "Table", "Chart", "Map", "MapMarker", "YouTube"] },
     { name: "Play", components: ["Flashcard", "Celebration"] },
-    { name: "Drawing", components: ["Svg", "G", "Circle", "Ellipse", "Rect", "Line", "Path", "Polyline", "Polygon", "SvgText", "HtmlView"] },
-  ],
+  { name: "Drawing", components: ["Svg", "G", "Circle", "Ellipse", "Rect", "Line", "Path", "Polyline", "Polygon", "SvgText", "HtmlView"] },
+];
+
+/**
+ * Primitives the model arranges itself, plus a few widgets for what a model
+ * cannot draw (a street map, a sandboxed HTML page). Layout is never fixed here.
+ * Generic @functions let a page compute with its own state, so an answer can be
+ * a working tool rather than a form sent back to the assistant.
+ */
+export const library = createLibrary({ root: "Col", components, functions, actions, componentGroups });
+
+/**
+ * Edit-mode variant of the same library. It adds only the internal `BlockSlot`
+ * wrapper (never offered to the model), so a program rewritten by
+ * `wrapProgramForBlockEditing` renders with the normal components and layout.
+ */
+export const blockEditLibrary = createLibrary({
+  root: "Col",
+  components: [...components, BlockSlot],
+  functions,
+  actions,
+  componentGroups,
 });

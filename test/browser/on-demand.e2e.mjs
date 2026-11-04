@@ -19,7 +19,7 @@ try {
     define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent',
     plugins: [{ name: 'shell-icons', setup(build) {
       build.onResolve({ filter: /^@deepseek-ai\/dsh-client-ui-primitives$/ }, () => ({ path: 'icons', namespace: 'fixture' }))
-      build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const DisclosureRow = () => null; export const IconChevronDownOutlineRegular = () => null; export const IconSparkleRegular = () => null' }))
+      build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const DisclosureRow = () => null; export const IconChevronDownOutlineRegular = () => null; export const IconSparkleRegular = () => null; export const ReferenceChip = () => null; export const IconCloseOutlineRegular = () => null; export const IconTrashOutlineRegular = () => null; ' }))
     } }],
   })
   await writeFile(join(temp, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="bundle.css"><style>
