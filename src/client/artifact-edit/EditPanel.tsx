@@ -29,8 +29,9 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
-import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
+import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import type { Translate } from '../../shared/locales.ts'
+import { hasArtifactEditContent, useArtifactEditStore } from './store.ts'
 
 /** Props of the edit panel; the card supplies both the snapshot and actions. */
 export interface EditPanelProps {
@@ -331,6 +332,102 @@ interface DropTarget {
   readonly y: number
 }
 
+/** Short request summary for one draft row. */
+function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
+  const count = draft.selection.length
+  if (count > 0) return t('edit.requestsCount', { count })
+  if (draft.orderChanged) return t('edit.summaryOrderChanged')
+  return t('edit.summaryGlobal')
+}
+
+/**
+ * Chat-wide draft switcher: every retained draft with content, its revision,
+ * request summary, active marker and conflict state, plus attach/discard
+ * controls. The active canvas stays the only draft whose detail sections the
+ * panel below renders.
+ * @param props - locale, all retained drafts, the active draft key and actions.
+ * @returns the section, or null when the chat has no retained draft.
+ */
+function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
+  readonly t: Translate
+  readonly drafts: readonly ArtifactEditSession[]
+  readonly activeKey: string
+  readonly attachedCount: number
+  readonly actions: ArtifactEditActions
+}): ReactElement | null {
+  if (drafts.length === 0) return null
+  const attachBlocked = attachedCount >= MAX_ARTIFACT_BATCH_REQUESTS
+  return (
+    <section className="dsh-iui-edit-drafts" aria-label={t('edit.pendingDrafts')} data-dsh-iui-edit-draft-switcher>
+      <div className="dsh-iui-edit-section-head">
+        <span className="dsh-iui-edit-section-title">{t('edit.pendingDrafts')}</span>
+        <span className="dsh-iui-edit-section-meta">({drafts.length}/{MAX_ARTIFACT_DRAFTS})</span>
+      </div>
+      <ul className="dsh-iui-edit-draft-list">
+        {drafts.map(draft => {
+          const active = draft.key === activeKey
+          const conflict = draft.status === 'conflict'
+          const title = draft.title !== undefined && draft.title.trim() !== '' ? draft.title : t('edit.panelTitle')
+          return (
+            <li
+              key={draft.key}
+              className={`dsh-iui-edit-draft-row${active ? ' is-active' : ''}`}
+              data-dsh-iui-edit-draft-row
+              data-key={draft.key}
+              data-active={active ? 'true' : 'false'}
+              data-attached={draft.attached ? 'true' : 'false'}
+              data-conflict={conflict ? 'true' : undefined}
+            >
+              <button
+                type="button"
+                className="dsh-iui-edit-draft-open"
+                data-dsh-iui-edit-draft-activate
+                aria-current={active ? 'true' : undefined}
+                onClick={() => { actions.activateDraft(draft.key) }}
+              >
+                <span className="dsh-iui-edit-draft-dot" aria-hidden="true" />
+                <span className="dsh-iui-edit-draft-text">
+                  <span className="dsh-iui-edit-draft-title" title={title}>{title}</span>
+                  <span className="dsh-iui-edit-draft-meta">
+                    {t('edit.revision', { n: draft.baseRevision })} · {draftSummaryLabel(draft, t)}
+                  </span>
+                </span>
+                {conflict ? <span className="dsh-iui-edit-draft-tag is-conflict">{t('edit.conflictTitle')}</span> : null}
+                {draft.attached ? null : <span className="dsh-iui-edit-draft-tag">{t('edit.draftDetached')}</span>}
+              </button>
+              <span className="dsh-iui-edit-draft-actions">
+                {draft.attached ? null : (
+                  <button
+                    type="button"
+                    className="dsh-iui-edit-draft-action"
+                    data-dsh-iui-edit-draft-attach
+                    aria-label={`${t('edit.attachDraft')}: ${title}`}
+                    title={attachBlocked ? t('edit.draftDetached') : t('edit.attachDraft')}
+                    disabled={attachBlocked}
+                    onClick={() => { actions.attachDraft(draft.key) }}
+                  >
+                    {t('edit.attachDraft')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="dsh-iui-edit-draft-action dsh-iui-edit-draft-action-danger"
+                  data-dsh-iui-edit-draft-discard
+                  aria-label={`${t('edit.discardDraft')}: ${title}`}
+                  title={t('edit.discardDraft')}
+                  onClick={() => { actions.discardDraft(draft.key) }}
+                >
+                  {t('edit.discardDraft')}
+                </button>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
 export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement {
   const globalId = useId()
@@ -345,6 +442,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const showTimer = useRef<number | null>(null)
   const hideTimer = useRef<number | null>(null)
   const flashTimers = useRef(new Map<string, number>())
+  const editStore = useArtifactEditStore()
 
   const blocks = useMemo(
     () => new Map<string, ArtifactBlock>(session.blocks.map(block => [block.blockId, block] as const)),
@@ -358,6 +456,19 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     () => [...session.selection].sort((left, right) => left.order - right.order),
     [session.selection],
   )
+  // Every retained draft of this chat, in creation order; the active canvas is
+  // only one of them, and the rest keep their content until sent or discarded.
+  const drafts = useMemo(() => {
+    const list: ArtifactEditSession[] = []
+    for (const candidate of editStore.sessions.values()) {
+      if (candidate.sessionId !== session.sessionId) continue
+      if (candidate.status === 'submitted') continue
+      if (!hasArtifactEditContent(candidate) && !candidate.attached) continue
+      list.push(candidate)
+    }
+    return list
+  }, [editStore, session.sessionId])
+  const attachedDraftCount = useMemo(() => drafts.filter(draft => draft.attached).length, [drafts])
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -575,6 +686,13 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       </header>
 
       <div className="dsh-iui-edit-panel-scroll">
+        <DraftSwitcher
+          t={t}
+          drafts={drafts}
+          activeKey={session.key}
+          attachedCount={attachedDraftCount}
+          actions={actions}
+        />
         {session.selection.length === 0 ? null : (
           <section className="dsh-iui-edit-section" aria-label={t('edit.requests')}>
             <div className="dsh-iui-edit-section-head">

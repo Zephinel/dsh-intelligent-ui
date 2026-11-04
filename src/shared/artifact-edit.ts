@@ -37,6 +37,14 @@ export const ARTIFACT_EDIT_SUMMARY = 'artifact-edit-summary'
 
 /** Hard caps shared by the composer validation and the Host. */
 export const MAX_ARTIFACT_EDITS = 12
+/** One Send may batch this many artifact edit requests (M3 multi-card). */
+export const MAX_ARTIFACT_BATCH_REQUESTS = 3
+/** One chat may keep this many unsent drafts (M3 multi-card). */
+export const MAX_ARTIFACT_DRAFTS = 6
+/** Batch-wide program budget for multi-artifact sends. */
+export const MAX_ARTIFACT_BATCH_PROGRAM_CHARS = 120_000
+/** Batch-wide edit-instruction count for multi-artifact sends. */
+export const MAX_ARTIFACT_BATCH_EDITS = 24
 /** Maximum number of top-level blocks one arrangement request may move. */
 export const MAX_TARGET_ORDER_BLOCKS = 100
 export const MAX_BLOCK_INSTRUCTION_CHARS = 2000
@@ -96,6 +104,8 @@ export interface ArtifactEditRequest {
   readonly baseRevisionId: string
   /** 1-based revision number of `baseRevisionId`. */
   readonly baseRevision: number
+  /** Stable per-draft request id; the Host binds tool calls to it in a batch. */
+  readonly requestId?: string
   /** Display title of the artifact, when it had one. */
   readonly title?: string
   /** Recorded presentation style; the update must keep it. */
@@ -220,9 +230,10 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'edits', 'targetOrder', 'orderChanged', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'edits', 'targetOrder', 'orderChanged', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
+  if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
   if (!isIdentity(value.artifactId)) return 'invalid_artifact_id'
   if (!isIdentity(value.baseRevisionId)) return 'invalid_base_revision_id'
   if (typeof value.baseRevision !== 'number' || !Number.isSafeInteger(value.baseRevision) || value.baseRevision < 1) return 'invalid_base_revision'
@@ -291,6 +302,7 @@ function splitEnvelope(text: string): { json: string; program: string; rest: str
 export function buildEditRequestText(request: ArtifactEditRequest): string {
   const header = JSON.stringify({
     schemaVersion: request.schemaVersion,
+    ...request.requestId === undefined ? {} : { requestId: request.requestId },
     artifactId: request.artifactId,
     baseRevisionId: request.baseRevisionId,
     baseRevision: request.baseRevision,
@@ -331,6 +343,9 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '',
         'This message is a targeted edit request for one existing rendered page (an artifact the user is looking at).',
         `Call the ${BLOCK_EDIT_TOOL} tool exactly once with a mini openui-lang program. Do not call render_ui for this request, do not answer in prose, do not return a diff, and do not redesign the page.`,
+        ...request.requestId === undefined ? [] : [
+          `Pass requestId: ${JSON.stringify(request.requestId)} and artifactId: ${JSON.stringify(request.artifactId)} in the tool arguments so the Host applies exactly this request.`,
+        ],
         '',
         'Output contract for that tool:',
         '- Return one mini program `root = Col([...])` whose direct children are exactly the edited versions of the target blocks listed below, in the same order as the list.',
@@ -371,6 +386,9 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '',
         'This message is a targeted request for one existing rendered page (an artifact the user is looking at). It contains no block content edits.',
         'Call the render_ui tool exactly once with the complete updated program. Do not answer in prose, do not return a diff, and do not redesign the page.',
+        ...request.requestId === undefined ? [] : [
+          `Pass editRequestId: ${JSON.stringify(request.requestId)} in the tool arguments so the Host applies exactly this request.`,
+        ],
         '',
         'Editing rules:',
         '- Keep every block unchanged unless the global instruction below requires a change.',
@@ -395,6 +413,11 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         ARTIFACT_PROGRAM_CLOSE,
       ]
   return lines.join('\n')
+}
+
+/** Request ids generated per draft; safe inside the JSON header and Host maps. */
+export function isRequestId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(value)
 }
 
 /** Whether one id has the shape of a recognized top-level block id. */
@@ -439,6 +462,31 @@ export function isNoOpEditRequest(request: ArtifactEditRequest, baseBlockIds: re
 }
 
 /**
+ * Parse one user message body into every structured edit request it carries.
+ *
+ * A multi-artifact send concatenates one envelope per chip; each envelope is
+ * parsed independently so one malformed request cannot hide the others.
+ * @param text - one user message text block.
+ * @returns the parsed requests in message order (empty for ordinary messages).
+ */
+export function parseEditRequestTexts(text: string): ArtifactEditRequest[] {
+  if (!text.includes(ARTIFACT_EDIT_OPEN)) return []
+  const requests: ArtifactEditRequest[] = []
+  let cursor = 0
+  while (cursor < text.length) {
+    const open = text.indexOf(ARTIFACT_EDIT_OPEN, cursor)
+    if (open < 0) break
+    const next = text.indexOf(ARTIFACT_EDIT_OPEN, open + ARTIFACT_EDIT_OPEN.length)
+    const segment = next < 0 ? text.slice( Math.max(0, open)) : text.slice(open, next)
+    const parsed = parseEditRequestText(segment)
+    if (parsed !== undefined) requests.push(parsed)
+    if (next < 0) break
+    cursor = next
+  }
+  return requests
+}
+
+/**
  * Parse one user message body into a structured edit request.
  *
  * Returns undefined for ordinary messages so the Host observer stays cheap.
@@ -479,10 +527,15 @@ export function nextEditRequestSummary(text: string, from: number): { start: num
   if (start < 0) return undefined
   const close = text.indexOf(ARTIFACT_EDIT_CLOSE, start + ARTIFACT_EDIT_OPEN.length)
   if (close < 0) return undefined
-  const programOpen = text.lastIndexOf(ARTIFACT_PROGRAM_OPEN)
-  const programClose = text.lastIndexOf(ARTIFACT_PROGRAM_CLOSE)
   const headerEnd = close + ARTIFACT_EDIT_CLOSE.length
-  const end = programOpen > close && programClose > programOpen ? programClose + ARTIFACT_PROGRAM_CLOSE.length : headerEnd
+  // Each envelope owns the first program section that follows its header and
+  // precedes the next envelope; a batch concatenates several of them.
+  const nextOpen = text.indexOf(ARTIFACT_EDIT_OPEN, headerEnd)
+  const programOpen = text.indexOf(ARTIFACT_PROGRAM_OPEN, headerEnd)
+  const programClose = programOpen < 0 ? -1 : text.indexOf(ARTIFACT_PROGRAM_CLOSE, programOpen)
+  const ownsProgram = programOpen >= 0 && programClose > programOpen
+    && (nextOpen < 0 || programOpen < nextOpen)
+  const end = ownsProgram ? programClose + ARTIFACT_PROGRAM_CLOSE.length : headerEnd
   let count = 0
   let globalOnly = false
   let reordered = false

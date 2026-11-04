@@ -1,8 +1,8 @@
 /** Structured block-edit requests observed from the user message stream. */
 import {
-  ARTIFACT_EDIT_OPEN, ARTIFACT_ID_PATTERN, MAX_ARTIFACT_PROGRAM_CHARS,
+  ARTIFACT_EDIT_OPEN, ARTIFACT_ID_PATTERN, MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_PROGRAM_CHARS,
   describeTargetOrderProblem, isNoOpEditRequest, isReorderedOrder,
-  parseEditRequestText,
+  parseEditRequestTexts,
   type ArtifactEditRequest, type ArtifactRevisionMeta, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
 import { artifactEditWarnings, extractArtifactBlocks, reorderProgramToTargetOrder, verifyEditTargets } from '../shared/artifact-blocks.ts'
@@ -11,11 +11,37 @@ import type { ArtifactRevisionRecord, ArtifactRevisionStore } from './artifact-r
 /** How long an observed edit request stays armed for the next render_ui call. */
 export const ARTIFACT_EDIT_TTL = 15 * 60 * 1000
 const MAX_PENDING_SESSIONS = 64
+/** Pending requests retained per session; one send arms at most a full batch. */
+const MAX_SESSION_REQUESTS = MAX_ARTIFACT_BATCH_REQUESTS
 
-/** One armed edit request, or why it cannot be applied. */
+/** Which pending request a tool call targets when a session holds several. */
+export type PendingSelectorError = 'multiple_pending' | 'unknown_request' | 'unknown_artifact' | 'artifact_mismatch'
+
+/** Selector a tool call uses to pick one request out of a multi-request send. */
+export interface PendingArtifactSelector {
+  readonly requestId?: string
+  readonly artifactId?: string
+}
+
+/** One armed edit request, or why it cannot be resolved/applied. */
 export interface PendingArtifactEdit {
   readonly request?: ArtifactEditRequest
+  /** Model-readable reason a parsed-but-unusable request cannot be applied. */
   readonly invalidReason?: string
+  /** Why the selector did not resolve exactly one usable pending request. */
+  readonly error?: PendingSelectorError
+  readonly requestId?: string
+  readonly artifactId?: string
+  readonly mode?: 'block' | 'full'
+  readonly messageId?: string
+}
+
+/** One pending request summarized for model-facing selection errors. */
+export interface PendingArtifactEditSummary {
+  readonly requestId: string
+  readonly artifactId?: string
+  readonly mode?: 'block' | 'full'
+  readonly invalid: boolean
 }
 
 /** Lineage and findings of one applied edit. */
@@ -25,13 +51,19 @@ export interface AppliedArtifactEdit {
 }
 
 export interface ArtifactEditController {
-  pending(sessionId?: string): PendingArtifactEdit | undefined
+  /** One pending request; `undefined` means none, or a selector could not resolve exactly one. */
+  pending(sessionId?: string, selector?: PendingArtifactSelector): PendingArtifactEdit | undefined
+  /** Compact view of every live pending request, in arrival order. */
+  listPending(sessionId?: string): PendingArtifactEditSummary[]
   apply(input: {
     readonly sessionId?: string
     readonly callId?: string
     readonly args: Record<string, unknown>
     /** Host-composed page for a block-level tool call; skips render_ui argument style checks and always carries the page. */
     readonly composedProgram?: string
+    /** Exact pending request to consume; omitted for the legacy single-request path. */
+    readonly requestId?: string
+    readonly artifactId?: string
   }): AppliedArtifactEdit
 }
 
@@ -46,8 +78,19 @@ interface ArtifactEditSessionEvent {
   }
 }
 
-interface Entry extends PendingArtifactEdit {
+/** One stored pending request. */
+interface Entry {
+  readonly requestId: string
+  readonly request?: ArtifactEditRequest
+  readonly invalidReason?: string
+  readonly artifactId?: string
+  readonly mode?: 'block' | 'full'
+  readonly messageId?: string
   readonly createdAt: number
+}
+
+interface SessionState {
+  readonly entries: Map<string, Entry>
 }
 
 const RELOAD = 'Ask the user to reload the rendered page and make the edit again.'
@@ -61,6 +104,17 @@ const NO_PENDING_MESSAGE = 'render_ui: no block edit request is pending for this
 const NO_OP_MESSAGE = 'render_ui: this block edit request changes nothing (no instructions, no global instruction and the same block order), so no revision can be rendered. Ask the user to choose an edit or reorder a block before editing again.'
 
 const ARRANGEMENT_MESSAGE = 'render_ui: this block arrangement request could not be verified because the updated program did not keep every top-level block; keep the same top-level blocks with their statement names/titles (no add/remove/merge) and try again.'
+
+const DUPLICATE_ARTIFACT_MESSAGE = (artifactId: string): string =>
+  `render_ui: this user message contains more than one edit request for artifactId ${JSON.stringify(artifactId)}; only the first request per artifact is armed. Ask the user to send one edit per artifact.`
+
+/** Deterministic request id for a legacy envelope that carries no requestId. */
+function legacyRequestId(request: ArtifactEditRequest): string {
+  const raw = request.artifactId === request.baseRevisionId ? request.artifactId : `${request.artifactId}_${request.baseRevisionId}`
+  return `legacy_${raw.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 72)}`
+}
+
+const LEGACY_UNREADABLE_REQUEST_ID = 'legacy_unreadable'
 
 /** Model-readable staleness report shared by the observer and apply(). */
 function staleMessage(request: ArtifactEditRequest, status: ArtifactRevisionStatus, tool = 'render_ui'): string {
@@ -81,32 +135,128 @@ function messageText(content: readonly unknown[] | undefined): string | undefine
 
 /**
  * Install the user-message observer and the render-time applicator.
- * @param ctx - host context with the optional live event subscription.
+ *
+ * One user message may carry several V1 edit envelopes (one per Composer chip);
+ * the Host aggregates them into a per-session batch keyed by requestId. Legacy
+ * envelopes without a requestId keep the previous single-pending behavior.
+ * @param ctx - host context with the optional live event subscription and logger.
  * @param revisions - durable revision registry.
  * @param options - clock injection for tests.
- * @returns the edit controller used by the render_ui execute path.
+ * @returns the edit controller used by render_ui and the block-level tool.
  */
 export function createArtifactEditController(
-  ctx: { on?: (event: string, handler: (...args: any[]) => unknown, prepend?: boolean) => unknown } = {},
+  ctx: {
+    on?: (event: string, handler: (...args: any[]) => unknown, prepend?: boolean) => unknown
+    logger?: { warn(message: string): void }
+  } = {},
   revisions: ArtifactRevisionStore,
   options: { now?: () => number } = {},
 ): ArtifactEditController {
   const now = options.now ?? Date.now
-  const entries = new Map<string, Entry>()
+  const sessions = new Map<string, SessionState>()
 
-  const arm = (sessionId: string, entry: Entry): void => {
-    // Re-insert so Map iteration order keeps the newest session last.
-    entries.delete(sessionId)
-    entries.set(sessionId, entry)
-    if (entries.size <= MAX_PENDING_SESSIONS) return
-    let oldestId: string | undefined
-    let oldestAt = Number.POSITIVE_INFINITY
-    for (const [id, candidate] of entries) {
-      if (id === sessionId || candidate.createdAt >= oldestAt) continue
-      oldestAt = candidate.createdAt
-      oldestId = id
+  /** Live, non-expired entries in arrival order; expired entries are dropped. */
+  const liveEntries = (sessionId: string): Entry[] => {
+    const state = sessions.get(sessionId)
+    if (state === undefined) return []
+    const expired: string[] = []
+    for (const entry of state.entries.values()) {
+      if (now() - entry.createdAt >= ARTIFACT_EDIT_TTL) expired.push(entry.requestId)
     }
-    if (oldestId !== undefined) entries.delete(oldestId)
+    for (const requestId of expired) state.entries.delete(requestId)
+    if (state.entries.size === 0) {
+      sessions.delete(sessionId)
+      return []
+    }
+    return [...state.entries.values()]
+  }
+
+  const viewOf = (entry: Entry): PendingArtifactEdit => ({
+    ...entry.request === undefined || entry.invalidReason !== undefined ? {} : { request: entry.request },
+    ...entry.invalidReason === undefined ? {} : { invalidReason: entry.invalidReason },
+    requestId: entry.requestId,
+    ...entry.artifactId === undefined ? {} : { artifactId: entry.artifactId },
+    ...entry.mode === undefined ? {} : { mode: entry.mode },
+    ...entry.messageId === undefined ? {} : { messageId: entry.messageId },
+  })
+
+  const summaryOf = (entry: Entry): PendingArtifactEditSummary => ({
+    requestId: entry.requestId,
+    ...entry.artifactId === undefined ? {} : { artifactId: entry.artifactId },
+    ...entry.mode === undefined ? {} : { mode: entry.mode },
+    invalid: entry.invalidReason !== undefined,
+  })
+
+  /** Store one entry: same requestId replaces, per-session cap drops the oldest. */
+  const arm = (sessionId: string, entry: Entry): void => {
+    let state = sessions.get(sessionId)
+    if (state === undefined) {
+      if (sessions.size >= MAX_PENDING_SESSIONS) {
+        let oldestSession: string | undefined
+        let oldestAt = Number.POSITIVE_INFINITY
+        for (const [id, candidate] of sessions) {
+          let newest = 0
+          for (const item of candidate.entries.values()) if (item.createdAt > newest) newest = item.createdAt
+          if (newest < oldestAt) {
+            oldestAt = newest
+            oldestSession = id
+          }
+        }
+        if (oldestSession !== undefined) sessions.delete(oldestSession)
+      }
+      state = { entries: new Map() }
+      sessions.set(sessionId, state)
+    }
+    state.entries.delete(entry.requestId)
+    while (state.entries.size >= MAX_SESSION_REQUESTS) {
+      const oldest = state.entries.keys().next()
+      if (oldest.done === true) break
+      state.entries.delete(oldest.value)
+    }
+    state.entries.set(entry.requestId, entry)
+  }
+
+  /** Delete one consumed request, dropping the session state when it becomes empty. */
+  const consume = (sessionId: string, requestId: string): void => {
+    const state = sessions.get(sessionId)
+    if (state === undefined) return
+    state.entries.delete(requestId)
+    if (state.entries.size === 0) sessions.delete(sessionId)
+  }
+
+  type Resolution = { readonly entry?: Entry; readonly error?: PendingSelectorError }
+  const resolve = (sessionId: string, selector: PendingArtifactSelector | undefined): Resolution => {
+    const live = liveEntries(sessionId)
+    const requestId = selector?.requestId
+    const artifactId = selector?.artifactId
+    if (requestId !== undefined) {
+      const entry = live.find(candidate => candidate.requestId === requestId)
+      if (entry === undefined) return { error: 'unknown_request' }
+      if (artifactId !== undefined && entry.artifactId !== artifactId) return { entry, error: 'artifact_mismatch' }
+      return { entry }
+    }
+    if (artifactId !== undefined) {
+      const matches = live.filter(candidate => candidate.artifactId === artifactId)
+      if (matches.length === 0) return { error: 'unknown_artifact' }
+      if (matches.length > 1) return { error: 'multiple_pending' }
+      return { entry: matches[0] }
+    }
+    if (live.length === 0) return {}
+    if (live.length > 1) return { error: 'multiple_pending' }
+    return { entry: live[0] }
+  }
+
+  const selectorFailure = (tool: 'render_ui' | 'edit_ui_blocks', error: PendingSelectorError): Error => {
+    switch (error) {
+      case 'multiple_pending':
+        return new Error(`${tool}: more than one Artifact edit request is pending for this session; choose exactly one pending request by passing requestId in the tool arguments.`)
+      case 'unknown_request':
+        return new Error(`${tool}: no pending Artifact edit request matches the given requestId.`)
+      case 'unknown_artifact':
+        return new Error(`${tool}: no pending Artifact edit request matches the given artifactId.`)
+      case 'artifact_mismatch':
+        return new Error(`${tool}: the pending requestId does not belong to the given artifactId.`)
+    }
   }
 
   /** Describe why one parsed request cannot be applied, or undefined when it can. */
@@ -139,6 +289,7 @@ export function createArtifactEditController(
   // Cordis supports prepend. Observe the user message before later projections publish it.
   ctx.on?.('session/event', (session: { id?: string }, event: ArtifactEditSessionEvent) => {
     if (event.type !== 'user/message' || typeof session.id !== 'string' || session.id === '') return
+    const sessionId = session.id
     const data = event.data
     if (data === undefined) return
     // Injected user-role context (skills, file notices, goals) is not a human edit.
@@ -147,42 +298,73 @@ export function createArtifactEditController(
     // Installed user messages carry content directly; keep the nested message shape too.
     const text = messageText(data.message?.content ?? data.content)
     if (text === undefined || !text.includes(ARTIFACT_EDIT_OPEN)) return
-    const request = parseEditRequestText(text)
-    if (request === undefined) {
-      arm(session.id, { createdAt: now(), invalidReason: UNREADABLE_MESSAGE })
+    const messageId = typeof data.id === 'string' ? data.id : undefined
+    const message = messageId === undefined ? {} : { messageId }
+    const requests = parseEditRequestTexts(text)
+    if (requests.length === 0) {
+      // Keep the old single-pending behavior for one unreadable legacy envelope.
+      sessions.delete(sessionId)
+      arm(sessionId, { requestId: LEGACY_UNREADABLE_REQUEST_ID, invalidReason: UNREADABLE_MESSAGE, createdAt: now(), ...message })
       return
     }
-    const problem = describeProblem(request)
-    arm(session.id, problem === undefined
-      ? { createdAt: now(), request }
-      : { createdAt: now(), invalidReason: problem })
+    // An old client sends one envelope without requestId; that send replaces the
+    // session's previous request, exactly like the pre-batch Host.
+    if (requests.every(request => request.requestId === undefined)) sessions.delete(sessionId)
+    if (requests.length > MAX_ARTIFACT_BATCH_REQUESTS) {
+      ctx.logger?.warn(`intelligent-ui: ignored ${requests.length - MAX_ARTIFACT_BATCH_REQUESTS} artifact edit request(s) beyond the per-message limit of ${MAX_ARTIFACT_BATCH_REQUESTS}`)
+    }
+    const acceptedArtifacts = new Set<string>()
+    for (const request of requests.slice(0, MAX_ARTIFACT_BATCH_REQUESTS)) {
+      const requestId = request.requestId ?? legacyRequestId(request)
+      const artifactId = request.artifactId
+      const duplicate = acceptedArtifacts.has(artifactId)
+      acceptedArtifacts.add(artifactId)
+      const base = { requestId, request, artifactId, mode: request.edits.length > 0 ? 'block' as const : 'full' as const, createdAt: now(), ...message }
+      if (duplicate) {
+        ctx.logger?.warn(`intelligent-ui: ignored a duplicate artifact edit request for ${artifactId} in one user message`)
+        arm(sessionId, { ...base, invalidReason: DUPLICATE_ARTIFACT_MESSAGE(artifactId) })
+        continue
+      }
+      const problem = describeProblem(request)
+      arm(sessionId, problem === undefined ? base : { ...base, invalidReason: problem })
+    }
   }, true)
-  ctx.on?.('session/disposed', (session: { id?: string }) => { if (typeof session.id === 'string') entries.delete(session.id) })
+  ctx.on?.('session/disposed', (session: { id?: string }) => { if (typeof session.id === 'string') sessions.delete(session.id) })
 
-  const pending: ArtifactEditController['pending'] = sessionId => {
+  const pending: ArtifactEditController['pending'] = (sessionId, selector) => {
     if (sessionId === undefined) return undefined
-    const entry = entries.get(sessionId)
-    if (entry === undefined) return undefined
-    if (now() - entry.createdAt >= ARTIFACT_EDIT_TTL) {
-      entries.delete(sessionId)
-      return undefined
+    const resolved = resolve(sessionId, selector)
+    if (resolved.error === undefined) return resolved.entry === undefined ? undefined : viewOf(resolved.entry)
+    if (resolved.error === 'artifact_mismatch' && resolved.entry !== undefined) {
+      return { error: resolved.error, requestId: resolved.entry.requestId, artifactId: resolved.entry.artifactId }
     }
-    return {
-      ...entry.request === undefined ? {} : { request: entry.request },
-      ...entry.invalidReason === undefined ? {} : { invalidReason: entry.invalidReason },
-    }
+    return { error: resolved.error }
+  }
+
+  const listPending: ArtifactEditController['listPending'] = sessionId => {
+    if (sessionId === undefined) return []
+    return liveEntries(sessionId).map(summaryOf)
   }
 
   return {
     pending,
-    apply({ sessionId, callId, args, composedProgram }) {
+    listPending,
+    apply({ sessionId, callId, args, composedProgram, requestId, artifactId }) {
       if (sessionId === undefined) throw new Error('render_ui: a block edit needs a session identity.')
-      const entry = entries.get(sessionId)
-      if (entry === undefined) throw new Error(NO_PENDING_MESSAGE)
-      if (now() - entry.createdAt >= ARTIFACT_EDIT_TTL) {
-        entries.delete(sessionId)
+      const state = sessions.get(sessionId)
+      if (state === undefined) throw new Error(NO_PENDING_MESSAGE)
+      const before = [...state.entries.values()]
+      const live = liveEntries(sessionId)
+      if (requestId === undefined && artifactId === undefined && live.length === 0 && before.length === 1) {
+        // Preserve the pre-batch TTL error when the only request just expired.
         throw new Error(EXPIRED_MESSAGE)
       }
+      if (live.length === 0) throw new Error(NO_PENDING_MESSAGE)
+      const tool = composedProgram === undefined ? 'render_ui' : 'edit_ui_blocks'
+      const resolved = resolve(sessionId, requestId === undefined && artifactId === undefined ? undefined : { requestId, artifactId })
+      if (resolved.error !== undefined) throw selectorFailure(tool, resolved.error)
+      const entry = resolved.entry
+      if (entry === undefined) throw new Error(NO_PENDING_MESSAGE)
       if (entry.invalidReason !== undefined) throw new Error(entry.invalidReason)
       const request = entry.request
       if (request === undefined) throw new Error(UNREADABLE_MESSAGE)
@@ -206,7 +388,6 @@ export function createArtifactEditController(
         }
       }
       // A prior turn may have recorded a newer revision while this request stayed armed.
-      const tool = composed ? 'edit_ui_blocks' : 'render_ui'
       const base = revisions.get(request.baseRevisionId)
       if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
         throw new Error(`${tool}: this block edit request belongs to a different artifact revision. ${RELOAD}`)
@@ -259,7 +440,7 @@ export function createArtifactEditController(
         createdAt: now(),
       }
       revisions.record(record)
-      entries.delete(sessionId)
+      consume(sessionId, entry.requestId)
       return {
         lineage: {
           artifactId: record.artifactId,

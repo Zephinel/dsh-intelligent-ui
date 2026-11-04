@@ -12,11 +12,12 @@
  * editing: entering edit mode swaps the read-only body for the edit view while
  * the card itself (header, revision badge, collapse) stays in place.
  */
-import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { IconChevronDownOutlineRegular, IconSparkleRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS } from '../shared/artifact-edit.ts'
 import { MODE_PROJECTION_KEY, type IntelligentUIModeView, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { OpenUIRenderer } from '../lib/render.tsx'
@@ -30,13 +31,17 @@ import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
-import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions } from './artifact-edit/contracts.ts'
+import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession } from './artifact-edit/contracts.ts'
 import {
+  activateDraft as activateArtifactDraft,
+  attachDraft as attachArtifactDraft,
   blocksForProgram,
   closeArtifactBlockEditor,
   closeArtifactEditor,
   clearAllArtifactEdits,
   clearArtifactBlockInstruction,
+  discardDraft as discardArtifactDraft,
+  hasArtifactEditContent,
   moveArtifactBlock,
   moveArtifactBlockBy,
   openArtifactBlockEditor,
@@ -45,13 +50,13 @@ import {
   resetArtifactOrder,
   retryArtifactRevisionCheck,
   saveArtifactBlockInstruction,
-  selectArtifactBlock,
   setArtifactDrawerOpen,
   setArtifactGlobalInstruction,
   supportsBlockEditing,
   undoArtifactRemove,
   updateArtifactBlockDraft,
   useArtifactEditSession,
+  useArtifactEditStore,
 } from './artifact-edit/store.ts'
 
 /** Session-bound, Turn-keyed program source supplied by the plugin's registration. */
@@ -143,6 +148,21 @@ export function IntelligentUICards({
   )
 }
 
+/** Smooth scrolling unless the user asked for reduced motion. */
+function scrollBehavior(): ScrollBehavior {
+  if (typeof window.matchMedia !== 'function') return 'auto'
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+}
+
+/** Short card-header badge for one retained (non-active) draft. */
+function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
+  if (session.status === 'conflict') return t('edit.conflictTitle')
+  const count = session.selection.length
+  if (count > 0) return `${t('edit.pendingDrafts')} · ${t('edit.requestsCount', { count })}`
+  if (session.orderChanged) return `${t('edit.pendingDrafts')} · ${t('edit.summaryOrderChanged')}`
+  return `${t('edit.pendingDrafts')} · ${t('edit.summaryGlobal')}`
+}
+
 interface IntelligentUICardProps {
   readonly program: IntelligentUIProgram
   readonly sessionId: string
@@ -167,6 +187,11 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
   const [error, setError] = useState<string | null>(null)
   // Block editing needs a usable two-pane width; tiny viewports get a hint.
   const [narrowNotice, setNarrowNotice] = useState(false)
+  // Multi-draft notices: draft cap reached, and a detached draft (chip removed).
+  const [limitNotice, setLimitNotice] = useState(false)
+  const [detachedNotice, setDetachedNotice] = useState(false)
+  const cardRef = useRef<HTMLElement>(null)
+  const skipActivationScroll = useRef(false)
   const adjust = async (): Promise<void> => {
     if (onAdjust === undefined || adjusting) return
     setAdjusting(true)
@@ -181,7 +206,18 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
   const baseRevisionId = program.revisionId ?? program.callId
   const editKey = `${sessionId}:${baseRevisionId}`
   const editSession = useArtifactEditSession(sessionId, baseRevisionId)
+  const editStore = useArtifactEditStore()
   const editing = editSession?.editing === true
+  const hasDraft = editSession !== undefined && hasArtifactEditContent(editSession)
+  const showDraftBadge = editSession !== undefined && !editing && editSession.status !== 'submitted' && hasDraft
+  const attachedDraftTotal = useMemo(() => {
+    let count = 0
+    for (const candidate of editStore.sessions.values()) {
+      if (candidate.sessionId !== sessionId || candidate.status === 'submitted') continue
+      if (candidate.attached && hasArtifactEditContent(candidate)) count += 1
+    }
+    return count
+  }, [editStore, sessionId])
   const blocks = useMemo(() => blocksForProgram(program.program).blocks, [program.program])
   const editable = !program.running && blocks.length > 0 && supportsBlockEditing(program)
   const editActions = useMemo<ArtifactEditActions>(() => ({
@@ -200,7 +236,26 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
     closeEditor: () => { closeArtifactEditor(editKey) },
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
+    activateDraft: key => { activateArtifactDraft(key) },
+    attachDraft: key => { attachArtifactDraft(key) },
+    discardDraft: key => { discardArtifactDraft(key) },
   }), [editKey])
+
+  // Switching the active draft (from this card or the panel switcher) brings
+  // the newly active card back into view. Opening the canvas from this card's
+  // own entry is already in view, so it skips the jump.
+  useEffect(() => {
+    if (!editing) return
+    if (skipActivationScroll.current) { skipActivationScroll.current = false; return }
+    cardRef.current?.scrollIntoView({ block: 'center', behavior: scrollBehavior() })
+  }, [editing])
+
+  // A just-activated draft that could not join the batch says so inline.
+  useEffect(() => {
+    if (!editing || editSession === undefined) { setDetachedNotice(false); return }
+    setDetachedNotice(!editSession.attached)
+  }, [editing, editSession?.attached, editSession?.key])
+
   const toggleEditing = (): void => {
     if (editing) { closeArtifactEditor(editKey); return }
     if (typeof window !== 'undefined' && !isEditViewportWideEnough(window.innerWidth)) {
@@ -208,10 +263,18 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
       return
     }
     setNarrowNotice(false)
-    openArtifactEditor(sessionId, program)
+    skipActivationScroll.current = true
+    const result = openArtifactEditor(sessionId, program)
+    if (result.ok) {
+      setLimitNotice(false)
+      return
+    }
+    skipActivationScroll.current = false
+    if (result.reason === 'limit') setLimitNotice(true)
   }
   return (
     <section
+      ref={cardRef}
       className="dsh-iui-card"
       data-dsh-intelligent-ui="card"
       data-dsh-iui-call-id={program.callId}
@@ -237,6 +300,24 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
           <span className="dsh-iui-chevron" aria-hidden="true"><IconChevronDownOutlineRegular size={14} /></span>
         </button>
         <div className="dsh-iui-head-actions">
+          {showDraftBadge
+            ? <span
+                className="dsh-iui-draft-badge"
+                data-dsh-iui-draft-badge
+                data-state={editSession.status === 'conflict' ? 'conflict' : editSession.attached ? 'attached' : 'detached'}
+                title={t('edit.draftSaved')}
+              >{draftBadgeLabel(editSession, t)}</span>
+            : null}
+          {showDraftBadge && editSession !== undefined && !editSession.attached
+            ? <button
+                type="button"
+                className="dsh-iui-draft-attach"
+                data-dsh-iui-draft-attach
+                title={t('edit.attachDraft')}
+                disabled={attachedDraftTotal >= MAX_ARTIFACT_BATCH_REQUESTS}
+                onClick={() => { attachArtifactDraft(editKey) }}
+              >{t('edit.attachDraft')}</button>
+            : null}
           {program.revision !== undefined && program.revision > 1
             ? <span className="dsh-iui-revision" data-dsh-iui-revision>{t('edit.revision', { n: program.revision })}</span>
             : null}
@@ -259,6 +340,34 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
             </div>
             <button type="button" className="dsh-iui-edit-narrow-dismiss" onClick={() => { setNarrowNotice(false) }}>
               {t('edit.narrowDismiss')}
+            </button>
+          </div>
+        : null}
+      {limitNotice
+        ? <div className="dsh-iui-edit-narrow-notice" role="status" data-dsh-iui-draft-limit>
+            <div className="dsh-iui-edit-narrow-copy">
+              <strong>{t('edit.pendingDrafts')}</strong>
+              <span>{t('edit.draftLimit', { max: MAX_ARTIFACT_DRAFTS })}</span>
+            </div>
+            <button type="button" className="dsh-iui-edit-narrow-dismiss" onClick={() => { setLimitNotice(false) }}>
+              {t('edit.narrowDismiss')}
+            </button>
+          </div>
+        : null}
+      {detachedNotice && editing && editSession !== undefined && !editSession.attached
+        ? <div className="dsh-iui-edit-narrow-notice" role="status" data-dsh-iui-draft-detached>
+            <div className="dsh-iui-edit-narrow-copy">
+              <strong>{t('edit.pendingDrafts')}</strong>
+              <span>{t('edit.draftDetached')}</span>
+            </div>
+            <button
+              type="button"
+              className="dsh-iui-edit-narrow-dismiss"
+              data-dsh-iui-draft-attach
+              disabled={attachedDraftTotal >= MAX_ARTIFACT_BATCH_REQUESTS}
+              onClick={() => { attachArtifactDraft(editKey) }}
+            >
+              {t('edit.attachDraft')}
             </button>
           </div>
         : null}

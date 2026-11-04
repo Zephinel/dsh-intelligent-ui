@@ -352,6 +352,155 @@
 }
 
 /*
+ * Multi-draft switcher: every retained draft of the chat, in creation order.
+ * Same quiet editorial language as the request list: hairline separators, a
+ * brand tick on the active canvas, and inline attach/discard affordances.
+ */
+.dsh-iui-edit-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-draft-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-draft-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.dsh-iui-edit-draft-row:hover {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, transparent);
+}
+
+.dsh-iui-edit-draft-row.is-active {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsw-alias-brand-primary);
+}
+
+.dsh-iui-edit-draft-open {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 2px 8px 5px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-draft-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-border-l3);
+}
+
+.dsh-iui-edit-draft-row.is-active .dsh-iui-edit-draft-dot {
+  background: var(--dsw-alias-brand-primary);
+}
+
+.dsh-iui-edit-draft-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-draft-title {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-draft-meta {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-draft-tag {
+  flex: none;
+  max-width: 116px;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-draft-tag.is-conflict {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 38%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-draft-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.dsh-iui-edit-draft-action {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.dsh-iui-edit-draft-action:hover:not(:disabled) {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-draft-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dsh-iui-edit-draft-action-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/*
  * Saved request rows: a quiet editorial list, not a stack of tinted cards.
  * Selection identity lives in the left gutter (2px hue tick + mono number);
  * the row itself stays transparent so the panel has one surface, and only a
@@ -1022,6 +1171,8 @@
 .dsh-iui-edit-icon-button:focus-visible,
 .dsh-iui-edit-grip:focus-visible,
 .dsh-iui-edit-arrangement-body:focus-visible,
+.dsh-iui-edit-draft-open:focus-visible,
+.dsh-iui-edit-draft-action:focus-visible,
 .dsh-iui-edit-card-action:focus-visible,
 .dsh-iui-edit-link:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));

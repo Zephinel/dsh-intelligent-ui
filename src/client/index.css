@@ -1508,6 +1508,58 @@
   white-space: nowrap;
 }
 
+/*
+ * Multi-draft card chrome: a non-active card that still owns a draft shows a
+ * status badge (and an attach control when its chip was removed), so pending
+ * edits stay visible without opening the editor.
+ */
+.dsh-iui-draft-badge {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 1px 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10.5px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-draft-badge[data-state='conflict'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 42%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-draft-badge[data-state='detached'] {
+  border-style: dashed;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-draft-attach {
+  padding: 1px 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-draft-attach:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-draft-attach:focus-visible,
+.dsh-iui-draft-badge:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
 .dsh-iui-edit-entry {
   box-sizing: border-box;
   height: 26px;

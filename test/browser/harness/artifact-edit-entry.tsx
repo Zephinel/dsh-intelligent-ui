@@ -25,12 +25,12 @@ const seats = new Map<string, { definition: any; Component: any }>()
 const w = window as any
 
 /** One recorded render_ui call for the sample artifact. */
-function cardNode(callId: string, program: string, meta?: unknown) {
+function cardNode(callId: string, program: string, meta?: unknown, title: string = DST_TITLE) {
   return {
     root: {
       kind: 'tool-result', callId, name: 'render_ui', isError: false,
       ...meta === undefined ? {} : { meta },
-      call: { name: 'render_ui', argsRaw: JSON.stringify({ program, title: DST_TITLE, style: 'card' }) },
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program, title, style: 'card' }) },
     },
   }
 }
@@ -197,12 +197,47 @@ w.__applyRevision = (program: string, meta: Record<string, unknown> = {}) => {
   })]
   update()
 }
+// Multi-card E2E: append another settled artifact card from the same fixture.
+w.__addCard = (callId: string, title: string = '第二张卡片') => {
+  w.__lastAdd = callId
+  nodes = [...nodes, cardNode(callId, DST_PROGRAM, undefined, title)]
+  update()
+}
+w.__nodeCount = () => nodes.length
+// Serialize every attached edit chip in draft order, as one composed message.
+w.__serializeChips = async () => {
+  const occurrences = (input.occurrences as unknown as Occurrence[]).filter(item => item.source === 'artifact-edit')
+  if (occurrences.length === 0 || w.__chipSource === undefined) throw new Error('no edit chip in draft')
+  const texts: string[] = []
+  for (const occurrence of occurrences) {
+    texts.push(await w.__chipSource.codec.serialize(occurrence.ref, new AbortController().signal))
+  }
+  let cursor = 0
+  let composed = ''
+  occurrences.forEach((occurrence, index) => {
+    const at = input.draft.indexOf(occurrence.clipboardText, cursor)
+    composed += input.draft.slice(cursor, at) + texts[index]
+    cursor = at + occurrence.clipboardText.length
+  })
+  composed += input.draft.slice(cursor)
+  w.__sentText = composed
+  w.__sent = true
+  setDraft('')
+  return { texts, composed }
+}
+// User gesture: delete one chip from the draft (keep the draft after the check).
+w.__deleteChip = (ref: string) => {
+  const occurrence = (input.occurrences as unknown as Occurrence[]).find(item => item.source === 'artifact-edit' && item.ref === ref)
+  if (occurrence === undefined) return false
+  const start = chipDetectStart(input, occurrence)
+  return insertText('', { start, end: start + 1, draftRev: input.draftRev })
+}
 // Phase-1 block-level edit result: the tool call only returns the changed block
 // program; the Host projects the full revision through result meta.
-w.__applyBlockEditRevision = (meta: Record<string, unknown>) => {
+w.__applyBlockEditRevision = (meta: Record<string, unknown>, callId: string = 'dst-call-2') => {
   nodes = [...nodes, {
     root: {
-      kind: 'tool-result', callId: 'dst-call-2', name: 'edit_ui_blocks', isError: false,
+      kind: 'tool-result', callId, name: 'edit_ui_blocks', isError: false,
       meta: {
         artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2,
         editedBlockIds: ['b3'], title: DST_TITLE, style: 'card', ...meta,
@@ -271,13 +306,19 @@ function Seat({ name, ...props }: { name: string; [key: string]: any }): ReactEl
 /** Render the sent-message summary the same way the chat transcript would. */
 function SentSummary(): ReactElement | null {
   if (!w.__sent || w.__summaryRule === undefined) return null
-  const node = w.__summaryRule.match(w.__sentText, 0, { read: () => undefined })
-  if (node === undefined) return null
   const seat = seats.get('conversation.user.text.node:artifact-edit-summary')
   if (seat === undefined) return null
-  return createElement(seat.Component, {
-    node, raw: w.__sentText, interactive: false, t: translate(w.__lang === 'zh' ? zh : en),
-  })
+  const rendered: ReactElement[] = []
+  let cursor = 0
+  while (cursor < w.__sentText.length) {
+    const node = w.__summaryRule.match(w.__sentText, cursor, { read: () => undefined })
+    if (node === undefined || node.start < cursor) break
+    rendered.push(createElement(seat.Component, {
+      key: `${node.start}-${node.end}`, node, raw: w.__sentText, interactive: false, t: translate(w.__lang === 'zh' ? zh : en),
+    }))
+    cursor = Math.max(node.end, cursor + 1)
+  }
+  return rendered.length === 0 ? null : <>{rendered}</>
 }
 
 /** Harness shell: the card list, a compact composer preview and the sent summary. */

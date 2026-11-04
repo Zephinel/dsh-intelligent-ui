@@ -40,7 +40,7 @@ import {
   isAnswerStyle,
 } from '../shared/intelligent-ui.ts'
 import type { AnswerStyle, RenderLayout } from '../shared/intelligent-ui.ts'
-import { BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
+import { ARTIFACT_ID_PATTERN, BLOCK_EDIT_TOOL, isRequestId } from '../shared/artifact-edit.ts'
 import { spliceBlockBundle } from '../shared/artifact-block-bundle.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
@@ -50,7 +50,10 @@ import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
 import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
-import { createArtifactEditController } from './artifact-edit.ts'
+import {
+  createArtifactEditController,
+  type PendingArtifactEdit, type PendingArtifactEditSummary, type PendingArtifactSelector,
+} from './artifact-edit.ts'
 import { MAX_CLARIFICATION_ROUNDS, MAX_RENDER_CALLS, createOnDemandController } from './on-demand.ts'
 import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
 import { assertDshToolSchema } from './tool-schema.ts'
@@ -225,6 +228,10 @@ const PARAMETERS = {
       required: ['schemaVersion', 'baseLayout', 'directives'],
       additionalProperties: false,
     },
+    editRequestId: {
+      type: 'string',
+      description: 'Only when several Artifact edit requests are pending in this session: the requestId from the order-only/global-only edit envelope being applied. Omit it for ordinary renders.',
+    },
   },
   required: ['program', 'style'],
   additionalProperties: false,
@@ -268,6 +275,14 @@ const BLOCK_EDIT_PARAMETERS = {
         'The complete mini openui-lang program for this block edit: `root = Col([...])` with exactly one top-level '
         + 'expression per selected block, in the request order, with the requested changes applied, plus any new helper '
         + 'statements. Do not return the whole page; the Host splices these expressions back into the unchanged page.',
+    },
+    requestId: {
+      type: 'string',
+      description: 'Only when several Artifact edit requests are pending in this session: the requestId from the edit envelope of the request being applied.',
+    },
+    artifactId: {
+      type: 'string',
+      description: 'Only when several Artifact edit requests are pending in this session: the artifactId from the edit envelope of the request being applied.',
     },
   },
   required: ['program'],
@@ -392,10 +407,63 @@ const ARTIFACT_EDIT_NOTE =
   + 'do not rewrite the whole page with render_ui. Call `edit_ui_blocks` exactly once with a mini program `root = Col([...])` '
   + 'holding only those selected blocks\' updated top-level expressions in request order, plus any new helper statements; '
   + 'the Host splices them back into the unchanged page. The full page in the envelope is read-only reference. '
-  + 'Requests that only change block order or the global instruction still use render_ui once with the complete updated program.'
+  + 'Requests that only change block order or the global instruction still use render_ui once with the complete updated program. '
+  + 'A user message may carry several artifact edit requests; apply each one with its own tool call and its requestId.'
 
 /** Recovery sentence for an unusable pending block edit request. */
 const REQUEST_RELOAD = 'Ask the user to reload the rendered page and make the edit again.'
+
+/** One compact pending-choice line reused by both tools' selection errors. */
+function pendingChoiceLine(pending: PendingArtifactEditSummary): string {
+  const mode = pending.mode === 'block'
+    ? 'block edit: use edit_ui_blocks with requestId'
+    : pending.mode === 'full'
+      ? 'order/global only: use render_ui with editRequestId'
+      : 'unusable request: pass its requestId to a tool to see why'
+  const artifact = pending.artifactId === undefined ? 'unknown artifact' : `artifactId ${JSON.stringify(pending.artifactId)}`
+  return `requestId ${JSON.stringify(pending.requestId)} / ${artifact} (${mode})`
+}
+
+/** Stable request-order choice list for a model-readable selection error. */
+function pendingChoiceList(pending: readonly PendingArtifactEditSummary[]): string {
+  return pending.map(pendingChoiceLine).join('; ')
+}
+
+/** Convert an unresolved pending selector into the model-readable retry error. */
+function pendingSelectionError(
+  tool: 'edit_ui_blocks' | 'render_ui',
+  parameter: 'requestId' | 'editRequestId',
+  selector: PendingArtifactSelector,
+  pending: PendingArtifactEdit,
+  choices: readonly PendingArtifactEditSummary[],
+): Error {
+  switch (pending.error) {
+    case 'multiple_pending':
+      return new Error(`${tool}: this session has ${choices.length} pending Artifact edit requests, so choose exactly one pending request by passing ${parameter} in the tool arguments. Pending: ${pendingChoiceList(choices)}.`)
+    case 'unknown_request':
+      return new Error(`${tool}: no pending Artifact edit request matches ${parameter} ${JSON.stringify(selector.requestId)}; pass one of the pending requestIds in the tool arguments. Pending: ${pendingChoiceList(choices)}.`)
+    case 'unknown_artifact':
+      return new Error(`${tool}: no pending Artifact edit request matches artifactId ${JSON.stringify(selector.artifactId)}; pass one of the pending requestIds in the tool arguments. Pending: ${pendingChoiceList(choices)}.`)
+    case 'artifact_mismatch':
+      return new Error(`${tool}: requestId ${JSON.stringify(selector.requestId)} belongs to artifactId ${JSON.stringify(pending.artifactId)}, not ${JSON.stringify(selector.artifactId)}; pass the matching one, or omit artifactId.`)
+    default:
+      return new Error(`${tool}: this session has more than one pending Artifact edit request, so choose exactly one pending request by passing ${parameter} in the tool arguments. Pending: ${pendingChoiceList(choices)}.`)
+  }
+}
+
+/** Validate the optional edit_ui_blocks selector arguments before touching pending state. */
+function blockEditSelector(args: { readonly requestId?: unknown; readonly artifactId?: unknown }): PendingArtifactSelector {
+  if (args.requestId !== undefined && !isRequestId(args.requestId)) {
+    throw new Error('edit_ui_blocks: requestId must be 8-80 characters using only A-Z, a-z, 0-9, "_" and "-"; pass the requestId from the edit envelope.')
+  }
+  if (args.artifactId !== undefined && (typeof args.artifactId !== 'string' || !ARTIFACT_ID_PATTERN.test(args.artifactId))) {
+    throw new Error('edit_ui_blocks: artifactId is malformed; pass the artifactId from the edit envelope.')
+  }
+  return {
+    ...args.requestId === undefined ? {} : { requestId: args.requestId as string },
+    ...args.artifactId === undefined ? {} : { artifactId: args.artifactId as string },
+  }
+}
 
 /**
  * Read the free-composition preference from its live config reference.
@@ -587,7 +655,8 @@ ${section}`
       + 'containing exactly one top-level expression per selected block, in the request order, with the requested changes '
       + 'applied, plus any new helper statements. The Host splices those block expressions back into the unchanged page, '
       + 'verifies it and records the new revision; never return the whole page. Call it at most once per turn. '
-      + 'Order-only or global-instruction-only artifact requests still use render_ui once with the complete page program.',
+      + 'Order-only or global-instruction-only artifact requests still use render_ui once with the complete page program. '
+      + 'When several Artifact edit requests are pending, pass requestId (and its artifactId) to choose exactly one.',
     parameters: BLOCK_EDIT_PARAMETERS,
     output: {
       schema: BLOCK_EDIT_OUTPUT,
@@ -609,7 +678,7 @@ ${section}`
         ...value.styleId === undefined ? {} : { styleId: value.styleId },
       }),
     },
-    async execute(args: { program: string }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
+    async execute(args: { program: string; requestId?: unknown; artifactId?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
       const sessionId = exec?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) {
         throw new Error(
@@ -617,9 +686,16 @@ ${section}`
         )
       }
       if (sessionId === undefined) throw new Error('edit_ui_blocks: a session is required for a block-level edit.')
-      const pendingEdit = artifactEdits.pending(sessionId)
+      const selector = blockEditSelector(args)
+      const explicitSelector = selector.requestId === undefined && selector.artifactId === undefined ? undefined : selector
+      const pendingEdit = artifactEdits.pending(sessionId, explicitSelector)
       if (pendingEdit === undefined) {
         throw new Error('edit_ui_blocks: no block edit request is pending for this session; use render_ui for an ordinary answer.')
+      }
+      if (pendingEdit.error !== undefined) {
+        const choices = artifactEdits.listPending(sessionId)
+        if (choices.length === 0) throw new Error('edit_ui_blocks: no block edit request is pending for this session; use render_ui for an ordinary answer.')
+        throw pendingSelectionError('edit_ui_blocks', 'requestId', selector, pendingEdit, choices)
       }
       if (pendingEdit.request === undefined) {
         const reason = pendingEdit.invalidReason
@@ -629,7 +705,8 @@ ${section}`
       }
       const request = pendingEdit.request
       if (request.edits.length === 0) {
-        throw new Error('edit_ui_blocks: this edit request only changes block order or the global instruction; call render_ui once with the complete updated page program instead.')
+        const hint = request.requestId === undefined ? '' : ` Pass editRequestId ${JSON.stringify(request.requestId)} to render_ui.`
+        throw new Error(`edit_ui_blocks: this edit request only changes block order or the global instruction; call render_ui once with the complete updated page program instead.${hint}`)
       }
       const fragment = typeof args.program === 'string' ? args.program.trim() : ''
       if (fragment === '') throw new Error('edit_ui_blocks: program must be a non-empty mini openui-lang program with root = Col([...]).')
@@ -637,7 +714,7 @@ ${section}`
       if (!spliced.ok) {
         throw new Error(`edit_ui_blocks: the block program does not fit this edit (${spliced.error}). Return exactly one complete top-level expression per selected block in request order, use only existing or newly defined statement names, keep every statement name unique, and call edit_ui_blocks again.`)
       }
-      const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, composedProgram: spliced.program })
+      const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, composedProgram: spliced.program, requestId: pendingEdit.requestId })
       const program = applied.lineage.program ?? spliced.program
       const lineage = applied.lineage
       const value: BlockEditValue = {
@@ -674,7 +751,7 @@ ${section}`
       + 'Never fabricate data, figures, dates or sources: ground them in the conversation or tool results, or ask the user first; '
       + 'missing data is material ambiguity, not a reason for placeholder content. '
       + 'For a pending Artifact block edit request with selected target blocks, call edit_ui_blocks instead with only those '
-      + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page. '
+      + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page, and when several edit requests are pending pass editRequestId to choose one. '
       + 'Call it at most once per turn, after any brief introductory sentence.',
     parameters: PARAMETERS,
     output: {
@@ -724,7 +801,7 @@ ${section}`
             ...value.program === undefined ? {} : { program: value.program },
           },
     },
-    async execute(args: { program: string; style?: unknown; styleId?: unknown; temporaryStyle?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
+    async execute(args: { program: string; style?: unknown; styleId?: unknown; temporaryStyle?: unknown; editRequestId?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
       const sessionId = exec?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) {
         throw new Error(
@@ -832,15 +909,28 @@ ${section}`
         editedBlockIds?: readonly string[]
         program?: string
       } | undefined
-      const pendingEdit = sessionId === undefined ? undefined : artifactEdits.pending(sessionId)
-      if (sessionId !== undefined && pendingEdit !== undefined) {
-        // A content edit must go through the structural block path, not a full rewrite.
-        if (pendingEdit.request !== undefined && pendingEdit.request.edits.length > 0) {
-          throw new Error('render_ui: this artifact edit request has selected blocks to change; call edit_ui_blocks once with a mini program containing only the selected blocks\' updated expressions instead of the whole page. The request stays armed, so do not answer in prose.')
+      if (sessionId !== undefined) {
+        if (args.editRequestId !== undefined && !isRequestId(args.editRequestId)) {
+          throw new Error('render_ui: editRequestId must be 8-80 characters using only A-Z, a-z, 0-9, "_" and "-"; pass the requestId from the edit envelope.')
         }
-        const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args })
-        lineage = applied.lineage
-        warnings.push(...applied.warnings)
+        const selector = args.editRequestId === undefined ? undefined : { requestId: args.editRequestId as string }
+        const pendingEdit = artifactEdits.pending(sessionId, selector)
+        if (pendingEdit === undefined) {
+          if (selector !== undefined) {
+            throw new Error(`render_ui: no pending Artifact edit request matches editRequestId ${JSON.stringify(selector.requestId)}; render the answer normally without editRequestId.`)
+          }
+        } else if (pendingEdit.error !== undefined) {
+          throw pendingSelectionError('render_ui', 'editRequestId', selector ?? {}, pendingEdit, artifactEdits.listPending(sessionId))
+        } else {
+          // A content edit must go through the structural block path, not a full rewrite.
+          if (pendingEdit.request !== undefined && pendingEdit.request.edits.length > 0) {
+            const hint = pendingEdit.request.requestId === undefined ? '' : ` Pass requestId ${JSON.stringify(pendingEdit.request.requestId)} to edit_ui_blocks.`
+            throw new Error(`render_ui: this artifact edit request has selected blocks to change; call edit_ui_blocks once with a mini program containing only the selected blocks' updated expressions instead of the whole page. The request stays armed, so do not answer in prose.${hint}`)
+          }
+          const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, requestId: pendingEdit.requestId })
+          lineage = applied.lineage
+          warnings.push(...applied.warnings)
+        }
       }
       if (temporary && isStyleSnapshot(args.temporaryStyle)) {
         const parentResultId = onDemand.view(sessionId!)?.parentResultId

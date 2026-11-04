@@ -1,21 +1,27 @@
 /**
- * Browser-side edit-session store for Artifact block editing.
+ * Browser-side multi-draft edit-session store for Artifact block editing.
  *
- * One edit session is keyed by `${sessionId}:${baseRevisionId}` and owns the
- * selected blocks, their instructions, the global instruction and the transient
- * popover/panel state. The store also keeps the composer's structured chip in
- * step: every change re-publishes a compact chip label through the injected
- * composer bridge, and the chip's reference codec asks the store to assemble the
- * structured request at send time.
+ * One draft is keyed by `${sessionId}:${baseRevisionId}` and owns the selected
+ * blocks, their instructions, the target order, the global instruction and the
+ * transient popover/panel state. M3 separates the draft from the canvas: a chat
+ * session may keep several drafts, but only one of them is the active edit
+ * canvas at a time (`activeKeys`). Closing the canvas keeps a non-empty draft
+ * alive; only an empty, detached draft is discarded.
  *
- * Only one session per chat session can be in edit mode at a time; saved
- * requests for other revisions may still exist if the user closed the editor
- * without sending, and the chip always reflects the most recently active one.
+ * Every draft that has content and is `attached` owns one composer reference
+ * chip (`artifact-edit:<key>`, deterministic per draft). The store keeps all of
+ * a chat's chips in step: attached drafts upsert their chip with a label that
+ * carries the artifact title, revision and request summary, while detached,
+ * empty and submitted drafts remove only their own chip. A chip the user
+ * deletes is treated as "detached": the draft survives and the user can attach
+ * it again from the panel or the card badge.
  */
 import { useSyncExternalStore } from 'react'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_REVISION_ROUTE_PATH,
+  MAX_ARTIFACT_BATCH_REQUESTS,
+  MAX_ARTIFACT_DRAFTS,
   describeEditRequestProblem,
   isArtifactRevisionStatus,
   isReorderedOrder,
@@ -26,22 +32,19 @@ import {
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
-import type { ArtifactEditSession } from './contracts.ts'
+import type { ArtifactEditSession, OpenEditorResult } from './contracts.ts'
 
 /** Composer integration the store talks to; registered by the chip module. */
 export interface ArtifactComposerBridge {
   /** Whether the draft can accept a chip edit right now. */
   readonly canEditChip: (sessionId: string) => boolean
-  /** Insert or replace the structured edit chip with its localized label. */
+  /** Insert or replace one draft's structured edit chip with its localized label. */
   readonly upsertChip: (sessionId: string, referenceId: string, label: string) => void
-  /** Remove the structured chip when the request set becomes empty. */
-  readonly removeChip: (sessionId: string) => void
-  /** Return to the card that owns the request (chip click). */
+  /** Remove one draft's chip; every other artifact-edit chip stays in the draft. */
+  readonly removeChip: (sessionId: string, referenceId: string) => void
+  /** Return to the card that owns one chip. */
   readonly openRequest: (sessionId: string, referenceId: string) => void
 }
-
-/** Result of trying to enter edit mode for one rendered card. */
-export type OpenEditorResult = { readonly ok: true } | { readonly ok: false; readonly reason: 'unsupported' | 'conflict' | 'empty' }
 
 /** Outcome of assembling the structured request at send time. */
 export type SerializeOutcome =
@@ -65,19 +68,81 @@ const sessions = new Map<string, ArtifactEditSession>()
 /** Chip reference -> session key, so the codec can resolve a sent chip. */
 const references = new Map<string, string>()
 const chipTimers = new Map<string, ReturnType<typeof setTimeout>>()
-/** Most recently active edit session per chat session; the chip mirrors it. */
-const lastActive = new Map<string, string>()
+/** Active edit-canvas draft per chat session (`sessionId` -> draft key). */
+const activeKeys = new Map<string, string>()
 let snapshot: SessionMapSnapshot = { sessions: new Map() }
 let bridge: ArtifactComposerBridge | undefined
 let translate: Translate = fallbackT
 
+/** Whether one draft currently holds unsent edit content. */
+export function hasArtifactEditContent(
+  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction'>,
+): boolean {
+  return session.selection.length > 0 || session.orderChanged || session.globalInstruction.trim() !== ''
+}
+
+/** Whether a draft counts against the per-chat draft cap and shows in the switcher. */
+function isUserDraft(session: ArtifactEditSession): boolean {
+  // Attachment only matters once a draft has content to send; an empty canvas
+  // draft is transient and never counts.
+  return session.status !== 'submitted' && hasArtifactEditContent(session)
+}
+
+/** Count the chat's drafts, optionally ignoring one key. */
+function draftCount(sessionId: string, excludeKey?: string): number {
+  let count = 0
+  for (const [key, session] of sessions) {
+    if (session.sessionId !== sessionId || key === excludeKey) continue
+    if (isUserDraft(session)) count += 1
+  }
+  return count
+}
+
+/** Count the chat's drafts that currently contribute a composer chip. */
+function attachedDraftCount(sessionId: string): number {
+  let count = 0
+  for (const session of sessions.values()) {
+    if (session.sessionId !== sessionId || session.status === 'submitted') continue
+    if (session.attached && hasArtifactEditContent(session)) count += 1
+  }
+  return count
+}
+
+/** Stable per-draft request id: `req_` plus 12 base36 characters. */
+function newRequestId(): string {
+  const bytes = new Uint8Array(12)
+  const cryptoApi = typeof globalThis.crypto === 'object' ? globalThis.crypto : undefined
+  if (cryptoApi !== undefined && typeof cryptoApi.getRandomValues === 'function') cryptoApi.getRandomValues(bytes)
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256)
+  let id = ''
+  for (const byte of bytes) id += (byte % 36).toString(36)
+  return `req_${id}`
+}
+
+/** The deterministic chip reference of one draft. */
+function referenceOf(key: string): string {
+  return `${ARTIFACT_EDIT_SOURCE}:${key}`
+}
+
+/** Drop the references-map entry of one discarded draft. */
+function removeReference(key: string): void {
+  references.delete(referenceOf(key))
+}
+
 function publish(): void {
   const next = new Map<string, ArtifactEditSession>()
   for (const [key, value] of sessions) {
-    if (value.editing || value.selection.length > 0 || value.orderChanged || value.globalInstruction.trim() !== '' || value.status === 'submitted') next.set(key, value)
+    if (value.editing || hasArtifactEditContent(value) || value.status === 'submitted') next.set(key, value)
   }
   for (const [key, value] of [...sessions]) {
-    if (!next.has(key) && value.status !== 'submitted') sessions.delete(key)
+    if (!next.has(key) && value.status !== 'submitted') {
+      sessions.delete(key)
+      removeReference(key)
+      if (activeKeys.get(value.sessionId) === key) activeKeys.delete(value.sessionId)
+    }
+  }
+  for (const [sessionId, key] of [...activeKeys]) {
+    if (!sessions.has(key)) activeKeys.delete(sessionId)
   }
   snapshot = { sessions: next }
   for (const listener of listeners) listener()
@@ -113,23 +178,48 @@ export function editKey(sessionId: string, baseRevisionId: string): string {
   return `${sessionId}:${baseRevisionId}`
 }
 
-/** Read one session snapshot without subscribing. */
+/** Read one draft snapshot without subscribing. */
 export function editSessionFor(sessionId: string, baseRevisionId: string): ArtifactEditSession | undefined {
   return sessions.get(editKey(sessionId, baseRevisionId))
 }
 
-/** Subscribe one card to its own edit session. */
+/** Read one draft by its session key without subscribing. */
+export function draftSessionFor(key: string): ArtifactEditSession | undefined {
+  return sessions.get(key)
+}
+
+/** Subscribe one card to its own edit draft. */
 export function useArtifactEditSession(sessionId: string, baseRevisionId: string): ArtifactEditSession | undefined {
   const store = useArtifactEditStore()
   return store.sessions.get(editKey(sessionId, baseRevisionId))
 }
 
-/** Read the single session currently in edit mode for a chat session. */
+/** The draft key currently shown in the edit canvas for one chat, if any. */
+export function activeDraftKeyFor(sessionId: string): string | undefined {
+  return activeKeys.get(sessionId)
+}
+
+/** The draft currently shown in the edit canvas for one chat. */
 export function editingSessionFor(sessionId: string): ArtifactEditSession | undefined {
+  const key = activeKeys.get(sessionId)
+  if (key === undefined) return undefined
+  const session = sessions.get(key)
+  return session !== undefined && session.editing ? session : undefined
+}
+
+/**
+ * Drafts of one chat that belong in the draft switcher, in creation order.
+ * Submitted drafts and empty canvas-only drafts never appear.
+ * @param sessionId - chat session id.
+ * @returns the retained drafts.
+ */
+export function draftSessionsFor(sessionId: string): ArtifactEditSession[] {
+  const drafts: ArtifactEditSession[] = []
   for (const session of sessions.values()) {
-    if (session.sessionId === sessionId && session.editing) return session
+    if (session.sessionId !== sessionId || !isUserDraft(session)) continue
+    drafts.push(session)
   }
-  return undefined
+  return drafts
 }
 
 /** Resolve one chip reference id back to its session key. */
@@ -148,7 +238,7 @@ export function editSessionKeyForReference(referenceId: string): string | undefi
  * @returns the stable chip reference id.
  */
 export function referenceForSession(key: string): string {
-  const reference = `${ARTIFACT_EDIT_SOURCE}:${key}`
+  const reference = referenceOf(key)
   if (!references.has(reference)) references.set(reference, key)
   return reference
 }
@@ -213,58 +303,115 @@ function lineageOf(program: IntelligentUIProgram): { artifactId: string; baseRev
   }
 }
 
-/** Close every other editing session for the same chat session. */
-function closeOtherEditors(sessionId: string, key: string): void {
-  for (const [existingKey, session] of sessions) {
-    if (existingKey !== key && session.sessionId === sessionId && session.editing) {
-      sessions.set(existingKey, { ...session, editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
-    }
+/** Make one draft the chat's active canvas and close every other canvas. */
+function activateKeyFor(sessionId: string, key: string): void {
+  for (const [otherKey, other] of sessions) {
+    if (otherKey === key || other.sessionId !== sessionId || !other.editing) continue
+    sessions.set(otherKey, { ...other, editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
   }
+  activeKeys.set(sessionId, key)
 }
 
-/** Cancel the debounced chip sync for one session. */
+/** Cancel the debounced chip sync for one chat session. */
 function clearChipTimer(sessionId: string): void {
   const timer = chipTimers.get(sessionId)
   if (timer !== undefined) { clearTimeout(timer); chipTimers.delete(sessionId) }
 }
 
-/** Publish the chip state for one chat session, debounced for typed text. */
+/**
+ * Publish the chips of every draft of one chat.
+ *
+ * Attached drafts with content upsert their own chip; detached, empty or
+ * submitted drafts remove only their own chip. Insertion order follows draft
+ * creation order, so the composer chip order stays stable while editing.
+ * @param sessionId - chat session whose chips change.
+ * @param immediate - skip the typed-text debounce.
+ */
 function scheduleChipSync(sessionId: string, immediate = false): void {
   if (bridge === undefined) return
   clearChipTimer(sessionId)
   const run = (): void => {
     chipTimers.delete(sessionId)
-    const active = activeSessionFor(sessionId)
-    if (active === undefined || (active.selection.length === 0 && !active.orderChanged && active.globalInstruction.trim() === '')) {
-      bridge.removeChip(sessionId)
-      return
+    const currentBridge = bridge
+    if (currentBridge === undefined) return
+    for (const [key, session] of sessions) {
+      if (session.sessionId !== sessionId) continue
+      const reference = referenceForSession(key)
+      const participates = session.status !== 'submitted' && session.attached && hasArtifactEditContent(session)
+      if (participates) currentBridge.upsertChip(sessionId, reference, chipLabelForSession(session))
+      else currentBridge.removeChip(sessionId, reference)
     }
-    bridge.upsertChip(sessionId, referenceForSession(active.key), editChipLabel({
-      count: active.selection.length,
-      reordered: active.orderChanged,
-      hasGlobal: active.globalInstruction.trim() !== '',
-    }))
   }
   if (immediate) run()
   else chipTimers.set(sessionId, setTimeout(run, 250))
 }
 
-/** The session whose chip represents one chat session. */
-function activeSessionFor(sessionId: string): ArtifactEditSession | undefined {
-  const editing = editingSessionFor(sessionId)
-  if (editing !== undefined) return editing
-  const preferred = lastActive.get(sessionId)
-  const known = preferred === undefined ? undefined : sessions.get(preferred)
-  if (known !== undefined && (known.selection.length > 0 || known.orderChanged || known.globalInstruction.trim() !== '')) return known
-  for (const session of sessions.values()) {
-    if (session.sessionId !== sessionId) continue
-    if (session.selection.length === 0 && !session.orderChanged && session.globalInstruction.trim() === '') continue
-    return session
+/**
+ * Activate one draft as the chat's edit canvas.
+ * @param key - draft key.
+ * @returns whether a retained draft was activated.
+ */
+export function activateDraft(key: string): boolean {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return false
+  activateKeyFor(session.sessionId, key)
+  if (!session.editing) {
+    sessions.set(key, { ...session, editing: true, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
   }
-  return undefined
+  publish()
+  return true
 }
 
-/** Run a revision probe and settle the session status. */
+/**
+ * Attach one detached draft to the next Send, when the batch has room.
+ * @param key - draft key.
+ * @returns whether the draft now contributes a chip.
+ */
+export function attachDraft(key: string): boolean {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return false
+  if (session.attached) return true
+  if (attachedDraftCount(session.sessionId) >= MAX_ARTIFACT_BATCH_REQUESTS) return false
+  sessions.set(key, { ...session, attached: true })
+  publish()
+  if (hasArtifactEditContent(sessions.get(key) ?? session)) scheduleChipSync(session.sessionId, true)
+  return true
+}
+
+/**
+ * Discard one draft for good (content, chip and canvas state).
+ * @param key - draft key.
+ */
+export function discardDraft(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const reference = referenceOf(key)
+  sessions.delete(key)
+  references.delete(reference)
+  if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
+  if (bridge !== undefined) bridge.removeChip(session.sessionId, reference)
+  publish()
+}
+
+/**
+ * Composer callback: one attached draft's chip disappeared from the draft.
+ *
+ * This is the user deleting the chip, not the store removing it, so the draft
+ * is kept and simply stops participating in the next Send until re-attached.
+ * Empty drafts and drafts the store itself removed are ignored.
+ * @param referenceId - chip reference that is gone.
+ */
+export function noteArtifactChipMissing(referenceId: string): void {
+  const key = references.get(referenceId)
+  if (key === undefined) return
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || !session.attached) return
+  if (!hasArtifactEditContent(session)) return
+  sessions.set(key, { ...session, attached: false })
+  publish()
+}
+
+/** Run a revision probe and settle one draft's status. */
 function checkRevision(key: string): void {
   const current = sessions.get(key)
   if (current === undefined) return
@@ -279,39 +426,59 @@ function checkRevision(key: string): void {
   })
 }
 
-/** Assemble the append chip reference for one key. */
-function referenceIdOf(key: string): string {
-  return referenceForSession(key)
-}
-
 /**
- * Enter edit mode for one rendered card.
+ * Open (or re-activate) the edit canvas for one rendered card.
+ *
+ * The first call creates a draft; later calls reactivate the retained draft.
+ * A new draft needs room under the per-chat draft cap, and joins the next Send
+ * only when the batch still has room (otherwise it starts detached).
  * @param sessionId - chat session owning the card.
  * @param program - extracted render_ui program identity and content.
  * @returns ok, or why editing is unavailable.
  */
 export function openArtifactEditor(sessionId: string, program: IntelligentUIProgram): OpenEditorResult {
-  if (!supportsBlockEditing(program)) return { ok: false, reason: program.styleSource === 'temporary' ? 'unsupported' : 'unsupported' }
+  if (!supportsBlockEditing(program)) return { ok: false, reason: 'unsupported' }
   const extraction = blocksForProgram(program.program)
   const wrappedProgram = wrapProgramForBlockEditing(program.program, extraction)
   if (wrappedProgram === undefined) return { ok: false, reason: 'unsupported' }
   const lineage = lineageOf(program)
   const key = editKey(sessionId, lineage.baseRevisionId)
-  lastActive.set(sessionId, key)
-  closeOtherEditors(sessionId, key)
   const existing = sessions.get(key)
-  if (existing !== undefined && existing.status === 'conflict') {
-    patch(key, session => ({ ...session, editing: true, status: 'checking', error: undefined }))
-    checkRevision(key)
-    return { ok: false, reason: 'conflict' }
+
+  // Retained draft: show its canvas again without touching the content.
+  if (existing !== undefined && existing.status !== 'submitted') {
+    activateKeyFor(sessionId, key)
+    patch(key, session => ({
+      ...session,
+      editing: true,
+      activeBlockId: undefined,
+      activeDraft: '',
+      activeDirty: false,
+      drawerOpen: false,
+      error: undefined,
+    }))
+    if (existing.status === 'conflict') {
+      patch(key, session => ({ ...session, status: 'checking', error: undefined }))
+      checkRevision(key)
+      return { ok: false, reason: 'conflict' }
+    }
+    return { ok: true }
   }
+
+  // A new draft (or a consumed draft being reused) needs cap room.
+  if (draftCount(sessionId, key) >= MAX_ARTIFACT_DRAFTS) return { ok: false, reason: 'limit' }
+  const attached = attachedDraftCount(sessionId) < MAX_ARTIFACT_BATCH_REQUESTS
+
   if (existing === undefined) {
+    activateKeyFor(sessionId, key)
     const created: ArtifactEditSession = {
       key,
       sessionId,
       artifactId: lineage.artifactId,
       baseRevisionId: lineage.baseRevisionId,
       baseRevision: lineage.baseRevision,
+      requestId: newRequestId(),
+      attached,
       ...program.title === undefined ? {} : { title: program.title },
       style: program.style ?? 'card',
       ...program.styleId === undefined ? {} : { styleId: program.styleId },
@@ -334,43 +501,50 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     checkRevision(key)
     return { ok: true }
   }
-  const reset = existing.status === 'submitted'
+
+  // Submitted draft reused: content was sent, so this is a fresh draft.
+  activateKeyFor(sessionId, key)
   patch(key, session => ({
     ...session,
-    ...reset ? {
-      selection: [],
-      globalInstruction: '',
-      targetOrder: session.originalOrder,
-      orderChanged: false,
-      status: 'checking' as const,
-    } : {},
+    requestId: newRequestId(),
+    attached,
+    selection: [],
+    removable: undefined,
+    globalInstruction: '',
+    targetOrder: extraction.blocks.map(block => block.blockId),
+    orderChanged: false,
+    status: 'checking',
     editing: true,
-    drawerOpen: false,
     activeBlockId: undefined,
     activeDraft: '',
     activeDirty: false,
+    drawerOpen: false,
     error: undefined,
-    wrappedProgram: wrapProgramForBlockEditing(program.program, extraction) ?? session.wrappedProgram,
+    wrappedProgram,
     blocks: extraction.blocks,
     program: program.program,
   }))
-  if (!reset || existing.status === 'submitted') checkRevision(key)
-  publish()
+  checkRevision(key)
   return { ok: true }
 }
 
-/** Exit edit mode; saved requests and the composer chip remain. */
+/**
+ * Close the edit canvas. A draft with content survives as a detached draft
+ * (and keeps its chip); an empty canvas draft is discarded.
+ * @param key - draft key.
+ */
 export function closeArtifactEditor(key: string): void {
   const session = sessions.get(key)
   if (session === undefined) return
-  if (session.selection.length === 0 && !session.orderChanged && session.globalInstruction.trim() === '') {
+  if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
+  if (!hasArtifactEditContent(session)) {
     sessions.delete(key)
-    references.delete(referenceIdOf(key))
-    if (lastActive.get(session.sessionId) === key) lastActive.delete(session.sessionId)
+    removeReference(key)
   } else {
     sessions.set(key, { ...session, editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
   }
   publish()
+  scheduleChipSync(session.sessionId, true)
 }
 
 /** Smallest positive badge number not used by the current selection. */
@@ -581,14 +755,23 @@ export async function probeArtifactRevisionStatus(key: string): Promise<void> {
     : { ...current, status: 'conflict' })
 }
 
-/** Mark a session as sent: drop the chip and leave edit mode. */
+/** Mark a draft as sent: drop its chip, leave the canvas and free its batch slot. */
 function markSubmitted(key: string): void {
   const session = sessions.get(key)
   if (session === undefined) return
-  sessions.set(key, { ...session, status: 'submitted', editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
-  if (lastActive.get(session.sessionId) === key) lastActive.delete(session.sessionId)
-  if (bridge !== undefined) bridge.removeChip(session.sessionId)
+  sessions.set(key, {
+    ...session,
+    status: 'submitted',
+    editing: false,
+    attached: false,
+    activeBlockId: undefined,
+    activeDraft: '',
+    activeDirty: false,
+    drawerOpen: false,
+  })
+  if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
   publish()
+  scheduleChipSync(session.sessionId, true)
 }
 
 /**
@@ -605,6 +788,9 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   if (key === undefined) return { ok: false, problem: 'stale' }
   const session = sessions.get(key)
   if (session === undefined) return { ok: false, problem: 'stale' }
+  // A consumed draft's chip may survive one more submission attempt when the
+  // composer was busy while the store removed it; never send the same draft twice.
+  if (session.status === 'submitted') return { ok: false, problem: 'stale' }
   const globalInstruction = session.globalInstruction.trim()
   if (session.selection.length === 0 && !session.orderChanged && globalInstruction === '') return { ok: false, problem: 'empty' }
   if (session.selection.some(item => item.instruction.trim() === '')) return { ok: false, problem: 'empty_instruction' }
@@ -624,6 +810,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     })
   const request: ArtifactEditRequest = {
     schemaVersion: 1,
+    requestId: session.requestId,
     artifactId: session.artifactId,
     baseRevisionId: session.baseRevisionId,
     baseRevision: session.baseRevision,
@@ -643,17 +830,12 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   return { ok: true, request }
 }
 
-/** Open the card that owns one chip reference, if it is still mounted. */
+/** Open the card that owns one chip reference, if its draft still exists. */
 export function openArtifactRequest(referenceId: string): boolean {
   const key = references.get(referenceId)
   if (key === undefined) return false
-  const session = sessions.get(key)
-  if (session === undefined) return false
-  closeOtherEditors(session.sessionId, key)
-  sessions.set(key, { ...session, editing: true, status: session.status === 'conflict' ? 'checking' : session.status })
-  publish()
-  if (sessions.get(key)?.status === 'checking') checkRevision(key)
-  return true
+  if (sessions.get(key) === undefined) return false
+  return activateDraft(key)
 }
 
 /** Localized message for one serialize problem, shown through the composer notice. */
@@ -669,7 +851,7 @@ export function editProblemMessage(problem: Extract<SerializeOutcome, { ok: fals
   }
 }
 
-/** Content facts that decide the composer chip label. */
+/** Content facts that decide the composer chip summary. */
 export interface EditChipFacts {
   readonly count: number
   readonly reordered: boolean
@@ -677,10 +859,10 @@ export interface EditChipFacts {
 }
 
 /**
- * Localized composer chip label for the current request shape:
+ * Localized composer chip summary for the current request shape:
  * order-only, N content edits, or N edits + arrangement (plus optional global note).
  * @param facts - request counts and flags.
- * @returns the chip label.
+ * @returns the summary label.
  */
 export function editChipLabel(facts: EditChipFacts): string {
   const t = translate
@@ -691,9 +873,37 @@ export function editChipLabel(facts: EditChipFacts): string {
   return facts.hasGlobal && (facts.count > 0 || facts.reordered) ? `${base}${t('edit.chip.suffix')}` : base
 }
 
-/** Whether any session for this chat session currently shows the chip. */
-export function hasPendingArtifactRequest(sessionId: string): boolean {
-  return activeSessionFor(sessionId) !== undefined
+/**
+ * Composer chip label for one draft: `编辑 {title} · 修订 N · {summary}`.
+ * The title falls back to the panel title so multiple chips stay distinguishable
+ * even for untitled artifacts.
+ * @param session - draft whose chip label is requested.
+ * @returns the localized label.
+ */
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction'>): string {
+  const t = translate
+  const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
+  const count = session.selection.length
+  const reordered = session.orderChanged
+  const hasGlobal = session.globalInstruction.trim() !== ''
+  let summary = count > 0 && reordered
+    ? t('edit.chipTail.mixed', { count })
+    : count > 0
+      ? t('edit.chipTail.edits', { count })
+      : reordered
+        ? t('edit.chipTail.order')
+        : t('edit.chipTail.global')
+  if (hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
+  return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}`
 }
 
-export type { ArtifactEditSession }
+/** Whether any draft of this chat currently contributes a composer chip. */
+export function hasPendingArtifactRequest(sessionId: string): boolean {
+  for (const session of sessions.values()) {
+    if (session.sessionId !== sessionId || session.status === 'submitted') continue
+    if (session.attached && hasArtifactEditContent(session)) return true
+  }
+  return false
+}
+
+export type { ArtifactEditSession, OpenEditorResult }

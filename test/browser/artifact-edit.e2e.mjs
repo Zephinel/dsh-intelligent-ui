@@ -185,7 +185,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
   check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-badge')?.textContent ?? null`), '1', 'arrangement badge number 1')
   check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-tag')?.textContent ?? null`), '已编辑', 'arrangement edited tag')
-  check(await chipLabel(), '编辑 Artifact · 1 项修改', 'chip shows one edit')
+  check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 1 项修改', 'chip shows one edit')
   check(await count('[data-dsh-iui-edit-clear-all]'), 1, 'clear-all control appears')
 
   // 5. A second request.
@@ -194,7 +194,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await saveInstruction('增加首次实施年份')
   await wait('document.querySelectorAll("[data-dsh-iui-edit-request-row]").length === 2', 'two request rows')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b5\\"]").getAttribute("data-dsh-iui-block-order")'), '2', 'canvas badge number 2')
-  check(await chipLabel(), '编辑 Artifact · 2 项修改', 'chip shows two edits')
+  check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 2 项修改', 'chip shows two edits')
   check(await count('[data-dsh-iui-edit-arrangement-row] .dsh-iui-edit-tag'), 2, 'two edited tags')
   await shot('harness-arrangement-requests.png')
 
@@ -214,7 +214,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await moveWithKeyboard('b5', 'ArrowUp', 4)
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b5'`, 'keyboard reorder')
   check((await arrangementOrder()).indexOf('b5'), 0, 'b5 moved to the top')
-  check(await chipLabel(), '编辑 Artifact · 2 项修改 + 排序', 'chip reports order + edits')
+  check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 2 项修改 + 排序', 'chip reports order + edits')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'b3 keeps number 1 after reorder')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b5\\"]").getAttribute("data-dsh-iui-block-order")'), '2', 'b5 keeps number 2 after reorder')
   check(await read(`document.querySelector('[data-dsh-iui-block]').getAttribute('data-dsh-iui-block')`), 'b5', 'edit canvas previews the target order')
@@ -234,7 +234,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-reset-order]')
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b1'`, 'reset order')
   check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], 'reset restores page order')
-  check(await chipLabel(), '编辑 Artifact · 2 项修改', 'reset removes the reorder chip part')
+  check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 2 项修改', 'reset removes the reorder chip part')
   check(await count('[data-dsh-iui-edit-request-row]'), 2, 'reset keeps saved requests')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'reset keeps numbering')
   check(await read(`document.querySelector('[data-dsh-iui-block]').getAttribute('data-dsh-iui-block')`), 'b1', 'reset restores the canvas preview order')
@@ -279,7 +279,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'fresh session has no requests')
   await moveWithKeyboard('b2', 'ArrowUp', 1)
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'order-only reorder')
-  check(await chipLabel(), '编辑 Artifact · 调整区块顺序', 'order-only chip label')
+  check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 调整区块顺序', 'order-only chip label')
   await read('window.__appendDraft("只调整顺序，内容保持不变。")')
   const orderEnvelope = await read('window.__serializeChip()')
   check(orderEnvelope.includes('"edits":[]'), true, 'order-only envelope has no block edits')
@@ -342,6 +342,68 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'wide viewport reopens the editor')
   check(await count('[data-dsh-iui-edit-narrow]'), 0, 'no narrow notice on a wide viewport')
   await click('[data-dsh-iui-edit-exit]')
+  await cdp.send('Emulation.clearDeviceMetricsOverride')
+
+  // 16. Multi-card drafts: two cards, two chips, one batch submit.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  const cardsBefore = await count('[data-dsh-intelligent-ui="card"]')
+  const nodesBefore = await read('window.__nodeCount()')
+  await read('window.__addCard("dst-call-9", "第二张卡片")')
+  check(await read('window.__nodeCount()'), nodesBefore + 1, 'second card node appended')
+  check(await count('[data-dsh-intelligent-ui="card"]'), cardsBefore + 1, 'second card rendered')
+  // Edit the first card and leave its draft.
+  await click('[data-dsh-iui-call-id="dst-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'first card edit')
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'first card popover')
+  await saveInstruction('第一张卡片：改成数字时钟')
+  check(await count('[data-dsh-iui-edit-draft-row]'), 1, 'draft switcher lists one draft')
+  check(await count('[data-chip="artifact-edit"]'), 1, 'first draft has one chip')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'first card edit closed')
+  check(await count('[data-dsh-iui-draft-badge]'), 1, 'closed draft shows a card badge')
+  // Edit the second card; the first draft must survive.
+  await click('[data-dsh-iui-call-id="dst-call-9"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'second card edit')
+  await openArrangementEditor('b5')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'second card popover')
+  await saveInstruction('第二张卡片：增加首次实施年份')
+  await wait('document.querySelectorAll("[data-dsh-iui-edit-draft-row]").length === 2', 'two drafts')
+  check(await text('[data-dsh-iui-edit-draft-switcher]').then(t => t.includes('(2/6)')), true, 'draft switcher shows two of six')
+  check(await count('[data-chip="artifact-edit"]'), 2, 'two composer chips')
+  check(await count('[data-dsh-iui-call-id="dst-call-1"] [data-dsh-iui-draft-badge]'), 1, 'inactive draft keeps its badge')
+  // Switch back to the first draft through the switcher.
+  await read(`(() => {
+    const rows = [...document.querySelectorAll('[data-dsh-iui-edit-draft-row]')];
+    const first = rows.find(row => row.getAttribute('data-key') === 'e2e-session:dst-call-1');
+    first.querySelector('[data-dsh-iui-edit-draft-activate]').click();
+  })()`)
+  await wait(`document.querySelector('[data-dsh-iui-call-id="dst-call-1"]').getAttribute('data-dsh-iui-editing') === 'true'`, 'first draft active again')
+  check(await count('[data-dsh-iui-edit-draft-row][data-active="true"]'), 1, 'exactly one active draft')
+  // Delete the second chip; the draft must survive as detached, then re-attach.
+  const refs = await read('window.__input().occurrences.filter(item => item.source === "artifact-edit").map(item => item.ref)')
+  check(refs.length, 2, 'two chip references')
+  await read(`window.__deleteChip(${JSON.stringify(refs[1])})`)
+  await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 1`, 'one chip after delete')
+  await new Promise(resolve => setTimeout(resolve, 1100))
+  check(await count('[data-dsh-iui-call-id="dst-call-9"] [data-dsh-iui-draft-badge][data-state="detached"]'), 1, 'deleted chip detaches its draft badge')
+  check(await count('[data-dsh-iui-edit-draft-row][data-attached="false"]'), 1, 'switcher marks the detached draft')
+  await click('[data-dsh-iui-edit-draft-row][data-attached="false"] [data-dsh-iui-edit-draft-attach]')
+  await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 2`, 'chip re-attached')
+  // One composed message carries both envelopes.
+  const composed = await read('window.__serializeChips().then(result => result.composed)')
+  check((composed.match(/<artifact-edit-request>/g) ?? []).length, 2, 'one message carries two envelopes')
+  check((composed.match(/"requestId":"req_[A-Za-z0-9_-]+"/g) ?? []).length, 2, 'each envelope carries its request id')
+  check(composed.includes('"artifactId":"dst-call-1"'), true, 'first envelope names its artifact')
+  check(composed.includes('"artifactId":"dst-call-9"'), true, 'second envelope names its artifact')
+  check((composed.match(/"targetOrder"/g) ?? []).length, 2, 'each envelope carries its order')
+  check(await count('[data-sent-summary] [data-reference-chip]'), 2, 'sent summary shows one chip per request')
+  // Two independent block-edit revisions land as two cards.
+  const badgesBefore = await count('[data-dsh-iui-revision]')
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '夏令时与冬令时' })}, 'dst-call-2')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-9', revisionId: 'dst-call-10', baseRevisionId: 'dst-call-9', revision: 2, editedBlockIds: ['b5'], program: DST_PROGRAM, title: '第二张卡片' })}, 'dst-call-10')`)
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${cardsBefore + 3}`, 'two revision cards')
+  check(await count('[data-dsh-iui-revision]'), badgesBefore + 2, 'two new revision badges')
   await cdp.send('Emulation.clearDeviceMetricsOverride')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

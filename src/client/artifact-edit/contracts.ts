@@ -19,6 +19,11 @@ export function isEditViewportWideEnough(width: number): boolean {
   return width >= MIN_EDIT_WIDTH
 }
 
+/** Result of trying to enter (or re-activate) edit mode for one rendered card. */
+export type OpenEditorResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'unsupported' | 'conflict' | 'empty' | 'limit' }
+
 /** One visible block selection in the current edit session. */
 export interface ArtifactEditSelectionView {
   readonly blockId: string
@@ -39,6 +44,17 @@ export interface ArtifactEditSession {
   readonly baseRevisionId: string
   /** 1-based revision number of `baseRevisionId`. */
   readonly baseRevision: number
+  /**
+   * Stable id of this draft's structured request, regenerated when the draft is
+   * reused after a send. The Host binds tool calls of one batch by this id.
+   */
+  readonly requestId: string
+  /**
+   * Whether this draft contributes a composer chip to the next Send. A draft
+   * whose chip the user deleted stays in the switcher but is detached until the
+   * user attaches it again.
+   */
+  readonly attached: boolean
   readonly title?: string
   readonly style: RenderLayout
   readonly styleId?: string
@@ -94,11 +110,17 @@ export interface ArtifactEditActions {
   /** Remove every saved block request but keep the arrangement draft and global instruction. */
   clearAllEdits(): void
   setGlobalInstruction(text: string): void
-  /** Exit edit mode; saved requests stay in the session and the composer chip remains. */
+  /** Exit the edit canvas; a non-empty draft stays as a detached draft + chip. */
   closeEditor(): void
   setDrawerOpen(open: boolean): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
+  /** Activate one draft of this chat as the edit canvas (switches the active draft). */
+  activateDraft(key: string): void
+  /** Attach one detached draft to the next Send (no-op when the batch is full). */
+  attachDraft(key: string): void
+  /** Discard one draft of this chat for good. */
+  discardDraft(key: string): void
 }
 
 /** Full props of the edit view. */

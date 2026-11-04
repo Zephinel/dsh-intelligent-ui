@@ -1,15 +1,19 @@
 /**
  * Composer integration for Artifact block editing.
  *
- * The edit request becomes a real composer reference chip: the user sees
- * a label such as 「编辑 Artifact · 2 项修改」 inline in the draft (next to any text they typed),
- * can delete it, and a normal Send serializes the chip through its reference
- * codec into the structured model-facing envelope. No second send system and
- * no draft overwrite are involved.
+ * Every attached draft owns one real composer reference chip, so one message
+ * can carry several artifact-edit chips (one per Artifact being edited). The
+ * chip is programmatic: the store asks for a per-reference upsert whenever a
+ * draft changes, and a normal Send serializes each chip through its reference
+ * codec into its own structured envelope. No second send system and no draft
+ * overwrite are involved.
  *
- * The chip is programmatic: the store asks for an upsert whenever the saved
- * request set changes. Replacing a chip is a span edit that keeps the draft
- * revision CAS, so concurrent typing is preserved.
+ * Chips are addressed by their stable reference id, never by "the first chip of
+ * this source": inserting a chip appends it at the end of the draft, updating a
+ * chip replaces only that chip's span, and removing a chip deletes only that
+ * chip. Deleting a chip by hand detaches its draft instead of silently
+ * re-inserting it: a short post-insert presence check tells the store that the
+ * user removed it, and only an explicit attach brings it back.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { InputState, ReferenceInsert, SessionInput, TokenSpan } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -21,11 +25,12 @@ import {
 } from '../../shared/artifact-edit.ts'
 import type { Translate } from '../../shared/locales.ts'
 import {
-  editChipLabel,
   editProblemMessage,
   installArtifactComposerBridge,
+  noteArtifactChipMissing,
   openArtifactRequest,
   serializeArtifactEditRequest,
+  type ArtifactComposerBridge,
 } from './store.ts'
 
 /** Per-session access the composer chip needs, injected by the plugin wiring. */
@@ -41,6 +46,9 @@ export type ArtifactEditTranslator = () => Translate
 
 /** Number of pending chip-retry attempts while the composer is busy. */
 const MAX_RETRIES = 12
+
+/** Delay before checking that a freshly upserted chip still exists. */
+const CHIP_PRESENCE_CHECK_MS = 800
 
 /** Chip reference insert for the current request label. */
 function chipInsert(referenceId: string, label: string): ReferenceInsert {
@@ -76,67 +84,111 @@ function endSpan(state: InputState): TokenSpan {
   return { start: end, end, draftRev: state.draftRev }
 }
 
-/** Find our own chip in the current draft. */
-function ownChip(state: InputState): InputState['occurrences'][number] | undefined {
-  return state.occurrences.find(occurrence => occurrence.source === ARTIFACT_EDIT_SOURCE)
+/** Find the artifact-edit chip that carries one reference id. */
+function chipForRef(state: InputState, referenceId: string): InputState['occurrences'][number] | undefined {
+  return state.occurrences.find(occurrence => occurrence.source === ARTIFACT_EDIT_SOURCE && occurrence.ref === referenceId)
+}
+
+/** Schedule the post-upsert presence check (browser only; tests call it directly). */
+function schedulePresenceCheck(access: ArtifactChipAccess, sessionId: string, referenceId: string): void {
+  if (typeof window === 'undefined') return
+  window.setTimeout(() => { verifyArtifactChipAttachment(access, sessionId, referenceId) }, CHIP_PRESENCE_CHECK_MS)
 }
 
 /**
- * Insert or refresh the structured edit chip for one session.
+ * Verify that one just-upserted chip is still in the draft.
+ *
+ * A missing chip means the user deleted it, not that the store should insert it
+ * again: the draft becomes detached (kept, but out of the next Send) until the
+ * user attaches it explicitly. The check is skipped while the composer is not
+ * in its plain state, so a send in flight never detaches a draft.
  * @param access - composer access.
  * @param sessionId - target chat session.
- * @param referenceId - stable chip reference id for this edit session.
+ * @param referenceId - chip reference whose presence is checked.
+ */
+export function verifyArtifactChipAttachment(access: ArtifactChipAccess, sessionId: string, referenceId: string): void {
+  const state = access.readInput(sessionId)
+  if (state === undefined || state.phase !== 'plain') return
+  if (chipForRef(state, referenceId) !== undefined) return
+  noteArtifactChipMissing(referenceId)
+}
+
+/**
+ * Insert or refresh the chip of one draft.
+ *
+ * Inserting appends at the end of the draft; updating replaces only the span of
+ * that chip. Other artifact-edit chips are never touched.
+ * @param access - composer access.
+ * @param sessionId - target chat session.
+ * @param referenceId - stable chip reference id of the draft.
  * @param label - localized chip label.
  * @param attempt - internal retry counter while the composer is busy.
+ * @returns whether the composer now shows the chip.
  */
-function upsertChip(access: ArtifactChipAccess, sessionId: string, referenceId: string, label: string, attempt = 0): void {
+export function upsertArtifactChip(
+  access: ArtifactChipAccess,
+  sessionId: string,
+  referenceId: string,
+  label: string,
+  attempt = 0,
+): boolean {
+  const input = access.inputFor(sessionId)
+  const state = access.readInput(sessionId)
+  if (input === undefined || state === undefined) return false
+  if (typeof input.insertReference !== 'function') return false
+  if (state.phase !== 'plain') {
+    if (attempt < MAX_RETRIES) setTimeout(() => upsertArtifactChip(access, sessionId, referenceId, label, attempt + 1), 400)
+    return false
+  }
+  const insert = chipInsert(referenceId, label)
+  const existing = chipForRef(state, referenceId)
+  if (existing !== undefined && existing.label === label) return true
+  const applied = existing === undefined
+    ? input.insertReference(insert, endSpan(state))
+    : input.insertReference(insert, chipSpan(state, existing))
+  if (applied !== true) return false
+  schedulePresenceCheck(access, sessionId, referenceId)
+  return true
+}
+
+/**
+ * Remove only the chip of one draft; every other draft chip stays in place.
+ * A busy composer defers the removal instead of dropping it, so a chip of a
+ * consumed draft cannot outlive its send.
+ * @param access - composer access.
+ * @param sessionId - target chat session.
+ * @param referenceId - chip reference id to remove.
+ * @param attempt - internal retry counter while the composer is busy.
+ */
+export function removeArtifactChip(access: ArtifactChipAccess, sessionId: string, referenceId: string, attempt = 0): void {
   const input = access.inputFor(sessionId)
   const state = access.readInput(sessionId)
   if (input === undefined || state === undefined) return
-  if (typeof input.insertReference !== 'function') return
   if (state.phase !== 'plain') {
-    if (attempt < MAX_RETRIES) setTimeout(() => upsertChip(access, sessionId, referenceId, label, attempt + 1), 400)
+    if (attempt < MAX_RETRIES) setTimeout(() => removeArtifactChip(access, sessionId, referenceId, attempt + 1), 400)
     return
   }
-  const insert = chipInsert(referenceId, label)
-  const existing = ownChip(state)
-  if (existing === undefined) {
-    input.insertReference(insert, endSpan(state))
-    return
-  }
-  if (existing.ref === referenceId && existing.label === insert.label) return
-  input.insertReference(insert, chipSpan(state, existing))
-}
-
-/**
- * Remove the structured edit chip, keeping every other draft part.
- * @param access - composer access.
- * @param sessionId - target chat session.
- */
-function removeChip(access: ArtifactChipAccess, sessionId: string): void {
-  const input = access.inputFor(sessionId)
-  const state = access.readInput(sessionId)
-  if (input === undefined || state === undefined || state.phase !== 'plain') return
-  const existing = ownChip(state)
+  const existing = chipForRef(state, referenceId)
   if (existing === undefined) return
   if (typeof input.insertText === 'function') input.insertText('', chipSpan(state, existing))
 }
 
 /**
  * Register the reference source, the composer bridge and the sent-message
- * summary node. The source never offers menu candidates; the chip is inserted
- * programmatically and only its serialization and preview matter.
+ * summary node. The source never offers menu candidates; chips are inserted
+ * programmatically and only their serialization and preview matter.
  * @param ctx - client root context.
  * @param access - composer access.
  * @param translate - locale seat provider (rebound on every call).
  */
 export function registerArtifactEditChip(ctx: ClientContext, access: ArtifactChipAccess, translate: ArtifactEditTranslator): void {
-  installArtifactComposerBridge({
+  const composerBridge: ArtifactComposerBridge = {
     canEditChip: sessionId => access.readInput(sessionId)?.phase === 'plain',
-    upsertChip: (sessionId, referenceId, label) => upsertChip(access, sessionId, referenceId, label),
-    removeChip: sessionId => removeChip(access, sessionId),
+    upsertChip: (sessionId, referenceId, label) => { upsertArtifactChip(access, sessionId, referenceId, label) },
+    removeChip: (sessionId, referenceId) => { removeArtifactChip(access, sessionId, referenceId) },
     openRequest: (_sessionId, referenceId) => { openArtifactRequest(referenceId) },
-  }, translate())
+  }
+  installArtifactComposerBridge(composerBridge, translate())
 
   const source: InputTriggerSource = {
     trigger: '@',

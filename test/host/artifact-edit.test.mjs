@@ -90,6 +90,30 @@ function blockFragment(blockIds, replacements) {
 
 const UPDATED_MONTH = ['选地区，再点月份，看当月的状态。', '切换地区，再点月份，查看当月的夏令时状态。']
 
+/** One V1 envelope for a chosen artifact and requestId (multi-card send helper). */
+function artifactRequest({ requestId, artifactId = 'call-original', ...overrides } = {}) {
+  return editRequest({
+    artifactId,
+    baseRevisionId: artifactId,
+    ...requestId === undefined ? {} : { requestId },
+    ...overrides,
+  })
+}
+
+/** Concatenate one envelope per Composer chip into the one user message the Host observes. */
+function batchText(...requests) {
+  return requests.map(request => buildEditRequestText(request)).join('\n\n')
+}
+
+/** One durable revision record for the pre-seeded stale-batch tests. */
+function revisionRecord(overrides = {}) {
+  return {
+    revisionId: 'call-old-2', artifactId: 'call-old', baseRevisionId: 'call-old', revision: 2,
+    sessionId: 's1', style: 'card', editedBlockIds: ['b4'], createdAt: 1,
+    ...overrides,
+  }
+}
+
 /** The same base with no instructions: only the arrangement can make it a change. */
 function orderOnlyRequest(overrides = {}) {
   return { ...editRequest(overrides), edits: [] }
@@ -105,11 +129,12 @@ const ENVELOPE = buildEditRequestText(editRequest())
 const MALFORMED_ENVELOPE = `${ARTIFACT_EDIT_OPEN}\n{broken}\n${ARTIFACT_EDIT_CLOSE}`
 
 /** Mount the plugin on a stub context that keeps every live session listener. */
-function mount({ answerStyle = 'auto', templates = [] } = {}) {
+function mount({ answerStyle = 'auto', templates = [], revisions = [] } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'iui-artifact-edit-'))
   homes.push(home)
   process.env.DSH_HOME = home
   writeFileSync(join(home, 'dsh-intelligent-ui-styles.json'), JSON.stringify({ version: 1, templates }))
+  if (revisions.length > 0) writeFileSync(join(home, 'dsh-intelligent-ui-artifacts.json'), JSON.stringify({ version: 1, revisions }))
   const registered = { tools: [], sessionEvents: [] }
   plugin.apply({
     tools: { register(definition) { registered.tools.push(definition) } },
@@ -363,7 +388,8 @@ test('registers edit_ui_blocks before render_ui with a minimal schema and the fu
   const m = mount()
   assert.deepEqual(m.tools.map(tool => tool.name), ['edit_ui_blocks', 'render_ui'], 'render_ui stays the last registration')
   assert.deepEqual(m.blockTool.parameters.required, ['program'])
-  assert.deepEqual(Object.keys(m.blockTool.parameters.properties), ['program'])
+  assert.deepEqual(Object.keys(m.blockTool.parameters.properties), ['program', 'requestId', 'artifactId'])
+  assert.equal(m.tool.parameters.properties.editRequestId.type, 'string', 'render_ui can select one pending request')
   for (const key of ['program', 'title', 'style', 'styleId', 'warnings', 'artifactId', 'revisionId', 'baseRevisionId', 'revision', 'editedBlockIds']) {
     assert.ok(m.blockTool.output.schema.properties[key], key)
   }
@@ -507,6 +533,185 @@ test('edit_ui_blocks surfaces an invalid pending request instead of rendering', 
     /edit_ui_blocks: this block edit request changes nothing/,
   )
   assert.equal(existsSync(m.file), false)
+})
+
+test('one message with two artifact envelopes arms two requests applied independently', async () => {
+  // v1 note: the Host trusts each envelope's program for its own (same-user) request;
+  // it validates structure and lineage, not a registry-level program digest.
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_edit_0001' }),
+    artifactRequest({ requestId: 'req_edit_0002', artifactId: 'call-second' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  const secondFragment = blockFragment(['b4'], { b4: ['选地区，再点月份，看当月的状态。', '按地区切换月份，查看当月的状态。'] })
+  const first = await m.blockTool.execute({ program: fragment, requestId: 'req_edit_0001', artifactId: 'call-original' }, { agent: m.agent, callId: 'call-batch-1' })
+  const second = await m.blockTool.execute({ program: secondFragment, requestId: 'req_edit_0002', artifactId: 'call-second' }, { agent: m.agent, callId: 'call-batch-2' })
+  assert.equal(first.artifactId, 'call-original')
+  assert.equal(second.artifactId, 'call-second')
+  assert.equal(first.revision, 2)
+  assert.equal(second.revision, 2)
+  assert.equal(first.revisionId, 'call-batch-1')
+  assert.equal(second.revisionId, 'call-batch-2')
+  assert.ok(typeof first.program === 'string' && typeof second.program === 'string')
+  assert.notEqual(first.program, second.program, 'each artifact carries its own composed page')
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(records.map(record => [record.artifactId, record.revisionId, record.revision]), [
+    ['call-original', 'call-batch-1', 2],
+    ['call-second', 'call-batch-2', 2],
+  ])
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_edit_0001' }, { agent: m.agent, callId: 'call-batch-3' }),
+    /no block edit request is pending/,
+  )
+})
+
+test('two pending requests require a selector and stay armed when it is missing', async () => {
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_edit_0001' }),
+    artifactRequest({ requestId: 'req_edit_0002', artifactId: 'call-second' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment }, { agent: m.agent, callId: 'call-no-selector' }),
+    (error) => {
+      assert.match(error.message, /edit_ui_blocks: this session has 2 pending Artifact edit requests, so choose exactly one pending request by passing requestId/)
+      assert.match(error.message, /requestId "req_edit_0001" \/ artifactId "call-original"/)
+      assert.match(error.message, /requestId "req_edit_0002" \/ artifactId "call-second"/)
+      assert.ok(error.message.indexOf('req_edit_0001') < error.message.indexOf('req_edit_0002'), 'choices keep request order')
+      return true
+    },
+  )
+  assert.equal(existsSync(m.file), false, 'a selection error records nothing')
+  // Both requests stay armed: artifactId alone is a unique selector, requestId alone works too.
+  const first = await m.blockTool.execute({ program: fragment, artifactId: 'call-original' }, { agent: m.agent, callId: 'call-selector-1' })
+  const second = await m.blockTool.execute({ program: fragment, requestId: 'req_edit_0002' }, { agent: m.agent, callId: 'call-selector-2' })
+  assert.equal(first.artifactId, 'call-original')
+  assert.equal(second.artifactId, 'call-second')
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 2)
+})
+
+test('unknown requestId and artifactId mismatches are rejected without consuming pending requests', async () => {
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_edit_0001' }),
+    artifactRequest({ requestId: 'req_edit_0002', artifactId: 'call-second' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_missing_001' }, { agent: m.agent, callId: 'call-unknown-id' }),
+    /no pending Artifact edit request matches requestId "req_missing_001"; pass one of the pending requestIds/,
+  )
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_edit_0001', artifactId: 'call-second' }, { agent: m.agent, callId: 'call-mismatch' }),
+    /requestId "req_edit_0001" belongs to artifactId "call-original", not "call-second"/,
+  )
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, artifactId: 'call-unknown' }, { agent: m.agent, callId: 'call-unknown-artifact' }),
+    /no pending Artifact edit request matches artifactId "call-unknown"/,
+  )
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'short' }, { agent: m.agent, callId: 'call-bad-id' }),
+    /requestId must be 8-80 characters/,
+  )
+  assert.equal(existsSync(m.file), false)
+  const first = await m.blockTool.execute({ program: fragment, requestId: 'req_edit_0001' }, { agent: m.agent, callId: 'call-after-errors-1' })
+  const second = await m.blockTool.execute({ program: fragment, requestId: 'req_edit_0002' }, { agent: m.agent, callId: 'call-after-errors-2' })
+  assert.equal(first.revision, 2)
+  assert.equal(second.revision, 2)
+})
+
+test('one stale pending request fails independently while the other applies', async () => {
+  const m = mount({ revisions: [revisionRecord()] })
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_stale_001', artifactId: 'call-old' }),
+    artifactRequest({ requestId: 'req_valid_001', artifactId: 'call-new' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_stale_001' }, { agent: m.agent, callId: 'call-stale' }),
+    /out of date\. Ask the user to reload the rendered page and make the edit again/,
+  )
+  const valid = await m.blockTool.execute({ program: fragment, requestId: 'req_valid_001' }, { agent: m.agent, callId: 'call-valid' })
+  assert.equal(valid.artifactId, 'call-new')
+  assert.equal(valid.revision, 2)
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(records.map(record => record.artifactId), ['call-old', 'call-new'])
+})
+
+test('render_ui applies the selected order-only request with editRequestId and leaves block requests armed', async () => {
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_block_001' }),
+    artifactRequest({ requestId: 'req_order_001', artifactId: 'call-second', edits: [], targetOrder: TARGET_ORDER }),
+  ))
+  await assert.rejects(
+    () => m.tool.execute({ program: DST_PROGRAM, style: 'card' }, { agent: m.agent, callId: 'call-render-no-selector' }),
+    (error) => {
+      assert.match(error.message, /render_ui: this session has 2 pending Artifact edit requests, so choose exactly one pending request by passing editRequestId/)
+      assert.match(error.message, /order\/global only: use render_ui with editRequestId/)
+      return true
+    },
+  )
+  await assert.rejects(
+    () => m.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_block_001' }, { agent: m.agent, callId: 'call-render-block' }),
+    /call edit_ui_blocks once with a mini program containing only the selected blocks/,
+  )
+  const ordered = await m.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_order_001' }, { agent: m.agent, callId: 'call-render-order' })
+  assert.equal(ordered.artifactId, 'call-second')
+  assert.equal(ordered.revision, 2)
+  assert.deepEqual(ordered.editedBlockIds, [])
+  assert.equal(typeof ordered.program, 'string', 'the order-only revision carries its normalized page')
+  // The block request was not consumed by the order-only render.
+  const blockValue = await m.blockTool.execute(
+    { program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_block_001' },
+    { agent: m.agent, callId: 'call-block-later' },
+  )
+  assert.equal(blockValue.artifactId, 'call-original')
+  await assert.rejects(
+    () => m.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_order_001' }, { agent: m.agent, callId: 'call-render-after' }),
+    /no pending Artifact edit request matches editRequestId "req_order_001"/,
+  )
+})
+
+test('a batch arms only the first request per artifact and reports the duplicate', async () => {
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_dup_0001' }),
+    artifactRequest({ requestId: 'req_dup_0002' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_dup_0002' }, { agent: m.agent, callId: 'call-dup-second' }),
+    /more than one edit request for artifactId "call-original"; only the first request per artifact is armed/,
+  )
+  assert.equal(existsSync(m.file), false)
+  const value = await m.blockTool.execute({ program: fragment, requestId: 'req_dup_0001' }, { agent: m.agent, callId: 'call-dup-first' })
+  assert.equal(value.revision, 2)
+})
+
+test('a message with more than three envelopes arms the first three in request order', async () => {
+  const m = mount()
+  m.send(batchText(
+    artifactRequest({ requestId: 'req_over_0001' }),
+    artifactRequest({ requestId: 'req_over_0002', artifactId: 'call-second' }),
+    artifactRequest({ requestId: 'req_over_0003', artifactId: 'call-third' }),
+    artifactRequest({ requestId: 'req_over_0004', artifactId: 'call-fourth' }),
+  ))
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_over_0004' }, { agent: m.agent, callId: 'call-over-4' }),
+    (error) => {
+      assert.match(error.message, /no pending Artifact edit request matches requestId "req_over_0004"/)
+      const choices = error.message.split('Pending: ')[1] ?? ''
+      assert.match(choices, /req_over_0001/)
+      assert.match(choices, /req_over_0002/)
+      assert.match(choices, /req_over_0003/)
+      assert.doesNotMatch(choices, /req_over_0004/)
+      return true
+    },
+  )
 })
 
 /** Drive the controller directly so the TTL and session bound are observable. */

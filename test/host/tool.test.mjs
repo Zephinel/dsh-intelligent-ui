@@ -57,7 +57,7 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.match(tool.description, /openui-lang/)
   assert.equal(tool.parameters.type, 'object')
   assert.deepEqual(tool.parameters.required, ['program', 'style'])
-  assert.deepEqual(Object.keys(tool.parameters.properties), ['program', 'title', 'style', 'styleId', 'temporaryStyle'])
+  assert.deepEqual(Object.keys(tool.parameters.properties).sort(), ['editRequestId', 'program', 'style', 'styleId', 'temporaryStyle', 'title'].sort())
   assert.deepEqual(tool.parameters.properties.styleId.type, 'string')
   // DSH's tool schema subset rejects maxLength/minLength/pattern; limits live in
   // annotations and are enforced by the Host at execution time.
