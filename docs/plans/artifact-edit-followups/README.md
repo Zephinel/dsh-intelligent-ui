@@ -1,26 +1,26 @@
 # Artifact 编辑与编排 — 后续路线图（A/B 清单与 B0 决策）
 
-> **状态：as-planned 路线图；M1 与 M2 Phase 1 已在工作树实现（未提交）— 2026-11-04。**
+> **状态：as-planned 路线图；M1、M2 Phase 1 已提交，M3-1a/M3-1b 已在工作树实现（未提交）— 2026-11-05。**
 > 本文件是路线图与决策记录，不是 as-built 文档。已实现行为以代码与 [架构与行为](../../architecture.md) 为准。
-> 当前工作树中的区块编辑 / 区块编排 / unslop 列表 / 窄屏提示 / M1 收口 / M2 Phase 1（区块片段编辑与实时预览）均**尚未 commit**；窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
-> 后续实现（M2 Phase 2、M3、M4）在 owner 明确说「开始」之前不写代码。
+> M1 收口与 M2 Phase 1 已随 `5d9689e`/`f3e18c3` 提交；当前工作树未提交的是 M3-1（多草稿/多 chip/多 pending）改动，以及本文档的同步。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
+> 后续实现（M3-1c、M3-2/3/4、M4）在 owner 明确说「开始」之前不写代码。
 >
 > **2026-11-04 B0 已拍板**：保留窄屏提示；开放临时样式编辑（先做授权设计）；支持多卡片并行编辑；维持请求上限；允许从旧修订分支；同时扩展嵌套容器与编排增删/复制；做画布实时预览；第一批 B1 收口与 B3-1 区块子程序原型并行。范围因此比最初计划显著变大，见 §4.1 与 §6 里程碑。
 
 ## 1. 背景与当前状态
 
-2026-11-04 已完成（工作树，未提交）：
+2026-11-04 已完成并提交（M1/M2 Phase 1）；2026-11-05 工作树新增 M3-1：
 
 - 区块识别、编辑模式、单区块编辑浮窗、多区块请求列表、整体编辑说明、Composer 结构化引用 chip、发送前版本校验、Host 编辑信封解析/校验、Artifact Revision（`<DSH_HOME>/dsh-intelligent-ui-artifacts.json` + 认证查询路由）与修订血缘（`presentationMeta` / `meta.program`）。
-- 区块编排：完整顶层区块列表、目标顺序 `targetOrder`、指针拖拽与键盘排序、重置顺序、编辑请求列表条件显示、悬停需求卡、Composer chip 文案随请求形状变化（内容 / 排序 / 内容+排序 / 整体说明）。
-- Host 确定性重排：模型返回完整程序后按语句名 → 标题+组件类型 → 唯一标题映射回填 `targetOrder`；映射失败可重试且不写修订。
-- unslop 后的「编辑请求」列表视觉（发丝线列表 + 左侧 2px 色 tick + 等宽编号）。
-- 窄屏最小宽度提示（<720px 不支持编辑，卡片/编辑视图显示提示）— B0-1 已决定保留。
-- **M1 收口（2026-11-04 完成）**：确定性 composer chip 引用（刷新后仍可解析；失效引用改为 `stale` + `edit.errorStale`）、失败 `render_ui`/`edit_ui_blocks` 工具行显示一行原因（≤160 字符，全文在 title，不读参数）、编辑期 15 秒 + 窗口 focus/visibility 静默修订探测（只在冲突时升级为冲突横幅）。
-- **M2 Phase 1（2026-11-04 完成）**：`artifact-block-bundle.ts` 区块片段切片/回填 + `edit_ui_blocks` Host 工具（内容修改只返回选中区块片段，Host 合成整页并记录修订，结果 meta 携带合成 `program`/`title`/`style`/`styleId`）、`render_ui` 对内容修改的回退拒绝、画布实时排序预览（工具栏「预览目标顺序」）。
-- 真机验证（M2 Phase 1）：隔离 DSH 实例、参考会话、显式 `/iui on` 后对时钟区块做一次内容编辑；模型调用 `edit_ui_blocks`，Host 返回 revision 2，新卡片渲染数字时钟 + 日期；未选中的基础语句逐字节不变（仅 `clockCard` 槽位被替换 + 新增辅助语句），Revision 1 卡片保留；发送前画布实时预览了目标顺序。纯排序真实模型回合仍未跑（保持"未验证"）。
+- 区块编排：完整顶层区块列表、目标顺序 `targetOrder`、指针拖拽与键盘排序、重置顺序、编辑请求列表条件显示、悬停需求卡、Composer chip 文案随请求形状变化。
+- Host 确定性重排：按语句名 → 标题+组件类型 → 唯一标题映射回填 `targetOrder`；映射失败可重试且不写修订。
+- unslop 后的「编辑请求」列表视觉；窄屏最小宽度提示（<720px 不支持编辑，B0-1 保留）。
+- **M1 收口（2026-11-04）**：确定性 composer chip 引用（刷新后仍可解析；失效引用改为 `stale` + `edit.errorStale`）、失败工具行显示一行原因（≤160 字符，全文在 title，不读参数）、编辑期 15 秒 + 窗口 focus/visibility 静默修订探测。
+- **M2 Phase 1（2026-11-04）**：`artifact-block-bundle.ts` 区块片段切片/回填 + `edit_ui_blocks` Host 工具（结果 meta 携带合成 `program`/`title`/`style`/`styleId`）、`render_ui` 对内容修改的回退拒绝、画布实时排序预览。
+- **M3-1a/M3-1b（2026-11-05，工作树）**：同一聊天多草稿（最多 6 份有内容草稿、单 active 画布、最多 3 份 attached）、每草稿稳定 `requestId`、每草稿一个 Composer chip（标签 `编辑 {title} · 修订 N · {摘要}`，手动删除 chip 只 detach 不删草稿，800ms 检测后可从草稿切换区重新附加）、右侧「待提交编辑 (N/6)」切换区与非 active 卡片角标；Host 一条消息解析多个 V1 信封（最多 3 个），每会话按 `requestId` 最多 3 条 pending，`edit_ui_blocks` 用 `requestId`/`artifactId`、`render_ui` 用 `editRequestId` 选择，每个请求独立应用/记录修订（无跨 Artifact 事务）。
+- 真机验证（M3-1，Lead，隔离 DSH 实例）：两张卡、两个 chip、一次 Send、模型两次 `edit_ui_blocks`、Revision 3 与 Revision 2 同时落卡；详见 `docs/plans/artifact-edit-m3/README.md` §0.1。仍未跑纯排序真实模型回合；M3-1c partial-failure reconciliation UI 未做。
 
-规模：区块编辑/编排相关新增源码 5,574 行（含编辑态 CSS）、特性测试 1,903 行（含浏览器套件）；Node 测试 321/321（Host 152、Client 148、packaging 21；五个特性测试文件合计 72），浏览器 8 套件通过（artifact-edit 77 checks），packaging 21/21。
+规模：区块编辑/编排相关新增源码 5,574 行（含编辑态 CSS）、特性测试 1,903 行（含浏览器套件）；M3-1 代码/测试 diff：16 个文件、+1,867/−241 行（含测试与样式）。Node 测试 **343/343**（Host 159、Client 163、packaging 21；六个特性测试文件合计 94）；浏览器 8 套件通过（artifact-edit 96 checks），packaging 21/21。
 
 ## 2. 已记录的产品决定
 
@@ -28,7 +28,7 @@
 | --- | --- | --- | --- |
 | D-1 | 2026-11-04 | 极小屏不支持"画布 + 面板并排"；检测到窗口过小直接提示用户加宽窗口或改用大屏，不提供降级编辑布局 | 已决定；实现保留（B0-1） |
 | D-2 | 2026-11-04 | 临时样式结果开放区块编辑，先做授权设计：base snapshot 纳入编辑请求 + Host 校验复用 | 已决定，待设计 |
-| D-3 | 2026-11-04 | 支持多卡片并行编辑 | 已决定，待设计（Composer chip/会话状态需重构） |
+| D-3 | 2026-11-04 | 支持多卡片并行编辑 | 已实现 M3-1a/M3-1b（工作树，2026-11-05）；M3-1c 待做 |
 | D-4 | 2026-11-04 | 维持当前请求上限（12 / 2000 / 4000 / 100 / 200k） | 已决定 |
 | D-5 | 2026-11-04 | 允许从旧修订分支生成新修订 | 已决定，待设计（版本树/冲突语义） |
 | D-6 | 2026-11-04 | 可编辑粒度扩展嵌套容器；编排支持新增/删除/复制区块；顶层 + 仅重排不再是最终范围 | 已决定，依赖渲染器/协议改造 |
@@ -48,7 +48,7 @@
 | --- | --- | --- | --- |
 | B0-1 | 保留已实现的窄屏提示（<720px 不支持编辑） | 已决定 | 无额外工作；需在最终验收中确认 |
 | B0-2 | 开放临时样式结果的区块编辑，先做授权设计 | 已决定 | 编辑请求需携带 base temporaryStyle；Host 校验复用与样式保持；待设计 |
-| B0-3 | 支持多卡片并行编辑 | 已决定 | 当前「同一会话仅一个编辑会话 + 单个 chip」需重构：多编辑会话、Composer 多块或复合 chip、每卡独立冲突处理 |
+| B0-3 | 支持多卡片并行编辑 | 已实现 M3-1a/M3-1b（工作树） | 多草稿 + 单 active 画布 + 每草稿一个 chip + 每会话多 pending；M3-1c 的部分失败对账 UI 待做；设计见 [M3 plan](../artifact-edit-m3/README.md) |
 | B0-4 | 维持当前请求上限 | 已决定 | 无 |
 | B0-5 | 允许从旧修订分支 | 已决定 | 版本模型从"线性最新"扩展为"可指定 base 的分支"；查询路由/冲突提示/卡片"修订 N"需重新定义；待设计 |
 | B0-6 | 扩展嵌套容器 + 编排新增/删除/复制区块，同时保留顶层能力 | 已决定 | 渲染器需为嵌套节点生成可寻址包装；协议从 targetOrder 扩展为结构操作；Host 校验从"同集合排列"放宽为结构补丁；大工程 |
@@ -75,7 +75,7 @@
 
 ### B2 中等工程
 
-- B2-1 真机验收：重启后确认 unslop 列表与编排；跑通"纯排序 → 真实模型生成修订"回合（上次被会话所有权挡住）。**部分完成（2026-11-04）**：隔离 DSH 实例上内容编辑 → `edit_ui_blocks` → revision 2 已通过（见 §1、§6.2）；纯排序真实模型回合仍未跑。
+- B2-1 真机验收：重启后确认 unslop 列表与编排；跑通"纯排序 → 真实模型生成修订"回合（上次被会话所有权挡住）。**部分完成（2026-11-04/05）**：隔离 DSH 实例上单卡内容编辑 → `edit_ui_blocks` → revision 2，以及 M3-1 双卡/双 chip/一次 Send 两次 `edit_ui_blocks` → Revision 3 + Revision 2 均已通过（见 §1 与 M3 plan §0.1）；纯排序真实模型回合仍未跑。
 - B2-2 一键恢复旧修订 / 版本对比视图。
 - B2-3 编辑草稿持久化 + 多标签协调（加锁/冲突提示；不做自动语义合并）。
 - B2-4 已淘汰卡片编辑：Host 从会话日志恢复程序后下发。
@@ -110,7 +110,7 @@ Phase 1 交付（已完成）：
 - 画布实时排序预览（复用 shared 排序函数，工具栏「预览目标顺序」）。
 - M1 收口与 M2 Phase 1 并行完成，Node 321/321、浏览器 artifact-edit 77 checks。
 
-### M2 Phase 1 验证记录（2026-11-04，非历史 docs/verification）
+### M2 Phase 1 验证记录（2026-11-04，非历史 docs/verification；M3-1 后最新数据见 §1 与 [M3 plan §0.1](../artifact-edit-m3/README.md#01-m3-1-验证记录2026-11-05工作树)）
 - 构建：host 727.0 kB、client 3.79 MB（js 3.62 + css 168.9 kB）、standalone 3.29 MB + 509.5 kB；pack 43 files ≈3.95 MB / 10.12 MB。
 - Node 321/321（Host 152、Client 148、packaging 21；五个特性测试文件合计 72）；浏览器 8/8 套件，`artifact-edit e2e: 77 checks passed`；renderer 42/42 + 42/42、CSS 50/50、prop 63/63、typography 22/22、i18n 4。
 - 真机（隔离第二个 DSH 实例、参考会话、显式 `/iui on`）：对时钟区块做一次内容编辑，模型调用 `edit_ui_blocks`，Host 返回 revision 2，新卡片渲染数字时钟 + 日期；未选中的基础语句逐字节不变（仅 `clockCard` 槽位被替换 + 新增辅助语句），Revision 1 卡片保留；发送前画布实时预览了目标顺序。
@@ -118,10 +118,10 @@ Phase 1 交付（已完成）：
 
 Phase 2（待做）：输入 token 节省（Host 程序缓存 / 客户端上下文路由，避免信封内整页）、失败回退整页模式的细化；之后按 §6 M3 → M4 推进。
 
-### M3 — 会话与版本模型（依赖 M2 的协议稳定）
+### M3 — 会话与版本模型（M3-1a/b 已完成；其余待做）
 范围：B0-2 临时样式授权设计；B0-3 多卡片并行；B0-5 旧修订分支；B2-2 一键恢复；B2-3 草稿持久化与多标签协调；B2-4 已淘汰卡片编辑。
-交付标准：多编辑会话与 Composer 提交模型、版本分支/恢复语义、临时样式授权的设计文档与实现；冲突提示完整。
-说明：这三项都会改"编辑会话 + 提交 + 版本"三处共享状态，应合并设计，避免互相推翻。
+交付：**M3-1a/M3-1b（多草稿、多 chip、多 pending、requestId 路由、独立修订）已完成（工作树，2026-11-05）**，验收数据见 [M3 plan §0.1](../artifact-edit-m3/README.md#01-m3-1-验证记录2026-11-05工作树)；**M3-1c partial-failure reconciliation UI 未完成**。其余（分支/恢复、草稿持久化/软租约、临时样式）仍待实现。
+说明：M3-1 只落地了多卡片主轴；旧修订分支、临时样式授权与草稿持久化会继续改动"编辑会话 + 提交 + 版本"共享状态，按 M3 plan §8 逐里程碑推进。
 
 ### M4 — 结构扩展（依赖 M2/M3）
 范围：B0-6 嵌套容器可编辑 + 编排新增/删除/复制；B3-3 嵌套渲染器包装；B3-4 结构补丁协议与 Host 校验；B2-5 严格校验 + diff 预览；B2-6 运行态部分保留。
@@ -132,13 +132,14 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 
 ## 7. 工作树中的未提交改动（摘要）
 
-新增源码：`src/shared/artifact-edit.ts`、`artifact-blocks.ts`、`artifact-block-bundle.ts`、`src/client/artifact-edit/*`、`src/client/RenderUiRow.tsx`（错误明细）、`src/lib/components/block-slot.tsx` + css、`src/host/artifact-edit.ts`、`artifact-revisions.ts`。
-修改：`IntelligentUICards.tsx`、`index.tsx`、`index.css`、`programs.ts`、`library.ts`、`render.tsx`、`locales.ts`、`host/index.ts`、`host/mode.ts`（deny 列表）、`package.json`、测试与文档。
-构建产物 `lib/` 已生成（gitignored）；Node 321/321、浏览器 artifact-edit 77 checks；全部未 commit。
+已提交基线：M1 收口与 M2 Phase 1（`5d9689e` feat、`f3e18c3` docs）。
+当前未提交（M3-1）：`src/shared/artifact-edit.ts`（requestId/批次常量/parseEditRequestTexts）、`src/shared/locales.ts`（chipTail/pendingDrafts 等）、`src/client/artifact-edit/{store,composer,contracts,EditPanel}.ts(x)`、`src/client/artifact-edit/artifact-edit.css`、`src/client/IntelligentUICards.tsx`、`src/client/index.css`、`src/host/artifact-edit.ts`（多 pending）、`src/host/index.ts`（工具选择器）、`test/client/artifact-edit-batch.test.mjs`（新）、`test/client/artifact-edit.test.mjs`、`test/host/artifact-edit.test.mjs`、`test/browser/artifact-edit.e2e.mjs` 与 harness，以及文档。
+构建产物 `lib/` 已生成（gitignored）；Node 343/343、浏览器 artifact-edit 96 checks；M3-1 改动尚未 commit。
 
 ## 8. 已知风险（与 A/B 的关系）
 
 - 残留 chip / 失败 UI / 实时冲突已随 M1（2026-11-04）处理；真实体验风险主要在 Phase 2 的输入 token 成本与新协议扩展。
+- 多卡片并行（M3-1）让每条消息最多带 3 个完整页面上下文，token 成本需用真实模型观测；各请求独立提交意味着可能部分成功，而 M3-1c 的 partial-failure reconciliation UI 尚未实现，用户可能误以为整批失败。
 - Host 确定性排序依赖语句名/标题映射，模型大改命名会触发重试（B3-1 可进一步缓解）。
 - 未选区块改动目前仅 warning（B2-5 决定是否升级）。
 - 编辑草稿仅内存、多标签无同步（B2-3）。
@@ -150,4 +151,5 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 
 | 日期 | 决定 | 备注 |
 | --- | --- | --- | --- |
-| 2026-11-04 | B0-1 保留窄屏提示；B0-2 开放临时样式（先设计）；B0-3 多卡片并行；B0-4 维持上限；B0-5 允许旧修订分支；B0-6 扩展嵌套 + 编排增删复制；B0-7 实时预览；B0-8 第一批并行 | 由 owner 在 B0 问答中确认；M1 与 M2 Phase 1 已于同日落地（工作树，未提交）；B0-2/3/5/6 仍待设计 |
+| 2026-11-04 | B0-1 保留窄屏提示；B0-2 开放临时样式（先设计）；B0-3 多卡片并行；B0-4 维持上限；B0-5 允许旧修订分支；B0-6 扩展嵌套 + 编排增删复制；B0-7 实时预览；B0-8 第一批并行 | 由 owner 在 B0 问答中确认；M1 与 M2 Phase 1 已于同日落地并已提交；B0-2/5/6 仍待设计 |
+| 2026-11-05 | M3-1 多卡片并行按 GPT 外部设计主干落地为 v1：多草稿 + 单 active 画布 + 多 chip + 每会话多 pending + requestId 选择器；不引入 V2 复合信封；无跨 Artifact 事务 | 工作树未提交；M3-1c partial-failure reconciliation UI 未做；纯排序真实模型回合未跑 |

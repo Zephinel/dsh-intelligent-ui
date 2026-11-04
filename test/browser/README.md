@@ -11,16 +11,20 @@ events but not the full DSH Web integration.
   numbered/colour request rows after saving, the hover request card, keyboard
   (↑/↓/Home/End) and pointer-drag reordering with live canvas preview, locate-only
   row activation, Reset order preserving requests/numbers/global instruction, the
-  conditional request list, the composer chip label shapes, one structured
+  conditional request list, the composer chip labels, one structured
   `<artifact-edit-request>` envelope carrying edits + `targetOrder` + the global
   instruction and targeting `edit_ui_blocks`, replay of a Host-composed
-  revision-2 result from `presentationMeta` (`program`/`title`/`style`/`styleId`,
-  revision badge, applied order), an order-only send through `render_ui`, a
-  background revision probe (window focus) surfacing the conflict banner, a
-  conflict blocking the send, the 720–1179px drawer, the below-720px
-  minimum-width notice and dark chrome. 77 checks; no real model is called (the
-  real-model acceptance was run manually against an isolated second DSH Web
-  instance).
+  revision-2 result from `presentationMeta`, an order-only send through
+  `render_ui`, a background revision probe (window focus) surfacing the conflict
+  banner, a conflict blocking the send, the 720–1179px drawer, the below-720px
+  minimum-width notice and dark chrome. The multi-card scenario then edits two
+  cards into two drafts with two chips, keeps an inactive draft across a canvas
+  switch, shows the (2/6) draft switcher, deletes a chip so its draft becomes
+  detached and re-attaches it, composes one message with two envelopes carrying
+  their request ids, applies two independent block-edit revisions as two cards
+  and shows two sent-summary chips. 96 checks; no real model is called (the
+  two-card real-model acceptance was run manually against an isolated second DSH
+  Web instance and is recorded in the M3 plan).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
