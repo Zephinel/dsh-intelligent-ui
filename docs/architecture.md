@@ -11,7 +11,7 @@
 ```
 Host  lib/index.js（Node）
 ├─ tool-schema.ts                          # 注册前用 DSH 子集校验 render_ui 参数/输出
-├─ ctx.tools.register(render_ui)          # 参数 { program, style, title?, styleId? | temporaryStyle?, editRequestId? }；编辑结果额外返回修订血缘、Host 归一化 program 与 presentationMeta
+├─ ctx.tools.register(render_ui)          # 参数 { program, style, title?, styleId? | temporaryStyle?, editRequestId? }；编辑结果额外返回修订血缘（含 requestId）、Host 归一化 program 与 presentationMeta
 │   └─ @openuidev/lang-core 按组件库 spec 校验；错误精确回传，模型同一轮自修
 ├─ ctx.tools.register(edit_ui_blocks)     # 区块片段编辑：Host 用 artifact-block-bundle 切片/回填微程序；多 pending 时用 requestId/artifactId 选择
 │   └─ artifact-block-bundle.ts（shared）  # extractBlockBundle / spliceBlockBundle：只替换选中的根子节点槽位
@@ -21,7 +21,7 @@ Host  lib/index.js（Node）
 ├─ on-demand.ts Operation controller       # session/event 绑定、澄清与终止；projection v6 的 onDemand
 ├─ style-store.ts + style-routes.ts          # 已保存模板；认证 catalog/saveFromResult/update/delete
 ├─ result-store.ts                          # 最多 200 条不可变临时结果快照；事后保存
-├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订；`edit_ui_blocks` 合并/排序；修订注册表 + 认证查询路由
+├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订并在 meta 回传 requestId；`edit_ui_blocks` 合并/排序；修订注册表 + 认证查询路由
 ├─ webServer 路由（可选注入）                # /api/intelligent-ui/export/standalone.{js,css}，供交互页面导出读取
 └─ ctx.skills.register(intelligent-ui)    # 内嵌 Agent Skill（skills/intelligent-ui/SKILL.md）
 
@@ -32,7 +32,7 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 ├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # 插件详情页：可用性、回答样式、我的样式、编排方式与导出（写 Host 设置文档的 volatile 字段）
 ├─ conversation.chat.turnTail 列表项       # 每轮结束时提取程序/临时快照，渲染主题、临时标记、调整/保存操作
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 移植后的 57 个组件（chrome 走渲染器 i18n context）
-├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染
+├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染；Turn 关闭时按 requestId 对账 submitted 草稿（成功删除、未完成恢复为 failed 可附加）
 │   └─ BlockSlot（仅编辑模式 library）+ 每草稿一个 Composer 引用 chip（按 ref upsert/remove，标签「编辑 {title} · 修订 N · {摘要}」）+ 已发送消息逐信封摘要节点；`programs.ts::blockEditProgram` + RenderUiRow 错误明细；Host 归一化/合成 program 随 presentationMeta 回放
 ├─ conversation.chat.assistant-actions 列表项  # 仅该轮记录过 render_ui 的消息出现导出按钮
 │   └─ 菜单（图片：原始 / 圆角 / 卡片；交互页面）→ PNG 或单文件 HTML 下载
@@ -151,13 +151,21 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 每草稿稳定 `requestId`（`req_` + 12 位 base36，优先 `crypto.getRandomValues`），序列化时写入信封；发送成功后草稿标记 submitted 并释放 chip，下次编辑时重建新 `requestId`。
 - Host v1 是「多个 V1 信封 + 内部 batch」：observer 用 `parseEditRequestTexts` 逐信封解析，每条消息最多 3 个信封，按 `requestId` 存入每会话 Map（`requestId`/`artifactId`/`mode: block|full`/`messageId`/`createdAt`，TTL 15 分钟，每会话最多 3 条 pending，同 Artifact 同消息只接受第一条）；旧客户端单信封无 `requestId` 时生成 legacy id 并保持原单 pending 行为；超出消息上限的请求被忽略并记录日志。
 - 工具选择：多 pending 时 `edit_ui_blocks` 需带 `requestId`（可选 `artifactId` 校验归属），`render_ui` 需带 `editRequestId`；缺 selector、未知 id 或 artifactId 不匹配返回模型可读错误并列出可用 pending，所有 pending 保持 armed。apply 只消费选中的那一条，其余保留；每个请求独立校验、独立记录修订，无跨 Artifact 事务——一项失败不回滚其他成功项。
-- v1 与外部设计（GPT）的差异：不引入 V2 复合信封（传输层仍是每 chip 一个 V1 信封）；请求程序仍以信封内 `program` 为权威，修订注册表级程序校验/摘要属 Phase 2 加固；`messageId` 仅尽力记录，turn 级 reconciliation 属 P3；客户端 partial-failure reconciliation UI 尚未实现（M3-1c）；纯排序仍走 `render_ui`（带 `editRequestId`），零模型执行留作后续。共享契约还声明了批次上限常量（每批 24 条区块修改 / 120k 字符程序总量），执行侧暂未强制，属 Phase 2 加固。
+- v1 与外部设计（GPT）的差异：不引入 V2 复合信封（传输层仍是每 chip 一个 V1 信封）；请求程序仍以信封内 `program` 为权威，修订注册表级程序校验/摘要属 Phase 2 加固；`messageId` 仅尽力记录，turn 级对账见下节（客户端 side，M3-1c）；纯排序仍走 `render_ui`（带 `editRequestId`），零模型执行留作后续。共享契约还声明了批次上限常量（每批 24 条区块修改 / 120k 字符程序总量），执行侧暂未强制，属 Phase 2 加固。
+
+### 修订对账（M3-1c）
+
+- 修订 meta 通过 `ArtifactRevisionMeta.requestId` 回传本次修订满足的请求 id：Host 在 `apply()` 的 lineage 中带上 pending request 的 `requestId`，`render_ui` 与 `edit_ui_blocks` 两条路径的 `OUTPUT`/`BLOCK_EDIT_OUTPUT`、`presentationMeta` 都透传；客户端 `IntelligentUIProgram.requestId` 从卡片 meta 读回（`programs.ts` 的 `revisionLineage`/`blockEditProgram`）。
+- 发送成功后草稿不立即删除：`markSubmitted` 置 `status:'submitted'`、记录 `requestId` 与 `submittedAt`，按提交时间保留最多 12 条未决 submitted 草稿（超限淘汰最旧）。它们不出现在切换区，也不再占用 attached 额度。
+- Turn 关闭时（`IntelligentUICards` 监听 `turn.status === 'closed'`，每个 Turn 只对账一次）收集该 Turn 卡片里的 `requestId`，以 `turn.start.time - 5000` 到 `turn.end.time` 为时间窗口调用 `reconcileArtifactSubmissions`：窗口内匹配到本次修订的 submitted 草稿删除；未匹配的恢复为 `status:'ready'`、`submitFailed:true`、`attached:false`、新 `requestId`、清空 `submittedAt`，内容保持可编辑。
+- UI：卡片草稿角标新增 `data-state="failed"`，文案「未完成，草稿已保留」（`edit.draftFailed`）；编辑面板切换区对应行显示 `is-failed` 标签（title 为 `edit.draftFailedHint`）。激活草稿或重新附加会清除 `submitFailed`；附加只把草稿加回下一次发送，不会自动重发。
+- 边界与限制：Host 未完成的 pending 仍按 15 分钟 TTL 保留，Turn 关闭不清理；Turn 归属靠发送时间窗口启发式（历史 Turn 不会认领新提交，极端时钟/长延迟场景未验证）；每个请求独立记录修订（无跨 Artifact 事务），因此「部分成功」是正常路径；真实模型的部分成功路径未做真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成；真机只覆盖单卡/双卡成功路径）。
 
 ### 区块片段编辑（Phase 1）
 
 - `src/shared/artifact-block-bundle.ts` 提供纯数据切片与回填。`extractBlockBundle(program, blockIds)` 返回：被选区块的表达式源码（裸语句引用解析为右侧表达式）、它们传递依赖的 `frozenStatements`（只读语句源码）、`stateSources`（`$name = ...` 声明）与全部顶层区块的 `outline`，并带 `statementId`/标题。
 - `spliceBlockBundle(baseProgram, blockIds, fragmentProgram)`：解析模型微程序，要求根是 `Col` 且直接子节点数等于选中区块数；按 `blockIds` 顺序只替换这些根子节点槽位，其余区块、页面 chrome、根语句尾部参数与基础语句保持逐字节不变；微程序里除 root 外的语句作为新辅助语句追加，但与基础语句/`$state` 重名、重复/未知区块 id、数量不符或引用了组合后不存在的标识符都会返回可重试错误。组合后再解析并重新识别，顶层区块数必须一致。
-- Host 新增 `edit_ui_blocks` 工具（在 `render_ui` 之前注册；`mode.ts` 在关闭会话时 deny 两个工具，execute 也有启用守卫）：只接受待处理编辑请求；多 pending 时用 `requestId`/`artifactId` 选择器精确取一条；`edits` 为空（只调顺序/整体说明）时要求改用 `render_ui`（并提示对应 `editRequestId`）；否则切片、合并、按 `targetOrder` 做确定性重排与保留警告，记录 `revision = baseRevision + 1` 的新修订并消费请求。成功值与结果 meta 为 `{artifactId, revisionId, baseRevisionId, revision, editedBlockIds, program, title?, style, styleId?}`；`presentationMeta` 总会带合成后的 `program`（该工具只返回片段），客户端 `programs.ts::blockEditProgram` 据此渲染修订卡片，`edit_ui_blocks` 的进程行复用紧凑的 `RenderUiRow`。
+- Host 新增 `edit_ui_blocks` 工具（在 `render_ui` 之前注册；`mode.ts` 在关闭会话时 deny 两个工具，execute 也有启用守卫）：只接受待处理编辑请求；多 pending 时用 `requestId`/`artifactId` 选择器精确取一条；`edits` 为空（只调顺序/整体说明）时要求改用 `render_ui`（并提示对应 `editRequestId`）；否则切片、合并、按 `targetOrder` 做确定性重排与保留警告，记录 `revision = baseRevision + 1` 的新修订并消费请求。成功值与结果 meta 为 `{artifactId, revisionId, requestId?, baseRevisionId, revision, editedBlockIds, program, title?, style, styleId?}`；`presentationMeta` 总会带合成后的 `program`（该工具只返回片段），客户端 `programs.ts::blockEditProgram` 据此渲染修订卡片，`edit_ui_blocks` 的进程行复用紧凑的 `RenderUiRow`。
 - `render_ui` 的回退分流：多 pending 时用 `editRequestId` 选择待处理请求；待处理请求有内容修改时，`render_ui` 抛出「call edit_ui_blocks」可读错误并保持请求待处理；只调顺序/整体说明的请求仍走原完整程序路径（样式/临时样式/版本冲突校验不变）。
 - Phase 1 仍把完整页面放进信封作为只读上下文，主要收益是未选区块逐字节不变与合并校验；输入 token 削减（Host 程序缓存/客户端上下文路由）留到 Phase 2。
 
@@ -170,18 +178,19 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 
 - `host/artifact-edit.ts` 以前置 `session/event` 监听 `user/message`，只处理真实用户消息（注入的 skill/文件等 `source.kind !== 'user'` 不算），用 `parseEditRequestTexts` 逐信封解析（一条消息最多 3 个）。除既有校验外，还要求 `targetOrder` 是基础版本全部顶层区块 id 的完整排列（`describeTargetOrderProblem`：wrong_length / unknown_block / duplicate_block / missing_block），允许 `edits` 为空，并拒绝既无修改、顺序也未变化、又无整体说明的空操作（no-op）。校验失败的请求以 `invalidReason` 保留（工具调用时返回可读错误）；合法请求按 `requestId` 存入每会话 Map（`requestId`/`artifactId`/`mode`/`messageId`/`createdAt`）：TTL 15 分钟、每会话最多 3 条 pending、最多 64 个会话；同 Artifact 同消息只 arm 第一条，重复项标记 `invalidReason`；无 `requestId` 的旧信封走 legacy 单 pending 路径。turn 未调用工具时请求保持待应用，新消息按 `requestId` 替换/新增。
 - `pending(sessionId, selector)` 在没有 selector 且恰好一条时返回它；多条 pending 且无 selector 时返回 `multiple_pending`，工具层转成模型可读错误并列出可用 `requestId`/`artifactId`（`listPending` 提供该列表）。两个工具共用 `artifactEdits.apply`，但输入不同：`edit_ui_blocks` 把 `spliceBlockBundle` 合成后的整页作为 `composedProgram` 传入（跳过 `render_ui` 的 styleId/temporaryStyle 参数校验，样式始终取请求记录值）；`render_ui` 在全部普通校验通过后应用待处理编辑，若请求含内容修改则先抛「call edit_ui_blocks」并保持请求待处理。两者都只消费 selector 选中的那一条 pending、其余保持 armed，并拒绝过期/不可读/无待处理请求、基础版本已过期、更新后根不是 `Col`，以及合成/更新程序无法重新识别为同一顶层区块集合；每个请求独立校验、独立记录修订，无跨 Artifact 事务。Host 不信任客户端的 `orderChanged` 提示，而是比较基础区块 id 顺序与 `targetOrder` 自行判断；顺序变化时用 `reorderProgramToTargetOrder` 确定性重排程序的根 `Col` 子节点：按语句名 → 标题+组件类型 → 唯一标题三轮回映基础区块，只移动已识别区块、其余 chrome 子节点保留原槽位；无法一一匹配时抛出可重试错误且不消费待处理请求，归一化程序超过 200,000 字符同样拒绝。通过后计算未选区块保留警告（最多 6 条）、记录新修订（`revision = baseRevision + 1`，`revisionId = 当前 tool callId`）并消费该请求。
-- `render_ui` 成功值新增可选 `artifactId`、`revisionId`、`baseRevisionId`、`revision`、`editedBlockIds` 与 `program`（编辑时出现）；`edit_ui_blocks` 的固定输出为 `{statements, style, styleId?, title?, warnings?, artifactId, revisionId, baseRevisionId, revision, editedBlockIds, program}`。`presentationMeta` 对普通渲染返回 `null`，对编辑返回血缘对象——`edit_ui_blocks` 总会带合成后的 `program` 与记录样式/标题。客户端 `programs.ts` 用 `presentationMeta.program` 覆盖渲染、重放与再次编辑使用的程序，并由 `blockEditProgram` 从 `edit_ui_blocks` meta（`program`/`title`/`style`/`styleId` + 血缘）构造修订卡片；两者都显示「修订 N」。仅调整顺序的结果行是 `Interactive UI updated for the user (revision N of the artifact, block order adjusted).`；有内容修改时保持 `Interactive UI updated for the user (revision N of the artifact, K blocks edited).`，`edit_ui_blocks` 的结果行同为这一行；普通渲染行不变。
+- `render_ui` 成功值新增可选 `artifactId`、`revisionId`、`requestId`、`baseRevisionId`、`revision`、`editedBlockIds` 与 `program`（编辑时出现）；`edit_ui_blocks` 的固定输出为 `{statements, style, styleId?, title?, warnings?, artifactId, revisionId, requestId?, baseRevisionId, revision, editedBlockIds, program}`。`presentationMeta` 对普通渲染返回 `null`，对编辑返回血缘对象（含本次请求的 `requestId`）——`edit_ui_blocks` 总会带合成后的 `program` 与记录样式/标题。客户端 `programs.ts` 用 `presentationMeta.program` 覆盖渲染、重放与再次编辑使用的程序，并由 `blockEditProgram` 从 `edit_ui_blocks` meta（`program`/`title`/`style`/`styleId` + 血缘）构造修订卡片；两者都显示「修订 N」，并把 `requestId` 读入 `IntelligentUIProgram.requestId` 供 Turn 关闭对账使用。仅调整顺序的结果行是 `Interactive UI updated for the user (revision N of the artifact, block order adjusted).`；有内容修改时保持 `Interactive UI updated for the user (revision N of the artifact, K blocks edited).`，`edit_ui_blocks` 的结果行同为这一行；普通渲染行不变。
 - `artifact-revisions.ts` 的存储与路由不变：修订记录原子写入 `<DSH_HOME>/dsh-intelligent-ui-artifacts.json`（`{version: 1, revisions: [...]}`），含 `revisionId`、`artifactId`、可选 `baseRevisionId`、`revision`、`sessionId`、`style`、可选 `styleId`/`title`/`editedBlockIds`（只调顺序时可为空数组）与 `createdAt`；最多 400 条（按 `createdAt` 淘汰最旧）、记录不可变、读取返回副本、损坏文件在下次写入前改名为 `.corrupt-<时间戳>`；首次渲染不写入记录，因此未知 Artifact 的查询按调用方自己的修订 1 回答。沿用同一 `connection.requestRejection` 认证模式的精确路由 `GET /api/intelligent-ui/artifact-revisions?artifactId=&revisionId=`（JSON、`no-store`；参数不合法 400 `invalid_input`，非 GET 405）不变；客户端进入编辑、发送前与重试时用它检查最新修订，没有 `webServer`/`connection` 时按未知处理、不阻塞编辑。
 
 ### 测试
 
 - `test/client/artifact-blocks.test.mjs`（8 条）：识别顺序、包裹后程序可解析且布局不变、Article 根只暴露 Section 而不是 Toc/页面标题、不支持根的原因、目标校验与保留警告、确定性排序移动根子节点并保留 chrome 槽位、信封往返与形状校验、发送消息摘要范围。
 - `test/client/artifact-edit.test.mjs`（26 条）：信封往返（含 targetOrder、requestId 与内容修改指向 `edit_ui_blocks`）、编排字段校验、排列与 no-op 判定、发送消息摘要的排序信息、编辑会话（保存才创建请求、只调顺序合法、重置保留请求/编号/整体说明、清空请求保留编排、空/无变化/冲突阻止发送、重开恢复请求与顺序、自定义模板 styleId、临时样式与不支持程序不进入编辑）、确定性 chip 引用与 stale、静默修订探测、chip 文案与多草稿切换/上限/附加状态。
+- `test/client/artifact-edit-reconcile.test.mjs`（4 条）：未完成的 submitted 草稿恢复为 failed/detached 且重建 requestId、已完成的 submitted 草稿被删除、混合结果逐条独立对账、历史 Turn 不会认领新提交（时间窗口）。
 - `test/client/artifact-edit-batch.test.mjs`（7 条）：v1 批次上限常量、requestId 线格式、信封头携带 requestId 与多信封指引、一条消息按顺序解析多个信封、坏信封不影响兄弟信封、普通消息解析为空、发送摘要范围不跨信封。
 - `test/client/artifact-block-bundle.test.mjs`（11 条）：选中区块表达式与传递冻结依赖/`$state` 切片、单块与双块回填顺序、chrome/根参数/基础语句保持、微程序使用基础 `$state` 或新增辅助语句、块数不匹配、未知/重复 id 与辅助语句重名、`@Each` 循环变量与对象字面量键不算未定义引用、引用组合后不存在的标识符被拒绝。
 - `test/host/artifact-edit.test.mjs`（32 条）：在既有编辑/片段覆盖之外，新增一条消息两个信封 → 两条 pending 且独立应用、缺 selector 被拒且保持 armed、未知 requestId/artifactId 不匹配被拒且不消费、一条 stale 一条有效时独立成功、`render_ui` 用 `editRequestId` 应用只调顺序请求并保留 block 请求、同 Artifact 同消息只 arm 第一条、超过 3 个信封只 arm 前三条；以及 `edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
 - `test/host/artifact-revisions.test.mjs`（10 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰、路由认证/方法/参数。
-- 浏览器 `test/browser/artifact-edit.e2e.mjs`（96 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；新增多卡片场景——两张卡片两份草稿与两个 chip、非 active 草稿保留与切换、切换区 (2/6)、手动删除 chip → detached → 重新附加、一条消息两个信封且各带 requestId、两次独立 block-edit 修订落成两张卡片、发送摘要两条 chip；不调用真实模型。
+- 浏览器 `test/browser/artifact-edit.e2e.mjs`（102 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景——两张卡片两份草稿与两个 chip、非 active 草稿保留与切换、切换区 (2/6)、手动删除 chip → detached → 重新附加、一条消息两个信封且各带 requestId、两次独立 block-edit 修订落成两张卡片、发送摘要两条 chip；新增 Turn 关闭对账——全部完成时草稿全部消失，部分完成时未完成草稿以 `data-state="failed"`「未完成，草稿已保留」角标恢复且可重新附加成 chip；不调用真实模型。
 
 ## 布局与间距契约
 

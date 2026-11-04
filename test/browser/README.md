@@ -22,7 +22,11 @@ events but not the full DSH Web integration.
   switch, shows the (2/6) draft switcher, deletes a chip so its draft becomes
   detached and re-attaches it, composes one message with two envelopes carrying
   their request ids, applies two independent block-edit revisions as two cards
-  and shows two sent-summary chips. 96 checks; no real model is called (the
+  and shows two sent-summary chips. The final reconciliation scenario closes the
+  Turn: when every submitted request produced a revision the drafts and badges
+  disappear, and when a batch is only partially fulfilled the untouched draft
+  comes back with the `failed` draft badge (**Not completed; draft kept**) and
+  can be re-attached into a new chip. 102 checks; no real model is called (the
   two-card real-model acceptance was run manually against an isolated second DSH
   Web instance and is recorded in the M3 plan).
 

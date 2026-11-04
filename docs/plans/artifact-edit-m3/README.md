@@ -1,11 +1,11 @@
 # M3 会话与版本模型设计方案
 
-> **状态：as-planned 设计稿；M3-1a / M3-1b 已在工作树实现（未提交）— 2026-11-05。**
+> **状态：as-planned 设计稿；M3-1a / M3-1b / M3-1c 已在工作树实现（未提交）— 2026-11-05。**
 > M3 对应 [后续路线图](../artifact-edit-followups/README.md) 的 M3：多卡片并行编辑、旧修订分支/恢复、临时样式编辑、草稿持久化与多标签协调、已淘汰卡片编辑。
 > 本文件描述设计与实施计划；已落地行为以代码与 [架构与行为](../../architecture.md) 为准，M3-1 的验收数据见下方「M3-1 验证记录」。
-> M3-1c（部分失败/未完成 reconciliation UI）尚未实现；M3-2/M3-3/M3-4 仍为计划。
+> M3-1c（部分失败/未完成 reconciliation UI）已实现并通过 Node/浏览器验证；M3-2/M3-3/M3-4 仍为计划。
 >
-> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b（v1，见 §0.1）。
+> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b/M3-1c（v1，见 §0.1、§3.6）。
 
 ## 0. 外部设计评审对齐（2026-11-05）
 
@@ -23,24 +23,25 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 **与 GPT 设计的偏差（有意为之）**
 1. **传输层暂不引入 V2 复合信封**：现有 Composer codec 对每个 reference 独立序列化，无法安全地把多个 chip 聚合成一个信封。v1 沿用「每个 chip 一个 V1 envelope」，Host 按同一条用户消息聚合为内部 Batch；因此 `requestId` 放在每个 V1 envelope 的 header 与 prose 中。V2 复合信封留作后续优化（不改变内部 Batch 语义）。GPT 文档中允许该过渡方案。
 2. **Host 权威程序**：v1 仍以用户消息信封携带的 program 作为该请求的来源（同一用户/同一会话），Host 校验结构、版本血缘、targetOrder 与拼接结果；修订注册表级程序校验/摘要留作 Phase 2 加固（GPT 的 P0 不阻塞多 pending，但记录在案）。
-3. **messageId/run 绑定**：v1 在 pending 中记录 messageId（尽力）+ requestId 显式选择器来防错配；turn 结束统一 reconciliation 标记未完成请求，属于 P3。
+3. **messageId/run 绑定**：v1 在 pending 中记录 messageId（尽力）+ requestId 显式选择器来防错配；Turn 关闭时的客户端对账已由 M3-1c 落地（§3.6），Host pending 仍只按 TTL 保留。
 4. **纯排序零模型执行**：v1 保留 `render_ui` 路径（带 `editRequestId`），Host 确定性排序的零模型执行留作后续优化。
 5. **全卡片重生成与局部编辑混发**：v1 允许但每批最多 1 个 full-regenerate；本里程碑的客户端只产生内容编辑/排序请求。
 
 **实施阶段（2026-11-05 状态）**
 - M3-1a：客户端多草稿 + 多 chip + 草稿切换区 — **已完成（工作树，未提交）**。
 - M3-1b：Host 多 pending + requestId 选择 + 独立提交 — **已完成（工作树，未提交）**。
-- M3-1c：部分失败/未完成 reconciliation UI — **未完成**；E2E 与真机两卡片验证已完成（见 §0.1）。
+- M3-1c：部分失败/未完成 reconciliation UI — **已完成（工作树，未提交）**：修订 meta 回传 `requestId`，Turn 关闭按请求 id 对账，未完成项恢复为 failed 可编辑草稿；限制见 §3.6。
 - 之后：M3-2 分支/本地卡片恢复、M3-3 草稿持久化/软租约、M3-4 临时样式。
 
 ## 0.1 M3-1 验证记录（2026-11-05，工作树）
 
-- Node 测试 **343/343**（Host 159、Client 163、packaging 21；特性文件合计 94：client artifact-edit 26、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 32、host artifact-revisions 10）。
-- 浏览器 **8/8** 套件通过，`artifact-edit e2e` **96 checks**（新增 multi-card：两张卡片两份草稿/两个 chip、非 active 草稿保留与切换、删除 chip → detached → 重新附加、一条消息两个信封且各带 requestId、两次独立 block-edit 修订、两条发送摘要 chip）。
+- Node 测试 **347/347**（Host 159、Client 167、packaging 21；特性文件合计 98：client artifact-edit 26、artifact-edit-reconcile 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 32、host artifact-revisions 10）。
+- 浏览器 **8/8** 套件通过，`artifact-edit e2e` **102 checks**（多卡片场景 + M3-1c：Turn 关闭后成功草稿消失、部分完成时未完成草稿以 failed 角标恢复且可重新附加成 chip）。
 - renderer 契约不变：42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4。
-- 构建：host `lib/index.js` 734.5 kB、client `lib/client.js` 3.80 MB（js 3.63 MB + css 172.7 kB）、standalone 3.29 MB + 510.5 kB；`npm run check` exit 0；pack 43 files ≈3.96 MB / 10.14 MB。
-- 真机（Lead，隔离第二个 DSH 实例，参考会话额外生成一张小卡片）：真实 Composer 同时显示两个 chip（`Edit 夏令时与冬令时 · Revision 2 · 1 changes`、`Edit 三城夏令时对比 · Revision 1 · 1 changes`），右侧面板「Pending edits (2/6)」；一次 Send 后模型依次调用两次 `edit_ui_blocks`（第一次带 requestId+artifactId，第二次带 artifactId），Host 分别记录 Revision 3 与 Revision 2，两张新卡片渲染，chip 清空。截图：`.tmp-report/real-gui-m3-two-drafts.png`、`.tmp-report/real-gui-m3-batch-revisions.png`（gitignored，未加入 docs assets）。
-- 明确未完成/未验证：客户端 partial-failure reconciliation UI（M3-1c）；纯排序真实模型回合；V2 复合信封、修订注册表级程序权威校验、zero-model 排序执行、多标签/草稿持久化均未做。
+- 构建：host `lib/index.js` 735.0 kB、client `lib/client.js` 3.80 MB（js 3.63 MB + css 172.8 kB）、standalone 3.30 MB + 510.5 kB；`npm run check` exit 0；pack 43 files ≈3.96 MB / 10.15 MB（本机实测）。
+- E2E 截图（gitignored，未加入 docs assets）：`.tmp-report/harness-m3-batch-reconciled.png`（全部完成对账后无草稿角标）、`.tmp-report/harness-m3-reconcile-failed.png`（部分完成时 failed 草稿角标）。
+- 真机（Lead，隔离第二个 DSH 实例，参考会话额外生成一张小卡片）：真实 Composer 同时显示两个 chip（`Edit 夏令时与冬令时 · Revision 2 · 1 changes`、`Edit 三城夏令时对比 · Revision 1 · 1 changes`），右侧面板「Pending edits (2/6)」；一次 Send 后模型依次调用两次 `edit_ui_blocks`（第一次带 requestId+artifactId，第二次带 artifactId），Host 分别记录 Revision 3 与 Revision 2，两张新卡片渲染，chip 清空。截图：`.tmp-report/real-gui-m3-two-drafts.png`、`.tmp-report/real-gui-m3-batch-revisions.png`（gitignored）。
+- 明确未验证/未完成：真实模型的「部分成功」路径未做真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成；真机只覆盖单卡/双卡成功路径）；纯排序真实模型回合未跑；V2 复合信封、修订注册表级程序权威校验、zero-model 排序执行、多标签/草稿持久化均未做。
 
 ## 1. 目标与非目标
 
@@ -104,9 +105,18 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 - store 单测：多草稿同时存在、active 唯一、切换不丢、requestId 稳定、草稿上限与 attached 状态、序列化带 requestId —— **已通过**（`test/client/artifact-edit.test.mjs` / `artifact-edit-batch.test.mjs`）。
 - Host 单测：一条消息两个信封 → 两条 pending；两次工具调用分别生成两个 revision；缺 selector 被拒且保持 armed；一条 stale 一条成功独立处理 —— **已通过**（`test/host/artifact-edit.test.mjs`）。
-- 浏览器 E2E：两张卡片分别编辑、Composer 两个 chip、一次 Send 两个信封 → 两张修订卡片、删除 chip 后 detached/重新附加 —— **已通过**（artifact-edit 96 checks）。
+- 浏览器 E2E：两张卡片分别编辑、Composer 两个 chip、一次 Send 两个信封 → 两张修订卡片、删除 chip 后 detached/重新附加 —— **已通过**（artifact-edit 102 checks）。
 - 真机：两张卡片的内容修改一次发送，模型调用两次 `edit_ui_blocks`，两张卡片都更新 —— **已通过**（2026-11-05，见 §0.1）。
-- 未达成：partial-failure reconciliation UI（M3-1c）；纯排序真实模型回合。
+- M3-1c 对账：Turn 关闭后成功草稿删除、部分完成时未完成草稿恢复为 failed/detached 且可重新附加 —— **Node/E2E 已通过**（`artifact-edit-reconcile.test.mjs` 4 条 + E2E §17/§18）。
+- 未达成：真实模型的「部分成功」路径真机验证；纯排序真实模型回合。
+
+### 3.6 M3-1c 修订对账（已实现）
+
+- 修订 meta：`ArtifactRevisionMeta.requestId` 由 Host 在 `apply()` 的 lineage 中写入（pending request 的 requestId），`render_ui` 与 `edit_ui_blocks` 的输出版本/meta 都透传；客户端 `IntelligentUIProgram.requestId` 从卡片 meta 读回（`programs.ts::revisionLineage`/`blockEditProgram`）。
+- 客户端提交保留：`markSubmitted` 置 `status:'submitted'` 并记录 `requestId`/`submittedAt`；每聊天最多保留 12 条未决 submitted（超限按 `submittedAt` 淘汰最旧）。它们不进切换区、不占 attached 额度。
+- Turn 关闭对账：`IntelligentUICards` 在 `turn.status === 'closed'` 时（每 Turn 一次）收集该 Turn 卡片的 `requestId`，以 `turn.start.time - 5000` … `turn.end.time` 为时间窗口调用 `reconcileArtifactSubmissions`（`store.ts`）：命中者删除；未命中者恢复为 `status:'ready'`、`submitFailed:true`、`attached:false`、新 `requestId`、清空 `submittedAt`，保留内容可编辑。
+- UI：卡片草稿角标新增 `data-state="failed"`，文案 `edit.draftFailed`（「未完成，草稿已保留」/ "Not completed; draft kept"）；编辑面板切换区行显示 `is-failed` 标签（title `edit.draftFailedHint`）；激活或重新附加会清除 `submitFailed`，附加只把草稿加回下次发送，不会自动重发。
+- 限制：Host 未完成 pending 仍按 15 分钟 TTL 保留（Turn 关闭不清理）；Turn 归属依赖发送时间窗口启发式（历史 Turn 不会认领新提交，极端时钟/长延迟未验证）；真实模型的部分成功路径未真机验证；`requestId` 仅客户端使用，不写修订记录文件。
 
 ## 4. M3b 旧修订分支与恢复
 
@@ -197,6 +207,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 | `edit_ui_blocks` 新增 `requestId` + 可选 `artifactId` | host/index | 单 pending 时仍可省略 |
 | `render_ui` 新增 `editRequestId` | host/index | 单 pending 时仍可省略 |
 | 请求 header `requestId` | shared/artifact-edit | 可选字段；客户端每草稿稳定生成 |
+| revision meta `requestId` | shared/artifact-edit + host/index + client programs | M3-1c；可选字段，由 pending request 写入，客户端用于 Turn 关闭对账 |
+| 客户端 submitted 草稿保留与对账（`submitFailed`/`submittedAt`/`reconcileArtifactSubmissions`） | client store + IntelligentUICards | M3-1c；纯客户端内存态，无协议变更 |
 | 请求 header `branch` / `restoreFromRevision` | shared/artifact-edit | M3-2 计划，可选字段 |
 | 请求 header `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选字段，复用快照校验 |
 | revision meta `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选 |
@@ -205,8 +217,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 ## 8. 里程碑与顺序
 
-0. **设计前置**：M3-1 多卡片交互设计（multi-card-brief.md）已确认并落地为 M3-1a/M3-1b。
-1. **M3-1（多卡片并行）**：3.2–3.5 已实现并通过验收（除 M3-1c）；**M3-1c partial-failure reconciliation UI 待做**。
+0. **设计前置**：M3-1 多卡片交互设计（multi-card-brief.md）已确认并落地为 M3-1a/M3-1b/M3-1c。
+1. **M3-1（多卡片并行 + 部分失败对账）**：3.2–3.6 已实现并通过 Node/浏览器验收（真机成功路径已过；真实模型部分成功未验证）。**下一步 M3-2。**
 2. **M3-2（旧修订分支 + 本地卡片恢复）**：4.1–4.3；包含 Host 恢复路由与本地修订卡片来源。
 3. **M3-3（草稿持久化 + 多标签）**：6.1–6.2（软租约已确认）。
 4. **M3-4（临时样式编辑）**：第 5 节（快照授权已确认）。
@@ -218,7 +230,7 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 - 多信封/多 pending 会改动 Host 与 Composer 的核心路径，必须保留单 Artifact 行为作为回归基线。
 - 多卡片并行发送可能放大 token 成本（每条消息最多 3 个完整页面上下文）；Phase 1 仍传整页，Phase 2 输入节省的优先级需用真实模型观测评估。
-- 独立执行意味着可能部分成功：客户端目前没有 reconciliation/重试 UI（M3-1c），失败项只显示工具行错误；一个请求失败后其余修订仍会落地，需避免用户误以为整批失败。
+- 独立执行意味着可能部分成功：M3-1c 已实现 Turn 关闭对账与 failed 草稿恢复，但没有自动重试/重发；Host pending 按 TTL 保留，turn 归属依赖时间窗口启发式，真实模型的部分成功路径未真机验证。
 - 分支让「latest」与卡片显示的 revision 可能分离，UI 文案和冲突提示容易混淆；需要统一的修订/分支文案。
 - 临时样式快照进入用户消息，仍属于同用户可控输入；Host 只接受封闭校验的展示快照，不执行任意 CSS。
 - 草稿持久化可能把 200k 程序写入 sessionStorage；需要配额与清理策略，避免存储爆掉。
@@ -227,7 +239,7 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 | 决策 | 结果 |
 | --- | --- |
-| 多卡片交互 | **已确认并落地 M3-1a/M3-1b**（GPT 外部设计主干采纳；v1 差异见 §0）；M3-1c 待做 |
+| 多卡片交互 | **已确认并落地 M3-1a/M3-1b/M3-1c**（GPT 外部设计主干采纳；v1 差异见 §0；M3-1c 见 §3.6） |
 | 一键恢复 | **零模型成本的本地修订卡片**（4.2 B）；需要 Host 恢复路由 + 本地卡片来源 |
 | 临时样式编辑 | **接受 Host 校验的快照**（第 5 节） |
 | 多标签协调 | **软租约 + 提示**（6.2） |
