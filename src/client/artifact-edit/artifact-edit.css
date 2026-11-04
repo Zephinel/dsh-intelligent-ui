@@ -1294,3 +1294,8 @@
   line-height: 16px;
   white-space: nowrap;
 }
+
+/* A submitted request that produced no revision keeps its draft for retry. */
+.dsh-iui-edit-draft-tag.is-failed {
+  color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-label-secondary));
+}

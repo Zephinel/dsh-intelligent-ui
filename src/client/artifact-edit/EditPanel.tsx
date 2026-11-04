@@ -393,6 +393,7 @@ function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
                   </span>
                 </span>
                 {conflict ? <span className="dsh-iui-edit-draft-tag is-conflict">{t('edit.conflictTitle')}</span> : null}
+                {draft.submitFailed === true ? <span className="dsh-iui-edit-draft-tag is-failed" title={t('edit.draftFailedHint')}>{t('edit.draftFailed')}</span> : null}
                 {draft.attached ? null : <span className="dsh-iui-edit-draft-tag">{t('edit.draftDetached')}</span>}
               </button>
               <span className="dsh-iui-edit-draft-actions">

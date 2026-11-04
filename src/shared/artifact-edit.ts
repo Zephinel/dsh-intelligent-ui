@@ -130,6 +130,8 @@ export interface ArtifactRevisionMeta {
   readonly artifactId: string
   /** This revision's result id (the tool call id). */
   readonly revisionId: string
+  /** Edit request id this revision fulfilled, when it came from the edit pipeline. */
+  readonly requestId?: string
   /** Parent revision this update was based on. */
   readonly baseRevisionId?: string
   /** 1-based revision number. */
@@ -557,12 +559,13 @@ export function nextEditRequestSummary(text: string, from: number): { start: num
  */
 export function isArtifactRevisionMeta(value: unknown): value is ArtifactRevisionMeta {
   if (!isRecord(value)) return false
-  if (Object.keys(value).some(key => !['artifactId', 'revisionId', 'baseRevisionId', 'revision', 'editedBlockIds', 'program', 'title', 'style', 'styleId'].includes(key))) return false
+  if (Object.keys(value).some(key => !['artifactId', 'revisionId', 'requestId', 'baseRevisionId', 'revision', 'editedBlockIds', 'program', 'title', 'style', 'styleId'].includes(key))) return false
   if ('program' in value && !isBoundedText(value.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return false
   if ('title' in value && !isBoundedText(value.title, 1, MAX_ARTIFACT_TITLE_CHARS)) return false
   if ('style' in value && !isEditLayout(value.style)) return false
   if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return false
   return isIdentity(value.artifactId) && isIdentity(value.revisionId)
+    && (!('requestId' in value) || isRequestId(value.requestId))
     && (!('baseRevisionId' in value) || isIdentity(value.baseRevisionId))
     && typeof value.revision === 'number' && Number.isSafeInteger(value.revision) && value.revision >= 1 && value.revision <= 100000
     && (!('editedBlockIds' in value) || (Array.isArray(value.editedBlockIds)

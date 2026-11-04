@@ -256,6 +256,7 @@ const OUTPUT = {
     },
     artifactId: { type: 'string', description: 'Artifact identity of an edited page: the first revision render_ui call id. Present only when this result applied a block edit.' },
     revisionId: { type: 'string', description: 'Revision identity of this result; equals the tool call id. Present only when this result applied a block edit.' },
+    requestId: { type: 'string', description: 'Edit request id this revision fulfilled. Present only when this result applied an artifact edit.' },
     baseRevisionId: { type: 'string', description: 'Revision id this block edit was based on.' },
     revision: { type: 'integer', description: '1-based artifact revision number of this result. Present only when this result applied a block edit.' },
     editedBlockIds: { type: 'array', items: { type: 'string' }, description: 'Root-level block ids the user asked to change.' },
@@ -304,6 +305,7 @@ const BLOCK_EDIT_OUTPUT = {
     },
     artifactId: { type: 'string', description: 'Artifact identity of the edited page: the first revision render_ui call id.' },
     revisionId: { type: 'string', description: 'Revision identity of this result; equals the tool call id.' },
+    requestId: { type: 'string', description: 'Edit request id this revision fulfilled; the client uses it to reconcile the submitted draft.' },
     baseRevisionId: { type: 'string', description: 'Revision id this block edit was based on.' },
     revision: { type: 'integer', description: '1-based artifact revision number of this result.' },
     editedBlockIds: { type: 'array', items: { type: 'string' }, description: 'Root-level block ids the user asked to change.' },
@@ -317,6 +319,7 @@ const BLOCK_EDIT_OUTPUT = {
 interface BlockEditValue {
   readonly statements: number
   readonly style: RenderLayout
+  readonly requestId?: string
   readonly styleId?: string
   readonly title?: string
   readonly warnings?: readonly string[]
@@ -669,6 +672,7 @@ ${section}`
       presentationMeta: (_args: unknown, value: BlockEditValue) => ({
         artifactId: value.artifactId,
         revisionId: value.revisionId,
+        ...value.requestId === undefined ? {} : { requestId: value.requestId },
         ...value.baseRevisionId === undefined ? {} : { baseRevisionId: value.baseRevisionId },
         revision: value.revision,
         editedBlockIds: [...value.editedBlockIds],
@@ -725,6 +729,7 @@ ${section}`
         ...applied.warnings.length === 0 ? {} : { warnings: applied.warnings },
         artifactId: lineage.artifactId,
         revisionId: lineage.revisionId,
+        ...lineage.requestId === undefined ? {} : { requestId: lineage.requestId },
         ...lineage.baseRevisionId === undefined ? {} : { baseRevisionId: lineage.baseRevisionId },
         revision: lineage.revision,
         editedBlockIds: lineage.editedBlockIds ?? [],
@@ -786,6 +791,7 @@ ${section}`
       presentationMeta: (_args: unknown, value: {
         artifactId?: string
         revisionId?: string
+        requestId?: string
         baseRevisionId?: string
         revision?: number
         editedBlockIds?: readonly string[]
@@ -795,6 +801,7 @@ ${section}`
         : {
             artifactId: value.artifactId,
             revisionId: value.revisionId,
+            ...value.requestId === undefined ? {} : { requestId: value.requestId },
             ...value.baseRevisionId === undefined ? {} : { baseRevisionId: value.baseRevisionId },
             revision: value.revision,
             ...value.editedBlockIds === undefined ? {} : { editedBlockIds: [...value.editedBlockIds] },
@@ -904,6 +911,7 @@ ${section}`
       let lineage: {
         artifactId: string
         revisionId: string
+        requestId?: string
         baseRevisionId?: string
         revision: number
         editedBlockIds?: readonly string[]
@@ -945,6 +953,7 @@ ${section}`
         ...lineage === undefined ? {} : {
           artifactId: lineage.artifactId,
           revisionId: lineage.revisionId,
+          ...lineage.requestId === undefined ? {} : { requestId: lineage.requestId },
           ...lineage.baseRevisionId === undefined ? {} : { baseRevisionId: lineage.baseRevisionId },
           revision: lineage.revision,
           ...lineage.editedBlockIds === undefined ? {} : { editedBlockIds: [...lineage.editedBlockIds] },

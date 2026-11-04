@@ -356,7 +356,9 @@ export function activateDraft(key: string): boolean {
   if (session === undefined || session.status === 'submitted') return false
   activateKeyFor(session.sessionId, key)
   if (!session.editing) {
-    sessions.set(key, { ...session, editing: true, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
+    sessions.set(key, { ...session, editing: true, submitFailed: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
+  } else if (session.submitFailed === true) {
+    sessions.set(key, { ...session, submitFailed: false })
   }
   publish()
   return true
@@ -372,7 +374,7 @@ export function attachDraft(key: string): boolean {
   if (session === undefined || session.status === 'submitted') return false
   if (session.attached) return true
   if (attachedDraftCount(session.sessionId) >= MAX_ARTIFACT_BATCH_REQUESTS) return false
-  sessions.set(key, { ...session, attached: true })
+  sessions.set(key, { ...session, attached: true, submitFailed: false })
   publish()
   if (hasArtifactEditContent(sessions.get(key) ?? session)) scheduleChipSync(session.sessionId, true)
   return true
@@ -762,6 +764,8 @@ function markSubmitted(key: string): void {
   sessions.set(key, {
     ...session,
     status: 'submitted',
+    submittedAt: Date.now(),
+    submitFailed: false,
     editing: false,
     attached: false,
     activeBlockId: undefined,
@@ -770,8 +774,85 @@ function markSubmitted(key: string): void {
     drawerOpen: false,
   })
   if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
+  pruneSubmitted(session.sessionId)
   publish()
   scheduleChipSync(session.sessionId, true)
+}
+
+/** Retain at most this many unresolved submitted drafts per chat. */
+const MAX_SUBMITTED_DRAFTS = 12
+
+/** Drop the oldest unresolved submitted drafts beyond the retention cap. */
+function pruneSubmitted(sessionId: string): void {
+  const submitted = [...sessions].filter(([, session]) =>
+    session.sessionId === sessionId && session.status === 'submitted')
+    .sort((a, b) => (a[1].submittedAt ?? 0) - (b[1].submittedAt ?? 0))
+  const excess = submitted.slice(0, Math.max(0, submitted.length - MAX_SUBMITTED_DRAFTS))
+  for (const [key] of excess) sessions.delete(key)
+}
+
+/** Request ids of submitted drafts that a later revision has not fulfilled yet. */
+export function submittedDraftsFor(sessionId: string): { key: string; requestId: string; artifactId: string; baseRevisionId: string }[] {
+  const pending: { key: string; requestId: string; artifactId: string; baseRevisionId: string }[] = []
+  for (const [key, session] of sessions) {
+    if (session.sessionId !== sessionId || session.status !== 'submitted') continue
+    pending.push({ key, requestId: session.requestId, artifactId: session.artifactId, baseRevisionId: session.baseRevisionId })
+  }
+  return pending
+}
+
+/**
+ * Reconcile the drafts submitted by one finished Turn with the revisions that
+ * actually landed. Fulfilled drafts disappear; unfulfilled drafts return as
+ * detached, editable drafts marked `submitFailed`, with a fresh request id so a
+ * retry cannot collide with a stale pending request.
+ * @param sessionId - chat session that owned the submitted drafts.
+ * @param committedRequestIds - request ids of revisions in this Turn.
+ * @returns number of restored drafts.
+ */
+export function reconcileArtifactSubmissions(
+  sessionId: string,
+  committedRequestIds: readonly string[],
+  window: { since?: number; until?: number } = {},
+): number {
+  const committed = new Set(committedRequestIds)
+  let restored = 0
+  for (const [key, session] of [...sessions]) {
+    if (session.sessionId !== sessionId || session.status !== 'submitted') continue
+    // Only drafts submitted for the Turn being reconciled. Historical closed
+    // Turns revisit the same store, so a time window keeps them from claiming a
+    // newer submission.
+    const submittedAt = session.submittedAt
+    if (submittedAt === undefined) continue
+    if (window.since !== undefined && submittedAt < window.since) continue
+    if (window.until !== undefined && submittedAt > window.until) continue
+    if (committed.has(session.requestId)) {
+      sessions.delete(key)
+      for (const [reference, referenceKey] of references) {
+        if (referenceKey === key) references.delete(reference)
+      }
+      continue
+    }
+    sessions.set(key, {
+      ...session,
+      status: 'ready',
+      submitFailed: true,
+      attached: false,
+      requestId: newRequestId(),
+      submittedAt: undefined,
+      editing: false,
+      activeBlockId: undefined,
+      activeDraft: '',
+      activeDirty: false,
+      drawerOpen: false,
+    })
+    restored += 1
+  }
+  if (restored > 0 || committed.size > 0) {
+    publish()
+    scheduleChipSync(sessionId, true)
+  }
+  return restored
 }
 
 /**

@@ -80,6 +80,10 @@ export interface ArtifactEditSession {
   readonly editing: boolean
   readonly drawerOpen: boolean
   readonly status: 'checking' | 'ready' | 'conflict' | 'submitted' | 'error'
+  /** A submitted request that no revision fulfilled; the draft is kept for retry. */
+  readonly submitFailed?: boolean
+  /** When this draft was submitted, for bounded retention. */
+  readonly submittedAt?: number
   readonly error?: string
   /** Most recent removal, offered as an inline undo in the panel. */
   readonly removable?: { readonly blockId: string; readonly order: number; readonly instruction: string; readonly title?: string }

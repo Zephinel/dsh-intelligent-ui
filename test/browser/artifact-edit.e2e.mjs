@@ -398,12 +398,56 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(composed.includes('"artifactId":"dst-call-9"'), true, 'second envelope names its artifact')
   check((composed.match(/"targetOrder"/g) ?? []).length, 2, 'each envelope carries its order')
   check(await count('[data-sent-summary] [data-reference-chip]'), 2, 'sent summary shows one chip per request')
-  // Two independent block-edit revisions land as two cards.
+  // Two independent block-edit revisions land as two cards, each carrying its request id.
+  const envelopeMap = composed.split('<artifact-edit-request>').slice(1).reduce((map, segment) => {
+    const requestId = /"requestId":"([^"]+)"/.exec(segment)?.[1]
+    const artifactId = /"artifactId":"([^"]+)"/.exec(segment)?.[1]
+    if (requestId !== undefined && artifactId !== undefined) map[artifactId] = requestId
+    return map
+  }, {})
+  check(Object.keys(envelopeMap).length, 2, 'composed message names two request/artifact pairs')
   const badgesBefore = await count('[data-dsh-iui-revision]')
-  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '夏令时与冬令时' })}, 'dst-call-2')`)
-  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-9', revisionId: 'dst-call-10', baseRevisionId: 'dst-call-9', revision: 2, editedBlockIds: ['b5'], program: DST_PROGRAM, title: '第二张卡片' })}, 'dst-call-10')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, requestId: envelopeMap['dst-call-1'], editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '夏令时与冬令时' })}, 'dst-call-2')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-9', revisionId: 'dst-call-10', baseRevisionId: 'dst-call-9', revision: 2, requestId: envelopeMap['dst-call-9'], editedBlockIds: ['b5'], program: DST_PROGRAM, title: '第二张卡片' })}, 'dst-call-10')`)
   await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${cardsBefore + 3}`, 'two revision cards')
   check(await count('[data-dsh-iui-revision]'), badgesBefore + 2, 'two new revision badges')
+  // 17. Turn close reconciles both fulfilled drafts away.
+  await read('window.__closeTurn()')
+  await wait('!document.querySelector("[data-dsh-iui-draft-badge]")', 'fulfilled drafts reconciled')
+  check(await count('[data-dsh-iui-edit-draft-switcher]'), 0, 'no draft switcher after all requests fulfilled')
+  check(await count('[data-dsh-iui-draft-badge]'), 0, 'no failed badges after all requests fulfilled')
+  await shot('harness-m3-batch-reconciled.png')
+  // 18. A partially fulfilled batch returns the untouched draft as failed.
+  await read('window.__nextTurn()')
+  await click('[data-dsh-iui-call-id="dst-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'failure draft one')
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'failure popover one')
+  await saveInstruction('第三次尝试：只改这一张')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'failure draft one closed')
+  await click('[data-dsh-iui-call-id="dst-call-9"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'failure draft two')
+  await openArrangementEditor('b5')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'failure popover two')
+  await saveInstruction('第三次尝试：这一张不会被完成')
+  await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 2`, 'two failure chips')
+  const partial = await read('window.__serializeChips().then(result => result.composed)')
+  const partialIds = partial.split('<artifact-edit-request>').slice(1).reduce((map, segment) => {
+    const requestId = /"requestId":"([^"]+)"/.exec(segment)?.[1]
+    const artifactId = /"artifactId":"([^"]+)"/.exec(segment)?.[1]
+    if (requestId !== undefined && artifactId !== undefined) map[artifactId] = requestId
+    return map
+  }, {})
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-1', revisionId: 'dst-call-12', baseRevisionId: 'dst-call-1', revision: 3, requestId: partialIds['dst-call-1'], editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '夏令时与冬令时' })}, 'dst-call-12')`)
+  await read('window.__closeTurn()')
+  await wait(`document.querySelectorAll('[data-dsh-iui-draft-badge][data-state="failed"]').length === 1`, 'failed draft restored')
+  check(await count('[data-dsh-iui-call-id="dst-call-9"] [data-dsh-iui-draft-badge][data-state="failed"]'), 1, 'unfulfilled draft shows the failed badge')
+  check((await text('[data-dsh-iui-draft-badge][data-state="failed"]')).includes('未完成'), true, 'failed card badge explains the draft was kept')
+  check(await count('[data-dsh-iui-draft-attach]'), 1, 'failed draft can be re-attached')
+  await shot('harness-m3-reconcile-failed.png')
+  await click('[data-dsh-iui-draft-attach]')
+  await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 1`, 'failed draft re-attached')
   await cdp.send('Emulation.clearDeviceMetricsOverride')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

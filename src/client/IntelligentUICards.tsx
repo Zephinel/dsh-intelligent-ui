@@ -52,6 +52,7 @@ import {
   saveArtifactBlockInstruction,
   setArtifactDrawerOpen,
   setArtifactGlobalInstruction,
+  reconcileArtifactSubmissions,
   supportsBlockEditing,
   undoArtifactRemove,
   updateArtifactBlockDraft,
@@ -94,6 +95,22 @@ export function IntelligentUICards({
   & { readonly t?: Translate; readonly useProjection?: SessionProjectionReader }): ReactNode {
   const nodes = usePrograms(String(turn.turn))
   const programs = useMemo(() => programsFromToolNodes(nodes), [nodes])
+  // Once the Turn is closed, submitted edit drafts either found their revision
+  // in this Turn's cards or come back as failed drafts for an explicit retry.
+  const reconciledTurn = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (turn.status !== 'closed') return
+    const token = `${turn.turn}:${turn.end?.seq ?? 'closed'}`
+    if (reconciledTurn.current === token) return
+    reconciledTurn.current = token
+    const until = turn.end?.time ?? Date.now()
+    const since = turn.start?.time === undefined ? undefined : turn.start.time - 5000
+    reconcileArtifactSubmissions(
+      sessionId,
+      programs.flatMap(program => program.requestId === undefined ? [] : [program.requestId]),
+      { since, until },
+    )
+  }, [turn.status, turn.turn, turn.end?.seq, turn.end?.time, turn.start?.time, sessionId, programs])
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   const scheme = useStyleScheme()
   // A theme-less result snapshot inherits the session's selected template; the
@@ -157,6 +174,7 @@ function scrollBehavior(): ScrollBehavior {
 /** Short card-header badge for one retained (non-active) draft. */
 function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
   if (session.status === 'conflict') return t('edit.conflictTitle')
+  if (session.submitFailed === true) return t('edit.draftFailed')
   const count = session.selection.length
   if (count > 0) return `${t('edit.pendingDrafts')} · ${t('edit.requestsCount', { count })}`
   if (session.orderChanged) return `${t('edit.pendingDrafts')} · ${t('edit.summaryOrderChanged')}`
@@ -304,7 +322,7 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
             ? <span
                 className="dsh-iui-draft-badge"
                 data-dsh-iui-draft-badge
-                data-state={editSession.status === 'conflict' ? 'conflict' : editSession.attached ? 'attached' : 'detached'}
+                data-state={editSession.status === 'conflict' ? 'conflict' : editSession.submitFailed === true ? 'failed' : editSession.attached ? 'attached' : 'detached'}
                 title={t('edit.draftSaved')}
               >{draftBadgeLabel(editSession, t)}</span>
             : null}

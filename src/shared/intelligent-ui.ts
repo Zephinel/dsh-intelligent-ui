@@ -48,6 +48,8 @@ export interface IntelligentUIProgram {
   readonly artifactId?: string
   /** Result id of this revision; equals `callId` when the Host recorded lineage. */
   readonly revisionId?: string
+  /** Edit request id this revision fulfilled, when it came from the edit pipeline. */
+  readonly requestId?: string
   /** Parent revision this result was edited from. */
   readonly baseRevisionId?: string
   /** 1-based revision number; absent for artifacts that were never edited. */

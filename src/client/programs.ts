@@ -105,6 +105,7 @@ function blockEditProgram(root: ToolResultNode): IntelligentUIProgram | undefine
     ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
     artifactId: meta.artifactId,
     revisionId: meta.revisionId,
+    ...meta.requestId === undefined ? {} : { requestId: meta.requestId },
     revision: meta.revision,
     ...meta.editedBlockIds === undefined ? {} : { editedBlockIds: meta.editedBlockIds },
     running: false,
@@ -152,11 +153,12 @@ function normalizedProgram(meta: unknown): string | undefined {
 }
 
 /** Replayable revision lineage projected by the Host on an edited result. */
-function revisionLineage(meta: unknown): Pick<IntelligentUIProgram, 'artifactId' | 'revisionId' | 'baseRevisionId' | 'revision' | 'editedBlockIds'> {
+function revisionLineage(meta: unknown): Pick<IntelligentUIProgram, 'artifactId' | 'revisionId' | 'requestId' | 'baseRevisionId' | 'revision' | 'editedBlockIds'> {
   if (!isArtifactRevisionMeta(meta)) return {}
   return {
     artifactId: meta.artifactId,
     revisionId: meta.revisionId,
+    ...meta.requestId === undefined ? {} : { requestId: meta.requestId },
     ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
     revision: meta.revision,
     ...meta.editedBlockIds === undefined ? {} : { editedBlockIds: meta.editedBlockIds },

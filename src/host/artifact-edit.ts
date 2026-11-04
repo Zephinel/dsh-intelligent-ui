@@ -445,6 +445,7 @@ export function createArtifactEditController(
         lineage: {
           artifactId: record.artifactId,
           revisionId: record.revisionId,
+          ...request.requestId === undefined ? {} : { requestId: request.requestId },
           baseRevisionId: request.baseRevisionId,
           revision: record.revision,
           editedBlockIds,

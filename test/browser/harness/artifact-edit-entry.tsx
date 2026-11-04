@@ -16,6 +16,7 @@ import type { IntelligentUIModeView } from '../../../src/shared/intelligent-ui.t
 import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DST_PROGRAM, DST_TITLE } from '../fixtures/dst-artifact.ts'
 import { templates } from './style-fixtures.ts'
+import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 
 const SESSION = 'e2e-session'
 const base = {
@@ -37,6 +38,7 @@ function cardNode(callId: string, program: string, meta?: unknown, title: string
 
 let nodes = [cardNode('dst-call-1', DST_PROGRAM)]
 let update: () => void = () => {}
+let turnState: { turn: number; status: 'open' | 'closed'; start?: { time: number }; end?: { seq: number; time: number } } = { turn: 1, status: 'open' }
 const toolSource = {
   subscribe: () => () => {},
   getSnapshot: () => nodes,
@@ -166,6 +168,14 @@ w.__project = (patch: Partial<IntelligentUIModeView>) => { view = { ...view, ...
 w.__lang = 'zh'
 w.__language = (lang: string) => { w.__lang = lang; update() }
 w.__token = clientToken()
+w.__closeTurn = () => {
+  turnState = { ...turnState, status: 'closed', end: { seq: 900 + turnState.turn, time: Date.now() } }
+  update()
+}
+w.__nextTurn = () => {
+  turnState = { turn: turnState.turn + 1, status: 'open', start: { time: Date.now() } }
+  update()
+}
 w.__conflict = false
 w.__input = () => ({ draft: input.draft, occurrences: input.occurrences, draftRev: input.draftRev, phase: input.phase })
 w.__setDraft = (text: string) => setDraft(text)
@@ -191,10 +201,13 @@ w.__openChip = () => {
   if (occurrence === undefined) return false
   return w.__chipSource.openReference({ sessionId: SESSION }, { ref: occurrence.ref })
 }
+function pendingRequestId(artifactId: string): string | undefined {
+  return submittedDraftsFor(SESSION).find(entry => entry.artifactId === artifactId)?.requestId
+}
 w.__applyRevision = (program: string, meta: Record<string, unknown> = {}) => {
-  nodes = [...nodes, cardNode('dst-call-2', program, {
-    artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3', 'b5'], ...meta,
-  })]
+  const merged = { artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3', 'b5'], ...meta }
+  const requestId = merged.requestId ?? pendingRequestId(String(merged.artifactId))
+  nodes = [...nodes, cardNode('dst-call-2', program, { ...merged, ...requestId === undefined ? {} : { requestId } })]
   update()
 }
 // Multi-card E2E: append another settled artifact card from the same fixture.
@@ -235,12 +248,14 @@ w.__deleteChip = (ref: string) => {
 // Phase-1 block-level edit result: the tool call only returns the changed block
 // program; the Host projects the full revision through result meta.
 w.__applyBlockEditRevision = (meta: Record<string, unknown>, callId: string = 'dst-call-2') => {
+  const merged = { artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3'], title: DST_TITLE, style: 'card', ...meta }
+  const requestId = merged.requestId ?? pendingRequestId(String(merged.artifactId))
   nodes = [...nodes, {
     root: {
       kind: 'tool-result', callId, name: 'edit_ui_blocks', isError: false,
       meta: {
-        artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2,
-        editedBlockIds: ['b3'], title: DST_TITLE, style: 'card', ...meta,
+        ...merged,
+        ...requestId === undefined ? {} : { requestId },
       },
       call: { name: 'edit_ui_blocks', argsRaw: JSON.stringify({ program: 'root = Col([Title("edited block")])' }) },
     },
@@ -326,7 +341,7 @@ function Harness(): ReactElement {
   const [, refresh] = useState(0)
   update = () => refresh(value => value + 1)
   return <>
-    <main><Seat name="conversation.chat.turnTail" turn={{ turn: 1 }} /></main>
+    <main><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
     <div data-composer-card>
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>
