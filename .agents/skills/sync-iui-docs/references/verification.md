@@ -1,19 +1,19 @@
 # Verification — dsh-intelligent-ui docs
 
-Run from the repo root. Current expected values are dated 2026-10-25; derive them from the commands, never copy them forward blindly.
+Run from the repo root. Current expected values are dated 2026-11-04; derive them from the commands, never copy them forward blindly.
 
 ## Guards
 
-| Command | Expected (2026-10-25) | What it proves |
+| Command | Expected (2026-11-04) | What it proves |
 | --- | --- | --- |
-| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 635.9 kB`, `client lib/client.js 3.63 MB`, `lib/standalone.js 3.28 MB + lib/standalone.css 503.5 kB`; tests: 247 total = Host 117 + Client 109 + packaging 21; `check: 42/42` gallery parsed; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22`; `media-row-check: 17/17`; `pressable-select-check: 9/9`; `css-contract-check: 50/50`; `prop-contract-check: 63/63` | Build artifacts, behavior, docs/consistency guards, renderer, i18n, typography and contract claims |
-| `npm run pack:check` | 43 files; tarball/unpacked sizes vary with the working tree (derive from the current command output); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 727.0 kB`, `client lib/client.js 3.79 MB (js 3.62 MB, css 168.9 kB)`, `lib/standalone.js 3.29 MB + lib/standalone.css 509.5 kB`; tests: 321 total = Host 152 + Client 148 + packaging 21; `check: 42/42` gallery parsed; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs)`; `typography-check: 22/22`; `media-row-check: 17/17`; `pressable-select-check: 9/9`; `css-contract-check: 50/50`; `prop-contract-check: 63/63` | Build artifacts, behavior, docs/consistency guards, renderer, i18n, typography and contract claims |
+| `npm run pack:check` | 43 files; tarball ≈ 3.95 MB, unpacked ≈ 10.12 MB (sizes vary with the working tree — derive from the current command output); includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs and `CHANGELOG.md` excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 21 pass (manifest 9 + reference catalog 6 + guardrails 6) | Package, README pair and changelog, screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows and the shipped file count |
 | `node --test test/packaging/guardrails.test.mjs` | 6 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
-| `node --test test/host/*.test.mjs` | 117 pass (mode, skill, tool, tool-schema, export-routes, layout, validation, on-demand, result-store, style-routes, style-store) | Tool contract, switch semantics, embedded skill, settings config, `@Each`-generated article validation and warning scope |
-| `node --test test/client/*.test.mjs` | 109 pass (programs, toggle, locales, settings, exports, followups, followup-hide, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles) | Client extractor, switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, follow-up hiding semantics, HTML-export theme resolution, image-frame geometry and single-file page assembly |
-| `npm run test:browser` | seven suites: on-demand (114 assertions), style-panel, style-theme, image export (65 assertions incl. the follow-up-removal toggle), standalone interactive page (46 assertions incl. remove-follow-up semantics), Article spacing and settings/template exchange/management (101 assertions; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
+| `node --test test/host/*.test.mjs` | 152 pass (mode, skill, tool, tool-schema, export-routes, layout, validation, on-demand, result-store, style-routes, style-store, artifact-edit, artifact-revisions) | Tool contract, switch semantics, embedded skill, settings config, `@Each`-generated article validation and warning scope, edit-envelope capture/apply, `edit_ui_blocks` composition, arrangement normalization and the revision registry/route |
+| `node --test test/client/*.test.mjs` | 148 pass (programs, toggle, locales, settings, exports, followups, followup-hide, on-demand, style-actions, style-template-exchange, style-snapshot, style-theme, styles, artifact-blocks, artifact-edit, artifact-block-bundle) | Client extractor (incl. block-edit revision cards), switch control (incl. Chinese), dictionaries, settings page (incl. image-export defaults and template import), template codec/actions, export message/Turn lookup, follow-up hiding semantics, HTML-export theme resolution, image-frame geometry and single-file page assembly, block recognition/deterministic reorder, edit-session store and chip labels, deterministic refs/stale/probe, bundle splicing |
+| `npm run test:browser` | eight suites: on-demand (114 assertions), style-panel, style-theme, image export (65 assertions incl. the follow-up-removal toggle), standalone interactive page (46 assertions incl. remove-follow-up semantics), Article spacing, settings/template exchange/management (101 assertions), Artifact block editing and arrangement (77 checks: request list, arrangement, live target-order preview, drag/keyboard reorder, `edit_ui_blocks`-targeted envelope, block-fragment revision replay, order-only path, background conflict probe, 720–1179px drawer and below-720px notice; Chrome required; run `npm run build` first) | Browser behavior cited by docs |
 | `npm run test:renderer` | `42/42` parse, `42/42` render, contrast OK, i18n 4 programs, typography 22/22, media-row 17/17, pressable-select 9/9, CSS contract 50/50, prop contract 63/63 (Chrome for the latter group) | Renderer behavior cited by docs |
 
 ## Screenshot reproduction
@@ -143,6 +143,7 @@ NODE
 3. If the change introduced a new test file or suite, keep the totals inside the same sentence and verify `npm test` totals match the sum.
 4. Never adjust a count by arithmetic on a previous docs value.
 5. Append the user-visible change to `CHANGELOG.md`; move `Unreleased` entries under the new version when publishing.
+6. When a roadmap milestone from `docs/plans/artifact-edit-followups/README.md` lands, update its dated verification record and milestone status there; do not rewrite the historical `docs/verification*.md` entries.
 
 ## Examples and vocabulary
 
@@ -152,6 +153,7 @@ NODE
 ## Known expected non-bugs (do not "fix")
 
 - `docs/verification.md` / `docs/verification.en.md` is a historical verification record; its past tense claims are not current-state claims.
+- `docs/plans/artifact-edit-followups/README.md` is an as-planned roadmap that also carries the dated M1/M2 Phase 1 verification record (2026-11-04); it is not part of the historical verification docs and is expected to be updated as milestones land.
 - `CHANGELOG.md` is repo-only by design; its absence from `npm pack` (43 files) is expected, not a missing shipped file.
 - Release planning is intentionally not part of the shipped READMEs; don't re-add a release checklist to public docs.
 - `docs/` is excluded from npm `files`; the README links to it with absolute GitHub URLs so links work on npm. Don't switch to relative links unless docs are added to `files`.
@@ -163,4 +165,5 @@ NODE
 - There is no PR CI; `.github/workflows/publish.yml` is the only workflow and publishes on `v*` tags via Trusted Publishing (OIDC + provenance). `npm run check` remains the local gate, and the workflow itself checks that the tag matches `package.json`.
 - Release verification is manual: after pushing a `v*` tag, watch `gh run list --workflow=publish.yml`; then confirm the registry version and `npm audit signatures` from a temporary install. See the release bullet in `docs/verification*.md`.
 - `lib/` is gitignored; artifact sizes are build outputs and must come from a fresh `npm run check`.
+- On a maintainer machine whose `git config remote.origin.url` uses an SSH host alias (for example `git@<ssh-alias>:…` instead of `git@github.com:…`), the clone-URL check reports drift unless the host alias is normalized to `github.com` first; the READMEs still hold the public HTTPS clone URL.
 - `references/components.md` has no generator script; it is hand-maintained against `vendor/spec.json` and guarded by tests.

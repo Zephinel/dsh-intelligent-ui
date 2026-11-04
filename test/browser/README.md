@@ -1,8 +1,26 @@
 # Browser E2E
 
-Seven focused suites boot a temporary HTTP server (or a local file) + headless
+Eight focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
+
+- `artifact-edit.e2e.mjs` mounts the production card list with one recorded
+  `render_ui` program (the 夏令时与冬令时 sample fixture) and exercises block
+  editing and arrangement: entering edit mode, an empty request list and an
+  always-complete arrangement, opening a popover without creating a request,
+  numbered/colour request rows after saving, the hover request card, keyboard
+  (↑/↓/Home/End) and pointer-drag reordering with live canvas preview, locate-only
+  row activation, Reset order preserving requests/numbers/global instruction, the
+  conditional request list, the composer chip label shapes, one structured
+  `<artifact-edit-request>` envelope carrying edits + `targetOrder` + the global
+  instruction and targeting `edit_ui_blocks`, replay of a Host-composed
+  revision-2 result from `presentationMeta` (`program`/`title`/`style`/`styleId`,
+  revision badge, applied order), an order-only send through `render_ui`, a
+  background revision probe (window focus) surfacing the conflict banner, a
+  conflict blocking the send, the 720–1179px drawer, the below-720px
+  minimum-width notice and dark chrome. 77 checks; no real model is called (the
+  real-model acceptance was run manually against an isolated second DSH Web
+  instance).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
