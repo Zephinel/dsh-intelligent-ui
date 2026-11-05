@@ -154,7 +154,7 @@ export function ArtifactEditView({
   }
 
   return (
-    <div className="dsh-iui-edit-view" data-dsh-iui-edit-view data-dsh-iui-edit-scheme={scheme}>
+    <div className="dsh-iui-edit-view" data-dsh-iui-edit-view data-dsh-iui-edit-scheme={scheme} data-closing={closing ? 'true' : undefined}>
       <div className="dsh-iui-edit-toolbar">
         <div className="dsh-iui-edit-toolbar-row">
           <span className="dsh-iui-edit-toolbar-title">{t('edit.title')}</span>

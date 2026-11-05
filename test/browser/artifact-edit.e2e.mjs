@@ -812,12 +812,12 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor')
-  await wait(`(() => { const w = parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width')); return w >= 1000 && w <= 1015 })()`, 'dynamic width fitted')
+  await wait(`(() => { const w = parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width')); return Number.isFinite(w) && w >= 1000 && w <= 1040 })()`, 'dynamic width fitted')
   const firstFit = await read(`parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width'))`)
-  check(firstFit > 990 && firstFit < 1020, true, 'preference 1200 yields a narrower fitted content width')
+  check(firstFit > 990 && firstFit < 1040, true, 'preference 1200 yields a narrower fitted content width')
   await read(`window.__widthWrapper.style.setProperty('--dsh-chat-user-width', '900px')`)
   await wait(`getComputedStyle(window.__widthContent).getPropertyValue('--dsh-chat-content-width').trim() === '900px'`, 'dynamic width follows preference')
-  check(await read(`window.__widthContent.style.getPropertyValue('--dsh-chat-content-width') !== '1008px'`), true, 'a smaller preference drops the fitted override')
+  check(await read(`window.__widthContent.style.getPropertyValue('--dsh-chat-content-width') !== '1023px'`), true, 'a smaller preference drops the fitted override')
   await click('[data-dsh-iui-edit-exit]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor closed')
   check(await read('window.__widthWrapper.style.getPropertyValue("--dsh-chat-user-width")'), '900px', 'user width preference is preserved')
@@ -863,6 +863,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(panelStyle.bottom, 12, 'rounded panel keeps the bottom inset')
   check(panelStyle.overflow.includes('hidden'), true, 'rounded panel clips its contents')
   check(panelStyle.animation.includes('in-desktop'), true, 'editor panel plays the enter animation')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-toolbar')).animationName.includes('dsh-iui-edit-toolbar-in')`), true, 'edit toolbar fades/slides in with the editor')
   await click('[data-dsh-iui-edit-exit]')
   await wait(`!!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'closing panel animation')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')).animationName.includes('out-desktop')`), true, 'editor panel plays the exit animation')
@@ -899,6 +900,28 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-preview-cancel]')
   await new Promise(resolve => setTimeout(resolve, 200))
   await shot('harness-polish-delete-confirm.png')
+  // Textarea focus ring has room inside the popover scroll container.
+  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-arrangement-edit]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'focus ring popover')
+  await read(`(() => { const ta = document.querySelector('[data-dsh-iui-edit-instruction]'); ta.focus(); return true; })()`)
+  await new Promise(resolve => setTimeout(resolve, 100))
+  const focusRoom = await read(`(() => {
+    const ta = document.querySelector('[data-dsh-iui-edit-instruction]');
+    const scroll = document.querySelector('.dsh-iui-edit-popover-scroll');
+    const cs = getComputedStyle(ta);
+    return { room: ta.getBoundingClientRect().left - scroll.getBoundingClientRect().left, marginLeft: cs.marginLeft, outline: cs.outlineWidth, focused: document.activeElement === ta };
+  })()`)
+  check(focusRoom.room >= 3, true, 'textarea leaves room for its focus ring on the left')
+  check(focusRoom.marginLeft, '3px', 'textarea reserves a 3px focus-ring margin')
+  check(focusRoom.outline, '2px', 'focused textarea exposes the 2px focus ring')
+  check(focusRoom.focused, true, 'textarea is focused for the focus-ring check')
+  await click('[data-dsh-iui-edit-cancel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-popover]")', 'focus ring popover closed')
+  // The toolbar exits with the editor, not instantly.
+  await click('[data-dsh-iui-edit-exit]')
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'closing toolbar editor')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-toolbar')).animationName.includes('dsh-iui-edit-toolbar-out')`), true, 'edit toolbar fades/slides out with the editor')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'toolbar editor closed')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

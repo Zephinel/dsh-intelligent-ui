@@ -213,6 +213,7 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   let writing = false
   let lastInline = savedValue
   let frame: number | null = null
+  let finishTimer: number | null = null
 
   const write = (width: number): void => {
     current = width
@@ -226,9 +227,14 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   }
 
   const cancelFrame = (): void => {
-    if (frame === null) return
-    win.cancelAnimationFrame(frame)
-    frame = null
+    if (frame !== null) {
+      win.cancelAnimationFrame(frame)
+      frame = null
+    }
+    if (finishTimer !== null) {
+      if (typeof win.clearTimeout === 'function') win.clearTimeout(finishTimer)
+      finishTimer = null
+    }
   }
 
   const restoreInline = (): void => {
@@ -273,9 +279,25 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
       const progress = Math.min(1, Math.max(0, (now - started) / CONTENT_WIDTH_ANIMATION_MS))
       write(from + (target - from) * easeContentWidth(progress))
       if (progress < 1) frame = win.requestAnimationFrame(step)
-      else write(target)
+      else {
+        if (finishTimer !== null) {
+          if (typeof win.clearTimeout === 'function') win.clearTimeout(finishTimer)
+          finishTimer = null
+        }
+        write(target)
+      }
     }
     frame = win.requestAnimationFrame(step)
+    // rAF pauses in hidden/background windows; guarantee the final layout even
+    // when no animation frames are delivered.
+    if (typeof win.setTimeout === 'function') {
+      finishTimer = win.setTimeout(() => {
+        finishTimer = null
+        if (disposed) return
+        cancelFrame()
+        write(target)
+      }, CONTENT_WIDTH_ANIMATION_MS + 40)
+    }
   }
 
   /** Recompute after a resize or a user width-handle drag. */
