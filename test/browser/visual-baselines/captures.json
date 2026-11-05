@@ -1,0 +1,14 @@
+{
+  "capturedAt": "2026-11-05T08:28:00Z",
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "deviceScaleFactor": 2,
+  "colorScheme": "light",
+  "captures": [
+    { "file": "article-card-1440.png", "surface": "article layout card", "viewport": "1440x1000", "method": "CDP element clip, captureBeyondViewport" },
+    { "file": "free-card-1440.png", "surface": "free-composition on-demand card", "viewport": "1440x1000", "method": "CDP element clip, captureBeyondViewport" },
+    { "file": "editor-article-1440.png", "surface": "block editor canvas", "viewport": "1440x1000", "method": "CDP element clip, max height 900" },
+    { "file": "preview-modal-1440.png", "surface": "structure diff confirmation modal", "viewport": "1440x1000", "method": "full viewport screenshot (M4-5 verification)" },
+    { "file": "narrow-390-viewport.png", "surface": "unsupported-width notice", "viewport": "390x844 mobile", "method": "CDP viewport screenshot" }
+  ],
+  "notes": "Manual visual baselines; no automated pixel comparator. Regenerate at the same viewport/DPR and update SHA256SUMS."
+}
