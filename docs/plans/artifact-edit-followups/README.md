@@ -1,15 +1,15 @@
 # Artifact 编辑与编排 — 后续路线图（A/B 清单与 B0 决策）
 
-> **状态：as-planned 路线图；M1、M2 Phase 1、M3 已提交，M3-3/M3-4 与 M4-0/M4-1/M4-2 已提交，M4-3 已在工作树实现（未提交）— 2026-11-05；M3 全部完成，M4 进行中。**
+> **状态：as-planned 路线图；M1、M2 Phase 1、M3 与 M4-0/M4-1/M4-2/M4-3 均已实现并提交 — 2026-11-05；M4 进行中（下一步 M4-4/M4-5）。**
 > 本文件是路线图与决策记录，不是 as-built 文档。已实现行为以代码与 [架构与行为](../../architecture.md) 为准。
-> M1 收口、M2 Phase 1、M3、M4-0/M4-1/M4-2 已提交；当前工作树未提交的是 M4-3（权威 program store + 确定性结构操作）及本文档同步。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
+> M1 收口、M2 Phase 1、M3、M4-0/M4-1/M4-2/M4-3 已提交；当前工作树干净（仅既有未跟踪 `pnpm-lock.yaml`）。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
 > 后续实现（M4-4/M4-5、B1/B2 收口项）在 owner 明确说「开始」之前不写代码。
 >
 > **2026-11-04 B0 已拍板**：保留窄屏提示；开放临时样式编辑（先做授权设计）；支持多卡片并行编辑；维持请求上限；允许从旧修订分支；同时扩展嵌套容器与编排增删/复制；做画布实时预览；第一批 B1 收口与 B3-1 区块子程序原型并行。范围因此比最初计划显著变大，见 §4.1 与 §6 里程碑。
 
 ## 1. 背景与当前状态
 
-2026-11-04 已完成并提交（M1/M2 Phase 1）；2026-11-05 工作树新增 M3-1/M3-2（已提交）与 M3-3/M3-4（未提交）：
+2026-11-04 已完成并提交（M1/M2 Phase 1）；2026-11-05 已提交 M3-1/M3-2、M3-3/M3-4 与 M4-0..M4-3：
 
 - 区块识别、编辑模式、单区块编辑浮窗、多区块请求列表、整体编辑说明、Composer 结构化引用 chip、发送前版本校验、Host 编辑信封解析/校验、Artifact Revision（`<DSH_HOME>/dsh-intelligent-ui-artifacts.json` + 认证查询路由）与修订血缘（`presentationMeta` / `meta.program`）。
 - 区块编排：完整顶层区块列表、目标顺序 `targetOrder`、指针拖拽与键盘排序、重置顺序、编辑请求列表条件显示、悬停需求卡、Composer chip 文案随请求形状变化。
@@ -132,17 +132,16 @@ Phase 2（待做）：输入 token 节省（Host 程序缓存 / 客户端上下�
 
 ### M4 — 结构扩展（进行中：M4-0、M4-1、M4-2、M4-3 已完成；M4-4/M4-5 待做）
 范围：B0-6 嵌套容器可编辑 + 编排新增/删除/复制；B3-3 嵌套渲染器包装；B3-4 结构补丁协议与 Host 校验；B2-5 严格校验 + diff 预览；B2-6 运行态部分保留。
-交付：**M4-0（CST/渲染引擎 gate）、M4-1（嵌套区块内容编辑）、M4-2（层级排序）与 M4-3（权威 program store + 确定性 delete/duplicate/move 路由 + 本地结构修订卡）已完成（M4-3 工作树未提交，2026-11-05）**，验收见 [M4 plan §0.3–§0.5](../artifact-edit-m4/README.md)。**下一步 M4-4 容器扩展/模型新增/跨容器 move/权威恢复收口，之后 M4-5 收口（a11y、视觉回归、性能）**；B2-5/B2-6 后续。
+交付：**M4-0（CST/渲染引擎 gate）、M4-1（嵌套区块内容编辑）、M4-2（层级排序）与 M4-3（权威 program store + 确定性 delete/duplicate/move 路由 + 本地结构修订卡）已完成并提交（M4-3：f4d296f / 70fae30，2026-11-05）**，验收见 [M4 plan §0.3–§0.5](../artifact-edit-m4/README.md)。**下一步 M4-4 容器扩展/模型新增/跨容器 move/权威恢复收口，之后 M4-5 收口（a11y、视觉回归、性能）**；B2-5/B2-6 后续。
 交付标准：嵌套节点可选可排；增删复制有协议与校验；未选区块保护仍成立；渲染器/导出/回放兼容。
 
 ### 贯穿（每批完成时）
 B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视觉基线、B1-6 验证文档、B1-7 提交/发版、B3-5 真实模型 E2E 自动化。
 
-## 7. 工作树中的未提交改动（摘要）
+## 7. 工作树状态（摘要）
 
-已提交基线：M1 收口、M2 Phase 1、M3、M4-0（`5d9689e`/`f3e18c3`/`b6a2322`/`0cda1be`/`9ad8bb2`/`df445aa`/`c7bf9a1`/`0704ffc`/`5186e3b`/`dd4a7cd`/`c84fb9a`/`051d902` feat/docs）。
-当前未提交（M4-3）：`src/host/artifact-structure.ts`（新：program registry、幂等 ledger、结构路由、CST 批量应用）、`src/shared/artifact-structure.ts`（新：路由/请求/结果契约与校验）、`src/host/index.ts`（注册路由/记录程序）、`src/host/artifact-revisions.ts`（restore 记录程序）、`src/client/artifact-edit/{store,contracts,EditPanel,artifact-edit.css,local-revisions}.ts(x)`（`applyArtifactStructure`、复制/两段式删除、structure 状态、本地结构卡 kind）、`src/client/IntelligentUICards.tsx`、`src/shared/{intelligent-ui,locales}.ts`（`localRevisionKind`/结构文案）、`test/host/artifact-structure.test.mjs`（新，15 条）、`test/host/{artifact-revisions,tool}.test.mjs`、`test/browser/artifact-edit.e2e.mjs`（+7 checks），以及文档。
-构建产物 `lib/` 已生成（gitignored）；当前树 Node 431/431、浏览器 artifact-edit 143 checks + nested-edit-renderer 41 checks；M4-3 改动尚未 commit。
+已提交基线：M1 收口、M2 Phase 1、M3、M4-0/M4-1/M4-2/M4-3（M4-3：`f4d296f` feat + `70fae30` docs，含 `src/host/artifact-structure.ts`、`src/shared/artifact-structure.ts`、结构路由/registry/ledger、客户端复制/两段式删除与本地结构卡、15 条 host 结构测试与 143 checks E2E）。
+当前工作树干净（仅既有未跟踪 `pnpm-lock.yaml`）。构建产物 `lib/` 已生成（gitignored）；当前树 Node 431/431、浏览器 artifact-edit 143 checks + nested-edit-renderer 41 checks；下一步 M4-4/M4-5。
 
 ## 8. 已知风险（与 A/B 的关系）
 

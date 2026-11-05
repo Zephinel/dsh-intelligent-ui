@@ -1,6 +1,6 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）、M4-2（层级排序）与 M4-3（权威 program store + 确定性结构操作）已实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-4 容器扩展/模型新增/跨容器/权威恢复收口。**
+> **状态：M4-0/M4-1/M4-2/M4-3 均已完成并提交（M4-3：f4d296f feat + 70fae30 docs）— 2026-11-05；下一步 M4-4 容器扩展/模型新增/跨容器/权威恢复收口。**
 > owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1/M4-2/M4-3 已按收窄范围落地（§0.3–§0.5）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
@@ -94,7 +94,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 3. Host：`buildArtifactTree` 校验 + `isNestedEditRequest`/`describeNestedEditProblem`/`composeNestedEditProgram`，all-nested/all-legacy 限制、CST `replaceNode` 回填、根层 targetOrder 保持、`editedBlockIds` root-only。
 4. 明确未做：Host 权威 program store / tree 元数据路由（结构提交属 M4-3）、结构操作 UI、duplicate/move、动态 `@Each` 内部编辑、七类容器扩展。
 
-## 0.3 M4-1 验证记录（2026-11-05，工作树，未提交）
+## 0.3 M4-1 验证记录（2026-11-05，已提交 44b1178 / 01265c5）
 
 - Node 测试 **409/409**（Host 184、Client 204、packaging 21；特性文件合计 148：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 50、host artifact-revisions 17）。
 - 浏览器 **9/9** 套件通过：`artifact-edit e2e` **127 checks**（新增嵌套：opt-in toggle、嵌套 display id `b1.1.1`、信封 nodeId/digest/depth）与新建 `nested-edit-renderer e2e` **41 checks**（card/text 0px 漂移、innermost 点击/悬停、overlay union rect、reorder 路径映射、普通渲染不变）。
@@ -103,7 +103,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 真机 ego（隔离实例，参考会话新增嵌套卡片）：模型生成「嵌套卡片示例」（Card→Title + Col→两段 Text）；打开编辑 →「嵌套区块」→ 选 `b1.1.1` → 指令「把这段文字改为：嵌套编辑成功。」→ Send；模型调用 `edit_ui_blocks`（带 requestId+artifactId+单块 fragment），Host 记录 **Revision 2**，新卡片显示「嵌套编辑成功。」；对比 program 只有目标 Text 行变化，root/outerCard/未选第二段 Text 逐字节不变。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m41-nested-card.png`、`real-gui-m41-nested-revision.png`、`harness-m4-nested-edit.png`。
 - 限制（必须保留）：嵌套是 opt-in toggle（默认顶层、刷新回顶层、不持久化）；仅 `Col`/`Row`/`Card`；仅内容 replace（无嵌套排序/删除/复制/移动）；`@Each`/opaque/共享引用/ chrome 不可编辑；根层 `targetOrder` 不变；请求必须 all-nested 或 all-legacy（混合拒绝）；`editedBlockIds` 仍为 root id；Host 仍以信封 program 为基础（权威 program store 属 M4-3）；`display:contents` 依赖 25 条 CSS 补偿，需随组件 CSS 维护；真机/真实模型只验证单个嵌套文本替换。
 
-## 0.4 M4-2 验证记录（2026-11-05，工作树，未提交）
+## 0.4 M4-2 验证记录（2026-11-05，已提交 0f3a809 / 8446be0）
 
 - Node 测试 **416/416**（Host 191、Client 204、packaging 21；特性文件合计 155：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 57、host artifact-revisions 17）。
 - 浏览器 **9/9** 套件：`artifact-edit e2e` **136 checks**（新增 nested arrangement：同父重排、重置可用、chip「调整区块顺序」、信封 `orderByParent` 且保留根 `targetOrder`）；`nested-edit-renderer` 41 checks 不变。
@@ -112,7 +112,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 真机 ego（隔离实例，参考会话嵌套卡片 Revision 2）：打开编辑 →「嵌套区块」→ 把 inner Col 的第二段 Text 上移 → chip 显示「Reorder blocks」→ Send；模型调用 `render_ui` 返回完整 program（带 `editRequestId`），Host 记录 **Revision 3**；新卡片文本顺序变为「Col 里是两段 Text…」在前、「嵌套编辑成功。」在后，无错误。同时验证 stale Revision 1 chip 会被冲突阻断（预期）；成功路径使用最新 Revision 2。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m42-nested-order.png`。
 - 限制（必须保留）：嵌套排序仍是 opt-in 且不持久化；没有画布 live preview（列表只显示目标顺序）；不支持跨容器移动；order-only 仍需一次模型 `render_ui` 回合（不是零模型）；不要对正在排序的 parent 子树同时做内容编辑；Host 仍以信封携带的 program 为基础（权威 program store 属 M4-3）；`editedBlockIds` 在 order-only 时为 `[]`。
 
-## 0.5 M4-3 验证记录（2026-11-05，工作树，未提交）
+## 0.5 M4-3 验证记录（2026-11-05，已提交 f4d296f / 70fae30）
 
 - Node 测试 **431/431**（Host 206、Client 204、packaging 21；特性文件合计 170：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 57、host artifact-revisions 17、host artifact-structure 15）。
 - 浏览器 **9/9**：`artifact-edit e2e` **143 checks**（新增 structure duplicate 客户端路径：mock 结构路由、请求 body 带 nodeId/sourceDigest/toIndex、结构操作修订本地卡片标签、编辑器关闭）；`nested-edit-renderer` 41 checks；renderer `nested-css-contract` **25/25**。
