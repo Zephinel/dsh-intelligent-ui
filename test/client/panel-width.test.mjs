@@ -15,6 +15,7 @@ import {
   EDIT_PANEL_RIGHT_INSET,
   easeContentWidth,
   fitChatContentWidth,
+  fitChatPanel,
 } from '../../src/client/artifact-edit/panel-width.ts'
 
 /** Docked panel width for one content width, mirroring the CSS clamp. */
@@ -150,7 +151,14 @@ test('the controller animates content between the base and fitted widths', () =>
       requestAnimationFrame: callback => { frameId += 1; frames.push({ id: frameId, callback }); return frameId },
       performance: { now: () => now },
     }
-    const doc = { querySelector: () => element }
+    const rootStyle = {
+      values: new Map(),
+      getPropertyValue(name) { return this.values.get(name) ?? '' },
+      getPropertyPriority() { return '' },
+      setProperty(name, value) { this.values.set(name, String(value)) },
+      removeProperty(name) { this.values.delete(name) },
+    }
+    const doc = { querySelector: () => element, documentElement: { style: rootStyle } }
     const controller = applyEditChatContentWidth(win, doc)
     const widthNow = () => Number.parseFloat(elementStyle.getPropertyValue('--dsh-chat-content-width'))
     assert.equal(widthNow(), 900)
@@ -206,4 +214,23 @@ test('accounts for the sidebar offset and conversation column width', () => {
     columnLeft: 280,
     columnWidth: 1648,
   }), 880)
+})
+
+test('adaptive panel width prevents overlap on narrow laptop columns', () => {
+  const noOverlap = (fit, viewport, columnLeft, columnWidth) => {
+    const contentRight = columnLeft + (columnWidth + fit.contentWidth) / 2
+    const panelLeft = viewport - 12 - fit.panelWidth
+    assert.ok(contentRight <= panelLeft - 24 + 0.6, `${contentRight} must clear ${panelLeft}`)
+  }
+  const air = fitChatPanel({ viewportWidth: 1234, contentWidth: 920, columnLeft: 280, columnWidth: 954, panelRightInset: 12 })
+  assert.equal(air.adaptive, true)
+  assert.ok(air.panelWidth >= 272 && air.panelWidth <= 360)
+  assert.ok(air.contentWidth >= 280)
+  noOverlap(air, 1234, 280, 954)
+  const narrow = fitChatPanel({ viewportWidth: 1180, contentWidth: 748, columnLeft: 280, columnWidth: 900, panelRightInset: 12 })
+  assert.equal(narrow.adaptive, true)
+  noOverlap(narrow, 1180, 280, 900)
+  const wide = fitChatPanel({ viewportWidth: 1512, contentWidth: 920, columnLeft: 280, columnWidth: 1232, panelRightInset: 12 })
+  assert.equal(wide.adaptive, false)
+  noOverlap(wide, 1512, 280, 1232)
 })

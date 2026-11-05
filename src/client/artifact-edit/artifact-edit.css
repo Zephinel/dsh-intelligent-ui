@@ -93,6 +93,9 @@
   .dsh-iui-edit-view[data-closing='true'] .dsh-iui-edit-toolbar {
     animation: none;
   }
+  .dsh-iui-edit-panel {
+    transition: none;
+  }
 }
 
 .dsh-iui-edit-toolbar-row {
@@ -250,7 +253,8 @@
     right: 12px;
     bottom: 12px;
     left: auto;
-    width: clamp(272px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 16px), 360px);
+    width: var(--dsh-iui-edit-panel-width, clamp(272px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 16px), 360px));
+    transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
     max-height: none;
     border: 1px solid var(--dsw-alias-border-l1);
     border-radius: 16px;
@@ -259,6 +263,7 @@
   }
   .dsh-iui-edit-panel[data-closing='true'] {
     animation-name: dsh-iui-edit-panel-out-desktop;
+    transition: none;
   }
 }
 

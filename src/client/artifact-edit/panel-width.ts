@@ -24,6 +24,13 @@ export const CHAT_CONTENT_WIDTH_VAR = '--dsh-chat-content-width'
 export const DEFAULT_CHAT_CONTENT_WIDTH = 748
 /** Floating desktop panel's inset from the viewport's right edge (matches CSS). */
 export const EDIT_PANEL_RIGHT_INSET = 12
+/** CSS variable the controller writes to override the docked panel width. */
+export const EDIT_PANEL_WIDTH_VAR = '--dsh-iui-edit-panel-width'
+/** Panel width range used by the docked layout (matches CSS). */
+export const EDIT_PANEL_MIN_WIDTH = 272
+export const EDIT_PANEL_MAX_WIDTH = 360
+/** Minimum content the adaptive panel-width fallback tries to preserve. */
+export const ADAPTIVE_MIN_CONTENT_WIDTH = 320
 /** Panel and content-width animation duration (must match the CSS panel animation). */
 export const CONTENT_WIDTH_ANIMATION_MS = 220
 
@@ -113,24 +120,88 @@ export function fitChatContentWidth({
   // Not enough room for one panel on each side plus the minimum content: leave
   // the shell alone rather than forcing an unusable layout.
   if (viewportWidth - panelRightInset < minContent + 2 * (panelMin + gap)) return contentWidth
+  const desired = fixedPointContentWidth({
+    viewportWidth,
+    contentWidth,
+    panelMin,
+    panelMax,
+    gap,
+    columnLeft,
+    columnWidth,
+    panelRightInset,
+  })
+  if (desired >= contentWidth) return contentWidth
+  return Math.max(minContent, desired)
+}
 
-  let current = contentWidth
-  let desired = contentWidth
+/** One fitted docked-panel layout. */
+export interface ChatPanelFit {
+  /** Content width to apply. */
+  readonly contentWidth: number
+  /** Docked panel width to apply (written as a CSS variable). */
+  readonly panelWidth: number
+  /** True when the panel had to shrink to keep the minimum readable content. */
+  readonly adaptive: boolean
+}
+
+/** Fixed point of content/panel widths without the readable-content floor. */
+function fixedPointContentWidth(options: FitChatContentWidthOptions & { readonly panelMin: number; readonly panelMax: number; readonly gap: number; readonly columnLeft: number; readonly columnWidth: number; readonly panelRightInset: number }): number {
+  let current = options.contentWidth
+  let desired = options.contentWidth
   for (let round = 0; round < 8; round += 1) {
-    const panelWidth = clamp((viewportWidth - current) / 2 + 16, panelMin, panelMax)
+    const panelWidth = clamp((options.viewportWidth - current) / 2 + 16, options.panelMin, options.panelMax)
     // The floating panel's right edge sits `panelRightInset` inside the
     // viewport, so its left edge (and the reserved content area) shifts left.
-    const panelLeft = viewportWidth - panelRightInset - panelWidth
+    const panelLeft = options.viewportWidth - options.panelRightInset - panelWidth
     // The content is centered inside the conversation column, which can start
     // after the sidebar. Solve for the width whose right edge stays `gap` left
     // of the docked panel.
-    const maxContent = 2 * (panelLeft - gap - columnLeft) - columnWidth
+    const maxContent = 2 * (panelLeft - options.gap - options.columnLeft) - options.columnWidth
     desired = Math.min(current, maxContent)
     if (Math.abs(desired - current) < 0.5) break
     current = desired
   }
-  if (desired >= contentWidth) return contentWidth
-  return Math.max(minContent, desired)
+  return desired
+}
+
+/**
+ * Fit both the docked panel width and the content width.
+ *
+ * The plain fixed point can demand a content width below a readable minimum on
+ * narrow laptops. In that case the panel shrinks first (down to its CSS minimum)
+ * so the content keeps a readable width and still clears the panel; if even the
+ * minimum panel cannot provide the preferred content width, the content is
+ * fitted as large as that panel allows (no overlap).
+ * @param options - viewport, column and width preferences.
+ * @returns the content/panel pair and whether the adaptive fallback was used.
+ */
+export function fitChatPanel(options: FitChatContentWidthOptions): ChatPanelFit {
+  const {
+    viewportWidth,
+    contentWidth,
+    panelMin = EDIT_PANEL_MIN_WIDTH,
+    panelMax = EDIT_PANEL_MAX_WIDTH,
+    gap = 24,
+    columnLeft = 0,
+    columnWidth = viewportWidth,
+    panelRightInset = 0,
+  } = options
+  const panelFor = (content: number): number => clamp((viewportWidth - content) / 2 + 16, panelMin, panelMax)
+  const fixed = fixedPointContentWidth({ ...options, panelMin, panelMax, gap, columnLeft, columnWidth, panelRightInset })
+  if (fixed >= contentWidth) {
+    return { contentWidth, panelWidth: panelFor(contentWidth), adaptive: false }
+  }
+  const minContent = options.minContent ?? 360
+  if (fixed >= minContent) {
+    return { contentWidth: fixed, panelWidth: panelFor(fixed), adaptive: false }
+  }
+  // Shrink the panel until the content can keep a readable width.
+  const targetContent = Math.min(contentWidth, ADAPTIVE_MIN_CONTENT_WIDTH)
+  const neededPanel = viewportWidth - panelRightInset - gap - columnLeft - (columnWidth + targetContent) / 2
+  const panelWidth = clamp(neededPanel, panelMin, panelMax)
+  const maxContent = 2 * (viewportWidth - panelRightInset - panelWidth - gap - columnLeft) - columnWidth
+  const content = Math.min(contentWidth, Math.max(0, maxContent))
+  return { contentWidth: content, panelWidth, adaptive: true }
 }
 
 /** Resolve the content element whose variable is overridden. */
@@ -204,6 +275,8 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   if (element === null) return INERT_CONTROLLER
   const savedValue = element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR)
   const savedPriority = element.style.getPropertyPriority(CHAT_CONTENT_WIDTH_VAR)
+  const savedPanelWidth = doc.documentElement.style.getPropertyValue(EDIT_PANEL_WIDTH_VAR)
+  const savedPanelWidthPriority = doc.documentElement.style.getPropertyPriority(EDIT_PANEL_WIDTH_VAR)
   const mountWidth = preferredContentWidth(win, doc, element)
   const reduceMotion = (): boolean => win.matchMedia('(prefers-reduced-motion: reduce)').matches
   let current = mountWidth
@@ -251,18 +324,22 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   /** Current shell preference (parent custom property) or the mount-time width. */
   const baseWidth = (): number => userWidthPreference(element) ?? mountWidth
 
-  /** Fitted width for the current viewport and user preference. */
-  const fittedWidth = (): number => {
+  /** Fitted panel/content pair for the current viewport and user preference. */
+  const fit = (): ChatPanelFit => {
     const preference = baseWidth()
     const rect = element.getBoundingClientRect()
-    const desired = fitChatContentWidth({
+    return fitChatPanel({
       viewportWidth: win.innerWidth,
       contentWidth: preference,
       columnLeft: rect.left,
       columnWidth: rect.width,
       panelRightInset: EDIT_PANEL_RIGHT_INSET,
     })
-    return desired >= preference ? preference : desired
+  }
+
+  /** Publish the docked panel width so the CSS panel matches the fit. */
+  const writePanelWidth = (width: number): void => {
+    doc.documentElement.style.setProperty(EDIT_PANEL_WIDTH_VAR, `${Math.round(width * 100) / 100}px`)
   }
 
   /** Animate from the current value to `target`; interrupts any running frame. */
@@ -304,18 +381,22 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   const refit = (): void => {
     if (disposed || closed) return
     if (!win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches) { restoreInline(); return }
+    const fitted = fit()
+    writePanelWidth(fitted.panelWidth)
     write(baseWidth())
-    animateTo(fittedWidth())
+    animateTo(fitted.contentWidth)
   }
 
   const open = (): void => {
     if (disposed) return
     closed = false
     if (!win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches) { restoreInline(); return }
-    // Start from the base layout, then animate to the fitted width on the next
-    // frame so the panel CSS enter animation and the content change are aligned.
+    // Publish the fitted panel width first, then start from the base content
+    // layout so the panel and content animations begin together.
+    const fitted = fit()
+    writePanelWidth(fitted.panelWidth)
     write(baseWidth())
-    animateTo(fittedWidth())
+    animateTo(fitted.contentWidth)
   }
 
   const close = (): void => {
@@ -328,6 +409,8 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
     if (disposed) return
     disposed = true
     restoreInline()
+    if (savedPanelWidth === '') doc.documentElement.style.removeProperty(EDIT_PANEL_WIDTH_VAR)
+    else doc.documentElement.style.setProperty(EDIT_PANEL_WIDTH_VAR, savedPanelWidth, savedPanelWidthPriority)
     win.removeEventListener('resize', refit)
     observer?.disconnect()
   }
