@@ -65,7 +65,7 @@ events but not the full DSH Web integration.
   menu focuses its first target and moves focus with arrow keys. 180 checks;
   The last scenarios check the editing width fit: the chat content is narrowed
   while editing and restored on exit, no expand button remains, and the fitted
-  width follows a live change of the shell width preference. 202 checks; no real
+  width follows a live change of the shell width preference. 207 checks; no real
   model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
