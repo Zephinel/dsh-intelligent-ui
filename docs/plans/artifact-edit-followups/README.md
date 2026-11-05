@@ -1,9 +1,9 @@
 # Artifact 编辑与编排 — 后续路线图（A/B 清单与 B0 决策）
 
-> **状态：as-planned 路线图；M1、M2 Phase 1、M3 与 M4-0–M4-4 第一阶段均已实现并提交（M4-4 phase1：25869cc）— 2026-11-05；M4-4 进行中。**
+> **状态：as-planned 路线图；M1、M2 Phase 1、M3 与 M4-0–M4-4 均已实现并提交（M4-4：25869cc + 125b6ad）— 2026-11-05；下一步 M4-5 收口与 B2-5/B2-6。**
 > 本文件是路线图与决策记录，不是 as-built 文档。已实现行为以代码与 [架构与行为](../../architecture.md) 为准。
-> M1 收口、M2 Phase 1、M3、M4-0–M4-3 与 M4-4 第一阶段（7 类容器扩展 + `insertNode`/跨容器 `moveNode` 引擎基础）已提交；当前工作树干净（仅既有未跟踪 `pnpm-lock.yaml`）。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
-> 后续实现（M4-4 剩余阶段、M4-5、B1/B2 收口项）在 owner 明确说「开始」之前不写代码。
+> M1 收口、M2 Phase 1、M3 与 M4-0–M4-4 已提交（M4-4：7 类容器扩展 + 模型新增区块 + 跨容器移动）；当前工作树干净（仅既有未跟踪 `pnpm-lock.yaml`）。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
+> 后续实现（M4-5、B1/B2 收口项）在 owner 明确说「开始」之前不写代码。
 >
 > **2026-11-04 B0 已拍板**：保留窄屏提示；开放临时样式编辑（先做授权设计）；支持多卡片并行编辑；维持请求上限；允许从旧修订分支；同时扩展嵌套容器与编排增删/复制；做画布实时预览；第一批 B1 收口与 B3-1 区块子程序原型并行。范围因此比最初计划显著变大，见 §4.1 与 §6 里程碑。
 
@@ -25,7 +25,7 @@
 - **M4-1（2026-11-05，工作树）**：嵌套区块内容编辑——渲染器 `nestedEditLibrary`（Col/Row/Card HOC）+ `OpenUIRenderer.nestedBlockSlots`（默认 false）、`display:contents` + 25 条直接子选择器 CSS 补偿与 `nested-css-contract-check`、几何 E2E；客户端 `nested.ts` CST→display block 映射（root `bN`、嵌套 `bN.M.K`、nodeId/digest）与「嵌套区块」opt-in toggle；信封 edits 带 nodeId/sourceDigest/parentBlockId/depth；Host CST 校验 + `composeNestedEditProgram` 按 selectionOrder 替换节点，all-nested/all-legacy、根层 targetOrder 不变、`editedBlockIds` root-only。限制：opt-in、仅 Col/Row/Card、仅内容 replace、@Each/opaque/共享引用不可编辑、根层顺序不变、混合拒绝、Host 仍以信封 program 为基础（权威 store 属 M4-3）、CSS 补偿层需随组件 CSS 维护。下一步 M4-2 层级排序。
 - **M4-2（2026-11-05，工作树）**：层级排序——信封 `orderByParent`（parent → 完整子 nodeId 排列，只发变化组，root `targetOrder` 保持基础顺序）；客户端「嵌套区块编排」同父 pointer drag/grip ↑/↓/Home/End + 重置、`nestedOrder` 状态与 chip「调整区块顺序」；Host `describeOrderByParentProblem`/`applyOrderByParent`（完整排列、chrome/跨父/@Each/共享/opaque 拒绝、root 冲突拒绝、最深优先重建、root group 拥有根顺序、order-only 接受并返回 normalized program、`editedBlockIds` order-only 为 []）。限制：仍 opt-in/不持久化、无画布 live preview、无跨容器移动、order-only 仍需一次模型 render_ui、不要在排序 parent 子树内同时编辑、Host 仍以信封 program 为基础（权威 store 属 M4-3）。下一步 M4-3 受限结构操作。
 - **M4-3（2026-11-05，工作树）**：权威 program store + 确定性结构操作——`<DSH_HOME>/dsh-intelligent-ui-programs.json`（≤200 条/50MB LRU）记录每个新 revision program 作为结构 base 唯一来源；`dsh-intelligent-ui-structure-operations.json` 幂等 ledger（operationId+digest；重放 200、不同 body 409）；`POST /api/intelligent-ui/artifact-structure`（201/200、64KiB、CST nodeId/digest/toIndex 校验、delete/duplicate/move 同父批量原子、revision latest+1、style/styleId/temporaryStyle/title 继承、`editedBlockIds` root ids）；客户端编排行复制/两段式删除、`applyArtifactStructure`、本地结构修订卡（kind structure，「结构操作修订」）、structureBusy/Error UI。限制：UI 仅 delete/duplicate（move 无 UI、跨容器未做）；registry 仅覆盖安装后且未淘汰的 revision（base_missing 需重渲染，branch 需 base 在）；本地卡仅 localStorage/触发 Turn（无消息/导出/跨设备）；无 diff/undo/helper GC；Section/Toc/@Each/shared 受限；结构操作与内容编辑不能混合；结构操作直接 markSubmitted 草稿（无过期确认 UI）。下一步 M4-4 容器扩展/模型新增/跨容器/权威恢复收口。
-- **M4-4 第一阶段（2026-11-05，工作树；M4-4 进行中）**：容器扩展——shared `artifact-containers.ts` 单一来源（Col/Row/Box/Grid/Card/Section/Carousel）、program-cst 容器 children 参数映射（Section 为第 2 参数）、renderer 自动覆盖、CSS 补偿 28 direct + 5 scoped、7 类容器/18 slots 几何 E2E（Carousel 滚动/overlay；离屏 anchor 裁剪未做）；引擎基础——`insertNode` 与跨容器 `moveNode`（18 engine tests）；shared `additions` schema 已声明但 Host/UI 未接入，**不可写成可用功能**。限制：M4-4 仍进行中；模型新增区块、跨容器 move UI、权威恢复/旧卡提示、Carousel 离屏 anchor 裁剪、结构 diff/确认未完成。真机 ego：Box/Grid/Section 子块识别 + Grid 子块复制（本地卡 Revision 2，内容 grid one/grid one/grid two）。下一步 M4-4 剩余阶段。
+- **M4-4（2026-11-05，工作树；已完成）**：容器扩展——shared `artifact-containers.ts` 单一来源（Col/Row/Box/Grid/Card/Section/Carousel）、program-cst 容器 children 参数映射（Section 为第 2 参数）、renderer 自动覆盖、CSS 补偿 28 direct + 5 scoped、7 类容器/18 slots 几何 E2E（Carousel 滚动/overlay；离屏 anchor 裁剪未做）；引擎基础——`insertNode` 与跨容器 `moveNode`（18 engine tests）；shared `additions` schema 已声明但 Host/UI 未接入，**不可写成可用功能**。additions 全链路（模型新增区块）与跨容器 move 已接入：嵌套组「添加区块」→ 一次模型 `edit_ui_blocks` → 新修订；编排 row「移动到…」→ 零模型结构路由 → 本地结构修订卡。限制：additions 与 orderByParent 不能同请求；root 不作跨容器目标；Carousel 离屏 anchor 未裁剪；无 diff/undo/GC；跨容器只 append；每容器 v1 一个 addition；base_missing 仅内联提示；本地结构卡仅 localStorage/触发 Turn；additions 依赖 fragment 顺序。真机 ego：Box/Grid/Section 识别 + Grid 复制 R2、Box 新增 R3、移动至 Grid R4。下一步 M4-5 收口/B2-5。
 - 真机验证（M3-1，Lead，隔离 DSH 实例）：两张卡、两个 chip、一次 Send、模型两次 `edit_ui_blocks`、Revision 3 与 Revision 2 同时落卡；M3-2：旧 Revision 2 restore → 本地 Revision 7（无模型调用、只渲染一次），旧 Revision 2 branch → 「latest is 5」→ 模型生成 Revision 6（base 旧修订）；M3-3：两个标签页同一 session 出现租约横幅/接管，保存草稿后 Reload 恢复 chip `Edit 夏令时与冬令时 · Revision 7 · 1 changes` 与卡片草稿角标。详见 `docs/plans/artifact-edit-m3/README.md` §0.1–§0.4。仍未跑纯排序真实模型回合；真实模型的「部分成功」路径未真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成）。
 
 规模：区块编辑/编排相关新增源码 5,574 行（含编辑态 CSS）、特性测试 1,903 行（含浏览器套件）；M3-3/M3-4 工作树增量：约 20 个已跟踪文件，新增 `tabs.ts`/`test/client/edit-tabs.test.mjs`，另有临时样式契约/记录/客户端编辑改动。Node 测试 **383/383**（Host 174、Client 188、packaging 21；九个特性测试文件合计 134）；浏览器 8 套件通过（artifact-edit 121 checks），packaging 21/21。
@@ -131,9 +131,9 @@ Phase 2（待做）：输入 token 节省（Host 程序缓存 / 客户端上下�
 交付：**M3-1a/M3-1b/M3-1c、M3-2 已提交；M3-3、M3-4 已在工作树实现（2026-11-05），M3 全部完成**，验收数据见 [M3 plan §0.1–§0.4](../artifact-edit-m3/README.md#01-m3-1-验证记录2026-11-05工作树) 与 §3.6/§4/§5/§6；限制（localStorage 本地卡片不进入导出/消息历史、sessionStorage 仅同标签、租约仅提示不合并、临时样式只支持内容编辑且未单独真机/真实模型验证）见 §1/§4/§5/§6。
 说明：M3 已完整落地多卡片主轴、部分失败对账、分支与恢复、草稿持久化与软租约、临时样式内容编辑；下一步 M4（嵌套容器、编排增删复制）与 B1/B2 收口项（a11y、视觉回归、真机验收记录、发布）。M4 会再次改动"编辑会话 + 提交 + 版本"共享状态，按 M3 plan §8 推进。
 
-### M4 — 结构扩展（进行中：M4-0–M4-3 已完成；M4-4 第一阶段完成、剩余进行中；M4-5 待做）
+### M4 — 结构扩展（M4-0–M4-4 已完成；M4-5 收口待做）
 范围：B0-6 嵌套容器可编辑 + 编排新增/删除/复制；B3-3 嵌套渲染器包装；B3-4 结构补丁协议与 Host 校验；B2-5 严格校验 + diff 预览；B2-6 运行态部分保留。
-交付：**M4-0–M4-3 已完成并提交；M4-4 第一阶段（7 类容器扩展 + `insertNode`/跨容器 `moveNode` 引擎基础）已完成（工作树未提交，2026-11-05）**，验收见 [M4 plan §0.3–§0.6](../artifact-edit-m4/README.md)。**M4-4 剩余：模型新增区块（additions 接线）、跨容器 move UI、权威恢复/旧卡提示、Carousel 离屏 anchor 裁剪、结构 diff/确认；之后 M4-5 收口（a11y、视觉回归、性能）**；B2-5/B2-6 后续。
+交付：**M4-0–M4-3 已完成并提交；M4-4 第一阶段（7 类容器扩展 + `insertNode`/跨容器 `moveNode` 引擎基础）已完成（工作树未提交，2026-11-05）**，验收见 [M4 plan §0.3–§0.6](../artifact-edit-m4/README.md)。**M4-4 已完成（容器扩展 + 模型新增区块 + 跨容器移动）；下一步 M4-5 收口（a11y、视觉回归、性能）与 B2-5（严格校验 + diff 预览）；B2-6 后续。**
 交付标准：嵌套节点可选可排；增删复制有协议与校验；未选区块保护仍成立；渲染器/导出/回放兼容。
 
 ### 贯穿（每批完成时）
@@ -142,7 +142,7 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 ## 7. 工作树状态（摘要）
 
 已提交基线：M1 收口、M2 Phase 1、M3、M4-0/M4-1/M4-2/M4-3（M4-3：`f4d296f` feat + `70fae30` docs，含 `src/host/artifact-structure.ts`、`src/shared/artifact-structure.ts`、结构路由/registry/ledger、客户端复制/两段式删除与本地结构卡、15 条 host 结构测试与 143 checks E2E）。
-当前工作树未提交（M4-4 第一阶段）：`src/shared/artifact-containers.ts`（新，7 类容器白名单）、`src/shared/program-cst.ts`（容器参数映射 + `insertNode`/跨容器 `moveNode`）、`src/shared/artifact-edit.ts`（`additions` schema，未接入）、`src/lib/{library.ts,components/nested-edit.css}`、`src/client/artifact-edit/nested.ts`、`src/host/{artifact-edit,artifact-structure}.ts`、`test/client/program-cst.test.mjs`（+6）、`test/browser/{artifact-edit.e2e.mjs,nested-edit-renderer.e2e.mjs}`、`test/browser/fixtures/nested-containers.ts`（新）、`test/renderer/nested-css-contract-check.mjs`，以及文档。构建产物 `lib/` 已生成（gitignored）；当前树 Node 437/437、浏览器 artifact-edit 149 checks + nested-edit-renderer 75 checks；下一步 M4-4 剩余阶段、M4-5。
+当前工作树未提交（M4-4 第一阶段）：`src/shared/artifact-containers.ts`（新，7 类容器白名单）、`src/shared/program-cst.ts`（容器参数映射 + `insertNode`/跨容器 `moveNode`）、`src/shared/artifact-edit.ts`（`additions` schema，未接入）、`src/lib/{library.ts,components/nested-edit.css}`、`src/client/artifact-edit/nested.ts`、`src/host/{artifact-edit,artifact-structure}.ts`、`test/client/program-cst.test.mjs`（+6）、`test/browser/{artifact-edit.e2e.mjs,nested-edit-renderer.e2e.mjs}`、`test/browser/fixtures/nested-containers.ts`（新）、`test/renderer/nested-css-contract-check.mjs`，以及文档。构建产物 `lib/` 已生成（gitignored）；当前树 Node 449/449、浏览器 artifact-edit 164 checks + nested-edit-renderer 75 checks；下一步 M4-5 收口/B2-5。
 
 ## 8. 已知风险（与 A/B 的关系）
 
@@ -156,7 +156,7 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 - 嵌套区块编辑（M4-1）：opt-in、仅 Col/Row/Card、仅内容 replace；@Each/opaque/共享引用不可编辑；根层 targetOrder 不变；all-nested/all-legacy；`editedBlockIds` 仍为 root id；Host 仍以信封 program 为基础（权威 program store 属 M4-3）；`display:contents` 依赖 25 条 CSS 补偿层；真机只验证单个嵌套文本替换。
 - 层级排序（M4-2）：仍 opt-in/不持久化；无画布 live preview；无跨容器移动；order-only 仍需一次模型 render_ui（非零模型）；排序 parent 子树不能同时内容编辑；`editedBlockIds` order-only 为 []；真机只验证单容器两段文本换序。
 - 结构操作（M4-3）：UI 仅 delete/duplicate（move 无 UI、跨容器引擎已支持但 UI 未做）；权威 program 注册表仅覆盖安装后且未淘汰的 revision（base_missing 需重渲染；branch 需 base 在）；本地结构卡仅 localStorage/触发 Turn，无消息/导出/跨设备；无 diff/undo/helper GC；Section/Toc/@Each/shared 受限；结构操作与内容编辑不能混合；结构操作直接 markSubmitted 草稿（无过期确认 UI）。
-- M4-4 第一阶段：Carousel 离屏 item anchor 需与 track rect 相交裁剪（未做）；CSS 补偿扩展为 28 direct + 5 scoped，需随组件 CSS 维护；Section children 参数映射特殊；shared `additions` schema 未接 Host/UI，不能视为可用功能；跨容器 move 仅引擎、无 UI。
+- M4-4：additions 依赖模型严格 fragment 顺序（edits→additions、children 数），失败需重试；additions 与 orderByParent 分开发送；root 不作跨容器目标；Carousel 离屏 anchor 未裁剪；跨容器移动只 append、无位置选择；每容器 v1 一个 addition；base_missing 无旧卡恢复提示；无结构 diff/undo/GC；本地结构卡仅 localStorage/触发 Turn。
 - 大请求 token / 日志成本：输出侧已由区块片段降低，输入侧仍传整页（Phase 2、B3-1）。
 - 重启运行中的 `dsh-web` 才能看到新 client bundle；当前 profile 与仓库 `lib/` 为硬链接。
 - 大 diff 未提交，评审与合并需要按模块拆分。
@@ -174,4 +174,5 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 | 2026-11-05 | M4-1 嵌套区块内容编辑落地：Col/Row/Card opt-in、CST nodeId/digest 身份、渲染器 nestedEditLibrary + CSS 补偿、Host 嵌套校验/替换、all-nested/all-legacy、根层 targetOrder 不变 | 已提交；M4 进行中 |
 | 2026-11-05 | M4-2 层级排序落地：`orderByParent`（单 children slot、完整排列、只发变化组）、客户端同父编排 UI、Host 最深优先重建 + root/legacy 兼容、order-only meta | 已提交 |
 | 2026-11-05 | M4-3 权威 program store + 确定性结构操作落地：programs registry（≤200/50MB LRU）+ 幂等 ledger + `POST artifact-structure`（delete/duplicate/move 同父批量原子、revision latest+1、CST 校验）、客户端复制/两段式删除与本地结构修订卡 | 已提交 |
-| 2026-11-05 | M4-4 第一阶段：7 类容器白名单/渲染/CSS 补偿（28+5）/几何 E2E、Section children 参数映射、`insertNode`/跨容器 `moveNode` 引擎基础；additions schema 仍未接线 | 工作树未提交；M4-4 进行中；模型新增/跨容器 UI/恢复收口待做 |
+| 2026-11-05 | M4-4 第一阶段：7 类容器白名单/渲染/CSS 补偿（28+5）/几何 E2E、Section children 参数映射、`insertNode`/跨容器 `moveNode` 引擎基础 | 已提交 |
+| 2026-11-05 | M4-4 完成：模型新增区块（additions 全链路、fragment 顺序、每容器 1 个）、跨容器 move（结构操作 `toParentNodeId`、追加位置、UI「移动到…」菜单）、结构错误内联提示 | 工作树未提交；M4-4 完成；下一步 M4-5/B2-5 |
