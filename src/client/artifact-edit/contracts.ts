@@ -111,6 +111,8 @@ export interface ArtifactEditSession {
   /** When this draft was submitted, for bounded retention. */
   readonly submittedAt?: number
   readonly error?: string
+  /** Pending model-generated additions, one per target container in v1. */
+  readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[]
   /** Structural operation request in flight; row actions are disabled meanwhile. */
   readonly structureBusy?: boolean
   /** Last structural operation failure, shown inline in the arrangement panel. */
@@ -157,6 +159,12 @@ export interface ArtifactEditActions {
   resetNestedOrder(): void
   /** Apply one deterministic delete/duplicate operation without a model turn. */
   applyStructure(blockId: string, op: 'delete' | 'duplicate'): void
+  /** Save (or replace) a model-generated addition for one nested container. */
+  saveBlockAddition(parentBlockId: string, instruction: string): void
+  /** Remove the pending addition of one nested container. */
+  removeBlockAddition(parentBlockId: string): void
+  /** Move a block into another container (or the page root) as a structural revision. */
+  moveBlockTo(blockId: string, targetParentBlockId: string | 'root'): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
   /** Turn the conflict into a branch edit based on this (older) revision. */

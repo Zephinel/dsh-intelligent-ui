@@ -726,7 +726,7 @@ ${section}`
           : `edit_ui_blocks: ${reason.replace(/^render_ui: /, '')}`)
       }
       const request = pendingEdit.request
-      if (request.edits.length === 0) {
+      if (request.edits.length === 0 && (request.additions?.length ?? 0) === 0) {
         const hint = request.requestId === undefined ? '' : ` Pass editRequestId ${JSON.stringify(request.requestId)} to render_ui.`
         throw new Error(`edit_ui_blocks: this edit request only changes block order or the global instruction; call render_ui once with the complete updated page program instead.${hint}`)
       }
@@ -960,7 +960,7 @@ ${section}`
           throw pendingSelectionError('render_ui', 'editRequestId', selector ?? {}, pendingEdit, artifactEdits.listPending(sessionId))
         } else {
           // A content edit must go through the structural block path, not a full rewrite.
-          if (pendingEdit.request !== undefined && pendingEdit.request.edits.length > 0) {
+          if (pendingEdit.request !== undefined && (pendingEdit.request.edits.length > 0 || (pendingEdit.request.additions?.length ?? 0) > 0)) {
             const hint = pendingEdit.request.requestId === undefined ? '' : ` Pass requestId ${JSON.stringify(pendingEdit.request.requestId)} to edit_ui_blocks.`
             throw new Error(`render_ui: this artifact edit request has selected blocks to change; call edit_ui_blocks once with a mini program containing only the selected blocks' updated expressions instead of the whole page. The request stays armed, so do not answer in prose.${hint}`)
           }

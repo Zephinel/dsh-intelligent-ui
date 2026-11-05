@@ -26,6 +26,8 @@ export interface NestedBlockMap {
   readonly byPath: ReadonlyMap<string, ArtifactBlock>
   /** CST node id -> display block. */
   readonly byNodeId: ReadonlyMap<string, ArtifactBlock>
+  /** CST node id of the root Col (used as a move target). */
+  readonly rootNodeId: string
   /** Whether the program contains at least one block below the root level. */
   readonly hasNested: boolean
 }
@@ -106,5 +108,5 @@ export function nestedBlocksForProgram(program: string): NestedBlockMap | undefi
 
   visit(undefined, root.children, 0, 0)
   if (blocks.length === 0) return undefined
-  return { blocks, byPath, byNodeId, hasNested }
+  return { blocks, byPath, byNodeId, rootNodeId: tree.rootNodeId, hasNested }
 }

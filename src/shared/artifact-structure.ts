@@ -30,8 +30,10 @@ export interface ArtifactStructureOperation {
   readonly nodeId: string
   /** Digest of the node source in the base revision tree. */
   readonly sourceDigest: string
-  /** Zero-based destination index for duplicate/move (same parent only). */
+  /** Zero-based destination index for duplicate/move. */
   readonly toIndex?: number
+  /** Target container node id for a cross-container move; absent means the current parent. */
+  readonly toParentNodeId?: string
 }
 
 /** Body of one structure request; the Host never accepts a client program. */
@@ -77,16 +79,19 @@ function isBoundedText(value: unknown, min: number, max: number): value is strin
 /** Describe why one structural operation is malformed, or undefined. */
 export function describeStructureOperationProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
-  if (Object.keys(value).some(key => !['op', 'nodeId', 'sourceDigest', 'toIndex'].includes(key))) return 'unknown_field'
+  if (Object.keys(value).some(key => !['op', 'nodeId', 'sourceDigest', 'toIndex', 'toParentNodeId'].includes(key))) return 'unknown_field'
   if (typeof value.op !== 'string' || !(ARTIFACT_STRUCTURE_OPS as readonly string[]).includes(value.op)) return 'invalid_op'
   if (typeof value.nodeId !== 'string' || !NODE_ID_PATTERN.test(value.nodeId)) return 'invalid_node_id'
   if (typeof value.sourceDigest !== 'string' || !DIGEST_PATTERN.test(value.sourceDigest)) return 'invalid_source_digest'
   if (value.op === 'delete') {
-    if ('toIndex' in value) return 'unexpected_to_index'
+    if ('toIndex' in value || 'toParentNodeId' in value) return 'unexpected_to_index'
     return undefined
   }
   if (typeof value.toIndex !== 'number' || !Number.isSafeInteger(value.toIndex) || value.toIndex < 0 || value.toIndex > 99) {
     return 'invalid_to_index'
+  }
+  if ('toParentNodeId' in value) {
+    if (typeof value.toParentNodeId !== 'string' || !NODE_ID_PATTERN.test(value.toParentNodeId)) return 'invalid_to_parent_node_id'
   }
   return undefined
 }

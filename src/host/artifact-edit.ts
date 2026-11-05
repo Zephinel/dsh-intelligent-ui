@@ -1,14 +1,15 @@
 /** Structured block-edit requests observed from the user message stream. */
 import {
-  ARTIFACT_EDIT_OPEN, ARTIFACT_ID_PATTERN, MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_PROGRAM_CHARS,
+  ARTIFACT_EDIT_OPEN, ARTIFACT_ID_PATTERN, MAX_ARTIFACT_ADDITIONS, MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_PROGRAM_CHARS,
   describeTargetOrderProblem, isNoOpEditRequest, isReorderedOrder,
   parseEditRequestTexts,
-  type ArtifactEditRequest, type ArtifactRevisionMeta, type ArtifactRevisionStatus,
+  type ArtifactBlockAddition, type ArtifactEditRequest, type ArtifactRevisionMeta, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
 import { artifactEditWarnings, extractArtifactBlocks, reorderProgramToTargetOrder, verifyEditTargets } from '../shared/artifact-blocks.ts'
 import {
   applyOperations as applyCstOperations,
   buildArtifactTree,
+  insertNode,
   inspectProgramStructure,
   parseProgramCst,
   reorderChildren,
@@ -26,10 +27,11 @@ const MAX_PENDING_SESSIONS = 64
 import { NESTED_CONTAINER_TYPES } from '../shared/artifact-containers.ts'
 export const NESTED_EDIT_CONTAINER_TYPES = NESTED_CONTAINER_TYPES
 
-/** One validated nested edit plan: the base tree plus the selected nodes. */
+/** One validated nested edit plan: the base tree, selected nodes and addition parents. */
 interface NestedEditPlan {
   readonly tree: ArtifactTree
   readonly nodes: readonly ArtifactTreeNode[]
+  readonly additionParents: readonly { readonly addition: ArtifactBlockAddition; readonly parent: ArtifactTreeNode }[]
 }
 
 interface NestedEditFailure {
@@ -37,9 +39,9 @@ interface NestedEditFailure {
   readonly message: string
 }
 
-/** Whether any edit of one request carries a revision-scoped CST node id. */
+/** Whether one request addresses the nested CST tree (node-id edits or additions). */
 export function isNestedEditRequest(request: ArtifactEditRequest): boolean {
-  return request.edits.some(edit => edit.nodeId !== undefined)
+  return (request.additions?.length ?? 0) > 0 || request.edits.some(edit => edit.nodeId !== undefined)
 }
 
 /** Whether `ancestorId` is a strict ancestor of `nodeId` in the tree. */
@@ -55,7 +57,11 @@ function isTreeNodeAncestor(tree: ArtifactTree, ancestorId: string, nodeId: stri
 /** Validate one all-nested request against its base program tree. */
 function planNestedEdits(program: string, request: ArtifactEditRequest): { readonly ok: true; readonly plan: NestedEditPlan } | NestedEditFailure {
   const edits = request.edits
-  if (edits.length === 0) return { ok: false, message: 'the nested edit request has no blocks.' }
+  const additions = request.additions ?? []
+  if (edits.length === 0 && additions.length === 0) return { ok: false, message: 'the nested edit request has no blocks.' }
+  if (additions.length > MAX_ARTIFACT_ADDITIONS) {
+    return { ok: false, message: `a request may add at most ${MAX_ARTIFACT_ADDITIONS} new blocks.` }
+  }
   const nestedCount = edits.filter(edit => edit.nodeId !== undefined).length
   if (nestedCount !== edits.length) {
     return { ok: false, message: 'nested block edits must all carry a nodeId; mixing top-level and nested edits in one request is not supported.' }
@@ -104,13 +110,71 @@ function planNestedEdits(program: string, request: ArtifactEditRequest): { reado
       }
     }
   }
-  return { ok: true, plan: { tree, nodes } }
+  const containers = new Set<string>(NESTED_EDIT_CONTAINER_TYPES)
+  const additionParents: { addition: ArtifactBlockAddition; parent: ArtifactTreeNode }[] = []
+  for (const addition of additions) {
+    const parent = tree.nodes.get(addition.parentNodeId)
+    if (parent === undefined) {
+      return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is not part of the current revision; ask the user to reload the page and retry.` }
+    }
+    if (parent.chrome) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is page chrome and cannot receive a block.` }
+    if (parent.scoped) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is inside an @Each template and cannot receive a block in this release.` }
+    if (parent.shared) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} belongs to a shared named expression; adding there would change every instance.` }
+    if (parent.opaque || parent.problem !== undefined) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is not structurally editable in this release.` }
+    for (const editedNode of nodes) {
+      if (parent.nodeId === editedNode.nodeId
+        || isTreeNodeAncestor(tree, parent.nodeId, editedNode.nodeId)
+        || isTreeNodeAncestor(tree, editedNode.nodeId, parent.nodeId)) {
+        return { ok: false, message: `cannot add a new block to ${JSON.stringify(addition.parentNodeId)} because that container is being edited or is an ancestor/descendant of an edited block.` }
+      }
+    }
+    if (!containers.has(parent.componentType)) {
+      return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is ${parent.componentType}, which cannot receive new blocks.` }
+    }
+    if (parent.slotRange === undefined || parent.childSlots.children === undefined) {
+      return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} has no writable children slot.` }
+    }
+    const editable = (parent.childSlots.children ?? []).filter(nodeId => tree.nodes.get(nodeId)?.editable === true)
+    if (!Number.isInteger(addition.index) || addition.index < 0 || addition.index > editable.length) {
+      return { ok: false, message: `new block position for parent ${JSON.stringify(addition.parentNodeId)} must be between 0 and ${editable.length}.` }
+    }
+    additionParents.push({ addition, parent })
+  }
+  return { ok: true, plan: { tree, nodes, additionParents } }
 }
 
 /** Model-readable problem with one nested request, or undefined when it is valid. */
 export function describeNestedEditProblem(program: string, request: ArtifactEditRequest): string | undefined {
   const plan = planNestedEdits(program, request)
   return plan.ok ? undefined : plan.message
+}
+
+/** Tolerant base→current node lookup used to relocate addition parents. */
+function locateCurrentNode(baseTree: ArtifactTree, tree: ArtifactTree, baseNode: ArtifactTreeNode): ArtifactTreeNode | undefined {
+  const chain: ArtifactTreeNode[] = []
+  let cursor: ArtifactTreeNode | undefined = baseNode
+  while (cursor !== undefined) {
+    chain.unshift(cursor)
+    cursor = cursor.parentNodeId === undefined ? undefined : baseTree.nodes.get(cursor.parentNodeId)
+  }
+  const root = tree.nodes.get(tree.rootNodeId)
+  if (root === undefined) return undefined
+  let current: ArtifactTreeNode | undefined = root
+  for (const step of chain) {
+    if (step.nodeId === baseTree.rootNodeId) continue
+    if (current === undefined) return undefined
+    const children: ArtifactTreeNode[] = (current.childSlots.children ?? []).flatMap((nodeId: string) => {
+      const entry = tree.nodes.get(nodeId)
+      return entry === undefined ? [] : [entry]
+    })
+    const unique = (candidates: ArtifactTreeNode[]): ArtifactTreeNode | undefined => candidates.length === 1 ? candidates[0] : undefined
+    current = (step.statementId === undefined ? undefined : unique(children.filter(entry => entry.statementId === step.statementId)))
+      ?? (step.title === undefined ? undefined : unique(children.filter(entry => entry.title === step.title && entry.componentType === step.componentType)))
+      ?? unique(children.filter(entry => entry.digest === step.digest && entry.componentType === step.componentType))
+      ?? unique(children.filter(entry => entry.componentType === step.componentType))
+      ?? (children[step.childIndex]?.componentType === step.componentType ? children[step.childIndex] : undefined)
+  }
+  return current
 }
 
 /** Root-level display block ids whose subtrees contain the edited nested nodes. */
@@ -161,9 +225,16 @@ export function composeNestedEditProgram(
     return { ok: false, message: 'the mini program must be root = Col([...]) with one expression per selected block.' }
   }
   const ordered = [...request.edits].sort((left, right) => left.selectionOrder - right.selectionOrder)
+  const additions = request.additions ?? []
+  const expectedChildren = ordered.length + additions.length
   const expressions = childrenArg.items ?? []
-  if (expressions.length !== ordered.length) {
-    return { ok: false, message: `return exactly ${ordered.length} root children, one per selected block in selection order.` }
+  if (expressions.length !== expectedChildren) {
+    return {
+      ok: false,
+      message: additions.length === 0
+        ? `return exactly ${ordered.length} root children, one per selected block in selection order.`
+        : `return exactly ${expectedChildren} root children: ${ordered.length} edited block(s) in selection order followed by ${additions.length} new block(s) in request order.`,
+    }
   }
   const baseCst = parseProgramCst(request.program)
   if (baseCst.problem !== undefined) {
@@ -191,22 +262,45 @@ export function composeNestedEditProgram(
       source: fragment.slice(expression.range.start, expression.range.end).trim(),
     }
   })
-  const applied = applyCstOperations(extended, replacements, {
-    tree: plan.plan.tree,
-    baseRevisionId: request.baseRevisionId,
-    containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
-  })
-  if (!applied.ok) {
+  const applied = replacements.length === 0
+    ? { ok: true as const, program: extended, tree: plan.plan.tree }
+    : applyCstOperations(extended, replacements, {
+      tree: plan.plan.tree,
+      baseRevisionId: request.baseRevisionId,
+      containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+    })
+  if (applied.ok === false) {
     return { ok: false, message: `the nested edit could not be applied (${applied.code}): ${applied.message}` }
   }
-  const inspected = inspectProgramStructure(applied.program, {
+  let nextProgram = applied.program
+  let nextTree = applied.tree
+  for (let index = 0; index < additions.length; index += 1) {
+    const additionEntry = plan.plan.additionParents[index] as { addition: ArtifactBlockAddition; parent: ArtifactTreeNode }
+    const expression = expressions[ordered.length + index] as CstExpr
+    const source = fragment.slice(expression.range.start, expression.range.end).trim()
+    const currentParent = locateCurrentNode(plan.plan.tree, nextTree, additionEntry.parent)
+    if (currentParent === undefined || currentParent.componentType !== additionEntry.parent.componentType) {
+      return { ok: false, message: `the parent container for new block ${index + 1} could not be located after the earlier edits; ask the user to reload the page and retry.` }
+    }
+    const inserted = insertNode(nextProgram, currentParent.nodeId, 'children', additionEntry.addition.index, source, {
+      tree: nextTree,
+      baseRevisionId: request.baseRevisionId,
+      containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+    })
+    if (inserted.ok === false) {
+      return { ok: false, message: `new block ${index + 1} could not be inserted (${inserted.code}): ${inserted.message}` }
+    }
+    nextProgram = inserted.program
+    nextTree = inserted.tree
+  }
+  const inspected = inspectProgramStructure(nextProgram, {
     baseRevisionId: request.baseRevisionId,
     containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
   })
-  if (!inspected.ok) {
+  if (inspected.ok === false) {
     return { ok: false, message: `the edited page is not a valid structure (${inspected.code}): ${inspected.message}` }
   }
-  return { ok: true, program: applied.program }
+  return { ok: true, program: nextProgram }
 }
 /** Tree options shared by nested content and hierarchical ordering. */
 function nestedTreeOptions(request: ArtifactEditRequest): { baseRevisionId: string; containerTypes: string[] } {
@@ -777,7 +871,8 @@ export function createArtifactEditController(
       const artifactId = request.artifactId
       const duplicate = acceptedArtifacts.has(artifactId)
       acceptedArtifacts.add(artifactId)
-      const base = { requestId, request, artifactId, mode: request.edits.length > 0 ? 'block' as const : 'full' as const, createdAt: now(), ...message }
+      const blockMode = request.edits.length > 0 || (request.additions?.length ?? 0) > 0
+      const base = { requestId, request, artifactId, mode: blockMode ? 'block' as const : 'full' as const, createdAt: now(), ...message }
       if (duplicate) {
         ctx.logger?.warn(`intelligent-ui: ignored a duplicate artifact edit request for ${artifactId} in one user message`)
         arm(sessionId, { ...base, invalidReason: DUPLICATE_ARTIFACT_MESSAGE(artifactId) })
@@ -904,7 +999,10 @@ export function createArtifactEditController(
       // revision metadata and warnings keep their existing block-id contract.
       const editedBlockIds = nestedPlan === undefined
         ? request.edits.map(edit => edit.blockId)
-        : nestedRootBlockIds(request.program, nestedPlan.tree, nestedPlan.nodes)
+        : nestedRootBlockIds(request.program, nestedPlan.tree, [
+          ...nestedPlan.nodes,
+          ...nestedPlan.additionParents.map(entry => entry.parent),
+        ])
       // The Host owns the mechanical arrangement; the client `orderChanged` hint is not trusted.
       let effectiveProgram = orderedProgram
       let normalizedProgram: string | undefined

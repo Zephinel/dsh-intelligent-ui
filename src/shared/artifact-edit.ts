@@ -440,7 +440,11 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     return `${edit.selectionOrder}. ${name} — blockId "${edit.blockId}", nodePath "${edit.nodePath}", originalIndex ${edit.originalIndex}, componentType ${edit.componentType}\n   Instruction: ${edit.instruction}`
   }).join('\n')
 
-  const contentEdits = request.edits.length > 0
+  const additionLines = (request.additions ?? []).map((addition, index) =>
+    `${index + 1}. Insert into container blockId "${addition.parentBlockId}" (parentNodeId "${addition.parentNodeId}") at position ${addition.index}\n   Instruction: ${addition.instruction}`,
+  ).join('\n')
+  const additionCount = request.additions?.length ?? 0
+  const contentEdits = request.edits.length > 0 || additionCount > 0
   const styleLine = contentEdits
     ? request.temporaryStyle !== undefined
       ? `- Keep the recorded result-owned temporary style (${JSON.stringify(request.style)}); the Host reuses its snapshot, do not pass style or styleId arguments to ${BLOCK_EDIT_TOOL}.`
@@ -462,8 +466,10 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         ],
         '',
         'Output contract for that tool:',
-        '- Return one mini program `root = Col([...])` whose direct children are exactly the edited versions of the target blocks listed below, in the same order as the list.',
-        '- Each child replaces that block in the page. Do not include any other block or the whole page.',
+        `- Return one mini program \`root = Col([...])\` with exactly ${request.edits.length + additionCount} direct children.`,
+        `- The first ${request.edits.length} children are the edited versions of the target blocks below, in the same order as the list (each replaces that block).`,
+        additionCount === 0 ? '' : `- The next ${additionCount} children are the new blocks to add, in the order listed below (each is inserted into its container; do not wrap it in a page or duplicate existing blocks).`,
+        '- Do not include any other block or the whole page.',
         '- You may add new helper statements before/after root (for example a chart data array); do not redefine an existing statement name or `$state` name, and keep every existing helper/state declaration unchanged.',
         '- A target block may reference the page\'s existing statements and `$state`; the full page below is read-only context for those references.',
         '',
@@ -480,6 +486,11 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '',
         `Target blocks (${request.edits.length}):`,
         targets,
+        ...additionCount === 0 ? [] : [
+          '',
+          `New blocks to add (${additionCount}):`,
+          additionLines,
+        ],
         '',
         `Target order (all editable top-level blocks, first to last): ${request.targetOrder.length} blocks`,
         request.targetOrder.map((id, index) => `${index + 1}. ${id}`).join(', '),

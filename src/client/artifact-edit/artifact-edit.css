@@ -1026,6 +1026,235 @@
   outline-offset: 1px;
 }
 
+/* -------------------------------------------------------------------------
+ * M4-4 add-block form, saved additions and the move-to menu.
+ * These stay on the same hairline/compact rhythm as the arrangement rows:
+ * no new cards, 22px icon buttons, one shallow floating menu.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-edit-nested-group-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dsh-iui-edit-add-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-add-button:hover {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-add-button[aria-expanded='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 1px 0 3px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-iui-edit-add-hint {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.dsh-iui-edit-add-textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 5px 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 17px;
+  outline: none;
+  resize: vertical;
+}
+
+.dsh-iui-edit-add-textarea:focus-visible {
+  border-color: var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  box-shadow: 0 0 0 var(--dsw-focus-ring-width, 2px) color-mix(in srgb, var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)) 22%, transparent);
+}
+
+.dsh-iui-edit-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dsh-iui-edit-add-save {
+  padding: 3px 9px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-add-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-edit-add-cancel {
+  padding: 3px 5px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-add-cancel:hover {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Saved additions: read-only intent rows, not part of the drag order. */
+.dsh-iui-edit-addition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+  padding: 3px 2px 3px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-addition-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 9.5px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-addition-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-addition-remove {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-edit-addition-remove:hover {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Move-to container menu: portaled so the panel's scroll column cannot clip it. */
+.dsh-iui-edit-move-menu {
+  position: fixed;
+  z-index: 1200;
+  width: 228px;
+  max-height: 280px;
+  padding: 4px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+
+.dsh-iui-edit-move-title {
+  padding: 3px 6px 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.03em;
+}
+
+.dsh-iui-edit-move-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 17px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-move-target:hover,
+.dsh-iui-edit-move-target:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  outline: none;
+}
+
+.dsh-iui-edit-move-target-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-move-target-meta {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-move-empty {
+  padding: 7px 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
 .dsh-iui-edit-undo {
   display: flex;
   align-items: center;

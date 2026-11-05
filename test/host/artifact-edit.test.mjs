@@ -145,6 +145,18 @@ function nestedEdit(nodeId, selectionOrder = 1, overrides = {}) {
   }
 }
 
+/** One model-generated addition for the nested fixture. */
+function nestedAddition(parentNodeId, index, instruction = 'add a new block here') {
+  const parent = NESTED_TREE.nodes.get(parentNodeId)
+  if (parent === undefined) throw new Error(`nested fixture node ${parentNodeId} is missing`)
+  return {
+    parentBlockId: parent.nodeId === NESTED_TREE.rootNodeId ? 'b1' : 'b1.1',
+    parentNodeId,
+    index,
+    instruction,
+  }
+}
+
 /** One all-nested edit request for the nested fixture. */
 function nestedRequest(edits, overrides = {}) {
   return {
@@ -1205,6 +1217,125 @@ test('a page that no longer matches the ordering fails retryably and keeps the r
   assert.equal(existsSync(m.file), false)
   const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_retry_order' }, { agent: m.agent, callId: 'call-retry-order' })
   assert.equal(value.revision, 2)
+})
+
+test('additions-only requests insert model-authored blocks into a nested parent', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([], {
+    requestId: 'req_add_only_1',
+    additions: [nestedAddition('n4', 3, 'add a callout under the existing text')],
+  })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("new callout", "sm")'), requestId: 'req_add_only_1' }, { agent: m.agent, callId: 'call-add-only-1' })
+  assert.equal(value.revision, 2)
+  assert.deepEqual(value.editedBlockIds, ['b1'])
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\("A", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\), Text\("new callout", "sm"\)\]\)/)
+  assert.equal(value.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2], 'the second card statement is byte-identical')
+  assert.equal(value.program.split('\n')[3], NESTED_PROGRAM.split('\n')[3])
+  assert.equal(m.blockTool.output.presentationMeta({}, value).program, value.program)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.revisionId, 'call-add-only-1')
+})
+
+test('additions-only requests can target the root and insert several blocks in request order', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([], {
+    requestId: 'req_add_root_1',
+    additions: [nestedAddition('n1', 1, 'first new top-level block'), nestedAddition('n1', 2, 'second new top-level block')],
+  })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("one", "sm")', 'Text("two", "sm")'), requestId: 'req_add_root_1' }, { agent: m.agent, callId: 'call-add-root-1' })
+  assert.equal(value.program.split('\n')[0], 'root = Col([outerCard, Text("one", "sm"), Text("two", "sm"), secondCard])')
+  assert.equal(value.program.split('\n')[1], NESTED_PROGRAM.split('\n')[1])
+  assert.deepEqual(value.editedBlockIds, [], 'a root-level addition has no containing root block')
+  assert.equal(value.warnings, undefined)
+})
+
+test('edits and additions compose by fragment order and survive an edit that changes node ids', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([
+    nestedEdit('n6', 2),
+    nestedEdit('n5', 1),
+  ], {
+    requestId: 'req_add_combo_1',
+    additions: [nestedAddition('n8', 0, 'insert before the row')],
+  })))
+  const value = await m.blockTool.execute({
+    // Fragment children: sorted edits first (n5 then n6), then additions in request order.
+    program: nestedFragment('Col([Text("A nested", "sm"), Text("B nested", "sm")])', 'Text("B rewritten", "sm")', 'Text("card new", "sm")'),
+    requestId: 'req_add_combo_1',
+  }, { agent: m.agent, callId: 'call-add-combo-1' })
+  assert.match(value.program.split('\n')[1], /Col\(\[Col\(\[Text\("A nested", "sm"\), Text\("B nested", "sm"\)\]\), Text\("B rewritten", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.match(value.program.split('\n')[2], /secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("card new", "sm"\), Row\(/)
+  assert.equal(value.program.split('\n')[3], NESTED_PROGRAM.split('\n')[3])
+})
+
+test('additions only accept parents outside the edited subtrees', async () => {
+  const cases = [
+    { edits: [nestedEdit('n5')], addition: nestedAddition('n5', 0), expected: /being edited or is an ancestor\/descendant/ },
+    { edits: [nestedEdit('n5')], addition: nestedAddition('n2', 1), expected: /being edited or is an ancestor\/descendant/ },
+    { edits: [nestedEdit('n2')], addition: nestedAddition('n4', 3), expected: /being edited or is an ancestor\/descendant/ },
+  ]
+  for (const [index, entry] of cases.entries()) {
+    const m = mount()
+    m.send(buildEditRequestText(nestedRequest(entry.edits, { requestId: `req_add_conflict_${index}`, additions: [entry.addition] })))
+    await assert.rejects(
+      () => m.blockTool.execute({ program: nestedFragment('Text("x", "sm")', 'Text("y", "sm")'), requestId: `req_add_conflict_${index}` }, { agent: m.agent, callId: `call-add-conflict-${index}` }),
+      entry.expected,
+    )
+    assert.equal(existsSync(m.file), false)
+  }
+})
+
+test('additions cannot mix with legacy top-level edits in one request', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([blockEdit('b2', 'legacy top-level edit', 1)], {
+    requestId: 'req_add_mixed',
+    additions: [nestedAddition('n4', 0, 'new nested block')],
+  })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: nestedFragment('Text("legacy", "sm")', 'Text("new", "sm")'), requestId: 'req_add_mixed' }, { agent: m.agent, callId: 'call-add-mixed' }),
+    /mixing top-level and nested edits in one request is not supported/,
+  )
+  assert.equal(existsSync(m.file), false)
+})
+
+test('additions reject invalid parents, positions and malformed fragments retryably', async () => {
+  const invalid = [
+    { addition: { parentBlockId: 'b1', parentNodeId: 'n99', index: 0, instruction: 'x' }, expected: /not part of the current revision/ },
+    { addition: nestedAddition('n5', 0), expected: /cannot receive new blocks|has no writable children slot/ },
+    { addition: nestedAddition('n3', 0), expected: /page chrome and cannot receive a block/ },
+    { addition: nestedAddition('n4', 99), expected: /new block position for parent .* must be between 0 and 3/ },
+  ]
+  for (const [index, entry] of invalid.entries()) {
+    const m = mount()
+    m.send(buildEditRequestText(nestedRequest([], { requestId: `req_add_invalid_${index}`, additions: [entry.addition] })))
+    await assert.rejects(
+      () => m.blockTool.execute({ program: nestedFragment('Text("x", "sm")'), requestId: `req_add_invalid_${index}` }, { agent: m.agent, callId: `call-add-invalid-${index}` }),
+      entry.expected,
+    )
+    assert.equal(existsSync(m.file), false)
+  }
+  // Malformed fragment stays retryable with the pending request armed.
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([], { requestId: 'req_add_retry', additions: [nestedAddition('n4', 0)] })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: nestedFragment('Text("a", "sm")', 'Text("b", "sm")'), requestId: 'req_add_retry' }, { agent: m.agent, callId: 'call-add-bad-fragment' }),
+    /return exactly 1 root children: 0 edited block\(s\) in selection order followed by 1 new block\(s\) in request order/,
+  )
+  assert.equal(existsSync(m.file), false)
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A added", "sm")'), requestId: 'req_add_retry' }, { agent: m.agent, callId: 'call-add-retry-ok' })
+  assert.equal(value.revision, 2)
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\("A added", "sm"\), Text\("A", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+})
+
+test('additions may use new helper statements and a multi-line mini program root', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([], { requestId: 'req_add_helper', additions: [nestedAddition('n4', 0)] })))
+  const value = await m.blockTool.execute({
+    program: 'root = Col([newText])\nnewText = Card([Text("from addition helper", "sm")])',
+    requestId: 'req_add_helper',
+  }, { agent: m.agent, callId: 'call-add-helper' })
+  assert.match(value.program.split('\n')[1], /Col\(\[newText, Text\("A", "sm"\)/)
+  assert.match(value.program, /newText = Card\(\[Text\("from addition helper", "sm"\)\]\)/)
 })
 
 /** Drive the controller directly so the TTL and session bound are observable. */

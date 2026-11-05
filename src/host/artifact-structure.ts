@@ -400,16 +400,50 @@ function validateOperations(
     if (parent.shared) return batchFailure(400, 'invalid_input', 'the parent container belongs to a shared named expression; changing it would change every instance.')
     if (parent.scoped) return batchFailure(400, 'invalid_input', 'the parent container is inside an @Each template and cannot be changed structurally in this release.')
     if (parent.childSlots.children === undefined) return batchFailure(400, 'invalid_input', `the parent of ${JSON.stringify(operation.nodeId)} has no editable children slot.`)
+    if (operation.toParentNodeId !== undefined && operation.op !== 'move') {
+      return batchFailure(400, 'invalid_input', 'toParentNodeId is only valid for move operations.')
+    }
     if (operation.op === 'duplicate') {
       const max = editableChildren(tree, parent).length
       if (operation.toIndex === undefined || operation.toIndex < 0 || operation.toIndex > max) {
         return batchFailure(400, 'invalid_input', `duplicate toIndex for ${JSON.stringify(operation.nodeId)} must be between 0 and ${max}.`)
       }
     }
-    if (operation.op === 'move') {
+    if (operation.op === 'move' && operation.toParentNodeId === undefined) {
       const remaining = editableChildren(tree, parent).filter(nodeId => nodeId !== node.nodeId)
       if (operation.toIndex === undefined || operation.toIndex < 0 || operation.toIndex > remaining.length) {
         return batchFailure(400, 'invalid_input', `move toIndex for ${JSON.stringify(operation.nodeId)} must be between 0 and ${remaining.length}.`)
+      }
+    }
+    if (operation.op === 'move' && operation.toParentNodeId !== undefined) {
+      if (operation.toParentNodeId === parent.nodeId) {
+        return batchFailure(400, 'invalid_input', `omit toParentNodeId when moving ${JSON.stringify(operation.nodeId)} within its current parent; use toIndex in the parent's children slot.`)
+      }
+      const target = tree.nodes.get(operation.toParentNodeId)
+      if (target === undefined) {
+        return batchFailure(400, 'invalid_input', `unknown target parent node ${JSON.stringify(operation.toParentNodeId)}.`)
+      }
+      if (target.nodeId === node.nodeId) return batchFailure(400, 'invalid_input', 'a block cannot be moved into itself.')
+      if (target.chrome) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is page chrome and cannot receive blocks.`)
+      if (target.scoped) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is inside an @Each template and cannot receive blocks in this release.`)
+      if (target.shared) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} belongs to a shared named expression; moving there would change every instance.`)
+      if (target.opaque || target.problem !== undefined) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is not structurally editable in this release.`)
+      if (!(STRUCTURE_CONTAINER_TYPES as readonly string[]).includes(target.componentType)) {
+        return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is ${target.componentType}, which cannot receive blocks.`)
+      }
+      if (target.slotRange === undefined || target.childSlots.children === undefined) {
+        return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} has no writable children slot.`)
+      }
+      if (isAncestor(tree, node.nodeId, target.nodeId)) {
+        return batchFailure(400, 'invalid_input', `cannot move ${JSON.stringify(operation.nodeId)} into its own descendant.`)
+      }
+      const sourceParent = parent
+      if (isAncestor(tree, sourceParent.nodeId, target.nodeId) || isAncestor(tree, target.nodeId, sourceParent.nodeId)) {
+        return batchFailure(400, 'invalid_input', 'the source and target containers are ancestor/descendant; their children slots are nested and cannot be rewritten in one operation.')
+      }
+      const max = editableChildren(tree, target).length
+      if (operation.toIndex === undefined || operation.toIndex < 0 || operation.toIndex > max) {
+        return batchFailure(400, 'invalid_input', `move toIndex for target ${JSON.stringify(operation.toParentNodeId)} must be between 0 and ${max}.`)
       }
     }
     resolved.push(node)
@@ -470,6 +504,19 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
       const index = insertionIndex(tree, parent, operation.toIndex as number)
       if (index === undefined) return batchFailure(400, 'invalid_input', 'the duplicate target index is no longer valid.')
       result = duplicateNode(program, currentNode.nodeId, parent.nodeId, 'children', index, { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
+    } else if (operation.toParentNodeId !== undefined) {
+      const targetBase = baseTree.nodes.get(operation.toParentNodeId)
+      if (targetBase === undefined) return batchFailure(400, 'invalid_input', 'the target parent is missing from the base tree.')
+      const targetCurrent = resolveCurrentNode(baseTree, tree, targetBase.nodeId)
+      if (targetCurrent === undefined) {
+        return batchFailure(400, 'operation_conflict', `target parent ${JSON.stringify(operation.toParentNodeId)} could not be located after earlier operations; send fewer operations.`)
+      }
+      result = moveNode(program, currentNode.nodeId, targetCurrent.nodeId, 'children', operation.toIndex as number, { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
+      const targetRoot = rootBlockForNode(baseTree, targetBase)
+      if (targetRoot !== undefined) {
+        const blockId = extraction.find(entry => entry.rootIndex === targetRoot)?.blockId
+        if (blockId !== undefined) affected.add(blockId)
+      }
     } else {
       const index = insertionIndex(tree, parent, operation.toIndex as number, currentNode.nodeId)
       if (index === undefined) return batchFailure(400, 'invalid_input', 'the move target index is no longer valid.')

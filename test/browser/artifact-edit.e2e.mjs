@@ -566,15 +566,18 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested arrangement section')
   check((await count('[data-dsh-iui-edit-nested-group]')) >= 1, true, 'nested group with multiple children')
   check(await count('[data-dsh-iui-edit-nested-list]'), await count('[data-dsh-iui-edit-nested-group]'), 'one list per nested parent')
-  const nestedFirst = await read(`document.querySelector('[data-dsh-iui-edit-nested-row]').getAttribute('data-block-id')`)
-  const nestedRowsBefore = await read(`[...document.querySelectorAll('[data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
+  const nestedGroup = '[data-dsh-iui-edit-nested-group][data-parent-id="b1.1"]'
+  check(await count(`${nestedGroup} [data-dsh-iui-edit-nested-row]`), 3, 'multi-child nested group is present')
+  check(await count('[data-dsh-iui-edit-nested-group][data-parent-id="b1"] [data-dsh-iui-edit-nested-row]'), 1, 'single-child nested group is present')
+  const nestedFirst = await read(`document.querySelector('${nestedGroup} [data-dsh-iui-edit-nested-row]').getAttribute('data-block-id')`)
+  const nestedRowsBefore = await read(`[...document.querySelectorAll('${nestedGroup} [data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
   await read(`(() => {
-    const grip = document.querySelector('[data-dsh-iui-edit-nested-grip]');
+    const grip = document.querySelector('${nestedGroup} [data-dsh-iui-edit-nested-grip]');
     grip.focus();
     grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
   })()`)
   await new Promise(resolve => setTimeout(resolve, 400))
-  const nestedRowsAfter = await read(`[...document.querySelectorAll('[data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
+  const nestedRowsAfter = await read(`[...document.querySelectorAll('${nestedGroup} [data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
   check(nestedRowsBefore.length >= 2, true, 'nested group has rows to reorder')
   check(nestedRowsAfter[0], nestedRowsBefore[1], 'nested child moved down inside its parent')
   check(nestedRowsAfter[1], nestedFirst, 'nested child order is a permutation')
@@ -637,6 +640,52 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await saveInstruction('grid nested change')
   const expandedEnvelope = await read('window.__serializeChipMatching("嵌套容器样例")')
   check(expandedEnvelope.includes('"blockId":"b2.1.1"'), true, 'container expansion envelope carries the Grid child id')
+
+  // 27. Model addition request and cross-container move request.
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'addition editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-add]")', 'add-block button')
+  const addParent = await read(`document.querySelector('[data-dsh-iui-edit-add]').getAttribute('data-parent-id')`)
+  await click(`[data-dsh-iui-edit-add][data-parent-id="${addParent}"]`)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-add-input]")', 'add-block form')
+  await read(`(() => {
+    const input = document.querySelector('[data-dsh-iui-edit-add-input]');
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(input, 'add a small note below');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`)
+  await wait(`!document.querySelector('[data-dsh-iui-edit-add-save]').disabled`, 'add save enabled')
+  await click('[data-dsh-iui-edit-add-save]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-addition]")', 'addition row')
+  check((await text('[data-dsh-iui-edit-addition]')).includes('add a small note below'), true, 'addition instruction appears in its group')
+  check(await count('[data-dsh-iui-edit-addition-remove]'), 1, 'addition can be removed')
+  const additionEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
+  check(additionEnvelope.includes('"additions"'), true, 'envelope carries the model addition')
+  check(additionEnvelope.includes('"parentBlockId":"' + addParent + '"'), true, 'addition names its parent block')
+  check(additionEnvelope.includes('"instruction":"add a small note below"'), true, 'addition carries the instruction')
+
+  await read('window.__structureCalls = []')
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'move editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-move]")', 'move button')
+  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-move]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-move-menu]")', 'move menu')
+  const moveTargets = await read(`[...document.querySelectorAll('[data-dsh-iui-edit-move-target]')].map(el => el.getAttribute('data-target-id'))`)
+  check(moveTargets.includes('root'), false, 'move menu does not offer the root target')
+  check(moveTargets.includes('b1.1'), false, 'move menu excludes the current parent')
+  check(moveTargets.includes('b1'), false, 'move menu excludes ancestors')
+  check(moveTargets.length > 0, true, 'move menu offers a valid container')
+  const moveTarget = moveTargets[0]
+  await click(`[data-dsh-iui-edit-move-target][data-target-id="${moveTarget}"]`)
+  await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local move revision card')
+  const moveCalls = await read('window.__structureCalls')
+  check(moveCalls.length, 1, 'one move structure request was sent')
+  check(moveCalls[0].operations[0].op, 'move', 'move operation sent')
+  check(typeof moveCalls[0].operations[0].toParentNodeId, 'string', 'move carries the target parent node id')
+  check(typeof moveCalls[0].operations[0].toIndex, 'number', 'move carries the target index')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

@@ -20,7 +20,9 @@ import { useEffect, useSyncExternalStore } from 'react'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_REVISION_ROUTE_PATH,
+  MAX_ARTIFACT_ADDITIONS,
   MAX_ARTIFACT_BATCH_REQUESTS,
+  MAX_BLOCK_INSTRUCTION_CHARS,
   MAX_ARTIFACT_DRAFTS,
   MAX_ARTIFACT_PROGRAM_CHARS,
   describeEditRequestProblem,
@@ -37,6 +39,7 @@ import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
+import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
@@ -86,7 +89,11 @@ let translate: Translate = fallbackT
 export function hasArtifactEditContent(
   session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction'> & { readonly nestedOrderChanged?: boolean },
 ): boolean {
-  return session.selection.length > 0 || session.orderChanged || session.nestedOrderChanged === true || session.globalInstruction.trim() !== ''
+  return session.selection.length > 0
+    || (session.additions?.length ?? 0) > 0
+    || session.orderChanged
+    || session.nestedOrderChanged === true
+    || session.globalInstruction.trim() !== ''
 }
 
 /** Whether a draft counts against the per-chat draft cap and shows in the switcher. */
@@ -937,6 +944,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     nestedOrder: undefined,
     nestedOriginalOrder: undefined,
     nestedOrderChanged: false,
+    additions: undefined,
+    structureBusy: false,
+    structureError: undefined,
     status: 'checking',
     editing: true,
     activeBlockId: undefined,
@@ -1292,23 +1302,15 @@ export function resetArtifactNestedOrder(key: string): void {
  * @param op - operation kind.
  * @param turn - latest loaded Turn, used to place the local card.
  */
-export async function applyArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate', turn?: number): Promise<void> {
+/** Submit one structural operation and turn the result into a local revision card. */
+async function submitStructureOperation(
+  key: string,
+  operation: { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string },
+  turn: number | undefined,
+  failureKey: string,
+): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
-  const nested = nestedBlocksForProgram(session.program)
-  const target = nested?.blocks.find(block => block.blockId === blockId)
-  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
-    publish()
-    return
-  }
-  const group = target.parentBlockId === undefined
-    ? nested.blocks.filter(block => block.parentBlockId === undefined)
-    : nested.blocks.filter(block => block.parentBlockId === target.parentBlockId)
-  const index = group.findIndex(block => block.blockId === blockId)
-  const operation = op === 'duplicate'
-    ? { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) }
-    : { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
   sessions.set(key, { ...session, structureBusy: true, structureError: undefined })
   publish()
   try {
@@ -1329,7 +1331,18 @@ export async function applyArtifactStructure(key: string, blockId: string, op: '
       }),
     })
     if (!response.ok) {
-      sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+      let code: string | undefined
+      try {
+        const body: unknown = await response.json()
+        if (body !== null && typeof body === 'object') {
+          const error = (body as { error?: unknown }).error
+          if (error !== null && typeof error === 'object') code = String((error as { code?: unknown }).code ?? '')
+        }
+      } catch { /* fall through to the generic message */ }
+      const message = code === 'base_missing' || code === 'artifact_missing'
+        ? translate('edit.structureBaseMissing')
+        : translate('edit.structureFailed')
+      sessions.set(key, { ...session, structureBusy: false, structureError: message })
       publish()
       return
     }
@@ -1355,12 +1368,111 @@ export async function applyArtifactStructure(key: string, blockId: string, op: '
         return
       }
     }
-    sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+    sessions.set(key, { ...session, structureBusy: false, structureError: translate(failureKey) })
     publish()
   } catch {
-    sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+    sessions.set(key, { ...session, structureBusy: false, structureError: translate(failureKey) })
     publish()
   }
+}
+
+/**
+ * Apply one deterministic structural operation (delete or duplicate) through the
+ * Host's authoritative revision route, then surface the result as a local
+ * revision card in the current Turn. No model turn is involved.
+ * @param key - edit-session key.
+ * @param blockId - display block id inside the current canvas.
+ * @param op - operation kind.
+ * @param turn - latest loaded Turn, used to place the local card.
+ */
+export async function applyArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate', turn?: number): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
+  const nested = nestedBlocksForProgram(session.program)
+  const target = nested?.blocks.find(block => block.blockId === blockId)
+  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
+    publish()
+    return
+  }
+  const group = target.parentBlockId === undefined
+    ? nested.blocks.filter(block => block.parentBlockId === undefined)
+    : nested.blocks.filter(block => block.parentBlockId === target.parentBlockId)
+  const index = group.findIndex(block => block.blockId === blockId)
+  const operation = op === 'duplicate'
+    ? { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) }
+    : { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
+  await submitStructureOperation(key, operation, turn, 'edit.structureFailed')
+}
+
+/**
+ * Move one block into another container (or the page root) as a structural
+ * revision. The target index appends at the end of the destination's editable
+ * children; the Host revalidates ancestry/scope.
+ * @param key - edit-session key.
+ * @param blockId - display id of the moved block.
+ * @param targetParentBlockId - target display container id, or 'root'.
+ * @param turn - latest loaded Turn for the local revision card.
+ */
+export async function moveArtifactBlockTo(key: string, blockId: string, targetParentBlockId: string | 'root', turn?: number): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
+  const nested = nestedBlocksForProgram(session.program)
+  const target = nested?.blocks.find(block => block.blockId === blockId)
+  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
+    publish()
+    return
+  }
+  const targetParentNodeId = targetParentBlockId === 'root'
+    ? nested.rootNodeId
+    : nested.blocks.find(block => block.blockId === targetParentBlockId)?.nodeId
+  if (targetParentNodeId === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
+    publish()
+    return
+  }
+  const children = targetParentBlockId === 'root'
+    ? nested.blocks.filter(block => block.parentBlockId === undefined)
+    : nested.blocks.filter(block => block.parentBlockId === targetParentBlockId)
+  await submitStructureOperation(key, {
+    op: 'move',
+    nodeId: target.nodeId,
+    sourceDigest: target.sourceDigest,
+    toParentNodeId: targetParentNodeId,
+    toIndex: children.length,
+  }, turn, 'edit.moveBlockFailed')
+}
+
+/** Save (or replace) a model-generated addition for one nested container. */
+export function saveArtifactBlockAddition(key: string, parentBlockId: string, instruction: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.nestedMode !== true) return
+  const text = instruction.trim()
+  if (text === '' || text.length > MAX_BLOCK_INSTRUCTION_CHARS) return
+  const nested = nestedBlocksForProgram(session.program)
+  const parent = nested?.blocks.find(block => block.blockId === parentBlockId)
+  if (nested === undefined || parent === undefined) return
+  if (!(NESTED_CONTAINER_TYPES as readonly string[]).includes(parent.componentType)) return
+  const existing = session.additions ?? []
+  const without = existing.filter(addition => addition.parentBlockId !== parentBlockId)
+  if (without.length >= MAX_ARTIFACT_ADDITIONS) return
+  sessions.set(key, { ...session, additions: [...without, { parentBlockId, instruction: text }] })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
+}
+
+/** Remove the pending addition of one nested container. */
+export function removeArtifactBlockAddition(key: string, parentBlockId: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.additions === undefined) return
+  const next = session.additions.filter(addition => addition.parentBlockId !== parentBlockId)
+  if (next.length === session.additions.length) return
+  sessions.set(key, { ...session, additions: next.length === 0 ? undefined : next })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Open or close the narrow-viewport request drawer. */
@@ -1540,7 +1652,11 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // composer was busy while the store removed it; never send the same draft twice.
   if (session.status === 'submitted') return { ok: false, problem: 'stale' }
   const globalInstruction = session.globalInstruction.trim()
-  if (session.selection.length === 0 && !session.orderChanged && session.nestedOrderChanged !== true && globalInstruction === '') return { ok: false, problem: 'empty' }
+  if (session.selection.length === 0
+    && (session.additions?.length ?? 0) === 0
+    && !session.orderChanged
+    && session.nestedOrderChanged !== true
+    && globalInstruction === '') return { ok: false, problem: 'empty' }
   if (session.selection.some(item => item.instruction.trim() === '')) return { ok: false, problem: 'empty_instruction' }
   const edits: ArtifactBlockEdit[] = [...session.selection]
     .sort((a, b) => a.order - b.order)
@@ -1579,6 +1695,18 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
       }
     }
   }
+  const additions: { parentBlockId: string; parentNodeId: string; index: number; instruction: string }[] = []
+  if ((session.additions?.length ?? 0) > 0) {
+    const nested = nestedBlocksForProgram(session.program)
+    if (nested !== undefined) {
+      for (const addition of session.additions ?? []) {
+        const parent = nested.blocks.find(block => block.blockId === addition.parentBlockId)
+        if (parent?.nodeId === undefined) continue
+        const index = nested.blocks.filter(block => block.parentBlockId === parent.blockId).length
+        additions.push({ parentBlockId: parent.blockId, parentNodeId: parent.nodeId, index, instruction: addition.instruction })
+      }
+    }
+  }
   const request: ArtifactEditRequest = {
     schemaVersion: 1,
     requestId: session.requestId,
@@ -1591,6 +1719,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     ...session.styleId === undefined || session.temporaryStyle !== undefined ? {} : { styleId: session.styleId },
     ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
     edits,
+    ...additions.length === 0 ? {} : { additions },
     targetOrder: [...session.targetOrder],
     ...Object.keys(orderByParent).length === 0 ? {} : { orderByParent },
     ...session.orderChanged ? { orderChanged: true } : {},
@@ -1657,10 +1786,10 @@ export function editChipLabel(facts: EditChipFacts): string {
  * @param session - draft whose chip label is requested.
  * @returns the localized label.
  */
-export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean }): string {
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[] }): string {
   const t = translate
   const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
-  const count = session.selection.length
+  const count = session.selection.length + (session.additions?.length ?? 0)
   const reordered = session.orderChanged || session.nestedOrderChanged === true
   const hasGlobal = session.globalInstruction.trim() !== ''
   let summary = count > 0 && reordered

@@ -162,6 +162,9 @@ async function seed(m, program = NESTED_PROGRAM, callId = 'call-original') {
 const deleteOp = (tree, nodeId) => ({ op: 'delete', nodeId, sourceDigest: node(tree, nodeId).digest })
 const duplicateOp = (tree, nodeId, toIndex) => ({ op: 'duplicate', nodeId, sourceDigest: node(tree, nodeId).digest, toIndex })
 const moveOp = (tree, nodeId, toIndex) => ({ op: 'move', nodeId, sourceDigest: node(tree, nodeId).digest, toIndex })
+const crossMoveOp = (tree, nodeId, toParentNodeId, toIndex) => ({
+  op: 'move', nodeId, sourceDigest: node(tree, nodeId).digest, toParentNodeId, toIndex,
+})
 
 test('the authoritative program registry persists, reloads and prunes by LRU bounds', () => {
   tempHome('iui-artifact-programs-')
@@ -325,6 +328,116 @@ test('scoped @Each nodes are not structurally editable', async () => {
   })
   assert.equal(response.status, 400)
   assert.match(response.body.error.message, /@Each template/)
+})
+
+test('a cross-container move route moves a nested block into another root card', async () => {
+  const m = mount()
+  await seed(m)
+  const response = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('crossmove'), operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 0)] }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  const result = response.body.result
+  assert.match(result.program.split('\n')[1], /Card\(\[Title\("外层卡片", "sm"\), Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)\]\)/)
+  assert.match(result.program.split('\n')[2], /secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row\(\[Text\("C", "sm"\), Text\("D", "sm"\)\]\)\], "soft"\)/)
+  assert.equal(result.program.split('\n')[0], NESTED_PROGRAM.split('\n')[0])
+  assert.equal(result.program.split('\n')[3], NESTED_PROGRAM.split('\n')[3])
+  const latest = createArtifactRevisionStore().latestFor('call-original')
+  assert.deepEqual([...(latest.editedBlockIds ?? [])].sort(), ['b1', 'b2'])
+  assert.equal(createArtifactProgramStore().lookup('call-original', result.revisionId), result.program)
+})
+
+test('a cross-container move route can target a nested Row slot', async () => {
+  const m = mount()
+  await seed(m)
+  const response = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('crossmove-row'), operations: [crossMoveOp(NESTED_TREE, 'n5', 'n10', 2)] }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.match(response.body.result.program.split('\n')[1], /Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.match(response.body.result.program.split('\n')[2], /Row\(\[Text\("C", "sm"\), Text\("D", "sm"\), Text\("A", "sm"\)\]\)/)
+})
+
+test('a cross-container move can move between two nested Col containers', async () => {
+  const program = 'root = Col([a, b])\na = Card([Col([Text("x")])])\nb = Card([Col([Text("y")])])'
+  const tree = buildArtifactTree(program, { containerTypes: ['Col', 'Row', 'Box', 'Grid', 'Card', 'Section', 'Carousel'] })
+  const x = [...tree.nodes.values()].find(entry => entry.source === 'Text("x")')
+  const cols = [...tree.nodes.values()].filter(entry => entry.componentType === 'Col' && !entry.children.some(id => id === x.nodeId))
+  const targetCol = cols[0]
+  assert.ok(targetCol !== undefined)
+  const m = mount()
+  await seed(m, program, 'call-cross')
+  const response = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      artifactId: 'call-cross', baseRevisionId: 'call-cross',
+      operationId: operationId('crossmove-col'),
+      operations: [crossMoveOp(tree, x.nodeId, targetCol.nodeId, 1)],
+    }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.equal(response.body.result.program.split('\n')[1], 'a = Card([Col([])])')
+  assert.equal(response.body.result.program.split('\n')[2], 'b = Card([Col([Text("y"), Text("x")])])')
+})
+
+test('cross-container move validation rejects unsafe targets and invalid shapes', async () => {
+  const m = mount()
+  await seed(m)
+  const cases = [
+    // Target root is the source parent's ancestor: nested slots.
+    [crossMoveOp(NESTED_TREE, 'n5', 'n1', 0), /ancestor\/descendant|nested/],
+    // Target lies inside the moved block.
+    [crossMoveOp(NESTED_TREE, 'n2', 'n4', 0), /own descendant/],
+    // Non-container target / chrome target.
+    [crossMoveOp(NESTED_TREE, 'n5', 'n3', 0), /cannot receive blocks/],
+    // Same parent cannot be passed as a target.
+    [crossMoveOp(NESTED_TREE, 'n5', 'n4', 0), /omit toParentNodeId/],
+    // toIndex must be an editable index in the target (Card has one editable child: Row).
+    [crossMoveOp(NESTED_TREE, 'n5', 'n8', 2), /between 0 and 1/],
+    // toParentNodeId is move-only.
+    [{ op: 'duplicate', nodeId: 'n5', sourceDigest: node(NESTED_TREE, 'n5').digest, toIndex: 0, toParentNodeId: 'n8' }, /only valid for move/],
+    // Shared shape rejects toParentNodeId on delete before the Host sees it.
+    [{ op: 'delete', nodeId: 'n5', sourceDigest: node(NESTED_TREE, 'n5').digest, toParentNodeId: 'n8' }, /unexpected_to_index/],
+  ]
+  for (const [operation, expected] of cases) {
+    const response = await postStructure(m.structureRoute(), {
+      body: structureBody({ operationId: operationId('bad-cross'), operations: [operation] }),
+    })
+    assert.equal(response.status, 400, JSON.stringify(response.body))
+    assert.match(response.body.error.message, expected)
+  }
+  assert.equal(existsSync(m.file), false, 'no rejected batch records a revision')
+})
+
+test('cross-container moves are scoped, bounded and atomic in one batch', async () => {
+  // A batch can move into another card and delete from the target card atomically.
+  const batchMount = mount()
+  await seed(batchMount)
+  const batch = await postStructure(batchMount.structureRoute(), {
+    body: structureBody({
+      operationId: operationId('cross-batch'),
+      operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 0), deleteOp(NESTED_TREE, 'n11')],
+    }),
+  })
+  assert.equal(batch.status, 201, JSON.stringify(batch.body))
+  assert.match(batch.body.result.program.split('\n')[1], /Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.match(batch.body.result.program.split('\n')[2], /Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row\(\[Text\("D", "sm"\)\]\)\], "soft"\)/)
+  // @Each dynamic containers cannot receive moved blocks.
+  const scopedMount = mount()
+  await seed(scopedMount, SCOPED_PROGRAM, 'call-scoped-cross')
+  const scopedTree = buildArtifactTree(SCOPED_PROGRAM, { containerTypes: ['Col', 'Row', 'Box', 'Grid', 'Card', 'Section', 'Carousel'] })
+  const dynamicCol = [...scopedTree.nodes.values()].find(entry => entry.componentType === 'Col' && entry.depth === 2)
+  const scopedMove = [...scopedTree.nodes.values()].find(entry => entry.componentType === 'Card' && entry.depth === 1)
+  assert.ok(dynamicCol !== undefined)
+  assert.ok(scopedMove !== undefined)
+  const rejected = await postStructure(scopedMount.structureRoute(), {
+    body: structureBody({
+      artifactId: 'call-scoped-cross', baseRevisionId: 'call-scoped-cross',
+      operationId: operationId('scoped-cross'),
+      operations: [crossMoveOp(scopedTree, scopedMove.nodeId, dynamicCol.nodeId, 0)],
+    }),
+  })
+  assert.equal(rejected.status, 400)
+  assert.match(rejected.body.error.message, /writable children slot|@Each/)
 })
 
 test('nodes inside a shared named expression are rejected by the structure route', async () => {

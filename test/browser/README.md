@@ -47,9 +47,12 @@ events but not the full DSH Web integration.
   `targetOrder`. The M4-3 scenario then duplicates a nested block through the
   row action (one mocked structure POST with nodeId/sourceDigest/toIndex),
   checks the structural-revision local card label and that the editor closes.
-  The M4-4 scenario selects Box/Grid/Section/Carousel children in nested mode
-  and checks the envelope carries a Grid child id. 149 checks; no real model is
-  called (the
+  The M4-4 scenario selects Box/Grid/Section/Carousel children in nested mode,
+  checks the envelope carries a Grid child id, and exercises the completion
+  paths: an addition instruction appears in its group and the envelope carries
+  the `additions` entry, while the **Move to…** menu excludes root/current
+  parent/ancestors and sends one move structure request with the target node id
+  and index. 164 checks; no real model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).

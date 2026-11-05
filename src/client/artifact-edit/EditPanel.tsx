@@ -30,6 +30,7 @@ import {
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
 import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
+import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { hasArtifactEditContent, useArtifactEditStore } from './store.ts'
 
@@ -170,6 +171,21 @@ function DuplicateGlyph(): ReactElement {
     <Glyph size={13}>
       <rect x="2.5" y="5" width="8.5" height="8.5" rx="1.5" />
       <path d="M5.5 5V3.5A1.5 1.5 0 0 1 7 2h5a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 10h-1.5" />
+    </Glyph>
+  )
+}
+
+/** Plus glyph for the add-block action. */
+function PlusGlyph(): ReactElement {
+  return <Glyph size={12}><path d="M8 3v10M3 8h10" /></Glyph>
+}
+
+/** Arrow-into-frame glyph for the move-to action. */
+function MoveGlyph(): ReactElement {
+  return (
+    <Glyph size={13}>
+      <path d="M2.5 3.5v9h9" />
+      <path d="M5 8h6.5M9 5.5 11.5 8 9 10.5" />
     </Glyph>
   )
 }
@@ -350,6 +366,25 @@ interface DropTarget {
   readonly parentId?: string
 }
 
+/** Open "move to container" menu, anchored in viewport coordinates. */
+interface MoveMenuState {
+  readonly blockId: string
+  readonly left: number
+  readonly top: number
+}
+
+/** One candidate target of the move-to menu. */
+interface MoveTarget {
+  readonly id: string
+  readonly title: string
+  readonly meta: string
+}
+
+/** Menu geometry used for placement and viewport clamping. */
+const MOVE_MENU_WIDTH = 228
+const MOVE_MENU_MAX_HEIGHT = 280
+const MOVE_MENU_ROW_HEIGHT = 30
+
 /** One nested container shown in the nested arrangement tree. */
 interface NestedGroup {
   readonly parent: ArtifactBlock
@@ -368,13 +403,15 @@ const STRUCTURE_ERROR_TIMEOUT_MS = 8000
  * @param props - locale, target block, busy/confirm state and handlers.
  * @returns the action group.
  */
-function StructureActions({ t, blockId, busy, confirming, onDuplicate, onDelete }: {
+function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate, onDelete, onMove }: {
   readonly t: Translate
   readonly blockId: string
   readonly busy: boolean
   readonly confirming: boolean
+  readonly moveOpen: boolean
   readonly onDuplicate: () => void
   readonly onDelete: () => void
+  readonly onMove: (anchor: HTMLButtonElement) => void
 }): ReactElement {
   const deleteLabel = confirming ? t('edit.structureDeleteConfirm') : t('edit.structureDelete')
   return (
@@ -403,6 +440,20 @@ function StructureActions({ t, blockId, busy, confirming, onDuplicate, onDelete 
         onClick={event => { event.stopPropagation(); onDelete() }}
       >
         {confirming ? <span className="dsh-iui-edit-confirm-label">{t('edit.structureDeleteConfirm')}</span> : <TrashGlyph />}
+      </button>
+      <button
+        type="button"
+        className="dsh-iui-edit-icon-button"
+        data-dsh-iui-edit-move
+        data-block-id={blockId}
+        disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={moveOpen ? 'true' : undefined}
+        aria-label={t('edit.moveBlock')}
+        title={t('edit.moveBlock')}
+        onClick={event => { event.stopPropagation(); onMove(event.currentTarget) }}
+      >
+        <MoveGlyph />
       </button>
     </span>
   )
@@ -552,6 +603,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const applyStructure = actions.applyStructure
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [dismissedStructureError, setDismissedStructureError] = useState<string | null>(null)
+  const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
+  const [addDraft, setAddDraft] = useState('')
+  const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
   const confirmDeleteTimer = useRef<number | null>(null)
   // Nested edit mode: one group per container with at least two editable
   // direct children. The pending order falls back to the base order, and any
@@ -568,7 +622,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     const groups: NestedGroup[] = []
     for (const block of session.blocks) {
       const childIds = childrenByParent.get(block.blockId)
-      if (childIds === undefined || childIds.length < 2) continue
+      if (childIds === undefined || childIds.length < 1) continue
       const target = session.nestedOrder?.[block.blockId] ?? session.nestedOriginalOrder?.[block.blockId] ?? childIds
       const ordered = [
         ...target.filter(childId => childIds.includes(childId)),
@@ -578,6 +632,64 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     }
     return groups
   }, [session.nestedMode, session.blocks, session.nestedOrder, session.nestedOriginalOrder])
+  // Move-to candidates: root plus every allowlisted container block, minus the
+  // block itself, its descendants and the parent it already lives in.
+  const nestedContainerIds = useMemo(
+    () => new Set(session.blocks.filter(block => (NESTED_CONTAINER_TYPES as readonly string[]).includes(block.componentType)).map(block => block.blockId)),
+    [session.blocks],
+  )
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const block of session.blocks) {
+      if (block.parentBlockId === undefined) continue
+      const children = map.get(block.parentBlockId) ?? []
+      children.push(block.blockId)
+      map.set(block.parentBlockId, children)
+    }
+    return map
+  }, [session.blocks])
+  const moveTargetsFor = (blockId: string): MoveTarget[] => {
+    const block = blocks.get(blockId)
+    if (block === undefined) return []
+    const excluded = new Set<string>([blockId])
+    const queue = [...(childrenByParent.get(blockId) ?? [])]
+    while (queue.length > 0) {
+      const descendant = queue.shift() as string
+      excluded.add(descendant)
+      queue.push(...(childrenByParent.get(descendant) ?? []))
+    }
+    // The Host rejects moving into descendants and into ancestor/descendant
+    // containers (their children slots are nested); exclude the whole ancestor
+    // chain and do not offer the root target (root is an ancestor for any
+    // nested source). Same-parent moves are expressed by ordering instead.
+    let ancestor = block.parentBlockId
+    while (ancestor !== undefined) {
+      excluded.add(ancestor)
+      ancestor = blocks.get(ancestor)?.parentBlockId
+    }
+    const targets: MoveTarget[] = []
+    // A container inside the source parent is an ancestor/descendant container
+    // pair for the Host's cross-move validation: moving from the parent's slot
+    // into one of its own descendant containers is rejected.
+    const sourceParent = block.parentBlockId
+    const isInsideSourceParent = (candidateId: string): boolean => {
+      if (sourceParent === undefined) return false
+      let cursor = blocks.get(candidateId)?.parentBlockId
+      while (cursor !== undefined) {
+        if (cursor === sourceParent) return true
+        cursor = blocks.get(cursor)?.parentBlockId
+      }
+      return false
+    }
+    for (const candidate of session.blocks) {
+      if (!nestedContainerIds.has(candidate.blockId) || excluded.has(candidate.blockId)) continue
+      if (isInsideSourceParent(candidate.blockId)) continue
+      const title = candidate.title !== undefined && candidate.title.trim() !== '' ? candidate.title : blockKindLabel(candidate.kind, t)
+      targets.push({ id: candidate.blockId, title, meta: blockKindLabel(candidate.kind, t) })
+    }
+    return targets
+  }
+  const moveTargets = moveMenu === null ? [] : moveTargetsFor(moveMenu.blockId)
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -642,6 +754,83 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       setConfirmDeleteId(current => current === blockId ? null : current)
     }, STRUCTURE_DELETE_CONFIRM_MS)
   }
+
+  const closeAddForm = (): void => {
+    setAddFormParentId(null)
+    setAddDraft('')
+  }
+  const toggleAddForm = (parentId: string): void => {
+    if (addFormParentId === parentId && addDraft.trim() === '') {
+      closeAddForm()
+      return
+    }
+    setAddFormParentId(current => current === parentId ? null : parentId)
+    setAddDraft('')
+  }
+  const saveAddition = (parentId: string): void => {
+    const instruction = addDraft.trim()
+    if (instruction === '') return
+    actions.saveBlockAddition(parentId, instruction)
+    closeAddForm()
+  }
+  const closeMoveMenu = (): void => { setMoveMenu(null) }
+  const openMoveMenu = (blockId: string, anchor: HTMLButtonElement): void => {
+    if (moveMenu?.blockId === blockId) { closeMoveMenu(); return }
+    const rect = anchor.getBoundingClientRect()
+    const count = Math.max(1, moveTargetsFor(blockId).length)
+    const estimatedHeight = Math.min(MOVE_MENU_MAX_HEIGHT, 34 + count * MOVE_MENU_ROW_HEIGHT)
+    const left = Math.max(CARD_MARGIN, Math.min(rect.left, window.innerWidth - MOVE_MENU_WIDTH - CARD_MARGIN))
+    let top = rect.bottom + 4
+    if (top + estimatedHeight > window.innerHeight - CARD_MARGIN) top = Math.max(CARD_MARGIN, rect.top - estimatedHeight - 4)
+    setMoveMenu({ blockId, left, top })
+  }
+  const chooseMoveTarget = (targetId: string): void => {
+    if (moveMenu === null) return
+    actions.moveBlockTo(moveMenu.blockId, targetId)
+    closeMoveMenu()
+  }
+
+  // The add form only belongs to nested mode; escaping it cancels the draft.
+  useEffect(() => {
+    if (session.nestedMode === true) return
+    closeAddForm()
+    closeMoveMenu()
+  }, [session.nestedMode])
+
+  // A structural operation (including moveBlockTo) cancels transient menus.
+  useEffect(() => {
+    if (!structureBusy) return
+    clearDeleteConfirm()
+    closeAddForm()
+    closeMoveMenu()
+  }, [structureBusy])
+
+  // The move menu closes on outside pointerdown, Escape, scroll and resize.
+  useEffect(() => {
+    if (moveMenu === null) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (target instanceof Element && (target.closest('[data-dsh-iui-edit-move-menu]') !== null || target.closest('[data-dsh-iui-edit-move]') !== null)) return
+      closeMoveMenu()
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      closeMoveMenu()
+    }
+    const onScroll = (): void => { closeMoveMenu() }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKey, true)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [moveMenu])
 
   // A structural operation disables the actions and cancels a pending confirm.
   useEffect(() => {
@@ -1044,8 +1233,10 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                       blockId={blockId}
                       busy={structureBusy}
                       confirming={confirmDeleteId === blockId}
+                      moveOpen={moveMenu?.blockId === blockId}
                       onDuplicate={() => { duplicateBlock(blockId) }}
                       onDelete={() => { requestDeleteBlock(blockId) }}
+                      onMove={anchor => { openMoveMenu(blockId, anchor) }}
                     />
                   </li>
                 )
@@ -1102,7 +1293,56 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                   <div className="dsh-iui-edit-nested-group-head">
                     <span className="dsh-iui-edit-nested-group-title" title={parentTitle}>{parentTitle}</span>
                     <span className="dsh-iui-edit-nested-group-meta">{parentKind}</span>
+                    <span className="dsh-iui-edit-nested-group-spacer" />
+                    <button
+                      type="button"
+                      className="dsh-iui-edit-add-button"
+                      data-dsh-iui-edit-add
+                      data-parent-id={parentId}
+                      aria-expanded={addFormParentId === parentId ? 'true' : undefined}
+                      title={t('edit.addBlock')}
+                      onClick={() => { closeHover(); toggleAddForm(parentId) }}
+                    >
+                      <PlusGlyph />{t('edit.addBlock')}
+                    </button>
                   </div>
+                  {addFormParentId !== parentId ? null : (
+                    <div className="dsh-iui-edit-add-form" data-dsh-iui-edit-add-form data-parent-id={parentId}>
+                      <p className="dsh-iui-edit-add-hint">{t('edit.addBlockHint')}</p>
+                      <textarea
+                        className="dsh-iui-edit-add-textarea"
+                        data-dsh-iui-edit-add-input
+                        rows={2}
+                        maxLength={2000}
+                        value={addDraft}
+                        placeholder={t('edit.addBlockPlaceholder')}
+                        onChange={event => { setAddDraft(event.target.value) }}
+                        onKeyDown={event => {
+                          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeAddForm() }
+                          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); saveAddition(parentId) }
+                        }}
+                      />
+                      <div className="dsh-iui-edit-add-actions">
+                        <button
+                          type="button"
+                          className="dsh-iui-edit-add-save"
+                          data-dsh-iui-edit-add-save
+                          disabled={addDraft.trim() === ''}
+                          onClick={() => { saveAddition(parentId) }}
+                        >
+                          {t('edit.addBlockSave')}
+                        </button>
+                        <button
+                          type="button"
+                          className="dsh-iui-edit-add-cancel"
+                          data-dsh-iui-edit-add-cancel
+                          onClick={() => { closeAddForm() }}
+                        >
+                          {t('edit.addBlockCancel')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="dsh-iui-edit-nested-wrap">
                     <ul
                       className="dsh-iui-edit-nested-list"
@@ -1168,8 +1408,10 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                               blockId={blockId}
                               busy={structureBusy}
                               confirming={confirmDeleteId === blockId}
+                              moveOpen={moveMenu?.blockId === blockId}
                               onDuplicate={() => { duplicateBlock(blockId) }}
                               onDelete={() => { requestDeleteBlock(blockId) }}
+                              onMove={anchor => { openMoveMenu(blockId, anchor) }}
                             />
                           </li>
                         )
@@ -1184,6 +1426,29 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                       />
                     )}
                   </div>
+                  {(session.additions ?? []).filter(addition => addition.parentBlockId === parentId).map((addition, index) => (
+                    <div
+                      key={`${parentId}:${index}`}
+                      className="dsh-iui-edit-addition"
+                      data-dsh-iui-edit-addition
+                      data-parent-id={parentId}
+                      data-block-id={addition.parentBlockId}
+                    >
+                      <span className="dsh-iui-edit-addition-tag">{t('edit.addBlock')}</span>
+                      <span className="dsh-iui-edit-addition-text" title={addition.instruction}>{addition.instruction}</span>
+                      <button
+                        type="button"
+                        className="dsh-iui-edit-icon-button dsh-iui-edit-addition-remove"
+                        data-dsh-iui-edit-addition-remove
+                        data-parent-id={parentId}
+                        aria-label={t('edit.addBlockRemove')}
+                        title={t('edit.addBlockRemove')}
+                        onClick={event => { event.stopPropagation(); actions.removeBlockAddition(parentId) }}
+                      >
+                        <TrashGlyph />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )
             })}
@@ -1237,6 +1502,36 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
           onEnter={keepHover}
           onLeave={scheduleHoverHide}
         />
+      )}
+      {moveMenu === null ? null : createPortal(
+        <div
+          className="dsh-iui-edit-move-menu"
+          data-dsh-iui-edit-move-menu
+          role="menu"
+          aria-label={t('edit.moveBlockTitle')}
+          style={{ left: moveMenu.left, top: moveMenu.top }}
+          onPointerDown={event => { event.stopPropagation() }}
+          onClick={event => { event.stopPropagation() }}
+        >
+          <div className="dsh-iui-edit-move-title">{t('edit.moveBlockTitle')}</div>
+          {moveTargets.length === 0 ? (
+            <div className="dsh-iui-edit-move-empty" data-dsh-iui-edit-move-empty>{t('edit.moveBlockEmpty')}</div>
+          ) : moveTargets.map(target => (
+            <button
+              key={target.id}
+              type="button"
+              className="dsh-iui-edit-move-target"
+              data-dsh-iui-edit-move-target
+              data-target-id={target.id}
+              role="menuitem"
+              onClick={() => { chooseMoveTarget(target.id) }}
+            >
+              <span className="dsh-iui-edit-move-target-title" title={target.title}>{target.title}</span>
+              <span className="dsh-iui-edit-move-target-meta">{target.meta}</span>
+            </button>
+          ))}
+        </div>,
+        document.body,
       )}
     </aside>
   )
