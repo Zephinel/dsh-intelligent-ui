@@ -747,6 +747,28 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`[...document.querySelectorAll('[data-dsh-iui-call-id="dst-call-2"]')].at(-1).querySelector('[role="radio"][aria-checked="true"]')?.textContent`), '夏令时', 'new revision keeps the selected state')
   await shot('harness-b26-runtime-state.png')
 
+  // 30. Editing auto-fits the chat content width and the old expand button is gone.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await read(`(() => {
+    const shell = document.createElement('div');
+    shell.setAttribute('data-conversation-content', '');
+    shell.setAttribute('data-conversation-region', 'chat');
+    shell.style.setProperty('--dsh-chat-content-width', '900px');
+    document.body.appendChild(shell);
+    window.__shellWidthEl = shell;
+  })()`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'auto width editor')
+  await wait('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width") !== "900px"', 'chat width fitted')
+  const fittedWidth = await read(`parseFloat(window.__shellWidthEl.style.getPropertyValue('--dsh-chat-content-width'))`)
+  check(fittedWidth >= 680 && fittedWidth <= 780, true, 'editing narrows the chat content width to a non-overlapping value')
+  check(await count('[data-dsh-iui-edit-expand]'), 0, 'expand button has been removed')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'auto width editor closed')
+  await wait('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width") === "900px"', 'chat width restored')
+  check(await read('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width")'), '900px', 'closing the editor restores the user width')
+  await read(`window.__shellWidthEl.remove()`)
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

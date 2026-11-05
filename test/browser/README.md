@@ -63,7 +63,9 @@ events but not the full DSH Web integration.
   scenario then checks the live region announces nested reorders and additions,
   the nested grip references the hidden keyboard hint, and the **Move to…**
   menu focuses its first target and moves focus with arrow keys. 180 checks;
-  no real model is called (the
+  The last scenario checks the editing width fit (chat content narrowed while
+  editing, no expand button, restored on exit). 183 checks; no real model is
+  called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).

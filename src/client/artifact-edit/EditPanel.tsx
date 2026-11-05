@@ -13,8 +13,8 @@
  * opens the popover. Hovering a row that already has a saved request shows a
  * compact request card, portaled to the body and anchored beside the rail.
  *
- * Markup stays one tree; CSS owns the desktop docked rail, the expanded rail and
- * the narrow-viewport bottom sheet.
+ * Markup stays one tree; CSS owns the desktop docked rail and the narrow-viewport
+ * bottom sheet.
  */
 import {
   useEffect,
@@ -33,6 +33,7 @@ import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, t
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { hasArtifactEditContent, useArtifactEditStore } from './store.ts'
+import { applyEditChatContentWidth } from './panel-width.ts'
 
 /** Props of the edit panel; the card supplies both the snapshot and actions. */
 export interface EditPanelProps {
@@ -136,13 +137,6 @@ function GripGlyph(): ReactElement {
 /** Reset-order glyph. */
 function ResetGlyph(): ReactElement {
   return <Glyph size={13}><path d="M3.5 8a4.5 4.5 0 1 0 1.3-3.2" /><path d="M3 2.5v3h3" /></Glyph>
-}
-
-/** Header expand/collapse glyph. */
-function ExpandGlyph({ expanded }: { readonly expanded: boolean }): ReactElement {
-  return expanded
-    ? <Glyph size={14}><path d="M6 2.5H2.5V6M10 13.5h3.5V10" /><path d="M2.5 2.5 6 6M13.5 13.5 10 10" /></Glyph>
-    : <Glyph size={14}><path d="M2.5 6V2.5H6M13.5 10v3.5H10" /><path d="M2.5 2.5 6 6M13.5 13.5 10 10" /></Glyph>
 }
 
 /** Close glyph for the narrow drawer control. */
@@ -563,7 +557,6 @@ function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
 export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement {
   const globalId = useId()
   const previewTitleId = useId()
-  const [expanded, setExpanded] = useState(false)
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
   const [dragBlockId, setDragBlockId] = useState<string | null>(null)
   const [dragParentId, setDragParentId] = useState<string | null>(null)
@@ -740,6 +733,13 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     clearHoverTimers()
     setHoverBlockId(null)
   }
+
+  // While the docked panel is open, narrow the chat content just enough that
+  // the panel cannot overlap it; restore the shell's inline width on exit.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    return applyEditChatContentWidth()
+  }, [])
 
   useEffect(() => () => {
     if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
@@ -1233,10 +1233,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
 
   return (
     <aside
-      className={`dsh-iui-edit-panel${expanded ? ' dsh-iui-edit-panel-expanded' : ''}`}
+      className="dsh-iui-edit-panel"
       aria-label={t('edit.panelTitle')}
       data-dsh-iui-edit-panel
-      data-expanded={expanded ? 'true' : 'false'}
       data-open={session.drawerOpen ? 'true' : 'false'}
       data-status={session.status}
     >
@@ -1245,17 +1244,6 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       <header className="dsh-iui-edit-panel-head">
         <span className="dsh-iui-edit-panel-title">{t('edit.panelTitle')}</span>
         <span className="dsh-iui-edit-panel-spacer" />
-        <button
-          type="button"
-          className="dsh-iui-edit-panel-icon"
-          data-dsh-iui-edit-expand
-          aria-pressed={expanded}
-          aria-label={expanded ? t('edit.collapse') : t('edit.expand')}
-          title={expanded ? t('edit.collapse') : t('edit.expand')}
-          onClick={() => { setExpanded(value => !value) }}
-        >
-          <ExpandGlyph expanded={expanded} />
-        </button>
         <button
           type="button"
           className="dsh-iui-edit-panel-close"

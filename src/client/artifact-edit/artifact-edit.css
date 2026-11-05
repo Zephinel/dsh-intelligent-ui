@@ -227,9 +227,6 @@
     border-radius: 0;
     box-shadow: -10px 0 30px rgb(0 0 0 / 6%);
   }
-  .dsh-iui-edit-panel.dsh-iui-edit-panel-expanded {
-    width: clamp(320px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 132px), 460px);
-  }
 }
 
 .dsh-iui-edit-panel-head {
@@ -253,7 +250,6 @@
   flex: 1 1 auto;
 }
 
-.dsh-iui-edit-panel-icon,
 .dsh-iui-edit-panel-close {
   display: inline-flex;
   flex: none;
@@ -272,14 +268,8 @@
   cursor: pointer;
 }
 
-.dsh-iui-edit-panel-icon:hover,
 .dsh-iui-edit-panel-close:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.dsh-iui-edit-panel-icon[aria-pressed='true'] {
-  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -1634,7 +1624,6 @@
 
 .dsh-iui-edit-button:focus-visible,
 .dsh-iui-edit-panel-close:focus-visible,
-.dsh-iui-edit-panel-icon:focus-visible,
 .dsh-iui-edit-section-action:focus-visible,
 .dsh-iui-edit-request-open:focus-visible,
 .dsh-iui-edit-icon-button:focus-visible,
