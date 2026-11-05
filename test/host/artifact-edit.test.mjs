@@ -100,6 +100,18 @@ function artifactRequest({ requestId, artifactId = 'call-original', ...overrides
   })
 }
 
+/** One branch envelope based on an older recorded revision. */
+function branchRequest(overrides = {}) {
+  return artifactRequest({
+    requestId: 'req_branch_001',
+    artifactId: 'call-old',
+    baseRevisionId: 'call-old-2',
+    baseRevision: 2,
+    branch: true,
+    ...overrides,
+  })
+}
+
 /** Concatenate one envelope per Composer chip into the one user message the Host observes. */
 function batchText(...requests) {
   return requests.map(request => buildEditRequestText(request)).join('\n\n')
@@ -661,6 +673,7 @@ test('render_ui applies the selected order-only request with editRequestId and l
   const ordered = await m.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_order_001' }, { agent: m.agent, callId: 'call-render-order' })
   assert.equal(ordered.artifactId, 'call-second')
   assert.equal(ordered.revision, 2)
+  assert.equal(ordered.requestId, 'req_order_001', 'the fulfilled request id is projected for client reconciliation')
   assert.deepEqual(ordered.editedBlockIds, [])
   assert.equal(typeof ordered.program, 'string', 'the order-only revision carries its normalized page')
   // The block request was not consumed by the order-only render.
@@ -712,6 +725,106 @@ test('a message with more than three envelopes arms the first three in request o
       return true
     },
   )
+})
+
+test('an edit request id is projected on the revision meta for client reconciliation', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(artifactRequest({ requestId: 'req_meta_0001' })))
+  const value = await m.blockTool.execute(
+    { program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_meta_0001' },
+    { agent: m.agent, callId: 'call-meta-1' },
+  )
+  assert.equal(value.requestId, 'req_meta_0001')
+  assert.deepEqual(m.blockTool.output.presentationMeta({}, value), {
+    artifactId: 'call-original', revisionId: 'call-meta-1', requestId: 'req_meta_0001',
+    baseRevisionId: 'call-original', revision: 2, editedBlockIds: ['b4'], program: value.program, title: DST_TITLE, style: 'card',
+  })
+})
+
+test('a branch edit from an older revision records latest.revision + 1', async () => {
+  const m = mount({
+    revisions: [
+      revisionRecord(),
+      revisionRecord({ revisionId: 'call-old-3', baseRevisionId: 'call-old-2', revision: 3, createdAt: 2 }),
+    ],
+  })
+  m.send(buildEditRequestText(branchRequest({ targetOrder: TARGET_ORDER })))
+  const value = await m.blockTool.execute(
+    { program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_branch_001' },
+    { agent: m.agent, callId: 'call-branch-1' },
+  )
+  assert.equal(value.artifactId, 'call-old')
+  assert.equal(value.baseRevisionId, 'call-old-2', 'the new revision keeps the older base')
+  assert.equal(value.revision, 4, 'branch revisions continue from the current head')
+  assert.equal(value.requestId, 'req_branch_001')
+  // The deterministic target order still applies on a branch edit.
+  assert.match(value.program, /^root = Col\(\[rulesTable, answerCard, clockCard, Card\(\[Title\("一年里什么时候生效"/)
+  const meta = m.blockTool.output.presentationMeta({}, value)
+  assert.equal(meta.revision, 4)
+  assert.equal(meta.baseRevisionId, 'call-old-2')
+  assert.equal(meta.requestId, 'req_branch_001')
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  const latest = records.filter(record => record.artifactId === 'call-old').sort((left, right) => left.revision - right.revision).at(-1)
+  assert.equal(latest.revisionId, 'call-branch-1')
+  assert.equal(latest.revision, 4)
+  assert.equal(latest.baseRevisionId, 'call-old-2')
+})
+
+test('a branch edit from the unrecorded first revision is allowed', async () => {
+  const m = mount({
+    revisions: [
+      revisionRecord(),
+      revisionRecord({ revisionId: 'call-old-3', baseRevisionId: 'call-old-2', revision: 3, createdAt: 2 }),
+    ],
+  })
+  m.send(buildEditRequestText(branchRequest({ requestId: 'req_branch_first', baseRevisionId: 'call-old', baseRevision: 1 })))
+  const value = await m.blockTool.execute(
+    { program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_branch_first' },
+    { agent: m.agent, callId: 'call-branch-first' },
+  )
+  assert.equal(value.baseRevisionId, 'call-old')
+  assert.equal(value.revision, 4)
+})
+
+test('a non-branch edit from an older revision is still rejected as stale', async () => {
+  const m = mount({
+    revisions: [
+      revisionRecord(),
+      revisionRecord({ revisionId: 'call-old-3', baseRevisionId: 'call-old-2', revision: 3, createdAt: 2 }),
+    ],
+  })
+  m.send(buildEditRequestText(branchRequest({ requestId: 'req_stale_old_001', branch: undefined })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_stale_old_001' }, { agent: m.agent, callId: 'call-old-no-branch' }),
+    /out of date\. Ask the user to reload the rendered page and make the edit again/,
+  )
+})
+
+test('invalid branch bases are rejected model-readably without recording', async () => {
+  const m = mount({
+    revisions: [
+      revisionRecord(),
+      revisionRecord({ revisionId: 'call-old-3', baseRevisionId: 'call-old-2', revision: 3, createdAt: 2 }),
+      revisionRecord({ revisionId: 'call-other-2', artifactId: 'call-other', baseRevisionId: 'call-other', revision: 2, createdAt: 3 }),
+    ],
+  })
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  m.send(buildEditRequestText(branchRequest({ requestId: 'req_branch_missing', baseRevisionId: 'call-old-missing', baseRevision: 5 })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_branch_missing' }, { agent: m.agent, callId: 'call-branch-missing' }),
+    /only revision 1 \(the original render\) may be unrecorded/,
+  )
+  m.send(buildEditRequestText(branchRequest({ requestId: 'req_branch_foreign', baseRevisionId: 'call-other-2', baseRevision: 2 })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_branch_foreign' }, { agent: m.agent, callId: 'call-branch-foreign' }),
+    /belongs to artifact "call-other", not "call-old"/,
+  )
+  m.send(buildEditRequestText(branchRequest({ requestId: 'req_branch_mismatch', baseRevisionId: 'call-old-2', baseRevision: 5 })))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: fragment, requestId: 'req_branch_mismatch' }, { agent: m.agent, callId: 'call-branch-mismatch' }),
+    /says it targets revision 5, but base revision "call-old-2" is revision 2/,
+  )
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 3)
 })
 
 /** Drive the controller directly so the TTL and session bound are observable. */

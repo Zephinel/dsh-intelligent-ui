@@ -34,6 +34,7 @@ import {
   editProblemMessage,
   editSessionFor,
   editingSessionFor,
+  enableBranch,
   installArtifactComposerBridge,
   moveArtifactBlock,
   moveArtifactBlockBy,
@@ -678,4 +679,102 @@ test('composer: deleting a chip detaches the draft instead of re-inserting it', 
   // An explicit attach brings the chip back.
   assert.equal(attachDraft(key), true)
   assert.equal(chip.upserts.filter(candidate => candidate.referenceId === reference).length, upsertsBefore + 1)
+})
+
+test('store: an old revision can branch from a known conflict', async () => {
+  stubRevision(false)
+  openArtifactEditor('b1', programFor('call_branch'))
+  await settle()
+  const key = editKey('b1', 'call_branch')
+  // A ready probe already records the latest revision number for the banner.
+  assert.equal(draftSessionFor(key).latestRevision, 1)
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'branch edit')
+
+  stubRevision(true)
+  await probeArtifactRevisionStatus(key)
+  const conflicted = draftSessionFor(key)
+  assert.equal(conflicted.status, 'conflict')
+  assert.equal(conflicted.latestRevision, 2)
+
+  // A conflict enables branch mode; the draft becomes sendable again.
+  assert.equal(enableBranch(key), true)
+  const branched = draftSessionFor(key)
+  assert.equal(branched.status, 'ready')
+  assert.equal(branched.branch, true)
+  assert.equal(branched.latestRevision, 2)
+  assert.equal(chip.upserts.at(-1).label, chipLabelForSession(branched))
+  assert.equal(chip.upserts.at(-1).label.endsWith(en['edit.chip.branchSuffix']), true)
+
+  // Sending a branch request is not blocked by the head mismatch and carries branch:true.
+  stubRevision(true)
+  const outcome = await serializeArtifactEditRequest(referenceForSession(key))
+  assert.equal(outcome.ok, true)
+  assert.equal(outcome.request.branch, true)
+  const text = buildEditRequestText(outcome.request)
+  assert.equal(parseEditRequestText(text).branch, true)
+  // The consumed draft no longer carries branch mode.
+  assert.equal(draftSessionFor(key).branch, false)
+})
+
+test('store: enableBranch is a no-op outside a known conflict', async () => {
+  stubRevision(false)
+  openArtifactEditor('b2', programFor('call_ready'))
+  await settle()
+  const key = editKey('b2', 'call_ready')
+  assert.equal(draftSessionFor(key).status, 'ready')
+  assert.equal(enableBranch(key), false)
+  assert.notEqual(draftSessionFor(key).branch, true)
+  assert.equal(enableBranch('does-not-exist:call_none'), false)
+})
+
+test('store: a non-branch conflict still blocks while branch drafts ignore later conflicts', async () => {
+  stubRevision(false)
+  openArtifactEditor('b3', programFor('call_block'))
+  await settle()
+  const key = editKey('b3', 'call_block')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'blocked edit')
+  stubRevision(true)
+  assert.deepEqual(await serializeArtifactEditRequest(referenceForSession(key)), { ok: false, problem: 'conflict' })
+  assert.equal(draftSessionFor(key).status, 'ready')
+
+  stubRevision(false)
+  await probeArtifactRevisionStatus(key)
+  assert.equal(draftSessionFor(key).latestRevision, 1)
+  stubRevision(true)
+  await probeArtifactRevisionStatus(key)
+  assert.equal(draftSessionFor(key).status, 'conflict')
+  assert.equal(draftSessionFor(key).latestRevision, 2)
+
+  assert.equal(enableBranch(key), true)
+  // A later conflict answer only refreshes the banner metadata in branch mode.
+  stubRevision(true)
+  await probeArtifactRevisionStatus(key)
+  assert.equal(draftSessionFor(key).status, 'ready')
+  assert.equal(draftSessionFor(key).branch, true)
+})
+
+test('store: branch mode survives closing and reopening the draft', async () => {
+  stubRevision(false)
+  openArtifactEditor('b4', programFor('call_reopen'))
+  await settle()
+  const key = editKey('b4', 'call_reopen')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'keep me')
+  stubRevision(true)
+  await probeArtifactRevisionStatus(key)
+  assert.equal(enableBranch(key), true)
+
+  closeArtifactEditor(key)
+  assert.equal(draftSessionFor(key).editing, false)
+  assert.equal(draftSessionFor(key).branch, true)
+
+  stubRevision(false)
+  openArtifactEditor('b4', programFor('call_reopen'))
+  await settle()
+  const reopened = draftSessionFor(key)
+  assert.equal(reopened.status, 'ready')
+  assert.equal(reopened.branch, true)
+  assert.equal(reopened.selection.length, 1)
 })

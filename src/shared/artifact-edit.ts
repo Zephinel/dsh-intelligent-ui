@@ -118,6 +118,8 @@ export interface ArtifactEditRequest {
   readonly targetOrder: readonly string[]
   /** Client-side hint that the target order differs from the base order; the Host recomputes it. */
   readonly orderChanged?: boolean
+  /** Explicitly base the new revision on an older revision instead of the current head. */
+  readonly branch?: boolean
   /** Cross-block constraints and global style requirements. */
   readonly globalInstruction?: string
   /** Complete OpenUI Lang program the user was looking at. */
@@ -165,6 +167,29 @@ export interface ArtifactRevisionStatus {
 
 /** Route path for the latest-revision probe. */
 export const ARTIFACT_REVISION_ROUTE_PATH = '/api/intelligent-ui/artifact-revisions'
+
+/** Route path for recording a new revision without a model turn. */
+export const ARTIFACT_RESTORE_ROUTE_PATH = '/api/intelligent-ui/artifact-restore'
+
+/** Body of one local restore request: a new revision copying an older one. */
+export interface ArtifactRestoreRequest {
+  readonly schemaVersion: 1
+  readonly artifactId: string
+  readonly sourceRevisionId: string
+  readonly program: string
+}
+
+/** Validate one untrusted restore request body. */
+export function describeArtifactRestoreProblem(value: unknown): string | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return 'not_an_object'
+  const record = value as Record<string, unknown>
+  if (Object.keys(record).some(key => !['schemaVersion', 'artifactId', 'sourceRevisionId', 'program'].includes(key))) return 'unknown_field'
+  if (record.schemaVersion !== 1) return 'unsupported_version'
+  if (typeof record.artifactId !== 'string' || !ARTIFACT_ID_PATTERN.test(record.artifactId)) return 'invalid_artifact_id'
+  if (typeof record.sourceRevisionId !== 'string' || !ARTIFACT_ID_PATTERN.test(record.sourceRevisionId)) return 'invalid_source_revision_id'
+  if (!isBoundedText(record.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return 'invalid_program'
+  return undefined
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -232,7 +257,7 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'edits', 'targetOrder', 'orderChanged', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'edits', 'targetOrder', 'orderChanged', 'branch', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
@@ -263,6 +288,7 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
     orders.add(block.selectionOrder)
   }
   if ('orderChanged' in value && typeof value.orderChanged !== 'boolean') return 'invalid_order_changed'
+  if ('branch' in value && typeof value.branch !== 'boolean') return 'invalid_branch'
   if ('globalInstruction' in value && !isBoundedText(value.globalInstruction, 1, MAX_GLOBAL_INSTRUCTION_CHARS)) return 'invalid_global_instruction'
   if (!isBoundedText(value.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return 'invalid_program'
   return undefined
@@ -322,6 +348,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     })),
     targetOrder: [...request.targetOrder],
     ...request.orderChanged === true ? { orderChanged: true } : {},
+    ...request.branch === true ? { branch: true } : {},
     ...request.globalInstruction === undefined ? {} : { globalInstruction: request.globalInstruction },
   }).replace(/</g, '\\u003c')
 
@@ -360,6 +387,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '- Keep every unselected block and every part of the page the request does not mention unchanged, including its content, structure and interactive behavior.',
         '- Reuse the existing theme and layout; do not add unrelated sections, restyle the page, or drop existing data.',
         styleLine,
+        ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
         '- Apply all block instructions in the mini program, together with the global instruction below.',
         '- If a block instruction depends on shared state or data, update the minimum related parts consistently.',
         '- Do not reorder the page or the target blocks: the Host applies the requested block order after merging your fragments.',
@@ -396,6 +424,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '- Keep every block unchanged unless the global instruction below requires a change.',
         '- Reuse the existing theme and layout; do not add unrelated sections, restyle the page, or drop existing data.',
         styleLine,
+        ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
         '- Reorder the top-level blocks (the root Col children) to exactly the target order below. Reordering never deletes, duplicates, merges or regenerates a block: keep the same set of top-level blocks and only move them.',
         '- Do not treat the target order as content edits; blocks that are only reordered keep their original body, component identity and interactions.',
         '- The program must be a complete, valid openui-lang program in the same style; the Host rejects an invalid program.',

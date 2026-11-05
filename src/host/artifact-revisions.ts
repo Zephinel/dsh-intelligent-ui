@@ -1,16 +1,29 @@
 /** Durable, bounded revision lineage for edited render_ui artifacts. */
+import { randomBytes } from 'node:crypto'
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
-  ARTIFACT_ID_PATTERN, ARTIFACT_REVISION_ROUTE_PATH, MAX_ARTIFACT_EDITS, MAX_ARTIFACT_TITLE_CHARS,
-  isEditLayout, type ArtifactRevisionStatus,
+  ARTIFACT_ID_PATTERN, ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH,
+  MAX_ARTIFACT_EDITS, MAX_ARTIFACT_TITLE_CHARS,
+  describeArtifactRestoreProblem, isEditLayout,
+  type ArtifactRestoreRequest, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
+import { extractArtifactBlocks } from '../shared/artifact-blocks.ts'
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
 
 /** Retained revision records; oldest creation times are dropped first. */
 export const MAX_ARTIFACT_REVISIONS = 400
+
+/** Hard cap on one restore request body. */
+export const MAX_RESTORE_BODY_BYTES = 300 * 1024
+
+/** Revision id prefix for local restores; the suffix is 16 random hex characters. */
+const RESTORE_REVISION_PREFIX = 'restore_'
+
+/** Session identity recorded for revisions created without a model turn. */
+const RESTORE_SESSION_ID = 'local-restore'
 
 /** One recorded revision of one artifact. */
 export interface ArtifactRevisionRecord {
@@ -160,38 +173,212 @@ interface RevisionRouteServices {
   effect?(fn: () => unknown): unknown
 }
 
-/** Expose the latest-revision probe only with the existing connection authentication. */
+/** One rejected restore body, carrying the HTTP status and error code to answer. */
+class RestoreBodyError extends Error {
+  readonly status: number
+  readonly code: string
+
+  constructor(message: string, status: number, code: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+function sendJson(res: ServerResponse, status: number, value: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+  res.end(JSON.stringify(value))
+}
+
+function sendError(res: ServerResponse, status: number, code: string, message: string): void {
+  sendJson(res, status, { error: { code, message } })
+}
+
+/** Read one bounded JSON restore body; never echoes payload bytes. */
+function readRestoreJson(req: IncomingMessage): Promise<unknown> {
+  if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+    return Promise.reject(new RestoreBodyError('Content-Type must be application/json.', 400, 'invalid_input'))
+  }
+  const limitMessage = `The restore body exceeds ${MAX_RESTORE_BODY_BYTES / 1024} KiB.`
+  if (Number(req.headers['content-length']) > MAX_RESTORE_BODY_BYTES) {
+    return Promise.reject(new RestoreBodyError(limitMessage, 413, 'payload_too_large'))
+  }
+  return new Promise((resolve, reject) => {
+    let size = 0
+    let settled = false
+    const parts: Buffer[] = []
+    const finish = (failure?: RestoreBodyError): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (failure !== undefined) {
+        req.resume()
+        reject(failure)
+        return
+      }
+      try {
+        resolve(JSON.parse(Buffer.concat(parts).toString('utf8')))
+      } catch {
+        reject(new RestoreBodyError('Invalid JSON body.', 400, 'invalid_input'))
+      }
+    }
+    const data = (chunk: Buffer | string): void => {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      size += bytes.length
+      if (size > MAX_RESTORE_BODY_BYTES) finish(new RestoreBodyError(limitMessage, 413, 'payload_too_large'))
+      else parts.push(bytes)
+    }
+    const end = (): void => finish()
+    const failed = (): void => finish(new RestoreBodyError('Could not read the restore body.', 400, 'invalid_input'))
+    const timer = setTimeout(() => finish(new RestoreBodyError('The restore body timed out.', 400, 'invalid_input')), 15_000)
+    const cleanup = (): void => {
+      clearTimeout(timer)
+      req.off('data', data)
+      req.off('end', end)
+      req.off('error', failed)
+      req.off('aborted', failed)
+    }
+    req.on('data', data)
+    req.once('end', end)
+    req.once('error', failed)
+    req.once('aborted', failed)
+  })
+}
+
+/**
+ * Expose the latest-revision probe and the zero-model restore route behind the
+ * existing connection authentication; both routes share one disposer.
+ */
 export function registerArtifactRevisionRoutes(ctx: {
   inject?: (dependencies: readonly string[], callback: (scoped: RevisionRouteServices) => void) => unknown
 }, store: ArtifactRevisionStore): void {
   ctx.inject?.(['webServer', 'connection'], scoped => {
     const { webServer, connection } = scoped
     if (typeof webServer?.register !== 'function' || typeof connection?.requestRejection !== 'function') return
-    scoped.effect?.(() => webServer.register({
-      kind: 'exact', path: ARTIFACT_REVISION_ROUTE_PATH,
-      handler: (req, res) => {
-        const rejection = connection.requestRejection(req)
-        if (rejection !== undefined) {
-          res.writeHead(rejection, { 'cache-control': 'no-store' })
-          res.end()
-          return
-        }
-        if (req.method !== 'GET') {
-          res.writeHead(405, { allow: 'GET', 'cache-control': 'no-store' })
-          res.end()
-          return
-        }
-        const params = new URL(req.url ?? ARTIFACT_REVISION_ROUTE_PATH, 'http://localhost').searchParams
-        const artifactId = params.get('artifactId')
-        const revisionId = params.get('revisionId')
-        if (artifactId === null || !isIdentity(artifactId) || revisionId === null || !isIdentity(revisionId)) {
-          res.writeHead(400, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-          res.end(JSON.stringify({ error: { code: 'invalid_input', message: 'artifactId and revisionId must be artifact identities.' } }))
-          return
-        }
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-        res.end(JSON.stringify(store.status({ artifactId, revisionId })))
-      },
-    }))
+    scoped.effect?.(() => {
+      const disposeStatus = webServer.register({
+        kind: 'exact', path: ARTIFACT_REVISION_ROUTE_PATH,
+        handler: (req, res) => {
+          const rejection = connection.requestRejection(req)
+          if (rejection !== undefined) {
+            res.writeHead(rejection, { 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          if (req.method !== 'GET') {
+            res.writeHead(405, { allow: 'GET', 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          const params = new URL(req.url ?? ARTIFACT_REVISION_ROUTE_PATH, 'http://localhost').searchParams
+          const artifactId = params.get('artifactId')
+          const revisionId = params.get('revisionId')
+          if (artifactId === null || !isIdentity(artifactId) || revisionId === null || !isIdentity(revisionId)) {
+            sendError(res, 400, 'invalid_input', 'artifactId and revisionId must be artifact identities.')
+            return
+          }
+          sendJson(res, 200, store.status({ artifactId, revisionId }))
+        },
+      })
+      const disposeRestore = webServer.register({
+        kind: 'exact', path: ARTIFACT_RESTORE_ROUTE_PATH,
+        handler: (req, res) => {
+          const rejection = connection.requestRejection(req)
+          if (rejection !== undefined) {
+            res.writeHead(rejection, { 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          if (req.method !== 'POST') {
+            res.writeHead(405, { allow: 'POST', 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ error: { code: 'method_not_allowed', message: 'Use POST to restore an artifact revision.' } }))
+            return
+          }
+          void readRestoreJson(req).then(body => {
+            const problem = describeArtifactRestoreProblem(body)
+            if (problem !== undefined) {
+              sendError(res, 400, 'invalid_input', `Invalid artifact restore body: ${problem}.`)
+              return
+            }
+            const request = body as ArtifactRestoreRequest
+            const source = store.get(request.sourceRevisionId)
+            if (source === undefined) {
+              sendError(res, 404, 'source_missing', 'The source revision is no longer available in the artifact revision registry.')
+              return
+            }
+            if (source.artifactId !== request.artifactId) {
+              sendError(res, 400, 'artifact_mismatch', 'The source revision belongs to a different artifact.')
+              return
+            }
+            const latest = store.latestFor(request.artifactId)
+            if (latest !== undefined && latest.revisionId === source.revisionId) {
+              sendError(res, 409, 'already_latest', 'The source revision is already the latest revision of this artifact.')
+              return
+            }
+            const extraction = extractArtifactBlocks(request.program)
+            if (extraction.rootType !== 'Col') {
+              sendError(res, 400, 'invalid_program', 'The restored program must be a complete openui-lang program with root = Col([...]).')
+              return
+            }
+            const revision = (latest === undefined ? source.revision : latest.revision) + 1
+            if (revision > 100_000) {
+              sendError(res, 400, 'revision_limit', 'The artifact has reached its maximum revision number.')
+              return
+            }
+            let revisionId: string | undefined
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              const candidate = `${RESTORE_REVISION_PREFIX}${randomBytes(8).toString('hex')}`
+              if (store.get(candidate) === undefined) {
+                revisionId = candidate
+                break
+              }
+            }
+            if (revisionId === undefined) {
+              sendError(res, 409, 'conflict', 'Could not allocate a restore revision id; retry the restore.')
+              return
+            }
+            try {
+              store.record({
+                revisionId,
+                artifactId: request.artifactId,
+                baseRevisionId: request.sourceRevisionId,
+                revision,
+                sessionId: RESTORE_SESSION_ID,
+                style: source.style,
+                ...source.styleId === undefined ? {} : { styleId: source.styleId },
+                ...source.title === undefined ? {} : { title: source.title },
+                createdAt: Date.now(),
+              })
+            } catch {
+              sendError(res, 409, 'conflict', 'The revision registry rejected the restored revision; retry the restore.')
+              return
+            }
+            sendJson(res, 201, {
+              ok: true,
+              revision: {
+                artifactId: request.artifactId,
+                revisionId,
+                baseRevisionId: request.sourceRevisionId,
+                revision,
+                program: request.program,
+                ...source.title === undefined ? {} : { title: source.title },
+                style: source.style,
+                ...source.styleId === undefined ? {} : { styleId: source.styleId },
+              },
+            })
+          }, (cause: unknown) => {
+            if (cause instanceof RestoreBodyError) {
+              sendError(res, cause.status, cause.code, cause.message)
+              return
+            }
+            sendError(res, 400, 'invalid_input', 'Invalid artifact restore request.')
+          })
+        },
+      })
+      return () => {
+        disposeStatus()
+        disposeRestore()
+      }
+    })
   })
 }

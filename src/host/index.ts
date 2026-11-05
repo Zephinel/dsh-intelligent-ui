@@ -766,6 +766,7 @@ ${section}`
         style: RenderLayout
         warnings?: readonly string[]
         revision?: number
+        requestId?: string
         editedBlockIds?: readonly string[]
         program?: string
       }) => {

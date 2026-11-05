@@ -168,6 +168,11 @@ w.__project = (patch: Partial<IntelligentUIModeView>) => { view = { ...view, ...
 w.__lang = 'zh'
 w.__language = (lang: string) => { w.__lang = lang; update() }
 w.__token = clientToken()
+w.__renderKey = 0
+w.__remount = () => {
+  w.__renderKey += 1
+  update()
+}
 w.__closeTurn = () => {
   turnState = { ...turnState, status: 'closed', end: { seq: 900 + turnState.turn, time: Date.now() } }
   update()
@@ -177,6 +182,8 @@ w.__nextTurn = () => {
   update()
 }
 w.__conflict = false
+w.__latestMap = {}
+w.__restoreRevision = 4
 w.__input = () => ({ draft: input.draft, occurrences: input.occurrences, draftRev: input.draftRev, phase: input.phase })
 w.__setDraft = (text: string) => setDraft(text)
 w.__appendDraft = (text: string) => setInput({ ...input, draft: input.draft + text, draftRev: input.draftRev + 1 } as InputState)
@@ -218,6 +225,11 @@ w.__addCard = (callId: string, title: string = '第二张卡片') => {
 }
 w.__nodeCount = () => nodes.length
 // Serialize every attached edit chip in draft order, as one composed message.
+w.__serializeChipMatching = async (needle: string) => {
+  const occurrence = (input.occurrences as unknown as Occurrence[]).find(item => item.source === 'artifact-edit' && item.label.includes(needle))
+  if (occurrence === undefined || w.__chipSource === undefined) throw new Error('no matching edit chip in draft')
+  return w.__chipSource.codec.serialize(occurrence.ref, new AbortController().signal)
+}
 w.__serializeChips = async () => {
   const occurrences = (input.occurrences as unknown as Occurrence[]).filter(item => item.source === 'artifact-edit')
   if (occurrences.length === 0 || w.__chipSource === undefined) throw new Error('no edit chip in draft')
@@ -267,13 +279,36 @@ window.fetch = async (url: string | URL, options?: RequestInit) => {
   const text = String(url)
   if (text.includes('/api/intelligent-ui/artifact-revisions')) {
     const query = new URL(text, 'http://localhost').searchParams
+    const artifactId = query.get('artifactId') ?? 'dst-call-1'
+    const revisionId = query.get('revisionId') ?? 'dst-call-1'
+    const mapped = w.__latestMap[artifactId]
+    const latestRevisionId = mapped?.revisionId ?? (w.__conflict ? 'dst-call-9' : revisionId)
+    const latestRevision = mapped?.revision ?? (w.__conflict ? 3 : 1)
     return new Response(JSON.stringify({
-      artifactId: query.get('artifactId') ?? 'dst-call-1',
-      revisionId: query.get('revisionId') ?? 'dst-call-1',
-      revision: 1,
-      latestRevisionId: w.__conflict ? 'dst-call-9' : (query.get('revisionId') ?? 'dst-call-1'),
-      latestRevision: w.__conflict ? 3 : 1,
-      conflict: w.__conflict === true,
+      artifactId,
+      revisionId,
+      revision: revisionId === latestRevisionId ? latestRevision : 1,
+      latestRevisionId,
+      latestRevision,
+      conflict: latestRevisionId !== revisionId,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  if (text.includes('/api/intelligent-ui/artifact-restore') && options?.method === 'POST') {
+    const body = JSON.parse(String(options.body))
+    const revision = w.__restoreRevision
+    const revisionId = 'restore_local1'
+    w.__latestMap[body.artifactId] = { revisionId, revision }
+    return new Response(JSON.stringify({
+      ok: true,
+      revision: {
+        artifactId: body.artifactId,
+        revisionId,
+        baseRevisionId: body.sourceRevisionId,
+        revision,
+        program: body.program,
+        title: '夏令时与冬令时',
+        style: 'card',
+      },
     }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   if (options?.method !== 'POST') return new Response(JSON.stringify({ templates }))
@@ -341,7 +376,7 @@ function Harness(): ReactElement {
   const [, refresh] = useState(0)
   update = () => refresh(value => value + 1)
   return <>
-    <main><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
+    <main key={w.__renderKey}><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
     <div data-composer-card>
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>

@@ -56,6 +56,8 @@ export interface IntelligentUIProgram {
   readonly revision?: number
   /** Blocks the user asked to change in this revision. */
   readonly editedBlockIds?: readonly string[]
+  /** Client-owned revision card that was restored without a model turn. */
+  readonly localRevision?: boolean
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
 }

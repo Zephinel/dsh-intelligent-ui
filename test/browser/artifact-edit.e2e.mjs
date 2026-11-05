@@ -448,6 +448,39 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await shot('harness-m3-reconcile-failed.png')
   await click('[data-dsh-iui-draft-attach]')
   await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 1`, 'failed draft re-attached')
+  // Clean the composer before the branch scenario: detach the retried draft again.
+  await read(`(() => {
+    const occurrence = window.__input().occurrences.find(item => item.source === 'artifact-edit');
+    window.__deleteChip(occurrence.ref);
+  })()`)
+  await wait(`document.querySelectorAll('[data-chip="artifact-edit"]').length === 0`, 'composer cleaned before branch scenario')
+  // 19. Zero-model restore: the old revision becomes a local revision card.
+  await read(`window.__latestMap['dst-call-1'] = { revisionId: 'dst-call-12', revision: 3 }`)
+  await read('window.__remount()')
+  await wait('!!document.querySelector(`[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-restore]`)', 'restore entry on old revision')
+  const cardsBeforeRestore = await count('[data-dsh-intelligent-ui="card"]')
+  await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-restore]')
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${cardsBeforeRestore + 1}`, 'restored local revision card')
+  check(await count('[data-dsh-iui-local-revision]'), 1, 'restored card is marked local')
+  check((await text('[data-dsh-iui-restore-done]')).includes('4'), true, 'restore reports the new revision number')
+  check((await text('[data-dsh-intelligent-ui="card"]:last-of-type')).includes('夏令时与冬令时'), true, 'restored card renders the old program')
+  await shot('harness-m3-local-revision.png')
+  // 20. Branch editing from an old revision: conflict banner offers a branch,
+  // and the envelope carries branch:true.
+  await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-conflict]")', 'conflict banner on old revision')
+  check((await count('[data-dsh-iui-edit-branch]')) >= 1, true, 'conflict banner offers a branch edit')
+  await click('[data-dsh-iui-edit-branch]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-branch-note]")', 'branch note')
+  check(await count('[data-dsh-iui-edit-conflict]'), 0, 'branch note replaces the conflict banner')
+  check((await text('[data-dsh-iui-edit-branch-note]')).includes('修订 2'), true, 'branch note names the base revision')
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'branch popover')
+  await saveInstruction('分支修改：把时钟改成数字读数')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('分支'))`), true, 'chip label marks the branch')
+  const branchEnvelope = await read('window.__serializeChipMatching("分支")')
+  check(branchEnvelope.includes('"branch":true'), true, 'branch request carries branch:true')
+  check(branchEnvelope.includes('"baseRevisionId":"dst-call-2"'), true, 'branch request keeps the old base revision')
   await cdp.send('Emulation.clearDeviceMetricsOverride')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

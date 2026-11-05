@@ -55,6 +55,17 @@ export interface ArtifactEditSession {
    * user attaches it again.
    */
   readonly attached: boolean
+  /**
+   * Branch mode: the base revision is not the current head, and sending records
+   * a new revision on top of it instead of overwriting the head. Enabled from
+   * the conflict banner; the Host re-validates the branch on apply.
+   */
+  readonly branch?: boolean
+  /**
+   * Latest known revision number of this artifact, learned from the last
+   * successful revision probe (kept for the branch banner copy).
+   */
+  readonly latestRevision?: number
   readonly title?: string
   readonly style: RenderLayout
   readonly styleId?: string
@@ -119,6 +130,8 @@ export interface ArtifactEditActions {
   setDrawerOpen(open: boolean): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
+  /** Turn the conflict into a branch edit based on this (older) revision. */
+  enableBranch(key: string): void
   /** Activate one draft of this chat as the edit canvas (switches the active draft). */
   activateDraft(key: string): void
   /** Attach one detached draft to the next Send (no-op when the batch is full). */

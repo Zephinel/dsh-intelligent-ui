@@ -121,6 +121,21 @@ function staleMessage(request: ArtifactEditRequest, status: ArtifactRevisionStat
   return `${tool}: this block edit targets revision ${request.baseRevision}, but revision ${status.latestRevision} is now the latest; the page is out of date. ${RELOAD}`
 }
 
+/** Model-readable problem with a branch edit's base revision, or undefined when it resolves. */
+function branchBaseProblem(request: ArtifactEditRequest, base: ArtifactRevisionRecord | undefined, tool: string): string | undefined {
+  if (base === undefined) {
+    if (request.baseRevision === 1) return undefined
+    return `${tool}: this branch edit targets revision ${request.baseRevision} (${JSON.stringify(request.baseRevisionId)}), which is not a recorded revision of artifact ${JSON.stringify(request.artifactId)}; only revision 1 (the original render) may be unrecorded. Ask the user to reload the page and retry.`
+  }
+  if (base.artifactId !== request.artifactId) {
+    return `${tool}: this branch edit's base revision ${JSON.stringify(request.baseRevisionId)} belongs to artifact ${JSON.stringify(base.artifactId)}, not ${JSON.stringify(request.artifactId)}; reload the page and retry.`
+  }
+  if (base.revision !== request.baseRevision) {
+    return `${tool}: this branch edit says it targets revision ${request.baseRevision}, but base revision ${JSON.stringify(request.baseRevisionId)} is revision ${base.revision}; reload the page and retry.`
+  }
+  return undefined
+}
+
 /** Text blocks of one user message, in order. */
 function messageText(content: readonly unknown[] | undefined): string | undefined {
   if (!Array.isArray(content)) return undefined
@@ -261,9 +276,12 @@ export function createArtifactEditController(
 
   /** Describe why one parsed request cannot be applied, or undefined when it can. */
   const describeProblem = (request: ArtifactEditRequest): string | undefined => {
-    const base = revisions.get(request.baseRevisionId)
-    if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
-      return `render_ui: this block edit request belongs to a different artifact revision. ${RELOAD}`
+    // A branch edit may target an older revision; apply() re-validates that base.
+    if (request.branch !== true) {
+      const base = revisions.get(request.baseRevisionId)
+      if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
+        return `render_ui: this block edit request belongs to a different artifact revision. ${RELOAD}`
+      }
     }
     const extraction = extractArtifactBlocks(request.program)
     if (extraction.unsupported !== undefined) {
@@ -279,9 +297,11 @@ export function createArtifactEditController(
       return `render_ui: this block edit request does not match the program it was made for (${targetProblem}). ${RELOAD}`
     }
     if (isNoOpEditRequest(request, baseBlockIds)) return NO_OP_MESSAGE
-    const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
-    if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
-      return staleMessage(request, status)
+    if (request.branch !== true) {
+      const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
+      if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
+        return staleMessage(request, status)
+      }
     }
     return undefined
   }
@@ -388,13 +408,27 @@ export function createArtifactEditController(
         }
       }
       // A prior turn may have recorded a newer revision while this request stayed armed.
+      // A branch edit is allowed to target an older revision; it becomes latest+1.
+      const branch = request.branch === true
       const base = revisions.get(request.baseRevisionId)
-      if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
-        throw new Error(`${tool}: this block edit request belongs to a different artifact revision. ${RELOAD}`)
+      const latest = revisions.latestFor(request.artifactId)
+      let revisionNumber: number
+      if (branch) {
+        const problem = branchBaseProblem(request, base, tool)
+        if (problem !== undefined) throw new Error(problem)
+        revisionNumber = (latest === undefined ? request.baseRevision : latest.revision) + 1
+      } else {
+        if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
+          throw new Error(`${tool}: this block edit request belongs to a different artifact revision. ${RELOAD}`)
+        }
+        const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
+        if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
+          throw new Error(staleMessage(request, status, tool))
+        }
+        revisionNumber = request.baseRevision + 1
       }
-      const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
-      if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
-        throw new Error(staleMessage(request, status, tool))
+      if (revisionNumber > 100_000) {
+        throw new Error(`${tool}: this artifact has reached its maximum revision number; start a new page or restore an older revision instead.`)
       }
       const program = composed ? composedProgram.trim() : typeof args.program === 'string' ? args.program.trim() : ''
       const updated = extractArtifactBlocks(program)
@@ -431,7 +465,7 @@ export function createArtifactEditController(
         revisionId: callId,
         artifactId: request.artifactId,
         baseRevisionId: request.baseRevisionId,
-        revision: request.baseRevision + 1,
+        revision: revisionNumber,
         sessionId,
         style: request.style,
         ...request.styleId === undefined ? {} : { styleId: request.styleId },

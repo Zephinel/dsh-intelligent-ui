@@ -31,6 +31,7 @@ import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
+import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions } from './artifact-edit/local-revisions.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession } from './artifact-edit/contracts.ts'
 import {
   activateDraft as activateArtifactDraft,
@@ -41,6 +42,7 @@ import {
   clearAllArtifactEdits,
   clearArtifactBlockInstruction,
   discardDraft as discardArtifactDraft,
+  enableBranch as enableArtifactBranch,
   hasArtifactEditContent,
   moveArtifactBlock,
   moveArtifactBlockBy,
@@ -111,6 +113,13 @@ export function IntelligentUICards({
       { since, until },
     )
   }, [turn.status, turn.turn, turn.end?.seq, turn.end?.time, turn.start?.time, sessionId, programs])
+  // Client-owned revision cards (restored without a model turn) belong to the
+  // Turn that triggered the restore, so each one renders exactly once.
+  const localRevisions = useLocalRevisions(sessionId)
+  const localPrograms = useMemo(() => localRevisions
+    .filter(revision => revision.turn === turn.turn)
+    .map(localRevisionProgram), [localRevisions, turn.turn])
+  const allPrograms = useMemo(() => [...programs, ...localPrograms], [programs, localPrograms])
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   const scheme = useStyleScheme()
   // A theme-less result snapshot inherits the session's selected template; the
@@ -137,10 +146,10 @@ export function IntelligentUICards({
     focusComposer?.()
     return filled ? null : t('onDemand.fillError')
   }
-  if (programs.length === 0) return null
+  if (allPrograms.length === 0) return null
   return (
     <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
-      {programs.map(program => {
+      {allPrograms.map(program => {
         const templates = catalog.status === 'unavailable' ? [] : catalog.templates
         const theme = resolveCardTheme(program, templates, sessionStyle)
         return (
@@ -148,6 +157,7 @@ export function IntelligentUICards({
             key={program.callId}
             program={program}
             sessionId={sessionId}
+            turnNumber={turn.turn}
             onToAssistant={toAssistant}
             t={t}
             scheme={scheme}
@@ -184,6 +194,8 @@ function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
 interface IntelligentUICardProps {
   readonly program: IntelligentUIProgram
   readonly sessionId: string
+  /** Loaded Turn that owns this card; restored local cards render in the same Turn. */
+  readonly turnNumber: number
   readonly onToAssistant: (message: string) => void
   readonly t: Translate
   readonly themeStyle?: CSSProperties
@@ -199,7 +211,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -208,6 +220,8 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
   // Multi-draft notices: draft cap reached, and a detached draft (chip removed).
   const [limitNotice, setLimitNotice] = useState(false)
   const [detachedNotice, setDetachedNotice] = useState(false)
+  const [restoreState, setRestoreState] = useState<'checking' | 'available' | 'busy' | 'done' | 'error' | 'hidden'>('checking')
+  const [restoredRevision, setRestoredRevision] = useState<number | undefined>()
   const cardRef = useRef<HTMLElement>(null)
   const skipActivationScroll = useRef(false)
   const adjust = async (): Promise<void> => {
@@ -254,6 +268,7 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
     closeEditor: () => { closeArtifactEditor(editKey) },
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
+    enableBranch: () => { enableArtifactBranch(editKey) },
     activateDraft: key => { activateArtifactDraft(key) },
     attachDraft: key => { attachArtifactDraft(key) },
     discardDraft: key => { discardArtifactDraft(key) },
@@ -273,6 +288,28 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
     if (!editing || editSession === undefined) { setDetachedNotice(false); return }
     setDetachedNotice(!editSession.attached)
   }, [editing, editSession?.attached, editSession?.key])
+
+  // Offer the zero-model restore only for revisions that are no longer the head.
+  const restoreArtifactId = program.artifactId ?? program.callId
+  const restoreRevisionId = program.revisionId ?? program.callId
+  useEffect(() => {
+    if (program.localRevision === true || program.running) return
+    let cancelled = false
+    void fetchArtifactStatus(restoreArtifactId, restoreRevisionId).then(status => {
+      if (cancelled) return
+      setRestoreState(status?.conflict === true ? 'available' : 'hidden')
+    })
+    return () => { cancelled = true }
+  }, [restoreArtifactId, restoreRevisionId, program.localRevision, program.running])
+  const restore = async (): Promise<void> => {
+    if (restoreState !== 'available') return
+    setRestoreState('busy')
+    const revision = await restoreRevision({ artifactId: restoreArtifactId, sourceRevisionId: restoreRevisionId, program: program.program })
+    if (revision === undefined) { setRestoreState('error'); return }
+    addLocalRevision(sessionId, { ...revision, turn: turnNumber })
+    setRestoredRevision(revision.revision)
+    setRestoreState('done')
+  }
 
   const toggleEditing = (): void => {
     if (editing) { closeArtifactEditor(editKey); return }
@@ -335,6 +372,27 @@ function IntelligentUICard({ program, sessionId, onToAssistant, t, themeStyle, s
                 disabled={attachedDraftTotal >= MAX_ARTIFACT_BATCH_REQUESTS}
                 onClick={() => { attachArtifactDraft(editKey) }}
               >{t('edit.attachDraft')}</button>
+            : null}
+          {program.localRevision === true
+            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t('edit.localRevision')}</span>
+            : null}
+          {restoreState === 'available'
+            ? <button
+                type="button"
+                className="dsh-iui-draft-attach"
+                data-dsh-iui-restore
+                title={t('edit.restoreAction')}
+                onClick={() => { void restore() }}
+              >{t('edit.restoreAction')}</button>
+            : null}
+          {restoreState === 'busy'
+            ? <span className="dsh-iui-state" data-dsh-iui-restore-busy>{t('edit.restoreAction')}</span>
+            : null}
+          {restoreState === 'done' && restoredRevision !== undefined
+            ? <span className="dsh-iui-state" data-dsh-iui-restore-done>{t('edit.restoreDone', { n: restoredRevision })}</span>
+            : null}
+          {restoreState === 'error'
+            ? <span className="dsh-iui-state" data-dsh-iui-restore-error>{t('edit.restoreFailed')}</span>
             : null}
           {program.revision !== undefined && program.revision > 1
             ? <span className="dsh-iui-revision" data-dsh-iui-revision>{t('edit.revision', { n: program.revision })}</span>

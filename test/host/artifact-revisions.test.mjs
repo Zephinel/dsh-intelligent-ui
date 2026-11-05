@@ -10,8 +10,10 @@ import { afterEach, test } from 'node:test'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
-import { MAX_ARTIFACT_REVISIONS, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { Readable } from 'node:stream'
+import { EventEmitter } from 'node:events'
+import { ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
+import { MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
 
 const plugin = await import('../../lib/index.js')
 const originalHome = process.env.DSH_HOME
@@ -140,23 +142,67 @@ function mountRoutes({ webServer = true, connection = true, rejection, revisions
   const home = mkdtempSync(join(tmpdir(), 'iui-artifact-routes-'))
   homes.push(home)
   process.env.DSH_HOME = home
-  writeFileSync(join(home, 'dsh-intelligent-ui-artifacts.json'), JSON.stringify({ version: 1, revisions }))
+  const file = join(home, 'dsh-intelligent-ui-artifacts.json')
+  writeFileSync(file, JSON.stringify({ version: 1, revisions }))
   const routes = []
   const checked = []
+  const disposers = []
+  const disposedPaths = []
   plugin.apply({
     tools: { register() {} }, systemPrompt: { section() {} }, logger: { warn() {} },
     inject(dependencies, callback) {
       if (!dependencies.includes('webServer')) return
       // Supply partial scopes too, proving a missing connection cannot expose the route.
       callback({
-        ...webServer ? { webServer: { register(route) { routes.push(route); return () => {} } } } : {},
+        ...webServer ? {
+          webServer: {
+            register(route) {
+              routes.push(route)
+              return () => { disposedPaths.push(route.path) }
+            },
+          },
+        } : {},
         ...connection ? { connection: { requestRejection(req) { checked.push(req); return rejection } } } : {},
-        effect(fn) { return fn() },
+        effect(fn) {
+          const disposer = fn()
+          if (typeof disposer === 'function') disposers.push(disposer)
+          return disposer
+        },
       })
     },
   })
-  return { routes, checked, route: routes.find(candidate => candidate.path === ARTIFACT_REVISION_ROUTE_PATH) }
+  return {
+    routes, checked, disposers, disposedPaths, home, file,
+    route: routes.find(candidate => candidate.path === ARTIFACT_REVISION_ROUTE_PATH),
+    restoreRoute: routes.find(candidate => candidate.path === ARTIFACT_RESTORE_ROUTE_PATH),
+  }
 }
+
+/** Invoke the restore POST handler and resolve with the completed response. */
+function postRestore(route, { body, raw, headers = { 'content-type': 'application/json' }, url = ARTIFACT_RESTORE_ROUTE_PATH } = {}) {
+  const payload = raw === undefined ? JSON.stringify(body) : raw
+  const req = Readable.from([payload])
+  Object.assign(req, { method: 'POST', url, headers })
+  const result = { status: 0, headers: {}, body: undefined, req }
+  let complete
+  result.done = new Promise(resolve => { complete = resolve })
+  const res = new EventEmitter()
+  Object.assign(res, {
+    writeHead(status, responseHeaders = {}) {
+      result.status = status
+      result.headers = responseHeaders
+    },
+    end(chunk) {
+      result.body = chunk
+      complete(result)
+    },
+  })
+  route.handler(req, res)
+  return result.done
+}
+
+/** One valid restore body for the seeded `revision()` source record. */
+const RESTORE_BODY = { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-2', program: 'root = Col([Title("Restored")])' }
 
 /** Invoke the exact HTTP handler while recording response metadata. */
 function request(route, { method = 'GET', url = ARTIFACT_REVISION_ROUTE_PATH } = {}) {
@@ -169,11 +215,24 @@ function request(route, { method = 'GET', url = ARTIFACT_REVISION_ROUTE_PATH } =
   return result
 }
 
-test('registers the probe only when webServer and connection are composed', () => {
-  assert.ok(mountRoutes().route)
-  assert.equal(mountRoutes({ connection: false }).route, undefined)
-  assert.equal(mountRoutes({ webServer: false }).route, undefined)
-  assert.equal(mountRoutes({ webServer: false, connection: false }).route, undefined)
+test('registers the probe and the restore route only when webServer and connection are composed', () => {
+  const composed = mountRoutes()
+  assert.ok(composed.route)
+  assert.ok(composed.restoreRoute)
+  for (const partial of [{ connection: false }, { webServer: false }, { webServer: false, connection: false }]) {
+    assert.equal(mountRoutes(partial).route, undefined)
+    assert.equal(mountRoutes(partial).restoreRoute, undefined)
+  }
+})
+
+test('one disposer disposes the status and restore routes together', () => {
+  const { disposers, disposedPaths } = mountRoutes()
+  assert.ok(disposers.length > 0)
+  for (const dispose of disposers) dispose()
+  assert.deepEqual(
+    disposedPaths.filter(path => path.startsWith('/api/intelligent-ui/artifact-')).sort(),
+    [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH].sort(),
+  )
 })
 
 test('GET answers latest-lineage status with no-store JSON', () => {
@@ -220,4 +279,114 @@ test('only GET is supported and query params must be artifact identities', () =>
     assert.equal(result.status, 400, query)
     assert.deepEqual(JSON.parse(result.body).error.code, 'invalid_input')
   }
+})
+
+test('POST restore records latest+1 from an older source and returns the local revision', async () => {
+  const source = revision({ title: 'Restored page', styleId: 'cs_abcdef123456' })
+  const latest = revision({ revisionId: 'call-3', baseRevisionId: 'call-2', revision: 3, createdAt: 2 })
+  const { restoreRoute, route, file } = mountRoutes({ revisions: [source, latest] })
+  const response = await postRestore(restoreRoute, { body: RESTORE_BODY })
+  assert.equal(response.status, 201)
+  assert.equal(response.headers['cache-control'], 'no-store')
+  assert.match(response.headers['content-type'], /^application\/json/)
+  const body = JSON.parse(response.body)
+  assert.equal(body.ok, true)
+  assert.equal(body.revision.artifactId, 'call-1')
+  assert.match(body.revision.revisionId, /^restore_[0-9a-f]{16}$/)
+  assert.equal(body.revision.baseRevisionId, 'call-2')
+  assert.equal(body.revision.revision, 4)
+  assert.equal(body.revision.program, RESTORE_BODY.program)
+  assert.equal(body.revision.title, 'Restored page')
+  assert.equal(body.revision.style, 'card')
+  assert.equal(body.revision.styleId, 'cs_abcdef123456')
+  assert.notEqual(body.revision.revisionId, source.revisionId)
+  // The new revision is durable and copies the source presentation metadata.
+  const records = JSON.parse(readFileSync(file, 'utf8')).revisions
+  const restored = records.find(record => record.revisionId === body.revision.revisionId)
+  assert.deepEqual(restored, {
+    revisionId: body.revision.revisionId, artifactId: 'call-1', baseRevisionId: 'call-2', revision: 4,
+    sessionId: 'local-restore', style: 'card', styleId: 'cs_abcdef123456', title: 'Restored page',
+    createdAt: restored.createdAt,
+  })
+  assert.ok(Number.isSafeInteger(restored.createdAt))
+  // The existing GET probe sees the restored revision as the new head.
+  const probe = request(route, { url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-2` })
+  assert.deepEqual(JSON.parse(probe.body), {
+    artifactId: 'call-1', revisionId: 'call-2', revision: 2,
+    latestRevisionId: body.revision.revisionId, latestRevision: 4, conflict: true,
+  })
+})
+
+test('restore rejects missing, mismatched and already-latest sources', async () => {
+  const missing = mountRoutes({ revisions: [revision()] })
+  const missingResponse = await postRestore(missing.restoreRoute, { body: { ...RESTORE_BODY, sourceRevisionId: 'call-missing' } })
+  assert.equal(missingResponse.status, 404)
+  assert.deepEqual(JSON.parse(missingResponse.body).error.code, 'source_missing')
+
+  const newest = mountRoutes({ revisions: [revision()] })
+  const latestResponse = await postRestore(newest.restoreRoute, { body: RESTORE_BODY })
+  assert.equal(latestResponse.status, 409)
+  assert.deepEqual(JSON.parse(latestResponse.body).error.code, 'already_latest')
+
+  const mismatch = mountRoutes({ revisions: [revision()] })
+  const mismatchResponse = await postRestore(mismatch.restoreRoute, { body: { ...RESTORE_BODY, artifactId: 'call-9' } })
+  assert.equal(mismatchResponse.status, 400)
+  assert.deepEqual(JSON.parse(mismatchResponse.body).error.code, 'artifact_mismatch')
+
+  for (const { file } of [missing, newest, mismatch]) {
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).revisions.length, 1, 'failed restores record nothing')
+  }
+})
+
+test('restore validates the body, program and payload size', async () => {
+  const source = revision()
+  const latest = revision({ revisionId: 'call-3', baseRevisionId: 'call-2', revision: 3, createdAt: 2 })
+  const { restoreRoute } = mountRoutes({ revisions: [source, latest] })
+  for (const body of [
+    { ...RESTORE_BODY, schemaVersion: 2 },
+    { ...RESTORE_BODY, sourceRevisionId: 'bad id' },
+    { ...RESTORE_BODY, extra: true },
+    { ...RESTORE_BODY, program: 'root = Markdown("plain")' },
+    { ...RESTORE_BODY, program: 'root = Col([' },
+  ]) {
+    const response = await postRestore(restoreRoute, { body })
+    assert.equal(response.status, 400, JSON.stringify(body).slice(0, 60))
+    const problem = JSON.parse(response.body).error
+    assert.equal(problem.code, body.program === undefined || body.extra !== undefined || body.schemaVersion === 2 || body.sourceRevisionId === 'bad id' ? 'invalid_input' : 'invalid_program')
+  }
+  const wrongType = await postRestore(restoreRoute, { raw: JSON.stringify(RESTORE_BODY), headers: { 'content-type': 'text/plain' } })
+  assert.equal(wrongType.status, 400)
+  assert.equal(JSON.parse(wrongType.body).error.code, 'invalid_input')
+  const brokenJson = await postRestore(restoreRoute, { raw: '{broken' })
+  assert.equal(brokenJson.status, 400)
+  assert.equal(JSON.parse(brokenJson.body).error.code, 'invalid_input')
+  const declaredTooLarge = await postRestore(restoreRoute, {
+    raw: '{}',
+    headers: { 'content-type': 'application/json', 'content-length': String(MAX_RESTORE_BODY_BYTES + 1) },
+  })
+  assert.equal(declaredTooLarge.status, 413)
+  assert.equal(JSON.parse(declaredTooLarge.body).error.code, 'payload_too_large')
+  const streamedTooLarge = await postRestore(restoreRoute, { raw: 'x'.repeat(MAX_RESTORE_BODY_BYTES + 1) })
+  assert.equal(streamedTooLarge.status, 413)
+  assert.equal(JSON.parse(streamedTooLarge.body).error.code, 'payload_too_large')
+})
+
+test('restore rejects non-POST requests and preserves authentication denials', async () => {
+  const { restoreRoute, checked } = mountRoutes({ revisions: [revision()] })
+  for (const method of ['GET', 'PUT', 'DELETE', 'HEAD']) {
+    const response = request(restoreRoute, { method })
+    assert.equal(response.status, 405, method)
+    assert.equal(response.headers.allow, 'POST')
+    assert.deepEqual(JSON.parse(response.body).error.code, 'method_not_allowed')
+  }
+  for (const rejection of [401, 403]) {
+    const guarded = mountRoutes({ rejection })
+    const response = request(guarded.restoreRoute, { method: 'POST' })
+    assert.equal(response.status, rejection)
+    assert.equal(response.body, undefined)
+    assert.equal(response.headers['cache-control'], 'no-store')
+    assert.equal(guarded.checked.length, 1)
+  }
+  // Authentication runs before method dispatch, so even rejected methods were checked.
+  assert.equal(checked.length, 4)
 })

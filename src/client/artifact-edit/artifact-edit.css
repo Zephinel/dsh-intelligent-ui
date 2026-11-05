@@ -143,6 +143,17 @@
   margin-top: 8px;
 }
 
+/* Branch mode: the conflict is resolved locally, so this is an informational
+   note rather than an error banner; it reuses the conflict typography. */
+.dsh-iui-edit-branch-note {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 34%, var(--dsw-alias-border-l2));
+  border-left: 3px solid var(--dsw-alias-state-business-primary);
+  border-radius: var(--dsw-radius-md);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 6%, var(--dsw-alias-bg-layer-1));
+}
+
 .dsh-iui-edit-canvas {
   min-width: 0;
 }

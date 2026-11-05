@@ -275,9 +275,16 @@ function patch(key: string, update: (session: ArtifactEditSession) => ArtifactEd
   publish()
 }
 
+/** Outcome of one revision probe: status plus the Host's latest revision number. */
+interface RevisionProbe {
+  readonly result: 'ok' | 'conflict' | 'unknown'
+  /** Latest revision number reported by the Host; absent for unknown answers. */
+  readonly latestRevision?: number
+}
+
 /** Revision probe; unknown host/network states are non-blocking. */
-async function probeRevision(session: ArtifactEditSession): Promise<'ok' | 'conflict' | 'unknown'> {
-  if (typeof fetch !== 'function') return 'unknown'
+async function probeRevision(session: ArtifactEditSession): Promise<RevisionProbe> {
+  if (typeof fetch !== 'function') return { result: 'unknown' }
   const query = `?artifactId=${encodeURIComponent(session.artifactId)}&revisionId=${encodeURIComponent(session.baseRevisionId)}`
   try {
     const response = await fetch(`${ARTIFACT_REVISION_ROUTE_PATH}${query}`, {
@@ -285,12 +292,12 @@ async function probeRevision(session: ArtifactEditSession): Promise<'ok' | 'conf
       credentials: 'same-origin',
       cache: 'no-store',
     })
-    if (!response.ok) return 'unknown'
+    if (!response.ok) return { result: 'unknown' }
     const value: unknown = await response.json()
-    if (!isArtifactRevisionStatus(value)) return 'unknown'
-    return value.conflict ? 'conflict' : 'ok'
+    if (!isArtifactRevisionStatus(value)) return { result: 'unknown' }
+    return { result: value.conflict ? 'conflict' : 'ok', latestRevision: value.latestRevision }
   } catch {
-    return 'unknown'
+    return { result: 'unknown' }
   }
 }
 
@@ -413,17 +420,31 @@ export function noteArtifactChipMissing(referenceId: string): void {
   publish()
 }
 
-/** Run a revision probe and settle one draft's status. */
+/** Run a revision probe and settle one draft's status (and latest revision number). */
 function checkRevision(key: string): void {
   const current = sessions.get(key)
   if (current === undefined) return
-  void probeRevision(current).then(result => {
+  void probeRevision(current).then(probe => {
     patch(key, session => {
-      if (session.status === 'submitted') return session
-      if (result === 'conflict') return { ...session, status: 'conflict', error: undefined }
-      return session.status === 'checking' || session.status === 'conflict' || session.status === 'error'
-        ? { ...session, status: 'ready', error: undefined }
-        : session
+      if (session.status === 'submitted') return undefined
+      const latestRevision = probe.latestRevision ?? session.latestRevision
+      let status = session.status
+      let error = session.error
+      if (probe.result === 'conflict') {
+        // A branch draft explicitly targets a non-head revision, so the answer
+        // only refreshes the banner metadata; it never becomes a blocking conflict.
+        if (session.branch === true) {
+          if (session.status === 'checking') status = 'ready'
+        } else {
+          status = 'conflict'
+          error = undefined
+        }
+      } else if (probe.result === 'ok' && (session.status === 'checking' || session.status === 'conflict' || session.status === 'error')) {
+        status = 'ready'
+        error = undefined
+      }
+      if (status === session.status && error === session.error && latestRevision === session.latestRevision) return undefined
+      return { ...session, status, error, latestRevision }
     })
   })
 }
@@ -481,6 +502,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       baseRevision: lineage.baseRevision,
       requestId: newRequestId(),
       attached,
+      branch: false,
       ...program.title === undefined ? {} : { title: program.title },
       style: program.style ?? 'card',
       ...program.styleId === undefined ? {} : { styleId: program.styleId },
@@ -510,6 +532,8 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     ...session,
     requestId: newRequestId(),
     attached,
+    branch: false,
+    latestRevision: undefined,
     selection: [],
     removable: undefined,
     globalInstruction: '',
@@ -740,6 +764,26 @@ export function retryArtifactRevisionCheck(key: string): void {
 }
 
 /**
+ * Turn a conflicting draft into a branch edit based on its (older) revision.
+ *
+ * Only a draft that is actually blocked by a conflict can branch, and the
+ * latest revision number must be known so the banner can name the head. The
+ * status becomes ready again and the composer chip gains the branch suffix;
+ * sending is no longer blocked by a head mismatch because the Host records a
+ * new revision instead of overwriting the head.
+ * @param key - edit-session key.
+ * @returns whether the draft switched to branch mode.
+ */
+export function enableBranch(key: string): boolean {
+  const session = sessions.get(key)
+  if (session === undefined || session.status !== 'conflict' || session.latestRevision === undefined) return false
+  sessions.set(key, { ...session, branch: true, status: 'ready', error: undefined })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  return true
+}
+
+/**
  * Silent revision probe for the edit view's polling (interval plus window
  * focus/visibility). Conservative by design: only a fresh `conflict` changes
  * state; an `ok` answer never auto-clears a conflict (the user retries
@@ -750,11 +794,16 @@ export function retryArtifactRevisionCheck(key: string): void {
 export async function probeArtifactRevisionStatus(key: string): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted') return
-  const result = await probeRevision(session)
-  if (result !== 'conflict') return
-  patch(key, current => current.status === 'submitted' || current.status === 'conflict'
-    ? undefined
-    : { ...current, status: 'conflict' })
+  const probe = await probeRevision(session)
+  patch(key, current => {
+    if (current.status === 'submitted') return undefined
+    const latestRevision = probe.latestRevision ?? current.latestRevision
+    // Only a conflict may change the status (and never auto-clears one); a
+    // branch draft ignores conflicts because its old base is intentional.
+    const status = probe.result === 'conflict' && current.branch !== true ? 'conflict' : current.status
+    if (status === current.status && latestRevision === current.latestRevision) return undefined
+    return { ...current, status, latestRevision }
+  })
 }
 
 /** Mark a draft as sent: drop its chip, leave the canvas and free its batch slot. */
@@ -766,6 +815,7 @@ function markSubmitted(key: string): void {
     status: 'submitted',
     submittedAt: Date.now(),
     submitFailed: false,
+    branch: false,
     editing: false,
     attached: false,
     activeBlockId: undefined,
@@ -895,6 +945,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     artifactId: session.artifactId,
     baseRevisionId: session.baseRevisionId,
     baseRevision: session.baseRevision,
+    ...session.branch === true ? { branch: true } : {},
     ...session.title === undefined ? {} : { title: session.title },
     style: session.style,
     ...session.styleId === undefined ? {} : { styleId: session.styleId },
@@ -905,8 +956,10 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     program: session.program,
   }
   if (describeEditRequestProblem(request) !== undefined) return { ok: false, problem: 'invalid' }
-  const revision = await probeRevision(session)
-  if (revision === 'conflict') return { ok: false, problem: 'conflict' }
+  // Branch drafts are allowed to target an older base; the Host re-validates
+  // the branch on apply. Non-branch drafts keep the strict latest-head guard.
+  const probe = await probeRevision(session)
+  if (probe.result === 'conflict' && session.branch !== true) return { ok: false, problem: 'conflict' }
   markSubmitted(key)
   return { ok: true, request }
 }
@@ -961,7 +1014,7 @@ export function editChipLabel(facts: EditChipFacts): string {
  * @param session - draft whose chip label is requested.
  * @returns the localized label.
  */
-export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction'>): string {
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'>): string {
   const t = translate
   const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
   const count = session.selection.length
@@ -975,7 +1028,8 @@ export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' |
         ? t('edit.chipTail.order')
         : t('edit.chipTail.global')
   if (hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
-  return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}`
+  const branchSuffix = session.branch === true ? t('edit.chip.branchSuffix') : ''
+  return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}${branchSuffix}`
 }
 
 /** Whether any draft of this chat currently contributes a composer chip. */
