@@ -91,3 +91,24 @@ test('exposes the DOM contract constants used by the panel effect', () => {
   assert.equal(CHAT_CONTENT_WIDTH_VAR, '--dsh-chat-content-width')
   assert.equal(DEFAULT_CHAT_CONTENT_WIDTH, 748)
 })
+
+test('accounts for the sidebar offset and conversation column width', () => {
+  // 1800px viewport, 280px sidebar, 1520px conversation column: a centered
+  // 920px card would run under the 360px docked panel, so it must shrink to
+  // keep a 24px gap (content right edge 1416, panel left 1440).
+  assert.equal(fitChatContentWidth({
+    viewportWidth: 1800,
+    contentWidth: 920,
+    columnLeft: 280,
+    columnWidth: 1520,
+  }), 752)
+  // The same viewport with no sidebar offset needs a wider content column.
+  assert.equal(fitChatContentWidth({ viewportWidth: 1800, contentWidth: 920 }), 920)
+  // A wider user preference still converges to the column-aware fixed point.
+  assert.equal(fitChatContentWidth({
+    viewportWidth: 1928,
+    contentWidth: 930,
+    columnLeft: 280,
+    columnWidth: 1648,
+  }), 880)
+})

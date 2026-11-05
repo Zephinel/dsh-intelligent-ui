@@ -769,6 +769,34 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width")'), '900px', 'closing the editor restores the user width')
   await read(`window.__shellWidthEl.remove()`)
 
+  // 31. The fitted width follows the shell width preference while editing.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await read(`(() => {
+    const wrapper = document.createElement('div');
+    wrapper.id = 'e2e-width-wrapper';
+    wrapper.style.setProperty('--dsh-chat-user-width', '1200px');
+    const content = document.createElement('div');
+    content.setAttribute('data-conversation-content', '');
+    content.setAttribute('data-conversation-region', 'chat');
+    content.style.setProperty('--dsh-chat-content-width', 'var(--dsh-chat-user-width, 748px)');
+    wrapper.appendChild(content);
+    document.body.appendChild(wrapper);
+    window.__widthWrapper = wrapper;
+    window.__widthContent = content;
+  })()`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor')
+  await wait('window.__widthContent.style.getPropertyValue("--dsh-chat-content-width") !== ""', 'dynamic width fitted')
+  const firstFit = await read(`parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width'))`)
+  check(firstFit > 700 && firstFit < 1200, true, 'preference 1200 yields a narrower fitted content width')
+  await read(`window.__widthWrapper.style.setProperty('--dsh-chat-user-width', '900px')`)
+  await wait(`getComputedStyle(window.__widthContent).getPropertyValue('--dsh-chat-content-width').trim() === '900px'`, 'dynamic width follows preference')
+  check(await read(`window.__widthContent.style.getPropertyValue('--dsh-chat-content-width') !== '1032px'`), true, 'a smaller preference drops the fitted override')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor closed')
+  check(await read('window.__widthWrapper.style.getPropertyValue("--dsh-chat-user-width")'), '900px', 'user width preference is preserved')
+  await read('window.__widthWrapper.remove()')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

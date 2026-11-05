@@ -29,6 +29,10 @@ export interface FitChatContentWidthOptions {
   readonly viewportWidth: number
   /** User-preferred chat content width in px. */
   readonly contentWidth: number
+  /** Left edge of the conversation column in viewport px (default 0). */
+  readonly columnLeft?: number
+  /** Width of the conversation column in viewport px (default viewportWidth). */
+  readonly columnWidth?: number
   /** Minimum docked panel width (matches CSS clamp). */
   readonly panelMin?: number
   /** Maximum docked panel width (matches CSS clamp). */
@@ -61,8 +65,13 @@ export function fitChatContentWidth({
   panelMax = 360,
   gap = 24,
   minContent = 360,
+  columnLeft = 0,
+  columnWidth = viewportWidth,
 }: FitChatContentWidthOptions): number {
   if (!Number.isFinite(viewportWidth) || !Number.isFinite(contentWidth) || viewportWidth <= 0 || contentWidth <= 0) {
+    return contentWidth
+  }
+  if (!Number.isFinite(columnLeft) || !Number.isFinite(columnWidth) || columnWidth <= 0) {
     return contentWidth
   }
   // Not enough room for one panel on each side plus the minimum content: leave
@@ -73,7 +82,12 @@ export function fitChatContentWidth({
   let desired = contentWidth
   for (let round = 0; round < 8; round += 1) {
     const panelWidth = clamp((viewportWidth - current) / 2 + 16, panelMin, panelMax)
-    desired = Math.min(current, viewportWidth - 2 * (panelWidth + gap))
+    const panelLeft = viewportWidth - panelWidth
+    // The content is centered inside the conversation column, which can start
+    // after the sidebar. Solve for the width whose right edge stays `gap` left
+    // of the docked panel.
+    const maxContent = 2 * (panelLeft - gap - columnLeft) - columnWidth
+    desired = Math.min(current, maxContent)
     if (Math.abs(desired - current) < 0.5) break
     current = desired
   }
@@ -86,15 +100,34 @@ function chatContentElement(doc: Document): HTMLElement | null {
   return doc.querySelector<HTMLElement>(CHAT_CONTENT_SELECTOR)
 }
 
+/** Resolve the actual content width (custom properties may contain clamp()). */
+function measuredContentWidth(doc: Document, element: HTMLElement): number {
+  const probe = doc.createElement('div')
+  probe.style.cssText = 'position:absolute;left:-10000px;top:0;height:0;visibility:hidden;pointer-events:none;width:var(--dsh-chat-content-width);'
+  element.appendChild(probe)
+  const width = probe.getBoundingClientRect().width
+  probe.remove()
+  return Number.isFinite(width) && width > 0 ? width : DEFAULT_CHAT_CONTENT_WIDTH
+}
+
 /** Read the shell's current preferred content width from one element. */
-function preferredContentWidth(win: Window, element: HTMLElement): number {
+function preferredContentWidth(win: Window, doc: Document, element: HTMLElement): number {
   const inline = element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR).trim()
-  const computed = win.getComputedStyle(element).getPropertyValue(CHAT_CONTENT_WIDTH_VAR).trim()
   const parsedInline = Number.parseFloat(inline)
   if (Number.isFinite(parsedInline) && parsedInline > 0) return parsedInline
+  const computed = win.getComputedStyle(element).getPropertyValue(CHAT_CONTENT_WIDTH_VAR).trim()
+  // Custom properties keep their token stream, so a `clamp(...)` value cannot
+  // be parsed directly; measure a probe child that resolves it instead.
   const parsedComputed = Number.parseFloat(computed)
   if (Number.isFinite(parsedComputed) && parsedComputed > 0) return parsedComputed
-  return DEFAULT_CHAT_CONTENT_WIDTH
+  return measuredContentWidth(doc, element)
+}
+
+/** Read the user's shell width preference written on the content parent. */
+function userWidthPreference(element: HTMLElement): number | undefined {
+  const value = element.parentElement?.style.getPropertyValue('--dsh-chat-user-width').trim() ?? ''
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 /**
@@ -114,29 +147,58 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   if (element === null) return () => undefined
   const savedValue = element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR)
   const savedPriority = element.style.getPropertyPriority(CHAT_CONTENT_WIDTH_VAR)
-  const originalWidth = preferredContentWidth(win, element)
+  const originalWidth = preferredContentWidth(win, doc, element)
   let overridden = false
+  let writing = false
 
   const restore = (): void => {
     if (!overridden) return
     overridden = false
+    writing = true
     if (savedValue === '') element.style.removeProperty(CHAT_CONTENT_WIDTH_VAR)
     else element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, savedValue, savedPriority)
+    writing = false
   }
 
+  /**
+   * Recompute against the user's current shell width preference. The preference
+   * lives on the content element's parent (`--dsh-chat-user-width`); when the
+   * user drags the shell width handle while editing, this observer refits to the
+   * new preference instead of sticking to the mount-time width.
+   */
   const apply = (): void => {
     const wide = win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches
     if (!wide) { restore(); return }
-    const desired = fitChatContentWidth({ viewportWidth: win.innerWidth, contentWidth: originalWidth })
-    if (desired === originalWidth) { restore(); return }
+    const contentWidth = userWidthPreference(element) ?? originalWidth
+    const rect = element.getBoundingClientRect()
+    const desired = fitChatContentWidth({
+      viewportWidth: win.innerWidth,
+      contentWidth,
+      columnLeft: rect.left,
+      columnWidth: rect.width,
+    })
+    if (desired >= contentWidth) { restore(); return }
+    const next = `${desired}px`
+    if (overridden && element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR) === next) return
     overridden = true
-    element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, `${desired}px`)
+    writing = true
+    element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, next)
+    writing = false
   }
 
   apply()
   win.addEventListener('resize', apply)
+  // Observe the parent style for user-handle drags (and the element itself for
+  // shell rewrites), ignoring our own writes to avoid a feedback loop.
+  const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => {
+    if (writing) return
+    apply()
+  })
+  observer?.observe(element.parentElement ?? element, { attributes: true, attributeFilter: ['style'] })
+  if (element.parentElement !== null) observer?.observe(element, { attributes: true, attributeFilter: ['style'] })
   return () => {
     win.removeEventListener('resize', apply)
+    observer?.disconnect()
     restore()
   }
 }
