@@ -702,6 +702,22 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(typeof moveCalls[1].operations[0].toParentNodeId, 'string', 'move carries the target parent node id')
   check(typeof moveCalls[1].operations[0].toIndex, 'number', 'move carries the target index')
 
+  // 28. Strict mode toggle is part of the sent envelope.
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'strict editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-strict]")', 'strict toggle')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-strict]').getAttribute('aria-pressed')`), 'false', 'strict mode is off by default')
+  await click('[data-dsh-iui-edit-strict]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-strict]').getAttribute('aria-pressed') === 'true'`, 'strict enabled')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-row]")', 'strict nested rows')
+  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-nested-edit]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'strict popover')
+  await saveInstruction('strict protection edit')
+  const strictEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
+  check(strictEnvelope.includes('"strict":true'), true, 'envelope carries strict mode')
+  check(strictEnvelope.includes('"instruction":"strict protection edit"'), true, 'strict edit instruction is sent')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

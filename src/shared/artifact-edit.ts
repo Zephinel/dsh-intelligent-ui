@@ -159,6 +159,8 @@ export interface ArtifactEditRequest {
   readonly orderChanged?: boolean
   /** Explicitly base the new revision on an older revision instead of the current head. */
   readonly branch?: boolean
+  /** Optional strict mode: reject any change to a block the user did not select. */
+  readonly strict?: boolean
   /** Cross-block constraints and global style requirements. */
   readonly globalInstruction?: string
   /** Complete OpenUI Lang program the user was looking at. */
@@ -302,7 +304,7 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'additions', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'additions', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'strict', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
@@ -432,6 +434,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     ...request.additions === undefined ? {} : { additions: request.additions },
     ...request.orderChanged === true ? { orderChanged: true } : {},
     ...request.branch === true ? { branch: true } : {},
+    ...request.strict === true ? { strict: true } : {},
     ...request.globalInstruction === undefined ? {} : { globalInstruction: request.globalInstruction },
   }).replace(/</g, '\\u003c')
 
@@ -497,6 +500,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '',
         'The Host merges the returned fragments into the current page and normalizes that order.',
         '',
+        ...request.strict === true ? ['- Strict mode is on: do not change any block that is not listed as a target; the Host rejects the edit if an unselected block changes.'] : [],
         'Global instruction (applies across blocks, may be empty):',
         request.globalInstruction === undefined ? '(none)' : request.globalInstruction,
         '',
@@ -531,6 +535,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
         '',
         'The Host verifies and normalizes the final top-level order; keep every block identifiable by its statement name or title.',
         '',
+        ...request.strict === true ? ['- Strict mode is on: do not change any block that is not listed as a target; the Host rejects the edit if an unselected block changes.'] : [],
         'Global instruction (applies across blocks, may be empty):',
         request.globalInstruction === undefined ? '(none)' : request.globalInstruction,
         '',

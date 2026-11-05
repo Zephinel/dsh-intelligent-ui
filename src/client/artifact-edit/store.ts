@@ -905,6 +905,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       ...temporaryStyle === undefined ? {} : { temporaryStyle },
       program: program.program,
       nestedMode: false,
+      strict: false,
       wrappedProgram,
       blocks: extraction.blocks,
       originalOrder: extraction.blocks.map(block => block.blockId),
@@ -945,6 +946,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     nestedOriginalOrder: undefined,
     nestedOrderChanged: false,
     additions: undefined,
+    strict: false,
     structureBusy: false,
     structureError: undefined,
     status: 'checking',
@@ -1234,6 +1236,17 @@ export function setArtifactNestedMode(key: string, enabled: boolean): boolean {
   scheduleChipSync(session.sessionId, true)
   scheduleDraftPersist(key)
   return true
+}
+
+/** Toggle strict unselected-block protection for this draft. */
+export function setArtifactStrictMode(key: string, enabled: boolean): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return
+  if (session.strict === enabled) return
+  sessions.set(key, { ...session, strict: enabled })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Apply one nested parent group order and publish. */
@@ -1927,6 +1940,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     targetOrder: [...session.targetOrder],
     ...Object.keys(orderByParent).length === 0 ? {} : { orderByParent },
     ...session.orderChanged ? { orderChanged: true } : {},
+    ...session.strict === true ? { strict: true } : {},
     ...globalInstruction === '' ? {} : { globalInstruction },
     program: session.program,
   }

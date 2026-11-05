@@ -1338,6 +1338,90 @@ test('additions may use new helper statements and a multi-line mini program root
   assert.match(value.program, /newText = Card\(\[Text\("from addition helper", "sm"\)\]\)/)
 })
 
+test('strict mode accepts a nested edit that only changes the selected block', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], { strict: true, requestId: 'req_strict_ok' })))
+  const value = await m.blockTool.execute({
+    program: nestedFragment('Text("A strict", "sm")'),
+    requestId: 'req_strict_ok',
+  }, { agent: m.agent, callId: 'call-strict-ok' })
+  assert.equal(value.revision, 2)
+  assert.equal(value.warnings, undefined)
+  assert.match(value.program.split('\n')[1], /Text\("A strict", "sm"\)/)
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
+})
+
+test('strict mode rejects a full render that changes an unselected block and keeps the request armed', async () => {
+  const m = mount()
+  m.send(buildEditRequestText({
+    schemaVersion: 1, artifactId: 'call-original', baseRevisionId: 'call-original', baseRevision: 1,
+    requestId: 'req_strict_full', title: NESTED_TITLE, style: 'card', edits: [],
+    targetOrder: ['b1', 'b2'], globalInstruction: 'Tidy up the spacing without changing any block.',
+    strict: true, program: NESTED_PROGRAM,
+  }))
+  const changed = NESTED_PROGRAM.replace('Text("B", "sm")', 'Text("B changed", "sm")')
+  await assert.rejects(
+    () => m.tool.execute({ program: changed, style: 'card', editRequestId: 'req_strict_full' }, { agent: m.agent, callId: 'call-strict-full-bad' }),
+    (error) => {
+      assert.match(error.message, /^render_ui: strict mode is on; unselected block\(s\) changed: /)
+      assert.match(error.message, /Unselected block .* changed/)
+      assert.ok(error.message.length < 1_500, 'the error summarizes warnings instead of echoing the page')
+      assert.equal(error.message.includes('root = Col('), false)
+      return true
+    },
+  )
+  assert.equal(existsSync(m.file), false, 'a strict rejection records no revision')
+  // The same pending request can be retried when the model leaves unselected blocks unchanged.
+  const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_strict_full' }, { agent: m.agent, callId: 'call-strict-full-ok' })
+  assert.equal(value.revision, 2)
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
+})
+
+test('non-strict full render keeps the unselected-block warning and records the revision', async () => {
+  const m = mount()
+  const request = {
+    schemaVersion: 1, artifactId: 'call-original', baseRevisionId: 'call-original', baseRevision: 1,
+    requestId: 'req_strict_off', title: NESTED_TITLE, style: 'card', edits: [],
+    targetOrder: ['b1', 'b2'], globalInstruction: 'Tidy up the spacing.', program: NESTED_PROGRAM,
+  }
+  m.send(buildEditRequestText(request))
+  const changed = NESTED_PROGRAM.replace('Text("B", "sm")', 'Text("B changed", "sm")')
+  const value = await m.tool.execute({ program: changed, style: 'card', editRequestId: 'req_strict_off' }, { agent: m.agent, callId: 'call-strict-off' })
+  assert.equal(value.revision, 2)
+  assert.ok(Array.isArray(value.warnings) && value.warnings.some(warning => /Unselected block .* changed/.test(warning)))
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
+})
+
+test('strict mode does not reject order-only or nested-order requests', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(parentOrderRequest({ n4: ['n7', 'n5', 'n6'] }, { strict: true, requestId: 'req_strict_order' })))
+  const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_strict_order' }, { agent: m.agent, callId: 'call-strict-order' })
+  assert.equal(value.revision, 2)
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\(sharedText, "sm"\), Text\("A", "sm"\), Text\("B", "sm"\)\]\)/)
+})
+
+test('strict mode summary mentions every unselected block it can, without full source', async () => {
+  const m = mount()
+  m.send(buildEditRequestText({
+    schemaVersion: 1, artifactId: 'call-original', baseRevisionId: 'call-original', baseRevision: 1,
+    requestId: 'req_strict_multi', title: NESTED_TITLE, style: 'card', edits: [],
+    targetOrder: ['b1', 'b2'], globalInstruction: 'Tidy up.',
+    strict: true, program: NESTED_PROGRAM,
+  }))
+  const changed = NESTED_PROGRAM
+    .replace('Text("B", "sm")', 'Text("B changed", "sm")')
+    .replace('Text("D", "sm")', 'Text("D changed", "sm")')
+  await assert.rejects(
+    () => m.tool.execute({ program: changed, style: 'card', editRequestId: 'req_strict_multi' }, { agent: m.agent, callId: 'call-strict-multi' }),
+    (error) => {
+      assert.match(error.message, /strict mode is on/)
+      assert.ok(error.message.includes('Unselected block'))
+      assert.equal(existsSync(m.file), false)
+      return true
+    },
+  )
+})
+
 /** Drive the controller directly so the TTL and session bound are observable. */
 function directController() {
   const home = mkdtempSync(join(tmpdir(), 'iui-artifact-edit-direct-'))

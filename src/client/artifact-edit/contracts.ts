@@ -98,6 +98,8 @@ export interface ArtifactEditSession {
   readonly program: string
   /** Whether the canvas shows editable blocks nested inside supported containers. */
   readonly nestedMode?: boolean
+  /** Strict mode: the Host rejects edits that change unselected blocks. */
+  readonly strict?: boolean
   /** Display parent block id -> child display ids in the pending nested order. */
   readonly nestedOrder?: Readonly<Record<string, readonly string[]>>
   /** Display parent block id -> base child display ids (for reset/change detection). */
@@ -171,6 +173,8 @@ export interface ArtifactEditActions {
   setDrawerOpen(open: boolean): void
   /** Toggle nested-container block selection in the edit canvas. */
   setNestedMode(key: string, enabled: boolean): void
+  /** Toggle strict unselected-block protection for this draft. */
+  setStrictMode(key: string, enabled: boolean): void
   /** Reorder one child inside its display parent group. */
   moveNestedBlock(parentBlockId: string, blockId: string, toIndex: number): void
   /** Move one nested child by a relative number of positions. */

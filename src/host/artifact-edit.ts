@@ -1027,6 +1027,15 @@ export function createArtifactEditController(
           : `render_ui: the arranged program is too long for an artifact revision (limit ${MAX_ARTIFACT_PROGRAM_CHARS} characters); shorten it and call render_ui again.`)
       }
       const warnings = artifactEditWarnings(request.program, effectiveProgram, editedBlockIds)
+      // Strict mode rejects unselected *content* changes. Ordering is applied after this
+      // content program, so legitimate reorder/orderByParent requests cannot false-positive.
+      if (request.strict === true) {
+        const strictWarnings = artifactEditWarnings(request.program, program, editedBlockIds)
+        if (strictWarnings.length > 0) {
+          const summary = strictWarnings.slice(0, 3).join(' ')
+          throw new Error(`${composed ? 'edit_ui_blocks' : 'render_ui'}: strict mode is on; unselected block(s) changed: ${summary} Keep every unselected top-level block unchanged and try again; this edit request stays pending.`)
+        }
+      }
       const record: ArtifactRevisionRecord = {
         revisionId: callId,
         artifactId: request.artifactId,

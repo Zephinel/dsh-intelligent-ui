@@ -157,6 +157,15 @@ export function ArtifactEditView({
                 onClick={() => { actions.setNestedMode(session.key, session.nestedMode !== true) }}
               >{session.nestedMode === true ? t('edit.nestedRoot') : t('edit.nestedToggle')}</button>
             : null}
+          <button
+            type="button"
+            className="dsh-iui-edit-button dsh-iui-edit-strict"
+            data-dsh-iui-edit-strict
+            aria-pressed={session.strict === true}
+            title={t('edit.strictHint')}
+            disabled={session.status === 'submitted' || session.status === 'error'}
+            onClick={() => { actions.setStrictMode(session.key, session.strict !== true) }}
+          >{t('edit.strictOn')}</button>
           <span className="dsh-iui-edit-toolbar-spacer" />
           <button
             type="button"

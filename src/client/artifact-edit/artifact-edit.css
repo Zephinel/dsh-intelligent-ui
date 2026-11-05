@@ -1997,3 +1997,19 @@
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
+
+/* B2-5 strict protection toggle: same toolbar button, a light pressed state. */
+.dsh-iui-edit-button.dsh-iui-edit-strict[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dsh-iui-edit-button.dsh-iui-edit-strict[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent);
+}
+
+.dsh-iui-edit-button.dsh-iui-edit-strict:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
