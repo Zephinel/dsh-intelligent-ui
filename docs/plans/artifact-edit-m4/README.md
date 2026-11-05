@@ -1,7 +1,7 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0 已通过，M4-1 待 owner 批准开工 — 2026-11-05。**
-> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2）。**M4-1 开始前需 owner 确认 §0.2 的 gate 结论与 M4-1 范围。** 现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
+> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）已在工作树实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-2 层级排序。**
+> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1 已按收窄范围落地（§0.3）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
 ## 0. 评审结论（2026-11-05，owner 已确认）
@@ -86,12 +86,22 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 | Revision/CAS/幂等 | ⏳ M4-1/M4-3 接入 Host 权威链路 |
 | 旧协议 | ✅ 现有根层编辑/渲染/测试不变 |
 
-### 0.2.4 M4-1 提议范围（待 owner 批准）
+### 0.2.4 M4-1 实际交付范围（2026-11-05，工作树）
 
-1. Host：权威 base program/revision + `buildArtifactTree`；结构请求绑定 `baseRevisionId + nodeId + digest`；向客户端暴露 outline/tree 元数据（不回传整页源码）。
-2. Renderer：新增 edit-only `nestedEditLibrary`（HOC + allowlist），`display:contents` + CSS 补偿层；审计 components.css 直接子选择器；fixture 几何快照 E2E。
-3. Client：编辑画布选择键改为 tree nodeId；overlay rect/union；请求列表面包屑；先做**嵌套内容 replace**。
-4. 暂不做：结构操作 UI（M4-3）、duplicate/move、动态 @Each 实例内部编辑、七类容器扩展。
+按 gate 结论收窄后实际落地（详见 §0.3）：
+1. Renderer：`nestedEditLibrary`（HOC + `Col`/`Row`/`Card` allowlist）、`OpenUIRenderer.nestedBlockSlots`（默认 false）、`display:contents` + `nested-edit.css` 25 条直接子选择器补偿、`nested-css-contract-check`（25/25）与 `nested-edit-renderer` 几何 E2E（41 checks）。
+2. Client：`nested.ts` 的 CST→display block 映射（root `bN`、嵌套 `bN.M.K`、nodeId/digest/parent/depth）、编辑工具栏「嵌套区块」opt-in toggle、selection/请求/popover 用嵌套 id、信封携带身份字段。
+3. Host：`buildArtifactTree` 校验 + `isNestedEditRequest`/`describeNestedEditProblem`/`composeNestedEditProgram`，all-nested/all-legacy 限制、CST `replaceNode` 回填、根层 targetOrder 保持、`editedBlockIds` root-only。
+4. 明确未做：Host 权威 program store / tree 元数据路由（结构提交属 M4-3）、结构操作 UI、duplicate/move、动态 `@Each` 内部编辑、七类容器扩展。
+
+## 0.3 M4-1 验证记录（2026-11-05，工作树，未提交）
+
+- Node 测试 **409/409**（Host 184、Client 204、packaging 21；特性文件合计 148：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 50、host artifact-revisions 17）。
+- 浏览器 **9/9** 套件通过：`artifact-edit e2e` **127 checks**（新增嵌套：opt-in toggle、嵌套 display id `b1.1.1`、信封 nodeId/digest/depth）与新建 `nested-edit-renderer e2e` **41 checks**（card/text 0px 漂移、innermost 点击/悬停、overlay union rect、reorder 路径映射、普通渲染不变）。
+- renderer：原有 42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4 不变；新增 `nested-css-contract` **25/25**。
+- 构建（本机实测）：host `lib/index.js` **774.2 kB**、client `lib/client.js` 3.85 MB（js 3.67 MB + css 177.4 kB）、standalone 3.30 MB + 514.4 kB；`npm run check` exit 0；pack 43 files ≈3.99 MB / 10.24 MB。
+- 真机 ego（隔离实例，参考会话新增嵌套卡片）：模型生成「嵌套卡片示例」（Card→Title + Col→两段 Text）；打开编辑 →「嵌套区块」→ 选 `b1.1.1` → 指令「把这段文字改为：嵌套编辑成功。」→ Send；模型调用 `edit_ui_blocks`（带 requestId+artifactId+单块 fragment），Host 记录 **Revision 2**，新卡片显示「嵌套编辑成功。」；对比 program 只有目标 Text 行变化，root/outerCard/未选第二段 Text 逐字节不变。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m41-nested-card.png`、`real-gui-m41-nested-revision.png`、`harness-m4-nested-edit.png`。
+- 限制（必须保留）：嵌套是 opt-in toggle（默认顶层、刷新回顶层、不持久化）；仅 `Col`/`Row`/`Card`；仅内容 replace（无嵌套排序/删除/复制/移动）；`@Each`/opaque/共享引用/ chrome 不可编辑；根层 `targetOrder` 不变；请求必须 all-nested 或 all-legacy（混合拒绝）；`editedBlockIds` 仍为 root id；Host 仍以信封 program 为基础（权威 program store 属 M4-3）；`display:contents` 依赖 25 条 CSS 补偿，需随组件 CSS 维护；真机/真实模型只验证单个嵌套文本替换。
 
 ## 1. 目标与非目标
 
@@ -340,9 +350,9 @@ GPT 评审后新增/收窄、需 owner 确认：
   - Col/Card 渲染包装 spike（overlay 几何、React key/事件、普通渲染无变化）；
   - 固定 fixture（Col 内嵌 Card/Col、共享 helper、@Each 局部变量、Section anchor、不兼容 slot、循环移动）验证 replace/reorder/delete/duplicate/move 与**正确拒绝**。
   - 未通过 gate 不得进入 UI。
-- **M4-1 最小嵌套垂直切片**：仅 Col/Card；嵌套选择/内容编辑；Host 嵌套 splice；精确 overlay；E2E。
-- **M4-2 同父层级排序**：slotKey + 树形编排；Host 重建；旧 targetOrder 兼容。
-- **M4-3 受限结构操作**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。
+- **M4-1 最小嵌套垂直切片（已完成，工作树，2026-11-05）**：Col/Row/Card 嵌套选择/内容编辑；`nestedEditLibrary` + `display:contents` 补偿层；Host CST 嵌套替换；精确 overlay；Node/E2E/真机见 §0.3。**下一步 M4-2。**
+- **M4-2 同父层级排序（下一步）**：slotKey + 树形编排；Host 重建；旧 targetOrder 兼容。
+- **M4-3 受限结构操作**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
 - **M4-4 按容器能力扩展**：Row/Box/Grid/Section/Carousel；模型新增区块（若 owner 后续要）；可视化 diff（可选）。
 - **M4-5 收口**：a11y、视觉回归、真实模型 E2E、文档、性能（区块数 60 时的渲染/拖拽）。
 
@@ -357,6 +367,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **M4-1 新增风险**：`display:contents` 包装依赖 25 条直接子选择器 CSS 补偿层，组件 CSS 变更必须同步维护（`nested-css-contract-check` 只做静态清单检查）；嵌套 nodeId 是 revision-scoped，结构操作后旧 id 失效；M4-1 只验证了单个嵌套文本替换，多嵌套/混合容器/深层场景未真机覆盖；Host 仍以信封 program 为基础（权威 program store 未做）。
 
 ## 14. 代码触点（预估）
 
@@ -366,3 +377,5 @@ GPT 评审后新增/收窄、需 owner 确认：
 - `src/client/artifact-edit/{store,contracts,EditPanel,ArtifactEditView,composer}.tsx`：选择树、编排树、结构操作 UI、草稿 v2。
 - `src/host/{artifact-edit,artifact-revisions}.ts` 或新 `artifact-structure.ts`：层级校验、结构路由。
 - 测试：新增嵌套 fixture（多级 Card/Col）、host/client/浏览器 E2E、真实模型场景。
+
+**M4-1 实际触点**：`src/shared/program-cst.ts`（M4-0 已提交）、`src/shared/artifact-edit.ts`（嵌套身份字段/校验）、`src/client/artifact-edit/nested.ts`（新）、`src/client/artifact-edit/{store,contracts,ArtifactEditView}.tsx` + `artifact-edit.css`、`src/client/IntelligentUICards.tsx`、`src/lib/components/block-slot.tsx`（path context/HOC）、`src/lib/components/nested-edit.css`（新）、`src/lib/{library,render}.tsx`（nestedEditLibrary/nestedBlockSlots）、`src/host/artifact-edit.ts`（嵌套 plan/compose）、`src/shared/locales.ts`（嵌套文案）、测试 `test/client/nested-blocks.test.mjs`、`test/browser/nested-edit-renderer.e2e.mjs`、`test/renderer/nested-css-contract-check.mjs`。

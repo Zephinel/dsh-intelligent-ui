@@ -1,9 +1,9 @@
 # Artifact 编辑与编排 — 后续路线图（A/B 清单与 B0 决策）
 
-> **状态：as-planned 路线图；M1、M2 Phase 1、M3-1a/b/c、M3-2 已提交，M3-3/M3-4 已在工作树实现（未提交）— 2026-11-05；M3 全部完成。**
+> **状态：as-planned 路线图；M1、M2 Phase 1、M3（M3-1a/b/c、M3-2）已提交，M3-3/M3-4 与 M4-0 已提交，M4-1 已在工作树实现（未提交）— 2026-11-05；M3 全部完成，M4 进行中。**
 > 本文件是路线图与决策记录，不是 as-built 文档。已实现行为以代码与 [架构与行为](../../architecture.md) 为准。
-> M1 收口、M2 Phase 1、M3-1a/M3-1b/M3-1c、M3-2 已提交；当前工作树未提交的是 M3-3（草稿持久化、跨标签软租约）与 M3-4（临时样式快照编辑）及本文档同步。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
-> 后续实现（M4、B1/B2 收口项）在 owner 明确说「开始」之前不写代码。
+> M1 收口、M2 Phase 1、M3、M4-0 已提交；当前工作树未提交的是 M4-1（嵌套区块内容编辑）及本文档同步。窄屏提示是 owner 做出「极小屏不支持」决定后提前实现的，B0-1 已决定**保留**该实现。
+> 后续实现（M4-2/M4-3、B1/B2 收口项）在 owner 明确说「开始」之前不写代码。
 >
 > **2026-11-04 B0 已拍板**：保留窄屏提示；开放临时样式编辑（先做授权设计）；支持多卡片并行编辑；维持请求上限；允许从旧修订分支；同时扩展嵌套容器与编排增删/复制；做画布实时预览；第一批 B1 收口与 B3-1 区块子程序原型并行。范围因此比最初计划显著变大，见 §4.1 与 §6 里程碑。
 
@@ -22,6 +22,7 @@
 - **M3-2（2026-11-05，工作树）**：分支编辑——信封 header 支持 `branch: true`，旧修订冲突横幅「从此修订创建新修订」→ branch note → chip 追加「 · 分支」；Host 校验旧 base（记录需同 artifact + revision 匹配，未记录只允许 revision 1）并记录 `latest + 1`，非 branch 仍严格 latest。零模型恢复——新增 `POST /api/intelligent-ui/artifact-restore`（201、400/404/409/413/405 错误码、body ≤300 KiB/15 s）复制旧修订为新修订；客户端 `local-revisions.ts` 把结果存为 localStorage 本地修订卡片（每会话 ≤20、`localRevision` 标记、在触发恢复的 Turn 渲染一次、可继续编辑）。限制：本地卡片不进入 assistant 消息/导出/图片导出/回放链，清存储或换设备丢失；restore 只对非 latest 修订可用；branch 草稿被对账恢复后丢失 branch 标记；真实模型「分支部分失败」未单独验证。
 - **M3-3（2026-11-05，工作树）**：草稿持久化（sessionStorage per-tab，键 `dsh-iui-edit-draft:v1:<sessionId>:<baseRevisionId>` + 每会话索引，250ms debounce，每会话 ≤6，懒 hydrate/`flushArtifactDraftPersistence`，刷新后恢复 chip/请求；限制：跨标签不共享、branch/latestRevision/submitFailed/撤销不持久化、超大 program 不持久化）；跨标签软租约（BroadcastChannel `dsh-iui-artifact-edit-tabs:v1`，30s TTL/10s 续租，query 后 claim、接管按钮、横幅；只提示不合并/不阻止编辑，频道不可用无提示，Host 修订校验仍是最终权威）。
 - **M3-4（2026-11-05，工作树）**：临时样式结果的区块内容编辑——编辑请求/revision meta 增加可选 `temporaryStyle` 快照（`isStyleSnapshot`、`baseLayout===style`、不与 `styleId` 同用、≤20k）；客户端允许带有效快照的临时卡片进入编辑，serialize 内容编辑请求带快照、不带 styleId，纯排序/纯整体说明在 probe 前返回 `temporary_order` → `edit.errorTemporaryOrder`；Host 记录/投影/回放快照、恢复路由复制快照、`render_ui` 完整程序回退对临时样式保持拒绝。限制：只支持内容编辑；排序/整体说明需已保存/内置样式；无有效快照不可编辑；临时样式未单独真机/真实模型验证（E2E 模拟）。M3 四项全部完成，下一步 M4（嵌套/编排增删复制）与 B1/B2 收口。
+- **M4-1（2026-11-05，工作树）**：嵌套区块内容编辑——渲染器 `nestedEditLibrary`（Col/Row/Card HOC）+ `OpenUIRenderer.nestedBlockSlots`（默认 false）、`display:contents` + 25 条直接子选择器 CSS 补偿与 `nested-css-contract-check`、几何 E2E；客户端 `nested.ts` CST→display block 映射（root `bN`、嵌套 `bN.M.K`、nodeId/digest）与「嵌套区块」opt-in toggle；信封 edits 带 nodeId/sourceDigest/parentBlockId/depth；Host CST 校验 + `composeNestedEditProgram` 按 selectionOrder 替换节点，all-nested/all-legacy、根层 targetOrder 不变、`editedBlockIds` root-only。限制：opt-in、仅 Col/Row/Card、仅内容 replace、@Each/opaque/共享引用不可编辑、根层顺序不变、混合拒绝、Host 仍以信封 program 为基础（权威 store 属 M4-3）、CSS 补偿层需随组件 CSS 维护。下一步 M4-2 层级排序。
 - 真机验证（M3-1，Lead，隔离 DSH 实例）：两张卡、两个 chip、一次 Send、模型两次 `edit_ui_blocks`、Revision 3 与 Revision 2 同时落卡；M3-2：旧 Revision 2 restore → 本地 Revision 7（无模型调用、只渲染一次），旧 Revision 2 branch → 「latest is 5」→ 模型生成 Revision 6（base 旧修订）；M3-3：两个标签页同一 session 出现租约横幅/接管，保存草稿后 Reload 恢复 chip `Edit 夏令时与冬令时 · Revision 7 · 1 changes` 与卡片草稿角标。详见 `docs/plans/artifact-edit-m3/README.md` §0.1–§0.4。仍未跑纯排序真实模型回合；真实模型的「部分成功」路径未真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成）。
 
 规模：区块编辑/编排相关新增源码 5,574 行（含编辑态 CSS）、特性测试 1,903 行（含浏览器套件）；M3-3/M3-4 工作树增量：约 20 个已跟踪文件，新增 `tabs.ts`/`test/client/edit-tabs.test.mjs`，另有临时样式契约/记录/客户端编辑改动。Node 测试 **383/383**（Host 174、Client 188、packaging 21；九个特性测试文件合计 134）；浏览器 8 套件通过（artifact-edit 121 checks），packaging 21/21。
@@ -127,8 +128,9 @@ Phase 2（待做）：输入 token 节省（Host 程序缓存 / 客户端上下�
 交付：**M3-1a/M3-1b/M3-1c、M3-2 已提交；M3-3、M3-4 已在工作树实现（2026-11-05），M3 全部完成**，验收数据见 [M3 plan §0.1–§0.4](../artifact-edit-m3/README.md#01-m3-1-验证记录2026-11-05工作树) 与 §3.6/§4/§5/§6；限制（localStorage 本地卡片不进入导出/消息历史、sessionStorage 仅同标签、租约仅提示不合并、临时样式只支持内容编辑且未单独真机/真实模型验证）见 §1/§4/§5/§6。
 说明：M3 已完整落地多卡片主轴、部分失败对账、分支与恢复、草稿持久化与软租约、临时样式内容编辑；下一步 M4（嵌套容器、编排增删复制）与 B1/B2 收口项（a11y、视觉回归、真机验收记录、发布）。M4 会再次改动"编辑会话 + 提交 + 版本"共享状态，按 M3 plan §8 推进。
 
-### M4 — 结构扩展（依赖 M2/M3）
+### M4 — 结构扩展（进行中：M4-0、M4-1 已完成；M4-2/M4-3 待做）
 范围：B0-6 嵌套容器可编辑 + 编排新增/删除/复制；B3-3 嵌套渲染器包装；B3-4 结构补丁协议与 Host 校验；B2-5 严格校验 + diff 预览；B2-6 运行态部分保留。
+交付：**M4-0（CST/渲染引擎 gate）与 M4-1（嵌套区块内容编辑，Col/Row/Card、opt-in、内容 replace）已完成（M4-1 工作树未提交，2026-11-05）**，验收见 [M4 plan §0.3](../artifact-edit-m4/README.md)。**下一步 M4-2 层级排序 → M4-3 受限结构操作（delete/duplicate/move + Host 权威 program store）**；B2-5/B2-6 与容器扩展（M4-4）/收口（M4-5）后续。
 交付标准：嵌套节点可选可排；增删复制有协议与校验；未选区块保护仍成立；渲染器/导出/回放兼容。
 
 ### 贯穿（每批完成时）
@@ -136,9 +138,9 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 
 ## 7. 工作树中的未提交改动（摘要）
 
-已提交基线：M1 收口、M2 Phase 1、M3-1a/M3-1b/M3-1c、M3-2（`5d9689e`/`f3e18c3`/`b6a2322`/`0cda1be`/`9ad8bb2`/`df445aa`/`c7bf9a1`/`0704ffc`/`5186e3b` feat/docs）。
-当前未提交（M3-3）：`src/client/artifact-edit/store.ts`（sessionStorage 草稿持久化/懒恢复）、`src/client/artifact-edit/tabs.ts`（新，BroadcastChannel 软租约）、`src/client/artifact-edit/{ArtifactEditView}.tsx` + CSS（租约横幅）、`src/shared/locales.ts`（lease 文案）、`test/client/edit-tabs.test.mjs`（新）、`test/client/artifact-edit.test.mjs`（持久化 6 条）、`test/browser/artifact-edit.e2e.mjs` 与 harness，以及文档。
-构建产物 `lib/` 已生成（gitignored）；当前树 Node 383/383、浏览器 artifact-edit 121 checks；M3-3/M3-4 改动尚未 commit。
+已提交基线：M1 收口、M2 Phase 1、M3、M4-0（`5d9689e`/`f3e18c3`/`b6a2322`/`0cda1be`/`9ad8bb2`/`df445aa`/`c7bf9a1`/`0704ffc`/`5186e3b`/`dd4a7cd`/`c84fb9a`/`051d902` feat/docs）。
+当前未提交（M4-1）：`src/shared/artifact-edit.ts`（嵌套身份字段/校验）、`src/shared/locales.ts`（嵌套文案）、`src/client/artifact-edit/nested.ts`（新）、`src/client/artifact-edit/{store,contracts,ArtifactEditView}.tsx` + `artifact-edit.css`、`src/client/IntelligentUICards.tsx`、`src/lib/components/block-slot.tsx`、`src/lib/components/nested-edit.css`（新）、`src/lib/{library,render}.tsx`、`src/host/{artifact-edit,index}.ts`、`src/host/artifact-edit.ts`、`package.json`（test:browser/test:renderer 脚本）、`test/client/nested-blocks.test.mjs`（新）、`test/browser/nested-edit-renderer.e2e.mjs`（新）、`test/renderer/nested-css-contract-check.mjs`（新）、`test/browser/artifact-edit.e2e.mjs` 与 harness，以及文档。
+构建产物 `lib/` 已生成（gitignored）；当前树 Node 409/409、浏览器 artifact-edit 127 checks + nested-edit-renderer 41 checks；M4-1 改动尚未 commit。
 
 ## 8. 已知风险（与 A/B 的关系）
 
@@ -149,6 +151,7 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 - 未选区块改动目前仅 warning（B2-5 决定是否升级）。
 - 草稿持久化/多标签（M3-3）：sessionStorage 仅同标签页、跨标签不共享；branch/submitFailed/撤销不持久化；软租约仅提示、不合并/不阻止编辑，频道不可用时无提示；Host 修订校验仍是最终权威。
 - 临时样式编辑（M3-4）：只支持内容编辑；排序/整体说明需已保存/内置样式（客户端与 Host 双重拒绝）；无有效快照不可编辑；未单独真机/真实模型验证。
+- 嵌套区块编辑（M4-1）：opt-in、仅 Col/Row/Card、仅内容 replace；@Each/opaque/共享引用不可编辑；根层 targetOrder 不变；all-nested/all-legacy；`editedBlockIds` 仍为 root id；Host 仍以信封 program 为基础（权威 program store 属 M4-3）；`display:contents` 依赖 25 条 CSS 补偿层；真机只验证单个嵌套文本替换。
 - 大请求 token / 日志成本：输出侧已由区块片段降低，输入侧仍传整页（Phase 2、B3-1）。
 - 重启运行中的 `dsh-web` 才能看到新 client bundle；当前 profile 与仓库 `lib/` 为硬链接。
 - 大 diff 未提交，评审与合并需要按模块拆分。
@@ -163,3 +166,4 @@ B1-5 拖拽 a11y、B2-8 Article/free 真机、B2-9 移动端回归、B2-10 视�
 | 2026-11-05 | M3-1c 落地客户端 Turn 关闭对账：修订 meta requestId、submitted 草稿保留（≤12）、未完成项恢复为 failed 可附加草稿；不自动重发 | 工作树未提交；Host pending 仍按 TTL；时间窗口启发式与真实模型部分成功待验证 |
 | 2026-11-05 | M3-3 草稿持久化 + 跨标签软租约落地：sessionStorage per-tab 草稿（懒 hydrate/清理/上限 6）、BroadcastChannel lease（30s TTL/10s 续租、query→claim、takeover 横幅）；租约仅提示不合并 | 工作树未提交；跨标签不共享草稿；branch 标记不恢复；真实设备/极端并发未验证 |
 | 2026-11-05 | M3-4 临时样式内容编辑落地：请求/meta/record 可选 `temporaryStyle` 快照（≤20k、不与 styleId 同用）、客户端只允许内容编辑、Host 记录/回放/恢复复制、`render_ui` 回退拒绝排序/整体说明 | 工作树未提交；M3 全部完成；临时样式未单独真机/真实模型验证 |
+| 2026-11-05 | M4-1 嵌套区块内容编辑落地：Col/Row/Card opt-in、CST nodeId/digest 身份、渲染器 nestedEditLibrary + CSS 补偿、Host 嵌套校验/替换、all-nested/all-legacy、根层 targetOrder 不变 | 工作树未提交；M4 进行中；下一步 M4-2；权威 program store 未做 |

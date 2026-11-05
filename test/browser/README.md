@@ -1,6 +1,6 @@
 # Browser E2E
 
-Eight focused suites boot a temporary HTTP server (or a local file) + headless
+Nine focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
@@ -37,9 +37,13 @@ events but not the full DSH Web integration.
   temporary-style card's block content: the card carries the temporary marker,
   the envelope carries the style snapshot without a style id, the revision card
   keeps the temporary style, and an order-only draft is blocked with the
-  saved-style guidance. 121 checks; no real model is called (the real-model
-  restore/branch and cross-tab lease acceptance were run manually against an
-  isolated second DSH Web instance and are recorded in the M3 plan).
+  saved-style guidance. The M4-1 nested scenario adds a nested card, edits it
+  with the opt-in nested mode, selects nested block `b1.1.1`, saves an
+  instruction and checks the envelope carries the nested identity fields
+  (nodeId/sourceDigest/depth). 127 checks; no real model is called (the
+  real-model restore/branch, cross-tab lease and nested-edit acceptance were run
+  manually against an isolated second DSH Web instance and are recorded in the
+  M3/M4 plans).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
@@ -71,6 +75,11 @@ events but not the full DSH Web integration.
   in Chrome, and checks the inline-only assets, all three mounted card bodies (no
   header/collapse chrome), inline and saved-template theme exports in forced light/dark, free temporary/template and legacy mixed-layout exports at wide/narrow widths in light/dark, the inlined theme, the `@ToAssistant` copy toast, and the remove-follow-up variant: a mixed Card keeps its prose while only its follow-up control (and form fields) is hidden, a root-level follow-up hides only its control, and a pure follow-up Card disappears whole.
   Run `npm run build` first so the standalone artifacts exist.
+
+- `nested-edit-renderer.e2e.mjs` mounts the edit-mode nested library and measures
+  the `display:contents` wrappers: card/text 0px drift, innermost click and
+  hover, overlay union rects, the reorder path mapping and unchanged ordinary
+  rendering without wrappers. 41 checks.
 
 ```bash
 npm run build && npm run test:browser

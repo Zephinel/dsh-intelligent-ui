@@ -21,7 +21,7 @@ Host  lib/index.js（Node）
 ├─ on-demand.ts Operation controller       # session/event 绑定、澄清与终止；projection v6 的 onDemand
 ├─ style-store.ts + style-routes.ts          # 已保存模板；认证 catalog/saveFromResult/update/delete
 ├─ result-store.ts                          # 最多 200 条不可变临时结果快照；事后保存
-├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订并在 meta 回传 requestId；branch 请求允许旧 base（revision = latest+1）；`edit_ui_blocks` 合并/排序并支持临时样式快照；修订注册表（含可选 `temporaryStyle`）+ 认证查询路由 + POST 恢复路由
+├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订并在 meta 回传 requestId；branch 请求允许旧 base（revision = latest+1）；`edit_ui_blocks` 合并/排序并支持临时样式快照；M4-1 嵌套编辑用 `program-cst.ts` 的 revision-scoped `nodeId`/`sourceDigest` 校验并替换嵌套节点；修订注册表（含可选 `temporaryStyle`）+ 认证查询路由 + POST 恢复路由
 ├─ webServer 路由（可选注入）                # /api/intelligent-ui/export/standalone.{js,css}；GET 修订查询与 POST /api/intelligent-ui/artifact-restore（零模型恢复）
 └─ ctx.skills.register(intelligent-ui)    # 内嵌 Agent Skill（skills/intelligent-ui/SKILL.md）
 
@@ -32,8 +32,8 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 ├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # 插件详情页：可用性、回答样式、我的样式、编排方式与导出（写 Host 设置文档的 volatile 字段）
 ├─ conversation.chat.turnTail 列表项       # 每轮结束时提取程序/临时快照，渲染主题、临时标记、调整/保存操作
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 移植后的 57 个组件（chrome 走渲染器 i18n context）
-├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；草稿按标签页持久化到 sessionStorage（刷新恢复，跨标签不共享）；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染；Turn 关闭时按 requestId 对账 submitted 草稿；旧修订冲突横幅可启用 branch；旧修订可零模型恢复为本地修订卡片；临时样式卡片支持内容编辑（快照随请求）
-│   └─ BlockSlot（仅编辑模式 library）+ 每草稿一个 Composer 引用 chip（按 ref upsert/remove，标签「编辑 {title} · 修订 N · {摘要}」，branch 追加「 · 分支」）+ 已发送消息逐信封摘要节点；`programs.ts::blockEditProgram` + `artifact-edit/local-revisions.ts`（localStorage 每会话 ≤20、按 Turn 渲染）+ `artifact-edit/tabs.ts`（BroadcastChannel 跨标签软租约横幅）+ RenderUiRow 错误明细；Host 归一化/合成 program 随 presentationMeta 回放
+├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；草稿按标签页持久化到 sessionStorage（刷新恢复，跨标签不共享）；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染；Turn 关闭时按 requestId 对账 submitted 草稿；旧修订冲突横幅可启用 branch；旧修订可零模型恢复为本地修订卡片；临时样式卡片支持内容编辑（快照随请求）；「嵌套区块」opt-in 后可选 `Col`/`Row`/`Card` 内的子区块做内容替换（根层顺序不变）
+│   └─ BlockSlot（仅编辑模式 library）+ 每草稿一个 Composer 引用 chip（按 ref upsert/remove，标签「编辑 {title} · 修订 N · {摘要}」，branch 追加「 · 分支」）+ 已发送消息逐信封摘要节点；`programs.ts::blockEditProgram` + `artifact-edit/local-revisions.ts`（localStorage 每会话 ≤20、按 Turn 渲染）+ `artifact-edit/tabs.ts`（BroadcastChannel 跨标签软租约横幅）+ `artifact-edit/nested.ts`（CST→嵌套 display block 映射，`bN.M.K` 与 nodeId/digest）+ RenderUiRow 错误明细；嵌套模式经 `nestedBlockSlots` 走 `nestedEditLibrary`（`src/lib/library.ts`，Col/Row/Card HOC）；Host 归一化/合成 program 随 presentationMeta 回放
 ├─ conversation.chat.assistant-actions 列表项  # 仅该轮记录过 render_ui 的消息出现导出按钮
 │   └─ 菜单（图片：原始 / 圆角 / 卡片；交互页面）→ PNG 或单文件 HTML 下载
 ├─ tool.call.toolview keyed 'render_ui' / 'edit_ui_blocks'  # 进程区只留一行「交互式回答」；失败调用附一行原因（完整文本在 title）
@@ -196,6 +196,14 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - Host：`ArtifactRevisionRecord` 增加可选 `temporaryStyle`（`isStyleSnapshot` + `baseLayout === style` + JSON ≤ 20,000，旧 registry 文件兼容）；`edit_ui_blocks` 输出 schema/成功值/output meta 与 `presentationMeta`/lineage 透传快照，`style = snapshot.baseLayout` 且不带 `styleId`。`render_ui` 的完整程序回退对临时样式保持关闭，并给出明确错误：`render_ui: this artifact uses a result-owned temporary style, so only content edits through edit_ui_blocks are supported. Order-only or global-only edits on a temporary style are not supported; ask the user to edit the page content, or re-render it with a saved style first.` 恢复路由把 `source.temporaryStyle` 复制到新 record 与响应 `revision.temporaryStyle`。
 - 限制：临时样式结果只支持区块内容编辑；纯排序/纯整体说明不支持（客户端阻止 + Host `render_ui` 回退拒绝），需要已保存/内置样式；没有有效快照的临时卡片不可编辑；临时样式路径未单独做真实模型/真机验证（E2E 模拟）。
 
+### 嵌套区块编辑（M4-1）
+
+- 身份与映射：shared `src/shared/program-cst.ts` 的 `buildArtifactTree` 为基础修订分配 revision-scoped `nodeId`、节点 `sourceDigest` 与 CST `nodePath`/slot；客户端 `src/client/artifact-edit/nested.ts::nestedBlocksForProgram` 把树映射为展示区块：root 保持 `bN`，嵌套为 `bN.M.K`，携带 `nodeId`/`parentBlockId`/`depth`/`sourceDigest`；渲染器的 slash 路径（`root/children[0]/...`）与 CST 括号路径（`nodePath`）双向映射（`byPath`/`byNodeId`）。`nodeId` 跨修订不稳定（结构操作后重新提取属 M4-3），请求以 `baseRevisionId + nodeId + sourceDigest` 绑定。
+- 渲染器：新增 `nestedEditLibrary`（由 `blockEditLibrary` 派生，仅 `Col`/`Row`/`Card` 用 `wrapNestedContainer` HOC 把 direct children 替换为合成嵌套 `BlockSlot` AST；普通 library 与顶层 `blockEditLibrary` 不变）。`OpenUIRenderer` 新增 `nestedBlockSlots` prop（默认 `false`，false 时输出与原来一致）。`BlockSlotPathContext` 为 `{parentPath, resolve}`，`resolve` 返回 `{blockId,nodeId,blockIndex}`；嵌套 wrapper 输出 `data-dsh-iui-block`（display id）/`data-dsh-iui-block-node`/`data-dsh-iui-block-path`；根层生产 wrapper 无 path 时 markup 不变。wrapper 使用 `display:contents`，由 `src/lib/components/nested-edit.css` 补偿 25 条直接子选择器；`test/renderer/nested-css-contract-check.mjs` 静态检查（25/25），几何 E2E 验证 0px 漂移、innermost 点击/悬停、overlay union rect、排序路径映射与普通渲染不变。
+- 客户端：编辑器工具栏出现「嵌套区块 / 仅顶层」toggle（`data-dsh-iui-edit-nested`；默认关闭，关闭时清空选择；模式不持久化，刷新回到顶层）。开启后画布用 raw program + `nestedBlockSlots` + resolver，selection/请求列表/popover 使用嵌套 display id；信封 `edits` 增加 `nodeId`/`sourceDigest`/`parentBlockId`/`depth`（shared header 投影），`targetOrder` 仍是根层完整排列。
+- Host：`isNestedEditRequest` 在任一 edit 带 `nodeId` 时为嵌套请求；`planNestedEdits`/`describeNestedEditProblem` 用 `buildArtifactTree` 校验：node 存在、`depth > 0`、非 chrome/scoped(@Each)/shared/opaque、`sourceDigest` 与 `componentType` 匹配、无祖先-后代同时选中、树大小/深度上限；要求全部 edits 带 `nodeId`（all-nested 或 all-legacy，混合拒绝）。`composeNestedEditProgram` 把模型 `edit_ui_blocks` mini program 的 root children 按 `selectionOrder` 与 edits 一一对应，经 CST `replaceNode` 顺序替换，重解析/重校验后记录 revision；根层 `targetOrder` 仍走确定性重排；`editedBlockIds` 仍为受影响的根区块 id（共享 validator 限制）。非法嵌套请求返回模型可读错误且不消费 pending。
+- 限制：opt-in、仅 `Col`/`Row`/`Card`、仅内容 replace（不支持嵌套排序/删除/复制/移动）、`@Each`/opaque/共享引用不可编辑、根层 `targetOrder` 不变、all-nested 或 all-legacy、`editedBlockIds` 仍为 root id；Host 仍以信封携带的 program 为基础（权威 program store 属 M4-3）；CSS 补偿层需随组件直接子选择器维护；真机/真实模型只验证了单个嵌套文本替换。
+
 ### 区块片段编辑（Phase 1）
 
 - `src/shared/artifact-block-bundle.ts` 提供纯数据切片与回填。`extractBlockBundle(program, blockIds)` 返回：被选区块的表达式源码（裸语句引用解析为右侧表达式）、它们传递依赖的 `frozenStatements`（只读语句源码）、`stateSources`（`$name = ...` 声明）与全部顶层区块的 `outline`，并带 `statementId`/标题。
@@ -223,11 +231,14 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - `test/client/artifact-edit-reconcile.test.mjs`（4 条）：未完成的 submitted 草稿恢复为 failed/detached 且重建 requestId、已完成的 submitted 草稿被删除、混合结果逐条独立对账、历史 Turn 不会认领新提交（时间窗口）。
 - `test/client/local-revisions.test.mjs`（3 条）：恢复的本地修订只存本地、按 revisionId 替换并按 `createdAt` 淘汰、超过 20 条上限；本地修订转换为可编辑/可渲染的卡片程序；`restoreRevision` POST 源身份并映射 Host 返回的修订。
 - `test/client/edit-tabs.test.mjs`（3 条）：另一标签的 lease 会被看到并阻止静默 claim、takeover 替换 foreign lease 并释放、过期 lease 被忽略。
+- `test/client/nested-blocks.test.mjs`（4 条）：root 保持 `bN`、嵌套为 `parent.N`；path/nodeId 映射与 display blocks 一致；`@Each` 模板不作为嵌套可编辑区块；无可编辑嵌套子节点时 `hasNested` 为 false。
 - `test/client/artifact-edit-batch.test.mjs`（7 条）：v1 批次上限常量、requestId 线格式、信封头携带 requestId 与多信封指引、一条消息按顺序解析多个信封、坏信封不影响兄弟信封、普通消息解析为空、发送摘要范围不跨信封。
 - `test/client/artifact-block-bundle.test.mjs`（11 条）：选中区块表达式与传递冻结依赖/`$state` 切片、单块与双块回填顺序、chrome/根参数/基础语句保持、微程序使用基础 `$state` 或新增辅助语句、块数不匹配、未知/重复 id 与辅助语句重名、`@Each` 循环变量与对象字面量键不算未定义引用、引用组合后不存在的标识符被拒绝。
-- `test/host/artifact-edit.test.mjs`（40 条）：在既有编辑/片段/多 pending 覆盖之外，新增 branch：旧修订 branch=true 记录 `latest+1`、未记录的 revision 1 允许 branch、非 branch 旧修订仍被 stale 拒绝、非法 branch base 被模型可读错误拒绝且不写修订；以及临时样式内容编辑（record/meta/schema 带快照、`render_ui` 回退拒绝、非法/超大快照拒绝）；`edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
+- `test/host/artifact-edit.test.mjs`（50 条）：在既有编辑/片段/多 pending 覆盖之外，新增 branch：旧修订 branch=true 记录 `latest+1`、未记录的 revision 1 允许 branch、非 branch 旧修订仍被 stale 拒绝、非法 branch base 被模型可读错误拒绝且不写修订；以及临时样式内容编辑（record/meta/schema 带快照、`render_ui` 回退拒绝、非法/超大快照拒绝）；M4-1 嵌套：单/多嵌套替换、嵌套+根 targetOrder、嵌套 branch/temporaryStyle、非法 node/digest/chrome/祖先冲突拒绝、畸形嵌套片段可重试且保持 pending；`edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
 - `test/host/artifact-revisions.test.mjs`（17 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰；GET 路由认证/方法/参数；恢复路由：与 GET 共用 disposer、POST 成功记录 latest+1 并返回本地修订、source 缺失/跨 artifact/already latest 拒绝、body/program/大小校验、非 POST 与认证拒绝，以及临时样式 record 校验与恢复复制快照。
-- 浏览器 `test/browser/artifact-edit.e2e.mjs`（121 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景；Turn 关闭对账；M3-2 restore/branch 场景；M3-3 新增——未发送草稿写入 sessionStorage（含 instruction）、刷新后 Composer chip 与请求列表恢复、清理后回到初始态；M3-4 新增——临时样式卡片标记与编辑入口、信封携带 snapshot 且无 styleId、临时样式修订卡片、仅排序被阻止并显示引导；不调用真实模型。
+- 浏览器 `test/browser/artifact-edit.e2e.mjs`（127 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景；Turn 关闭对账；M3-2 restore/branch 场景；M3-3 新增——未发送草稿写入 sessionStorage（含 instruction）、刷新后 Composer chip 与请求列表恢复、清理后回到初始态；M3-4 新增——临时样式卡片标记与编辑入口、信封携带 snapshot 且无 styleId、临时样式修订卡片、仅排序被阻止并显示引导；M4-1 新增——嵌套模式 toggle、嵌套 display id `b1.1.1`、信封携带 nodeId/digest/depth；不调用真实模型。
+- `test/browser/nested-edit-renderer.e2e.mjs`（41 条检查）：嵌套编辑 library 的 `display:contents` 包装几何（card/text 0px 漂移）、innermost 点击/悬停、overlay union rect、reorder 路径映射、普通渲染无 wrapper 且输出不变。
+- renderer 契约新增 `test/renderer/nested-css-contract-check.mjs`（25/25）：静态检查 25 条受影响的直接子选择器都有 `nested-edit.css` 补偿。
 
 ## 布局与间距契约
 
