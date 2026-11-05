@@ -1,7 +1,7 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：设计已评审 + GPT 外部评审完成，方案已修订；实现尚未开始 — 2026-11-05。**
-> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**（先重设身份/源码变换协议、验证渲染包装，再按 M4-0 gate 推进）。本文已吸收其阻断项，见 **§0.1 修订清单**。**在 owner 确认 §0.1 的收窄项与 M4-0 gate 之前不写实现代码。** 现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
+> **状态：M4-0 已通过，M4-1 待 owner 批准开工 — 2026-11-05。**
+> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2）。**M4-1 开始前需 owner 确认 §0.2 的 gate 结论与 M4-1 范围。** 现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
 ## 0. 评审结论（2026-11-05，owner 已确认）
@@ -52,6 +52,46 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 ```
 
 每个阶段先跑可自动测试的引擎 fixture（不接模型），再开放 UI；七类容器不再一次性承诺。
+
+## 0.2 M4-0 gate 结果（2026-11-05）
+
+结论：**结构变换引擎与嵌套渲染的可行性已证明，可以进入 M4-1；但 Renderer 集成与 Host 权威提交链路不在 M4-0 内，必须在 M4-1/M4-3 完成前保持 gate 关闭。**
+
+### 0.2.1 结构引擎 spike（`src/shared/program-cst.ts`，12 tests）
+
+- 已实现：CST ranges（语句/表达式/call args/array items/object entries）、vendor AST↔CST 树映射、revision-scoped `nodeId`（DFS `n1..`）+ `nodePath`/slotKey/digest、symbol/ref/@Each/$state 收集、`replaceNode`/`reorderChildren`/`removeNode`/`duplicateNode`/`moveNode`/`applyOperations`；每次操作重解析 + 重建树 + 未触及子树字节对比；30 个机器可读错误码。
+- 支持子集：call/array/object/string/number/bool/null/ref/paren/@Each；ternary/binary/member access 为 opaque，不参与结构编辑。
+- 已验证通过：嵌套 replace 且未触及子树逐字节不变；同父 reorder/非法排列拒绝；remove 叶子/容器；duplicate inline 与命名 clone（`_copyN`）；Section anchor/@Each/shared-ref 复制拒绝；move 成功/自身后代/祖先/scope/不兼容容器拒绝；limits/atomic batch。
+- 关键限制：nodeId 是 revision-scoped（结构提交后重新提取，旧 id 失效）；`Col(@Each(...))` 动态 children 作为 opaque，不能在内部 reorder/insert；跨容器 move v1 仅 sibling（拒绝祖先/后代区域重叠）；同一父 slot 的批量操作必须不重叠；opaque 表达式不可替换；`unchanged` 以 content range 为准（命名的祖先被标记 touched）。
+- M4-1 建议：Host 侧用 `buildArtifactTree` 绑定权威 base program/revision；结构请求携带 `baseRevisionId + nodeId + digest`；先做同父 reorder + delete + replace，duplicate/move 放 M4-3。
+
+### 0.2.2 渲染/overlay spike（39 checks，Col/Row/Card，depth 4，11 nested slots）
+
+- **方案 A（运行时合成 BlockSlot AST 走 renderNode）可行；方案 B（edit-mode library HOC 包装容器）可行且推荐；方案 C 不需要。** 泛型“包 direct children”的 HOC + container allowlist 即足够，无需 per-container adapter。
+- 关键发现：`display:contents` wrapper 不是布局透明的（直接子 CSS 失配，card 最大漂移 57.5px / text 67px / body 283→216px）；真实 wrapper 盒仍有 2.5px 高度漂移且成为 Row/Grid 的布局项。**`display:contents` + CSS 补偿层（把受影响的直接子选择器 re-point 到 slot wrapper）可做到 card/text/body 0px 漂移**。
+- overlay：每个 slot 可用真实 rect 定位（contents 模式用 union-of-children）；父子 anchor 包含关系正确；pointer-events:none 穿透 + 按 depth 的 z-index 命中 innermost；reorder 后路径映射正确。
+- 生产回归：普通渲染无 wrapper；现有 root BlockSlot/artifact-edit e2e 121/121 不变；唯一生产改动是 `block-slot.tsx` 的可选 `path` prop + context（+26/−3，path 缺省行为不变）。
+- 主要 M4-1 风险：**CSS 补偿层必须覆盖所有直接子选择器**（`> *`、first/last/nth、`:has(>...)` 等）；建议加 CSS 契约扫描 + fixture 几何快照 E2E。
+
+### 0.2.3 M4-0 验收对照
+
+| gate 项 | 结果 |
+| --- | --- |
+| 稳定节点身份 | ✅ revision-scoped nodeId + digest；跨修订稳定=false（已接受限制） |
+| 嵌套源码替换 | ✅ 支持子集；未触及子树字节一致；opaque 拒绝 |
+| 层级排序 | ✅ 同 slot 完整排列；非法拒绝 |
+| 跨容器移动 | ⚠️ sibling-only；祖先/后代/scope 拒绝 |
+| 结构校验 | ✅ 重解析/引用/scope/limits；非法正确拒绝 |
+| Renderer 映射 | ✅ Col/Row/Card；需 CSS 补偿层 |
+| Revision/CAS/幂等 | ⏳ M4-1/M4-3 接入 Host 权威链路 |
+| 旧协议 | ✅ 现有根层编辑/渲染/测试不变 |
+
+### 0.2.4 M4-1 提议范围（待 owner 批准）
+
+1. Host：权威 base program/revision + `buildArtifactTree`；结构请求绑定 `baseRevisionId + nodeId + digest`；向客户端暴露 outline/tree 元数据（不回传整页源码）。
+2. Renderer：新增 edit-only `nestedEditLibrary`（HOC + allowlist），`display:contents` + CSS 补偿层；审计 components.css 直接子选择器；fixture 几何快照 E2E。
+3. Client：编辑画布选择键改为 tree nodeId；overlay rect/union；请求列表面包屑；先做**嵌套内容 replace**。
+4. 暂不做：结构操作 UI（M4-3）、duplicate/move、动态 @Each 实例内部编辑、七类容器扩展。
 
 ## 1. 目标与非目标
 
@@ -293,7 +333,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 ## 12. 实施阶段与验收
 
-- **M4-0 结构引擎可行性验证**（新增，gate）：
+- **M4-0 结构引擎可行性验证（已完成，见 §0.2）**：
   - 源码 CST/range 引擎（嵌套 children 范围、digest、重解析、子源码字节对比）；
   - revision-scoped nodeId + baseRevision/digest 绑定；
   - symbol/引用/anchor 校验；
