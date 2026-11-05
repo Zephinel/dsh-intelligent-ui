@@ -11,6 +11,7 @@ import {
   buildArtifactTree,
   inspectProgramStructure,
   parseProgramCst,
+  reorderChildren,
   type ArtifactTree,
   type ArtifactTreeNode,
   type CstExpr,
@@ -206,6 +207,230 @@ export function composeNestedEditProgram(
   }
   return { ok: true, program: applied.program }
 }
+/** Tree options shared by nested content and hierarchical ordering. */
+function nestedTreeOptions(request: ArtifactEditRequest): { baseRevisionId: string; containerTypes: string[] } {
+  return { baseRevisionId: request.baseRevisionId, containerTypes: [...NESTED_EDIT_CONTAINER_TYPES] }
+}
+
+/** Editable children of one container slot (chrome and non-editable nodes excluded). */
+function editableChildIds(tree: ArtifactTree, parent: ArtifactTreeNode): string[] {
+  return (parent.childSlots.children ?? []).filter(nodeId => tree.nodes.get(nodeId)?.editable === true)
+}
+
+/** Full slot permutation: requested editable ids fill their base positions; chrome stays put. */
+function fullSlotOrder(tree: ArtifactTree, parent: ArtifactTreeNode, order: readonly string[]): string[] | undefined {
+  const children = parent.childSlots.children ?? []
+  const editable = editableChildIds(tree, parent)
+  if (editable.length !== order.length) return undefined
+  const requested = new Set(order)
+  if (requested.size !== order.length) return undefined
+  const positions: number[] = []
+  children.forEach((nodeId, index) => {
+    if (tree.nodes.get(nodeId)?.editable === true) positions.push(index)
+  })
+  if (positions.length !== editable.length) return undefined
+  const result = [...children]
+  positions.forEach((position, index) => { result[position] = order[index] as string })
+  return result
+}
+
+/** Whether every requested group is already in the base order. */
+function isOrderByParentNoOp(tree: ArtifactTree, orderByParent: Readonly<Record<string, readonly string[]>>): boolean {
+  for (const [key, order] of Object.entries(orderByParent)) {
+    const parent = key === 'root' ? tree.nodes.get(tree.rootNodeId) : tree.nodes.get(key)
+    if (parent === undefined) return false
+    const actual = editableChildIds(tree, parent)
+    if (order.length !== actual.length || order.some((nodeId, index) => nodeId !== actual[index])) return false
+  }
+  return true
+}
+
+/** Whether one node lies in the subtree of any edited node. */
+function insideEditedSubtree(tree: ArtifactTree, nodeId: string, edited: ReadonlySet<string>): boolean {
+  if (edited.size === 0) return false
+  let cursor: string | undefined = nodeId
+  while (cursor !== undefined) {
+    if (edited.has(cursor)) return true
+    cursor = tree.nodes.get(cursor)?.parentNodeId
+  }
+  return false
+}
+
+/**
+ * Model-readable problem with one request's `orderByParent` groups.
+ * @param baseProgram - base revision program the request was made on.
+ * @param request - parsed edit request.
+ * @returns the first problem, or undefined when every group is a complete
+ * permutation of that parent's editable children and does not conflict with
+ * `targetOrder.root` or the same request's content edits.
+ */
+export function describeOrderByParentProblem(baseProgram: string, request: ArtifactEditRequest): string | undefined {
+  const groups = request.orderByParent
+  if (groups === undefined) return undefined
+  const tree = buildArtifactTree(baseProgram, nestedTreeOptions(request))
+  if (tree.limitsExceeded !== undefined) {
+    return `the page is too large or nested too deeply for hierarchical ordering (${tree.limitsExceeded}).`
+  }
+  const extraction = extractArtifactBlocks(baseProgram)
+  const baseRootOrder = extraction.blocks.map(block => block.blockId)
+  if (groups.root !== undefined && (request.targetOrder.length !== baseRootOrder.length
+    || request.targetOrder.some((id, index) => id !== baseRootOrder[index]))) {
+    return 'targetOrder and orderByParent.root cannot disagree; keep targetOrder as the base root order and send the new hierarchy in orderByParent.'
+  }
+  const editedNodes = new Set<string>()
+  if (isNestedEditRequest(request)) {
+    const plan = planNestedEdits(baseProgram, request)
+    if (!plan.ok) return plan.message
+    for (const node of plan.plan.nodes) editedNodes.add(node.nodeId)
+  }
+  for (const [key, order] of Object.entries(groups)) {
+    const parent = key === 'root' ? tree.nodes.get(tree.rootNodeId) : tree.nodes.get(key)
+    if (parent === undefined) return `orderByParent refers to an unknown parent ${JSON.stringify(key)}.`
+    if (parent.chrome) return `orderByParent parent ${JSON.stringify(key)} is page chrome and has no editable block children.`
+    if (parent.scoped) return `orderByParent parent ${JSON.stringify(key)} is inside an @Each template and cannot be reordered in this release.`
+    if (parent.shared) return `orderByParent parent ${JSON.stringify(key)} belongs to a shared named expression; reordering it would change every instance.`
+    if (parent.opaque || parent.problem !== undefined) return `orderByParent parent ${JSON.stringify(key)} is not structurally reorderable in this release.`
+    if (parent.childSlots.children === undefined) return `orderByParent parent ${JSON.stringify(key)} has no children slot to reorder.`
+    if (insideEditedSubtree(tree, parent.nodeId, editedNodes)) {
+      return `cannot reorder inside block ${JSON.stringify(key)} because that subtree is being edited in the same request.`
+    }
+    const editable = editableChildIds(tree, parent)
+    const seen = new Set<string>()
+    for (const nodeId of order) {
+      const child = tree.nodes.get(nodeId)
+      if (child === undefined) return `orderByParent for ${JSON.stringify(key)} refers to an unknown block ${JSON.stringify(nodeId)}.`
+      if (seen.has(nodeId)) return `orderByParent for ${JSON.stringify(key)} lists block ${JSON.stringify(nodeId)} more than once.`
+      seen.add(nodeId)
+      if (child.chrome) return `orderByParent for ${JSON.stringify(key)} must not include page chrome (${JSON.stringify(nodeId)}).`
+      if (!child.editable) return `orderByParent for ${JSON.stringify(key)} includes a block that is not editable (${JSON.stringify(nodeId)}).`
+      if (!editable.includes(nodeId)) return `orderByParent for ${JSON.stringify(key)} lists a block from a different parent (${JSON.stringify(nodeId)}).`
+    }
+    if (order.length !== editable.length) {
+      return `orderByParent for ${JSON.stringify(key)} must list every editable child exactly once (expected ${editable.length}, got ${order.length}).`
+    }
+  }
+  return undefined
+}
+
+/** Map children of one aligned base/current parent pair by identity, with index fallback. */
+function mapChildIds(
+  baseTree: ArtifactTree,
+  baseParent: ArtifactTreeNode,
+  currentTree: ArtifactTree,
+  currentParent: ArtifactTreeNode,
+): Map<string, string> | undefined {
+  const baseChildren = baseParent.childSlots.children ?? []
+  const currentChildren = currentParent.childSlots.children ?? []
+  if (baseChildren.length !== currentChildren.length) return undefined
+  const mapping = new Map<string, string>()
+  const used = new Set<string>()
+  const resolve = (baseChildId: string): string | undefined => {
+    const baseChild = baseTree.nodes.get(baseChildId)
+    if (baseChild === undefined) return undefined
+    const candidates = currentChildren.filter(nodeId => !used.has(nodeId))
+    const byStatement = baseChild.statementId === undefined
+      ? undefined
+      : candidates.find(nodeId => currentTree.nodes.get(nodeId)?.statementId === baseChild.statementId)
+    const byTitle = byStatement !== undefined || baseChild.title === undefined
+      ? undefined
+      : candidates.find(nodeId => {
+        const candidate = currentTree.nodes.get(nodeId)
+        return candidate !== undefined && candidate.title === baseChild.title && candidate.componentType === baseChild.componentType
+      })
+    const byIndex = byStatement !== undefined || byTitle !== undefined
+      ? undefined
+      : candidates.find(nodeId => {
+        const candidate = currentTree.nodes.get(nodeId)
+        return candidate !== undefined && candidate.childIndex === baseChild.childIndex && candidate.componentType === baseChild.componentType
+      })
+    return byStatement ?? byTitle ?? byIndex
+  }
+  for (const baseChildId of baseChildren) {
+    const target = resolve(baseChildId)
+    if (target === undefined) return undefined
+    mapping.set(baseChildId, target)
+    used.add(target)
+  }
+  return used.size === currentChildren.length ? mapping : undefined
+}
+
+/** Resolve a base parent node in the current tree (rebuilt after every reorder). */
+function resolveCurrentParent(baseTree: ArtifactTree, currentTree: ArtifactTree, baseParent: ArtifactTreeNode): ArtifactTreeNode | undefined {
+  if (baseParent.nodeId === baseTree.rootNodeId) return currentTree.nodes.get(currentTree.rootNodeId)
+  const found = currentTree.nodes.get(baseParent.nodeId)
+  if (found !== undefined && found.nodePath === baseParent.nodePath && found.componentType === baseParent.componentType) return found
+  return [...currentTree.nodes.values()].find(node => node.nodePath === baseParent.nodePath && node.componentType === baseParent.componentType)
+}
+
+/**
+ * Apply one request's `orderByParent` groups to a (possibly content-edited) page.
+ *
+ * Groups are applied deepest-first with a tree rebuild after every parent, so
+ * node ids stay consistent; groups are mapped from the base revision tree onto
+ * the returned page by block identity (statement name → title+component → index).
+ * @param baseProgram - base revision program the node ids were issued against.
+ * @param program - model/composed program to normalize.
+ * @param request - parsed edit request carrying `orderByParent`.
+ * @param options - tree options for the identity binding.
+ * @returns the ordered program, or a model-readable failure.
+ */
+export function applyOrderByParent(
+  baseProgram: string,
+  program: string,
+  request: ArtifactEditRequest,
+  options: { readonly containerTypes?: readonly string[]; readonly baseRevisionId?: string } = {},
+): { readonly ok: true; readonly program: string } | NestedEditFailure {
+  const groups = request.orderByParent
+  if (groups === undefined) return { ok: true, program }
+  const problem = describeOrderByParentProblem(baseProgram, request)
+  if (problem !== undefined) return { ok: false, message: problem }
+  const treeOptions = {
+    baseRevisionId: options.baseRevisionId ?? request.baseRevisionId,
+    ...options.containerTypes === undefined ? {} : { containerTypes: options.containerTypes },
+  }
+  const baseTree = buildArtifactTree(baseProgram, treeOptions)
+  const initialTree = buildArtifactTree(program, treeOptions)
+  if (initialTree.limitsExceeded !== undefined) {
+    return { ok: false, message: `the edited page is too large or nested too deeply for hierarchical ordering (${initialTree.limitsExceeded}).` }
+  }
+  const entries = Object.entries(groups).sort((left, right) => {
+    const leftDepth = left[0] === 'root' ? -1 : (baseTree.nodes.get(left[0])?.depth ?? -1)
+    const rightDepth = right[0] === 'root' ? -1 : (baseTree.nodes.get(right[0])?.depth ?? -1)
+    return rightDepth - leftDepth
+  })
+  let currentProgram = program
+  let currentTree = initialTree
+  for (const [key, order] of entries) {
+    const baseParent = key === 'root' ? baseTree.nodes.get(baseTree.rootNodeId) : baseTree.nodes.get(key)
+    if (baseParent === undefined) {
+      return { ok: false, message: `orderByParent refers to an unknown parent ${JSON.stringify(key)}.` }
+    }
+    const fullOrder = fullSlotOrder(baseTree, baseParent, order)
+    if (fullOrder === undefined) {
+      return { ok: false, message: `orderByParent for ${JSON.stringify(key)} is not a complete permutation of its editable children.` }
+    }
+    const currentParent = resolveCurrentParent(baseTree, currentTree, baseParent)
+    if (currentParent === undefined) {
+      return { ok: false, message: `the edited page no longer keeps block ${JSON.stringify(key)}; keep every block's structure and call render_ui again.` }
+    }
+    const mapping = mapChildIds(baseTree, baseParent, currentTree, currentParent)
+    if (mapping === undefined) {
+      return { ok: false, message: `could not map the edited page back onto the requested block order; keep every block's statement name or title stable and call render_ui again.` }
+    }
+    const targetOrder = fullOrder.map(baseChildId => mapping.get(baseChildId))
+    if (targetOrder.some(nodeId => nodeId === undefined) || new Set(targetOrder).size !== targetOrder.length) {
+      return { ok: false, message: `could not map the edited page back onto the requested block order; keep every block's statement name or title stable and call render_ui again.` }
+    }
+    const result = reorderChildren(currentProgram, currentParent.nodeId, 'children', targetOrder as string[], treeOptions)
+    if (!result.ok) {
+      return { ok: false, message: `the requested block order could not be applied (${result.code}): ${result.message}` }
+    }
+    currentProgram = result.program
+    currentTree = result.tree
+  }
+  return { ok: true, program: currentProgram }
+}
+
 /** Pending requests retained per session; one send arms at most a full batch. */
 const MAX_SESSION_REQUESTS = MAX_ARTIFACT_BATCH_REQUESTS
 
@@ -496,7 +721,19 @@ export function createArtifactEditController(
         return `render_ui: this block edit request does not match the program it was made for (${targetProblem}). ${RELOAD}`
       }
     }
-    if (isNoOpEditRequest(request, baseBlockIds)) return NO_OP_MESSAGE
+    if (request.orderByParent !== undefined) {
+      const orderProblem = describeOrderByParentProblem(request.program, request)
+      if (orderProblem !== undefined) return `render_ui: ${orderProblem}`
+    }
+    if (request.orderByParent === undefined) {
+      if (isNoOpEditRequest(request, baseBlockIds)) return NO_OP_MESSAGE
+    } else {
+      const tree = buildArtifactTree(request.program, nestedTreeOptions(request))
+      const noEdits = request.edits.length === 0 && (request.globalInstruction?.trim() ?? '') === ''
+      if (noEdits && !isReorderedOrder(baseBlockIds, request.targetOrder) && isOrderByParentNoOp(tree, request.orderByParent)) {
+        return NO_OP_MESSAGE
+      }
+    }
     if (request.branch !== true) {
       const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
       if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
@@ -649,6 +886,18 @@ export function createArtifactEditController(
         if (!plan.ok) throw new Error(`${tool}: ${plan.message}`)
         nestedPlan = plan.plan
       }
+      // M4-2 hierarchical ordering runs before the legacy root targetOrder.
+      let orderedProgram = program
+      let orderByParentChanged = false
+      if (request.orderByParent !== undefined) {
+        const ordered = applyOrderByParent(request.program, orderedProgram, request, {
+          baseRevisionId: request.baseRevisionId,
+          containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+        })
+        if (!ordered.ok) throw new Error(`${tool}: ${ordered.message}`)
+        orderByParentChanged = ordered.program !== orderedProgram
+        orderedProgram = ordered.program
+      }
       const baseExtraction = extractArtifactBlocks(request.program)
       // Nested edits are recorded through the root-level blocks they affect so the
       // revision metadata and warnings keep their existing block-id contract.
@@ -656,10 +905,11 @@ export function createArtifactEditController(
         ? request.edits.map(edit => edit.blockId)
         : nestedRootBlockIds(request.program, nestedPlan.tree, nestedPlan.nodes)
       // The Host owns the mechanical arrangement; the client `orderChanged` hint is not trusted.
-      let effectiveProgram = program
+      let effectiveProgram = orderedProgram
       let normalizedProgram: string | undefined
-      if (isReorderedOrder(baseExtraction.blocks.map(block => block.blockId), request.targetOrder)) {
-        const reordered = reorderProgramToTargetOrder(program, request.targetOrder, baseExtraction)
+      const rootOrderOwnedByParent = request.orderByParent?.root !== undefined
+      if (!rootOrderOwnedByParent && isReorderedOrder(baseExtraction.blocks.map(block => block.blockId), request.targetOrder)) {
+        const reordered = reorderProgramToTargetOrder(orderedProgram, request.targetOrder, baseExtraction)
         if (reordered === undefined) {
           throw new Error(composed
             ? 'edit_ui_blocks: the composed page no longer keeps every top-level block, so the block order cannot be restored; call edit_ui_blocks again without renaming or removing blocks.'
@@ -670,6 +920,7 @@ export function createArtifactEditController(
       }
       // A block-level result only carries a fragment, so its lineage always needs the composed page.
       if (composed) normalizedProgram = effectiveProgram
+      else if (orderByParentChanged && normalizedProgram === undefined) normalizedProgram = effectiveProgram
       // The lineage program is replayed by the client and must satisfy the shared request bound.
       if (normalizedProgram !== undefined && normalizedProgram.length > MAX_ARTIFACT_PROGRAM_CHARS) {
         throw new Error(composed

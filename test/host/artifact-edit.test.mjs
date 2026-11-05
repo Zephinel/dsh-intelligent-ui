@@ -166,6 +166,23 @@ function nestedFragment(...expressions) {
   return `root = Col([${expressions.join(', ')}])`
 }
 
+/** One M4-2 order-only request (no content edits) for the nested fixture. */
+function parentOrderRequest(orderByParent, overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactId: 'call-original',
+    baseRevisionId: 'call-original',
+    baseRevision: 1,
+    title: NESTED_TITLE,
+    style: 'card',
+    edits: [],
+    targetOrder: ['b1', 'b2'],
+    orderByParent,
+    program: NESTED_PROGRAM,
+    ...overrides,
+  }
+}
+
 /** One durable revision record for the pre-seeded stale-batch tests. */
 function revisionRecord(overrides = {}) {
   return {
@@ -1097,6 +1114,96 @@ test('a malformed nested fragment fails retryably and keeps the request armed', 
   )
   assert.equal(existsSync(m.file), false)
   const value = await m.blockTool.execute({ program: nestedFragment('Text("A retry", "sm")') }, { agent: m.agent, callId: 'call-nested-retry-ok' })
+  assert.equal(value.revision, 2)
+})
+
+test('a nested order-only request rebuilds the hierarchy through render_ui', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(parentOrderRequest({ n4: ['n7', 'n5', 'n6'] }, { requestId: 'req_parent_order1' })))
+  const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_parent_order1' }, { agent: m.agent, callId: 'call-parent-order-1' })
+  assert.equal(value.revision, 2)
+  assert.deepEqual(value.editedBlockIds, [])
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\(sharedText, "sm"\), Text\("A", "sm"\), Text\("B", "sm"\)\]\)/)
+  assert.equal(value.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2])
+  assert.equal(typeof value.program, 'string')
+  assert.equal(m.tool.output.presentationMeta({}, value).program, value.program)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(record.editedBlockIds, [])
+  assert.equal(record.revision, 2)
+})
+
+test('a root orderByParent group owns the root order and is not undone by targetOrder', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(parentOrderRequest({ root: ['n8', 'n2'] }, { requestId: 'req_parent_order2' })))
+  const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_parent_order2' }, { agent: m.agent, callId: 'call-parent-order-2' })
+  assert.equal(value.program.split('\n')[0], 'root = Col([secondCard, outerCard])')
+  assert.equal(value.program.split('\n')[1], NESTED_PROGRAM.split('\n')[1])
+  assert.equal(value.warnings, undefined)
+})
+
+test('nested content edits and orderByParent compose deterministically', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], {
+    requestId: 'req_combo_order1',
+    orderByParent: { n4: ['n7', 'n5', 'n6'] },
+  })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A edited", "sm")'), requestId: 'req_combo_order1' }, { agent: m.agent, callId: 'call-combo-order-1' })
+  assert.equal(value.revision, 2)
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\(sharedText, "sm"\), Text\("A edited", "sm"\), Text\("B", "sm"\)\]\)/)
+  assert.equal(value.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2])
+  assert.deepEqual(value.editedBlockIds, ['b1'])
+})
+
+test('an unchanged orderByParent group plus a content edit is not treated as a no-op', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], {
+    requestId: 'req_combo_nooporder',
+    orderByParent: { n4: ['n5', 'n6', 'n7'] },
+  })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A only", "sm")'), requestId: 'req_combo_nooporder' }, { agent: m.agent, callId: 'call-combo-noop-order' })
+  assert.match(value.program.split('\n')[1], /Col\(\[Text\("A only", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+})
+
+test('invalid orderByParent groups are rejected before rendering and record nothing', async () => {
+  const cases = [
+    [{ n99: ['n5'] }, /unknown parent/],
+    [{ n4: ['n5', 'n6'] }, /must list every editable child exactly once/],
+    [{ n2: ['n3', 'n4'] }, /must not include page chrome/],
+    [{ n4: ['n5', 'n6', 'n11'] }, /lists a block from a different parent/],
+    [{ root: ['n8', 'n2'] }, /targetOrder and orderByParent\.root cannot disagree/],
+  ]
+  for (const [orderByParent, expected] of cases) {
+    const m = mount()
+    const overrides = orderByParent.root === undefined ? { requestId: 'req_bad_order' } : { requestId: 'req_bad_order', targetOrder: ['b2', 'b1'] }
+    m.send(buildEditRequestText(parentOrderRequest(orderByParent, overrides)))
+    await assert.rejects(
+      () => m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_bad_order' }, { agent: m.agent, callId: 'call-bad-order' }),
+      expected,
+    )
+    assert.equal(existsSync(m.file), false, expected.source)
+  }
+})
+
+test('a no-op order-only request is rejected consistently', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(parentOrderRequest({ n4: ['n5', 'n6', 'n7'] }, { requestId: 'req_noop_order' })))
+  await assert.rejects(
+    () => m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_noop_order' }, { agent: m.agent, callId: 'call-noop-order' }),
+    /changes nothing/,
+  )
+  assert.equal(existsSync(m.file), false)
+})
+
+test('a page that no longer matches the ordering fails retryably and keeps the request armed', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(parentOrderRequest({ n4: ['n7', 'n5', 'n6'] }, { requestId: 'req_retry_order' })))
+  const broken = 'root = Col([secondCard])\nsecondCard = Card([Title("第二张卡片", "sm"), Row([Text("C", "sm"), Text("D", "sm")])], "soft")\nsharedText = "shared"\nouterCard = Card([Title("外层卡片", "sm"), Col([Text("A", "sm"), Text("B", "sm"), Text(sharedText, "sm")])])'
+  await assert.rejects(
+    () => m.tool.execute({ program: broken, style: 'card', editRequestId: 'req_retry_order' }, { agent: m.agent, callId: 'call-broken-order' }),
+    /requested block order|could not map the edited page|no longer keeps block/,
+  )
+  assert.equal(existsSync(m.file), false)
+  const value = await m.tool.execute({ program: NESTED_PROGRAM, style: 'card', editRequestId: 'req_retry_order' }, { agent: m.agent, callId: 'call-retry-order' })
   assert.equal(value.revision, 2)
 })
 

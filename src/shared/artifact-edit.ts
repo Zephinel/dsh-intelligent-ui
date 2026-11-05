@@ -133,6 +133,12 @@ export interface ArtifactEditRequest {
   readonly edits: readonly ArtifactBlockEdit[]
   /** Target order of every editable top-level block id (a permutation of the base revision's blocks). */
   readonly targetOrder: readonly string[]
+  /**
+   * M4 hierarchical order: parent node id ('root' or a CST node id) -> complete
+   * child node-id permutation for that parent's `children` slot. Only changed
+   * groups are sent; the Host validates them against the base program tree.
+   */
+  readonly orderByParent?: Readonly<Record<string, readonly string[]>>
   /** Client-side hint that the target order differs from the base order; the Host recomputes it. */
   readonly orderChanged?: boolean
   /** Explicitly base the new revision on an older revision instead of the current head. */
@@ -280,7 +286,7 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'targetOrder', 'orderChanged', 'branch', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
@@ -316,6 +322,21 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
     orders.add(block.selectionOrder)
   }
   if ('orderChanged' in value && typeof value.orderChanged !== 'boolean') return 'invalid_order_changed'
+  if ('orderByParent' in value) {
+    const groups = value.orderByParent
+    if (!isRecord(groups)) return 'invalid_order_by_parent'
+    const entries = Object.entries(groups)
+    if (entries.length > 61) return 'invalid_order_by_parent'
+    for (const [parent, order] of entries) {
+      if (parent !== 'root' && !/^n[1-9][0-9]{0,4}$/.test(parent)) return 'invalid_order_by_parent'
+      if (!Array.isArray(order) || order.length === 0 || order.length > 100) return 'invalid_order_by_parent'
+      const seen = new Set<string>()
+      for (const id of order) {
+        if (typeof id !== 'string' || !/^n[1-9][0-9]{0,4}$/.test(id) || seen.has(id)) return 'invalid_order_by_parent'
+        seen.add(id)
+      }
+    }
+  }
   if ('branch' in value && typeof value.branch !== 'boolean') return 'invalid_branch'
   if ('globalInstruction' in value && !isBoundedText(value.globalInstruction, 1, MAX_GLOBAL_INSTRUCTION_CHARS)) return 'invalid_global_instruction'
   if (!isBoundedText(value.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return 'invalid_program'
@@ -380,6 +401,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
       instruction: edit.instruction,
     })),
     targetOrder: [...request.targetOrder],
+    ...request.orderByParent === undefined ? {} : { orderByParent: request.orderByParent },
     ...request.orderChanged === true ? { orderChanged: true } : {},
     ...request.branch === true ? { branch: true } : {},
     ...request.globalInstruction === undefined ? {} : { globalInstruction: request.globalInstruction },

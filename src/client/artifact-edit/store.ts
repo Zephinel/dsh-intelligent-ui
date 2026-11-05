@@ -82,9 +82,9 @@ let translate: Translate = fallbackT
 
 /** Whether one draft currently holds unsent edit content. */
 export function hasArtifactEditContent(
-  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction'>,
+  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction'> & { readonly nestedOrderChanged?: boolean },
 ): boolean {
-  return session.selection.length > 0 || session.orderChanged || session.globalInstruction.trim() !== ''
+  return session.selection.length > 0 || session.orderChanged || session.nestedOrderChanged === true || session.globalInstruction.trim() !== ''
 }
 
 /** Whether a draft counts against the per-chat draft cap and shows in the switcher. */
@@ -931,6 +931,10 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     globalInstruction: '',
     targetOrder: extraction.blocks.map(block => block.blockId),
     orderChanged: false,
+    nestedMode: false,
+    nestedOrder: undefined,
+    nestedOriginalOrder: undefined,
+    nestedOrderChanged: false,
     status: 'checking',
     editing: true,
     activeBlockId: undefined,
@@ -1150,6 +1154,28 @@ export function setArtifactGlobalInstruction(key: string, text: string): void {
   scheduleDraftPersist(key)
 }
 
+/** Build parent display id -> child display ids groups from a nested block map. */
+function orderGroups(blocks: readonly { blockId: string; parentBlockId?: string }[]): Record<string, string[]> {
+  const groups: Record<string, string[]> = {}
+  for (const block of blocks) {
+    if (block.parentBlockId === undefined) continue
+    ;(groups[block.parentBlockId] ??= []).push(block.blockId)
+  }
+  return groups
+}
+
+/** Whether any nested group differs from its base order. */
+function nestedOrdersDiffer(order: Readonly<Record<string, readonly string[]>> | undefined, base: Readonly<Record<string, readonly string[]>> | undefined): boolean {
+  if (order === undefined || base === undefined) return false
+  const keys = new Set([...Object.keys(order), ...Object.keys(base)])
+  for (const key of keys) {
+    const a = order[key] ?? []
+    const b = base[key] ?? []
+    if (a.length !== b.length || a.some((id, index) => id !== b[index])) return true
+  }
+  return false
+}
+
 /**
  * Toggle nested-container block selection. Nested blocks are only offered when
  * the CST tree finds supported container children; switching modes clears the
@@ -1164,10 +1190,14 @@ export function setArtifactNestedMode(key: string, enabled: boolean): boolean {
     const nested = nestedBlocksForProgram(session.program)
     if (nested === undefined || !nested.hasNested) return false
     if (session.nestedMode === true) return true
+    const groups = orderGroups(nested.blocks)
     sessions.set(key, {
       ...session,
       nestedMode: true,
       blocks: nested.blocks,
+      nestedOriginalOrder: groups,
+      nestedOrder: Object.fromEntries(Object.entries(groups).map(([parent, ids]) => [parent, [...ids]])),
+      nestedOrderChanged: false,
       selection: [],
       activeBlockId: undefined,
       activeDraft: '',
@@ -1179,6 +1209,9 @@ export function setArtifactNestedMode(key: string, enabled: boolean): boolean {
       ...session,
       nestedMode: false,
       blocks: extraction.blocks,
+      nestedOrder: undefined,
+      nestedOriginalOrder: undefined,
+      nestedOrderChanged: false,
       selection: [],
       activeBlockId: undefined,
       activeDraft: '',
@@ -1189,6 +1222,63 @@ export function setArtifactNestedMode(key: string, enabled: boolean): boolean {
   scheduleChipSync(session.sessionId, true)
   scheduleDraftPersist(key)
   return true
+}
+
+/** Apply one nested parent group order and publish. */
+function applyNestedGroupOrder(key: string, parentBlockId: string, order: readonly string[]): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.nestedOrder === undefined) return
+  const next = { ...session.nestedOrder, [parentBlockId]: [...order] }
+  sessions.set(key, {
+    ...session,
+    nestedOrder: next,
+    nestedOrderChanged: nestedOrdersDiffer(next, session.nestedOriginalOrder),
+  })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
+}
+
+/**
+ * Move one nested child inside its display parent group.
+ * @param key - edit-session key.
+ * @param parentBlockId - display id of the parent container block.
+ * @param blockId - nested child display id.
+ * @param toIndex - target index inside that parent group.
+ */
+export function moveArtifactNestedBlock(key: string, parentBlockId: string, blockId: string, toIndex: number): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const order = session.nestedOrder?.[parentBlockId]
+  if (order === undefined) return
+  const from = order.indexOf(blockId)
+  if (from < 0) return
+  const bounded = Math.max(0, Math.min(order.length - 1, Math.trunc(toIndex)))
+  if (bounded === from) return
+  const next = [...order]
+  next.splice(from, 1)
+  next.splice(bounded, 0, blockId)
+  applyNestedGroupOrder(key, parentBlockId, next)
+}
+
+/** Move one nested child by a relative number of positions. */
+export function moveArtifactNestedBlockBy(key: string, parentBlockId: string, blockId: string, delta: number): void {
+  const order = sessions.get(key)?.nestedOrder?.[parentBlockId]
+  if (order === undefined) return
+  const from = order.indexOf(blockId)
+  if (from < 0) return
+  moveArtifactNestedBlock(key, parentBlockId, blockId, from + delta)
+}
+
+/** Restore every nested group to its base order. */
+export function resetArtifactNestedOrder(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.nestedOriginalOrder === undefined) return
+  const clone = Object.fromEntries(Object.entries(session.nestedOriginalOrder).map(([parent, ids]) => [parent, [...ids]]))
+  sessions.set(key, { ...session, nestedOrder: clone, nestedOrderChanged: false })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Open or close the narrow-viewport request drawer. */
@@ -1368,7 +1458,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // composer was busy while the store removed it; never send the same draft twice.
   if (session.status === 'submitted') return { ok: false, problem: 'stale' }
   const globalInstruction = session.globalInstruction.trim()
-  if (session.selection.length === 0 && !session.orderChanged && globalInstruction === '') return { ok: false, problem: 'empty' }
+  if (session.selection.length === 0 && !session.orderChanged && session.nestedOrderChanged !== true && globalInstruction === '') return { ok: false, problem: 'empty' }
   if (session.selection.some(item => item.instruction.trim() === '')) return { ok: false, problem: 'empty_instruction' }
   const edits: ArtifactBlockEdit[] = [...session.selection]
     .sort((a, b) => a.order - b.order)
@@ -1392,6 +1482,21 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // path (it would need on-demand authorization), so reorder/global-only
   // requests are rejected before any probe.
   if (session.temporaryStyle !== undefined && edits.length === 0) return { ok: false, problem: 'temporary_order' }
+  const orderByParent: Record<string, string[]> = {}
+  if (session.nestedOrderChanged === true && session.nestedOrder !== undefined && session.nestedOriginalOrder !== undefined) {
+    const nested = nestedBlocksForProgram(session.program)
+    if (nested !== undefined) {
+      const byDisplay = new Map(nested.blocks.map(block => [block.blockId, block]))
+      for (const [parentDisplay, order] of Object.entries(session.nestedOrder)) {
+        const base = session.nestedOriginalOrder[parentDisplay]
+        if (base === undefined || order.length !== base.length || order.every((id, index) => id === base[index])) continue
+        const parentBlock = byDisplay.get(parentDisplay)
+        if (parentBlock?.nodeId === undefined) continue
+        const nodeOrder = order.map(id => byDisplay.get(id)?.nodeId).filter((id): id is string => id !== undefined)
+        if (nodeOrder.length === order.length) orderByParent[parentBlock.nodeId] = nodeOrder
+      }
+    }
+  }
   const request: ArtifactEditRequest = {
     schemaVersion: 1,
     requestId: session.requestId,
@@ -1405,6 +1510,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
     edits,
     targetOrder: [...session.targetOrder],
+    ...Object.keys(orderByParent).length === 0 ? {} : { orderByParent },
     ...session.orderChanged ? { orderChanged: true } : {},
     ...globalInstruction === '' ? {} : { globalInstruction },
     program: session.program,
@@ -1469,11 +1575,11 @@ export function editChipLabel(facts: EditChipFacts): string {
  * @param session - draft whose chip label is requested.
  * @returns the localized label.
  */
-export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'>): string {
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean }): string {
   const t = translate
   const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
   const count = session.selection.length
-  const reordered = session.orderChanged
+  const reordered = session.orderChanged || session.nestedOrderChanged === true
   const hasGlobal = session.globalInstruction.trim() !== ''
   let summary = count > 0 && reordered
     ? t('edit.chipTail.mixed', { count })

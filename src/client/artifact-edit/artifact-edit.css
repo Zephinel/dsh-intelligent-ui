@@ -797,6 +797,127 @@
   transform: translateY(-1px);
 }
 
+/* Nested arrangement (M4): per-container child ordering below the root list. */
+.dsh-iui-edit-nested-arrangement {
+  gap: 10px;
+}
+
+.dsh-iui-edit-nested-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-nested-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 1px 2px;
+}
+
+.dsh-iui-edit-nested-group-title {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-nested-group-meta {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-nested-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.dsh-iui-edit-nested-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 3px 0 3px 12px;
+  list-style: none;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-nested-list[data-dragging='true'] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dsh-iui-edit-nested-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-radius-sm);
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+}
+
+/* Tree tick from the group rail to each child row. */
+.dsh-iui-edit-nested-row::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 1px;
+  margin-left: -12px;
+  margin-right: 5px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.dsh-iui-edit-nested-row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-nested-row.is-dragging {
+  z-index: 2;
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 16%);
+  opacity: 0.72;
+}
+
+.dsh-iui-edit-nested-row.is-dragging .dsh-iui-edit-grip {
+  cursor: grabbing;
+}
+
+.dsh-iui-edit-nested-row .dsh-iui-edit-arrangement-body {
+  padding: 4px 2px;
+}
+
+.dsh-iui-edit-nested-type {
+  flex: none;
+  max-width: 84px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-nested-row:hover .dsh-iui-edit-arrangement-glyph {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-edit-nested-arrangement .dsh-iui-edit-section-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+  background: transparent;
+}
+
 .dsh-iui-edit-undo {
   display: flex;
   align-items: center;

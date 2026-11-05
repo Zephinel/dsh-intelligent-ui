@@ -318,11 +318,17 @@ function RequestRow({ t, block, order, instruction, onOpen, onEdit, onDelete }: 
   )
 }
 
-/** Pointer-drag bookkeeping for the arrangement list. */
+/** Pointer-drag bookkeeping for one arrangement list (root or nested group). */
 interface DragState {
   readonly blockId: string
+  /** Display id of the nested parent group; omitted for the root list. */
+  readonly parentId?: string
   readonly startY: number
   readonly grip: HTMLButtonElement
+  /** The list element that owns this drag (root or one nested group). */
+  readonly list: HTMLElement
+  /** Row selector for the list (`[data-dsh-iui-edit-nested-row]` or root). */
+  readonly rowSelector: string
   moved: boolean
 }
 
@@ -330,6 +336,15 @@ interface DragState {
 interface DropTarget {
   readonly index: number
   readonly y: number
+  /** Nested parent group; omitted for the root list. */
+  readonly parentId?: string
+}
+
+/** One nested container shown in the nested arrangement tree. */
+interface NestedGroup {
+  readonly parent: ArtifactBlock
+  /** Child display ids in the pending nested order (already sanitized). */
+  readonly childIds: readonly string[]
 }
 
 /** Short request summary for one draft row. */
@@ -435,6 +450,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const [expanded, setExpanded] = useState(false)
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
   const [dragBlockId, setDragBlockId] = useState<string | null>(null)
+  const [dragParentId, setDragParentId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -470,6 +486,31 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     return list
   }, [editStore, session.sessionId])
   const attachedDraftCount = useMemo(() => drafts.filter(draft => draft.attached).length, [drafts])
+  // Nested edit mode: one group per container with at least two editable
+  // direct children. The pending order falls back to the base order, and any
+  // child missing from the pending record is appended so no row disappears.
+  const nestedGroups = useMemo<NestedGroup[]>(() => {
+    if (session.nestedMode !== true) return []
+    const childrenByParent = new Map<string, string[]>()
+    for (const block of session.blocks) {
+      if (block.parentBlockId === undefined) continue
+      const children = childrenByParent.get(block.parentBlockId) ?? []
+      children.push(block.blockId)
+      childrenByParent.set(block.parentBlockId, children)
+    }
+    const groups: NestedGroup[] = []
+    for (const block of session.blocks) {
+      const childIds = childrenByParent.get(block.blockId)
+      if (childIds === undefined || childIds.length < 2) continue
+      const target = session.nestedOrder?.[block.blockId] ?? session.nestedOriginalOrder?.[block.blockId] ?? childIds
+      const ordered = [
+        ...target.filter(childId => childIds.includes(childId)),
+        ...childIds.filter(childId => !target.includes(childId)),
+      ]
+      groups.push({ parent: block, childIds: ordered })
+    }
+    return groups
+  }, [session.nestedMode, session.blocks, session.nestedOrder, session.nestedOriginalOrder])
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -508,11 +549,11 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }, [hoverBlockId])
 
   const computeDrop = (clientY: number): DropTarget | null => {
-    const list = listRef.current
     const drag = dragRef.current
-    if (list === null || drag === null) return null
+    if (drag === null) return null
+    const list = drag.list
     const listRect = list.getBoundingClientRect()
-    const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-dsh-iui-edit-arrangement-row]'))
+    const rows = Array.from(list.querySelectorAll<HTMLElement>(drag.rowSelector))
       .filter(row => row.dataset.blockId !== drag.blockId)
     if (rows.length === 0) return null
     const last = rows[rows.length - 1].getBoundingClientRect()
@@ -526,7 +567,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
         break
       }
     }
-    return { index, y }
+    return { index, y, ...drag.parentId === undefined ? {} : { parentId: drag.parentId } }
   }
 
   const locate = (blockId: string): void => {
@@ -566,17 +607,27 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     }, HOVER_HIDE_DELAY)
   }
 
-  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, blockId: string): void => {
+  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, blockId: string, parentId?: string, order?: readonly string[]): void => {
     if (dragRef.current !== null) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
-    if (session.targetOrder.length < 2) return
+    const list = event.currentTarget.closest<HTMLElement>('ul')
+    const siblings = order ?? (parentId === undefined ? session.targetOrder : [])
+    if (list === null || siblings.length < 2) return
     event.preventDefault()
     event.stopPropagation()
     closeHover()
     const grip = event.currentTarget
     const pointerId = event.pointerId
     try { grip.setPointerCapture(pointerId) } catch { /* capture is an optimization only */ }
-    dragRef.current = { blockId, startY: event.clientY, grip, moved: false }
+    dragRef.current = {
+      blockId,
+      ...parentId === undefined ? {} : { parentId },
+      startY: event.clientY,
+      grip,
+      list,
+      rowSelector: parentId === undefined ? '[data-dsh-iui-edit-arrangement-row]' : '[data-dsh-iui-edit-nested-row]',
+      moved: false,
+    }
     dropRef.current = null
     let cleanup = (): void => undefined
     const finish = (commit: boolean): void => {
@@ -587,8 +638,12 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       dropRef.current = null
       cleanup()
       setDragBlockId(null)
+      setDragParentId(null)
       setDropTarget(null)
-      if (commit && drag !== null && drag.moved && target !== null) actions.moveBlock(drag.blockId, target.index)
+      if (commit && drag !== null && drag.moved && target !== null) {
+        if (drag.parentId === undefined) actions.moveBlock(drag.blockId, target.index)
+        else actions.moveNestedBlock(drag.parentId, drag.blockId, target.index)
+      }
     }
     const onMove = (moveEvent: PointerEvent): void => {
       const drag = dragRef.current
@@ -598,7 +653,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       moveEvent.preventDefault()
       const next = computeDrop(moveEvent.clientY)
       dropRef.current = next
-      setDropTarget(current => current !== null && next !== null && current.index === next.index && current.y === next.y
+      setDropTarget(current => current !== null && next !== null && current.index === next.index && current.y === next.y && current.parentId === next.parentId
         ? current
         : next)
     }
@@ -623,31 +678,45 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     document.addEventListener('keydown', onKey, true)
     dragCleanup.current = cleanup
     setDragBlockId(blockId)
+    setDragParentId(parentId ?? null)
     setDropTarget(null)
   }
 
-  const onGripKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, blockId: string): void => {
-    const index = session.targetOrder.indexOf(blockId)
+  const onGripKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    blockId: string,
+    parentId: string | undefined,
+    order: readonly string[],
+  ): void => {
+    const index = order.indexOf(blockId)
     if (index < 0) return
-    const last = session.targetOrder.length - 1
+    const last = order.length - 1
+    const moveBy = (delta: number): void => {
+      if (parentId === undefined) actions.moveBlockBy(blockId, delta)
+      else actions.moveNestedBlockBy(parentId, blockId, delta)
+    }
+    const moveTo = (toIndex: number): void => {
+      if (parentId === undefined) actions.moveBlock(blockId, toIndex)
+      else actions.moveNestedBlock(parentId, blockId, toIndex)
+    }
     if (event.key === 'ArrowUp') {
       event.preventDefault(); event.stopPropagation()
-      if (index > 0) actions.moveBlockBy(blockId, -1)
+      if (index > 0) moveBy(-1)
       return
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault(); event.stopPropagation()
-      if (index < last) actions.moveBlockBy(blockId, 1)
+      if (index < last) moveBy(1)
       return
     }
     if (event.key === 'Home') {
       event.preventDefault(); event.stopPropagation()
-      if (index !== 0) actions.moveBlock(blockId, 0)
+      if (index !== 0) moveTo(0)
       return
     }
     if (event.key === 'End') {
       event.preventDefault(); event.stopPropagation()
-      if (index !== last) actions.moveBlock(blockId, last)
+      if (index !== last) moveTo(last)
     }
   }
 
@@ -761,14 +830,14 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
               ref={listRef}
               className="dsh-iui-edit-arrangement-list"
               data-dsh-iui-edit-arrangement-list
-              data-dragging={dragBlockId === null ? undefined : 'true'}
+              data-dragging={dragBlockId === null || dragParentId !== null ? undefined : 'true'}
             >
               {session.targetOrder.map((blockId, index) => {
                 const block = blocks.get(blockId)
                 if (block === undefined) return null
                 const entry = requests.get(blockId)
                 const title = block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
-                const dragging = dragBlockId === blockId
+                const dragging = dragBlockId === blockId && dragParentId === null
                 return (
                   <li
                     key={blockId}
@@ -787,7 +856,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                       aria-label={`${t('edit.moveHandle')}: ${title}`}
                       title={t('edit.moveHandle')}
                       onPointerDown={event => { startDrag(event, blockId) }}
-                      onKeyDown={event => { onGripKeyDown(event, blockId) }}
+                      onKeyDown={event => { onGripKeyDown(event, blockId, undefined, session.targetOrder) }}
                     >
                       <GripGlyph />
                     </button>
@@ -817,7 +886,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                 )
               })}
             </ul>
-            {dropTarget === null ? null : (
+            {dropTarget === null || dropTarget.parentId !== undefined ? null : (
               <span
                 className="dsh-iui-edit-insert-indicator"
                 data-dsh-iui-edit-insert-indicator
@@ -827,6 +896,124 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
             )}
           </div>
         </section>
+
+        {nestedGroups.length === 0 ? null : (
+          <section
+            className="dsh-iui-edit-section dsh-iui-edit-nested-arrangement"
+            aria-label={t('edit.nestedArrangement')}
+            data-dsh-iui-edit-nested-arrangement
+          >
+            <div className="dsh-iui-edit-section-head">
+              <span className="dsh-iui-edit-section-title">{t('edit.nestedArrangement')}</span>
+              <span className="dsh-iui-edit-section-spacer" />
+              <button
+                type="button"
+                className="dsh-iui-edit-section-action"
+                data-dsh-iui-edit-reset-nested
+                disabled={session.nestedOrderChanged !== true}
+                aria-label={t('edit.resetNestedOrder')}
+                title={t('edit.resetNestedOrder')}
+                onClick={() => { closeHover(); actions.resetNestedOrder() }}
+              >
+                <ResetGlyph />{t('edit.resetNestedOrder')}
+              </button>
+            </div>
+            <p className="dsh-iui-edit-arrangement-hint">{t('edit.nestedGroupHint')}</p>
+            {nestedGroups.map(group => {
+              const parentId = group.parent.blockId
+              const parentTitle = group.parent.title !== undefined && group.parent.title.trim() !== ''
+                ? group.parent.title
+                : blockKindLabel(group.parent.kind, t)
+              const parentKind = blockKindLabel(group.parent.kind, t)
+              const groupDragging = dragParentId === parentId
+              return (
+                <div
+                  key={parentId}
+                  className="dsh-iui-edit-nested-group"
+                  data-dsh-iui-edit-nested-group
+                  data-parent-id={parentId}
+                >
+                  <div className="dsh-iui-edit-nested-group-head">
+                    <span className="dsh-iui-edit-nested-group-title" title={parentTitle}>{parentTitle}</span>
+                    <span className="dsh-iui-edit-nested-group-meta">{parentKind}</span>
+                  </div>
+                  <div className="dsh-iui-edit-nested-wrap">
+                    <ul
+                      className="dsh-iui-edit-nested-list"
+                      data-dsh-iui-edit-nested-list
+                      data-parent-id={parentId}
+                      data-dragging={groupDragging ? 'true' : undefined}
+                    >
+                      {group.childIds.map((blockId, index) => {
+                        const block = blocks.get(blockId)
+                        if (block === undefined) return null
+                        const entry = requests.get(blockId)
+                        const title = block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
+                        const dragging = dragBlockId === blockId && dragParentId === parentId
+                        const depth = Math.max(0, (block.depth ?? 1) - (group.parent.depth ?? 0) - 1)
+                        return (
+                          <li
+                            key={blockId}
+                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
+                            data-dsh-iui-edit-nested-row
+                            data-block-id={blockId}
+                            data-parent-id={parentId}
+                            data-order-index={index}
+                            data-depth={block.depth}
+                            style={depth === 0 ? undefined : { paddingLeft: `${depth * 12}px` }}
+                          >
+                            <button
+                              type="button"
+                              className="dsh-iui-edit-grip"
+                              data-dsh-iui-edit-nested-grip
+                              aria-label={`${t('edit.moveHandle')}: ${title}`}
+                              title={t('edit.moveHandle')}
+                              onPointerDown={event => { startDrag(event, blockId, parentId, group.childIds) }}
+                              onKeyDown={event => { onGripKeyDown(event, blockId, parentId, group.childIds) }}
+                            >
+                              <GripGlyph />
+                            </button>
+                            <button
+                              type="button"
+                              className="dsh-iui-edit-arrangement-body"
+                              data-dsh-iui-edit-nested-body
+                              title={t('edit.locate')}
+                              onClick={() => { closeHover(); locate(blockId) }}
+                            >
+                              {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
+                              <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
+                              <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
+                              <span className="dsh-iui-edit-nested-type">{blockKindLabel(block.kind, t)}</span>
+                              {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
+                            </button>
+                            <button
+                              type="button"
+                              className="dsh-iui-edit-icon-button"
+                              data-dsh-iui-edit-nested-edit
+                              aria-label={`${t('edit.openRequirement')}: ${title}`}
+                              title={t('edit.openRequirement')}
+                              onClick={() => { closeHover(); actions.openBlockEditor(blockId) }}
+                            >
+                              <EditGlyph />
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    {dropTarget === null || dropTarget.parentId !== parentId ? null : (
+                      <span
+                        className="dsh-iui-edit-insert-indicator"
+                        data-dsh-iui-edit-insert-indicator
+                        style={{ top: dropTarget.y }}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </section>
+        )}
 
         <div className="dsh-iui-edit-divider" aria-hidden="true" />
 

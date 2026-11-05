@@ -80,6 +80,12 @@ export interface ArtifactEditSession {
   readonly program: string
   /** Whether the canvas shows editable blocks nested inside supported containers. */
   readonly nestedMode?: boolean
+  /** Display parent block id -> child display ids in the pending nested order. */
+  readonly nestedOrder?: Readonly<Record<string, readonly string[]>>
+  /** Display parent block id -> base child display ids (for reset/change detection). */
+  readonly nestedOriginalOrder?: Readonly<Record<string, readonly string[]>>
+  /** Whether any nested group differs from its base order. */
+  readonly nestedOrderChanged?: boolean
   /** Program with internal block wrappers, for the edit-mode renderer. */
   readonly wrappedProgram?: string
   readonly blocks: readonly ArtifactBlock[]
@@ -139,6 +145,12 @@ export interface ArtifactEditActions {
   setDrawerOpen(open: boolean): void
   /** Toggle nested-container block selection in the edit canvas. */
   setNestedMode(key: string, enabled: boolean): void
+  /** Reorder one child inside its display parent group. */
+  moveNestedBlock(parentBlockId: string, blockId: string, toIndex: number): void
+  /** Move one nested child by a relative number of positions. */
+  moveNestedBlockBy(parentBlockId: string, blockId: string, delta: number): void
+  /** Restore every nested group to its base order. */
+  resetNestedOrder(): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
   /** Turn the conflict into a branch edit based on this (older) revision. */

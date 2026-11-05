@@ -558,6 +558,31 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(nestedEnvelope.includes('"sourceDigest"'), true, 'envelope carries the source digest')
   await shot('harness-m4-nested-edit.png')
 
+  // 24. Nested arrangement: reorder children inside one container group.
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested arrangement editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested arrangement section')
+  check((await count('[data-dsh-iui-edit-nested-group]')) >= 1, true, 'nested group with multiple children')
+  check(await count('[data-dsh-iui-edit-nested-list]'), await count('[data-dsh-iui-edit-nested-group]'), 'one list per nested parent')
+  const nestedFirst = await read(`document.querySelector('[data-dsh-iui-edit-nested-row]').getAttribute('data-block-id')`)
+  const nestedRowsBefore = await read(`[...document.querySelectorAll('[data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
+  await read(`(() => {
+    const grip = document.querySelector('[data-dsh-iui-edit-nested-grip]');
+    grip.focus();
+    grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  })()`)
+  await new Promise(resolve => setTimeout(resolve, 400))
+  const nestedRowsAfter = await read(`[...document.querySelectorAll('[data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
+  check(nestedRowsBefore.length >= 2, true, 'nested group has rows to reorder')
+  check(nestedRowsAfter[0], nestedRowsBefore[1], 'nested child moved down inside its parent')
+  check(nestedRowsAfter[1], nestedFirst, 'nested child order is a permutation')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('调整区块顺序'))`), true, 'chip reports the nested reorder')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-reset-nested]').disabled`), false, 'nested reset is enabled after a change')
+  const nestedOrderEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
+  check(nestedOrderEnvelope.includes('"orderByParent"'), true, 'envelope carries the hierarchical order')
+  check(nestedOrderEnvelope.includes('"targetOrder"'), true, 'envelope keeps the legacy root target order')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

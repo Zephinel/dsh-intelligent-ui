@@ -40,10 +40,14 @@ events but not the full DSH Web integration.
   saved-style guidance. The M4-1 nested scenario adds a nested card, edits it
   with the opt-in nested mode, selects nested block `b1.1.1`, saves an
   instruction and checks the envelope carries the nested identity fields
-  (nodeId/sourceDigest/depth). 127 checks; no real model is called (the
-  real-model restore/branch, cross-tab lease and nested-edit acceptance were run
-  manually against an isolated second DSH Web instance and are recorded in the
-  M3/M4 plans).
+  (nodeId/sourceDigest/depth). The M4-2 scenario then reorders two children
+  inside one nested parent in the **Nested block order** list: the list rows
+  swap, the reset control enables, the composer chip reports the reorder, and
+  the envelope carries `orderByParent` while keeping the legacy root
+  `targetOrder`. 136 checks; no real model is called (the
+  real-model restore/branch, cross-tab lease and nested-edit/nested-order
+  acceptance were run manually against an isolated second DSH Web instance and
+  are recorded in the M3/M4 plans).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
