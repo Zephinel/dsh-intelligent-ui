@@ -1,6 +1,6 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0–M4-5、B2-5、B2-6、B1-5、B2-8/B2-9/B2-10 全部完成（B2-6：86b436f；B1-5：4c0b4dd；B2-8/9/10：d6ec446 + 文档提交）；用户反馈修复（去 expand 按钮 + 编辑自动宽度适配）已在工作树完成 — 2026-11-05；下一步发布（B1-7）。**
+> **状态：M4-0–M4-5、B2-5、B2-6、B1-5、B2-8/B2-9/B2-10 全部完成（B2-6：86b436f；B1-5：4c0b4dd；B2-8/9/10：d6ec446 + 文档提交）；用户反馈修复（去 expand 按钮 + 编辑自动宽度适配，第二轮改为 column-aware 动态适配）已在工作树完成 — 2026-11-05；下一步发布（B1-7）。**
 > owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1–M4-5 已按收窄范围落地（§0.3–§0.8）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
@@ -202,6 +202,18 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 真机 ego（1800×1000，用户手动把 chat content 设为 1600px）：打开编辑后 inline `--dsh-chat-content-width` → **1032px**，expand 按钮数量 0，无横向溢出；退出恢复 **1600px**。截图（gitignored）：`.tmp-report/fix-width-editing.png`、`.tmp-report/fix-width-restored.png`。
 - 限制：base width 在面板挂载时捕获一次（编辑中拖动 shell 手柄不会即时跟随，但关闭恢复原 inline/偏好）；仅 ≥1180px docked 模式生效；未来 shell 变量位置变更需更新集中式 selector 常量；面板 CSS clamp 仍以 748 为 fallback。
 - 状态：用户反馈修复完成；下一步发布（B1-7）。
+
+## 0.14 第二轮用户反馈修复记录：column-aware 动态宽度适配（2026-11-05，已提交 df01c6b）
+
+- Node 测试 **484/484**（Host 228、Client 235、packaging 21；特性文件 235：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 124，其中 `panel-width` 10 条，新增 column-aware 1 条）。
+- 浏览器 **9/9**：`artifact-edit` **186 checks**（新增动态宽度跟随/恢复与 no-expand 检查）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.02 MB / 10.36 MB；`npm run check` exit 0。
+- 根因：第一版按 viewport 中心计算，忽略 sidebar/聊天列；CSS 自定义属性 computed 值可能是 `clamp(...)` token，`parseFloat` 失败退回 748 与实际宽度不符。
+- 修复：`fitChatContentWidth` 增加 `columnLeft`/`columnWidth`（`panelLeft = viewport - panelWidth`、`maxContent = 2 * (panelLeft - gap - columnLeft) - columnWidth`，固定点 ≤8 轮；默认 columnLeft=0 保持旧结果）；内容宽度改用隐藏 probe 实测 `--dsh-chat-content-width`；用户偏好读父元素 `--dsh-chat-user-width`；`MutationObserver` 观察父/自身 style 以跟随编辑中的 shell 宽度拖动（`writing` 标志避免反馈循环）；resize/断点/卸载恢复逻辑不变。
+- 真机 ego（最新隔离构建，1800×1000，sidebar 280 / 聊天列 left=280 width=1520）：打开编辑后 inline 内容宽度 **752px**；聊天卡片右缘 1412.5、Exit editing 按钮右缘 1382.5，面板左缘 1440 → **按钮可见、无遮挡**；编辑中把用户宽度偏好设为 1600 仍保持 752 不重叠；退出后 inline 覆盖移除、父元素偏好保留 1600。截图（gitignored）：`.tmp-report/dynamic-width2-editing.png`。
+- **部署事实**：用户主 GUI（3080）当时加载的是旧 client bundle；client 插件改动必须**重启 `dsh-web`** 才会生效，页面刷新不够。文档/行为不一致时先确认服务已重启，而不是代码未更新。
+- 限制：仅 ≥1180px docked；面板 CSS clamp 仍以 748 为 fallback；shell 未来迁移变量/属性位置需更新集中式常量。
+- 状态：第二轮修复完成；下一步发布（B1-7）。
 
 ## 1. 目标与非目标
 
@@ -447,7 +459,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **M4-4 按容器能力扩展（已完成，工作树，2026-11-05）**：
   - 已完成：7 类容器白名单/渲染/CSS 补偿/几何 E2E、Section children 参数映射、CST `insertNode` 与跨容器 `moveNode` 基础（§0.6）；模型新增区块接线路由与客户端表单、跨容器 move UI 与结构操作（§0.7）。
   - 后续（M4-5/B2-5）：a11y、视觉回归、真实模型 E2E、发布收口、严格校验/diff 预览；Carousel 离屏 anchor 裁剪仍列为已知限制。
-- **M4-5 收口（已完成）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 完成**：结构 dry-run + diff 预览与未选区块严格保护（§0.9）。M4 全部阶段完成；B2-6 已完成（§0.10）、B1-5 已完成（§0.11）、B2-8/9/10 已完成（§0.12）、用户反馈修复已完成（§0.13）；下一步发布（B1-7）。
+- **M4-5 收口（已完成）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 完成**：结构 dry-run + diff 预览与未选区块严格保护（§0.9）。M4 全部阶段完成；B2-6 已完成（§0.10）、B1-5 已完成（§0.11）、B2-8/9/10 已完成（§0.12）、用户反馈修复已完成（§0.13，第二轮 §0.14）；下一步发布（B1-7）。
 
 每个阶段：Node 测试 + 浏览器 E2E + 真机 + 文档增量，全绿后再进入下一阶段。
 
@@ -460,7 +472,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
-- **编辑宽度适配风险**：base width 只捕获一次（拖动 shell 手柄不即时跟随，但退出恢复）；仅 ≥1180px docked；shell 变量位置变更需更新 selector 常量；面板 clamp fallback 748 与拟合值需保持一致。
+- **编辑宽度适配风险**：依赖 shell 的 `data-conversation-*`/`--dsh-chat-user-width` 位置（迁移需更新常量）；column-aware 公式假设内容在聊天列内居中；仅 ≥1180px docked；面板 clamp fallback 748 与拟合值需保持一致；用户主 GUI 曾因旧 client bundle 未重启而误报未修复。
 - **B2-8/9/10 风险**：free 只能经 On-demand/授权模板获得（普通 render_ui 会被拒）；视觉基线为手动对照、环境敏感、无自动像素 diff；窄屏只验证 390×844 与 900×1000 两个视口；真机截图留在 gitignored 的 `.tmp-report`。
 - **B1-5 a11y 风险**：live region 单槽会合并快速连续播报；指针拖拽只在 drop 播报；Tab 关闭菜单不回焦；隐藏 hint 仍在可访问性树；未做真机 screen-reader/axe 审计，也无像素基线（B2-10）。
 - **B2-6 运行时状态风险**：快照仅会话内存、刷新丢失；容量 24/5/64KiB 可能淘汰较旧快照；首渲染不继承、继承要求 `baseRevisionId`；第三方组件内部状态与编辑画布交互值不保留，用户可能误以为全部交互都会保留。

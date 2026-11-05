@@ -270,14 +270,16 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 视觉基线（B2-10）：`test/browser/visual-baselines/` 保存 5 张手动参考截图（`article-card-1440.png`、`free-card-1440.png`、`editor-article-1440.png`、`preview-modal-1440.png`、`narrow-390-viewport.png`）以及 `captures.json`（浏览器/视口/截图时间与方法）、`SHA256SUMS` 与 README。这是**手动视觉基线，不是自动像素 diff 套件**：现有浏览器套件继续负责几何/排版守卫，基线用于 UI 变更后人工对照；环境敏感（macOS、Chrome 156、2× DPR、light），且测试基线目录不进入 npm 包。
 - 验证计数不变：Node 474/474、浏览器 9/9、`artifact-edit` 180 checks、`nested-edit-renderer` 75、`nested-css-contract` 28/28 + 5/5。
 
-### 编辑时自动内容宽度适配（用户反馈修复）
+### 编辑时自动内容宽度适配（用户反馈修复，第二轮）
 
 - 进入编辑（停靠面板挂载）时自动收窄主聊天内容宽度，避免右侧面板覆盖内容；退出编辑时恢复用户原来的宽度。不修改 shell 的宽度偏好，只临时覆盖会话内容元素上的 inline `--dsh-chat-content-width`。
-- 纯函数 `fitChatContentWidth`（`src/client/artifact-edit/panel-width.ts`）：`panelWidth = clamp((viewportWidth - current) / 2 + 16, 272, 360)`，`desired = min(current, viewportWidth - 2 * (panelWidth + 24))`，迭代至固定点（≤8 轮，<0.5px 视为收敛）；`minContent = 360`，视口不足以容纳两侧面板 + 最小内容或用户宽度已适配时返回原值。示例：1440/748→672、2548/1900→1780、1180/748→412、宽屏已适配则不变。
-- DOM helper `applyEditChatContentWidth`：仅在 `matchMedia('(min-width: 1180px)')` 且存在 `[data-conversation-content][data-conversation-region="chat"]` 时生效；保存原 inline 值与 priority，写入拟合后的 px；`resize` 用保存的 base width 重算（不基于自身覆盖值）；低于断点时恢复 inline；清理时恢复原 inline 或移除属性。`EditPanel` 在挂载/卸载的单个 `useEffect` 中调用，不在渲染期读 DOM。
-- 限制：base width 在面板挂载时捕获一次——编辑中拖动 shell 宽度手柄不会即时跟随，但关闭时恢复原 inline 值/用户偏好不丢；仅在 ≥1180px docked 模式生效；若未来 shell 把该变量移到 `body`/`:root`，需要更新集中式 selector 常量；面板自身 CSS clamp 仍以 748 为 fallback（覆盖后 672→360，面板与内容不重叠）。
-- 真机（ego，1800×1000，用户手动把 chat content 设为 1600px）：打开编辑后 inline var 变为 **1032px**（内容右缘距面板左缘 24px 的设计值），expand 按钮数量为 0，无横向溢出；退出后恢复 **1600px**。
-- 测试：`test/client/panel-width.test.mjs`（9 条：公式固定点/已适配不变/最小内容/视口过小/媒体断点/DOM 覆盖与恢复/resize 重算等）；浏览器 `artifact-edit` 183 checks 含自动宽度拟合/恢复与 expand 按钮不存在的用例。
+- 第二轮根因：第一版按 **viewport 中心** 计算，忽略 sidebar 与聊天列（列可从 sidebar 之后开始），且 CSS 自定义属性的 computed 值可能是 `clamp(...)` token，`parseFloat` 解析失败后退回 748，与实际宽度（如 920）不符，导致面板仍遮挡内容。
+- 纯函数 `fitChatContentWidth`（`src/client/artifact-edit/panel-width.ts`）：可选 `columnLeft`/`columnWidth`（默认 0/viewportWidth，保持旧结果）；`panelWidth = clamp((viewportWidth - current) / 2 + 16, 272, 360)`，`panelLeft = viewportWidth - panelWidth`，`maxContent = 2 * (panelLeft - gap - columnLeft) - columnWidth`，`desired = min(current, maxContent)`，迭代至固定点（≤8 轮，<0.5px 收敛）；`minContent = 360`；视口不足或已适配返回原值。
+- DOM helper `applyEditChatContentWidth`：仅在 `matchMedia('(min-width: 1180px)')` 且存在 `[data-conversation-content][data-conversation-region="chat"]` 时生效；保存原 inline 值与 priority。内容宽度优先读内容父元素的 `--dsh-chat-user-width`（用户宽度偏好），否则回退到 probe 实测：插入隐藏 probe（`width: var(--dsh-chat-content-width)`）后用 `getBoundingClientRect()` 得到真实像素，从而解析 `clamp()` 值。`columnLeft`/`columnWidth` 取自内容元素的实际 `getBoundingClientRect()`（聊天列，sidebar 之后）。`resize` 重算；`MutationObserver` 观察内容父元素与自身的 `style`，编辑中拖动 shell 宽度把手（写 `--dsh-chat-user-width`）会立即重算；通过 `writing` 标志忽略自身写入避免反馈循环；低于断点或已适配时恢复 inline；卸载时恢复原 inline/移除属性、断开 observer，用户偏好不被修改。`EditPanel` 在挂载/卸载的单个 `useEffect` 中调用，不在渲染期读 DOM。
+- 真机（ego，最新隔离构建，1800×1000，sidebar 280 / 聊天列 left=280 width=1520）：打开编辑后 inline 内容宽度变为 **752px**；聊天卡片右缘 1412.5、Exit editing 按钮右缘 1382.5，面板左缘 1440 → 按钮可见、无遮挡；编辑中把用户宽度偏好设为 1600，仍保持 752 不重叠；退出后 inline 覆盖移除，父元素偏好保留 1600。
+- 部署：client 插件改动只有**重启 `dsh-web`** 才会加载（页面刷新不够）。用户主 GUI 曾因加载旧 client bundle 仍显示旧行为；排查文档/行为不一致时先确认服务已重启。
+- 限制：仅 ≥1180px docked 模式生效；面板自身 CSS clamp 仍以 748 为 fallback；若 shell 未来迁移 `--dsh-chat-content-width`/`--dsh-chat-user-width` 或 `data-conversation-*` 属性，需要更新集中式 selector/变量常量。
+- 测试：`test/client/panel-width.test.mjs`（10 条：固定点/默认视口/宽视口/断点/已适配/过小视口/minContent/常见视口不重叠/非法值/column-aware sidebar 偏移）；浏览器 `artifact-edit` 186 checks 含自动拟合/恢复、动态跟随用户宽度与 expand 按钮不存在的用例。
 
 ### 区块片段编辑（Phase 1）
 
