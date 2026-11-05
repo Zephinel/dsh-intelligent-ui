@@ -1,6 +1,6 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0–M4-5 全部完成并提交（M4-5：3970d33 feat）— 2026-11-05；B2-5 部分完成（结构 dry-run + diff 已做，未选区块内容严格模式未做）。**
+> **状态：M4-0–M4-5 与 B2-5 全部完成并提交（M4-5：3970d33；B2-5：54fb145）— 2026-11-05；下一步 B2-6/B1 收口。**
 > owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1–M4-5 已按收窄范围落地（§0.3–§0.8）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
@@ -149,10 +149,20 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **456/456**（Host 223、Client 212、packaging 21；特性文件合计 207：host artifact-edit 64、host artifact-structure 25、host artifact-revisions 17、client 101）。
 - 浏览器 **9/9**：`artifact-edit` **170 checks**（新增 preview dry-run→200、confirm→apply、模态 `aria-modal`/初始焦点 Cancel、diff add 行、move 的 preview→apply 两段请求）；`nested-edit-renderer` 75；renderer `nested-css-contract` **28/28 direct + 5/5 scoped**。
-- 构建（本机实测）：host `lib/index.js` **808.8 kB**、client `lib/client.js` 3.89 MB（js 3.71 MB + css 191.1 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.34 MB；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **808.8 kB**、client `lib/client.js` 3.89 MB（js 3.71 MB + css 191.1 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
 - 真机 ego（隔离实例，参考会话「M44 容器验证」R4）：打开编辑 →「嵌套区块」→ 复制 Box 组 → 模态 diff 显示 `boxCard ... + boxGroup_copy1` 等 add/remove/same 行、summary 为 1 个顶层区块 → 确认 → 本地结构修订卡 **Revision 5**（Box 内容重复为 box one/box two 两次），无错误。截图（gitignored）：`.tmp-report/real-gui-m45-preview-confirm.png`。
 - 已完成：Host dry-run preview（同 apply 校验/原子操作/最终校验，不写 revision/registry/ledger；200 preview 响应、touched ≤120、changedBlockIds 同口径、错误一致、同 operationId 后续 apply 只记一次 revision）；客户端 preview 状态/actions/LCS diff（>400 行降级）/confirm 才 apply；preview→模态确认（duplicate/delete/move）、`aria-modal`/初始焦点 Cancel/focus trap/Esc/backdrop/焦点返回/disabled/reduced-motion；保留旧直接 apply fallback；性能 smoke（7 卡片/49 区块/57 nodes <2s；insertNode+reorder <2s）；视觉守卫仍为几何/排版 E2E（无像素基线）。
 - 限制：无像素级视觉快照基线、无完整 screen-reader/axe 审计；preview loading 无客户端超时（依赖 fetch 失败）；模态背景用遮罩阻止指针但未设 `inert`/`aria-hidden`；**B2-5 的「未选区块内容严格模式（warning→strict）」未做**；既有 M4 限制全部不变（Carousel 离屏 anchor、跨容器 append-only/root target、additions 与 orderByParent 分开发送、每容器 1 addition、无多步 undo/GC、base_missing 仅 inline、本地结构卡限制）。M4-5 完成，B2-5 仍为部分完成。
+
+## 0.9 B2-5 严格保护记录（2026-11-05，已提交 54fb145；B2-5 完成）
+
+- Node 测试 **461/461**（Host 228、Client 212、packaging 21；特性文件合计 212：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 101）。
+- 浏览器 **9/9**：`artifact-edit` **173 checks**（新增 strict toggle 默认关、信封 `"strict":true` + strict 指令）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
+- 构建（本机实测）：host `lib/index.js` **809.1 kB**、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.6 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
+- 实现：shared `ArtifactEditRequest.strict?: boolean`（header 投影、strict prose）；客户端工具栏「严格保护 / Strict protection」toggle（`data-dsh-iui-edit-strict`、`aria-pressed`、默认关、submitted/error disabled）、store `setStrictMode` 与 serialize；Host 在保留警告之后、record revision/consume pending 之前检查 strict，未选顶层块改动 → 模型可读错误（`render_ui:`/`edit_ui_blocks:` 前缀、≤3 条 label 摘要、无源码），pending 保留、无 revision/registry/ledger，可用同一请求重试；比较基于 content stage（重排前），合法排序不误报。
+- Host strict 测试 5 条：nested strict 成功、full render 改未选 → strict 错误且无 revision + 同 pending 修正后成功、非 strict 对照记录 warning、order-only 不误报、多块摘要无源码泄露。
+- 范围与限制：只覆盖**识别到的顶层未选区块**（statement name→title+type→unique title、digest，排除 selected/edited ids）；**不检测选中的根区块内部、未被选中的嵌套子节点改动**；`edit_ui_blocks` fragment 合成本身不能改未选顶层块，完整 `render_ui`（`edits: []`）覆盖全部顶层块；`strictOff` 文案当前未使用；严格拒绝路径只有 Host 单测覆盖，**未做真机验证**。
+- 状态：B2-5 完成（结构 diff 预览 §0.8 + 严格保护 §0.9）；下一步 B2-6（运行态部分保留）与 B1 收口（a11y/视觉回归/真机/发布）。
 
 ## 1. 目标与非目标
 
@@ -398,7 +408,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **M4-4 按容器能力扩展（已完成，工作树，2026-11-05）**：
   - 已完成：7 类容器白名单/渲染/CSS 补偿/几何 E2E、Section children 参数映射、CST `insertNode` 与跨容器 `moveNode` 基础（§0.6）；模型新增区块接线路由与客户端表单、跨容器 move UI 与结构操作（§0.7）。
   - 后续（M4-5/B2-5）：a11y、视觉回归、真实模型 E2E、发布收口、严格校验/diff 预览；Carousel 离屏 anchor 裁剪仍列为已知限制。
-- **M4-5 收口（已完成，工作树，2026-11-05）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 部分完成**：结构 dry-run + diff 预览已做，「未选区块内容严格模式（warning→strict）」未做。M4 全部阶段完成。
+- **M4-5 收口（已完成，工作树，2026-11-05）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 完成**：结构 dry-run + diff 预览与未选区块严格保护（§0.9）。M4 全部阶段完成；下一步 B2-6/B1 收口。
 
 每个阶段：Node 测试 + 浏览器 E2E + 真机 + 文档增量，全绿后再进入下一阶段。
 
@@ -411,6 +421,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **B2-5 严格模式风险**：只覆盖识别到的顶层未选区块，选中根块内部的嵌套未选子节点改动不检测；strictOff 文案未用；严格拒绝路径只有 Host 单测（无真机）；模型可能忽略 header strict 说明，需靠信封 prose + 错误重试兜底。
 - **M4-5/B2-5 风险**：无像素级视觉快照基线，视觉回归仍靠几何/排版 E2E；无完整 screen-reader/axe 审计；preview loading 无客户端超时；模态背景未设 `inert`/`aria-hidden`（仅遮罩阻止指针）；B2-5 内容严格模式（warning→strict）未做，未选区块改动仍只有 warning。
 - **M4-4 已完成阶段风险**：additions 依赖模型严格遵循 fragment 顺序（edits→additions、children 数），失败需重试；`additions` 与 `orderByParent` 分开发送；root 不能作跨容器目标；Carousel 离屏 anchor 未裁剪；跨容器移动只 append、无位置选择；每容器 v1 一个 addition；`base_missing` 无旧卡恢复提示；无结构 diff/undo/GC。
 - **M4-4 第一阶段风险**：Carousel 的离屏 item anchor 可能超出 track，绘制需与 track rect 相交裁剪（未做）；CSS 补偿层从 28 direct + 5 scoped 继续增长，组件 CSS 变更必须同步维护；Section children 参数映射（第 2 参数）与其他容器（第 1 参数）不同，后续新增容器必须登记；shared `additions` schema 已存在但 Host/UI 未接入，文档不得声称模型新增区块可用；跨容器 move 引擎已支持但无 UI。
