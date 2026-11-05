@@ -1,7 +1,7 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）与 M4-2（层级排序）已在工作树实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-3 受限结构操作。**
-> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1/M4-2 已按收窄范围落地（§0.3/§0.4）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
+> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）、M4-2（层级排序）与 M4-3（权威 program store + 确定性结构操作）已实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-4 容器扩展/模型新增/跨容器/权威恢复收口。**
+> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1/M4-2/M4-3 已按收窄范围落地（§0.3–§0.5）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
 ## 0. 评审结论（2026-11-05，owner 已确认）
@@ -111,6 +111,17 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 构建（本机实测）：host `lib/index.js` **781.1 kB**、client `lib/client.js` 3.86 MB（js 3.68 MB + css 179.4 kB）、standalone 3.30 MB + 514.4 kB；`npm run check` exit 0；pack 43 files ≈3.99 MB / 10.26 MB。
 - 真机 ego（隔离实例，参考会话嵌套卡片 Revision 2）：打开编辑 →「嵌套区块」→ 把 inner Col 的第二段 Text 上移 → chip 显示「Reorder blocks」→ Send；模型调用 `render_ui` 返回完整 program（带 `editRequestId`），Host 记录 **Revision 3**；新卡片文本顺序变为「Col 里是两段 Text…」在前、「嵌套编辑成功。」在后，无错误。同时验证 stale Revision 1 chip 会被冲突阻断（预期）；成功路径使用最新 Revision 2。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m42-nested-order.png`。
 - 限制（必须保留）：嵌套排序仍是 opt-in 且不持久化；没有画布 live preview（列表只显示目标顺序）；不支持跨容器移动；order-only 仍需一次模型 `render_ui` 回合（不是零模型）；不要对正在排序的 parent 子树同时做内容编辑；Host 仍以信封携带的 program 为基础（权威 program store 属 M4-3）；`editedBlockIds` 在 order-only 时为 `[]`。
+
+## 0.5 M4-3 验证记录（2026-11-05，工作树，未提交）
+
+- Node 测试 **431/431**（Host 206、Client 204、packaging 21；特性文件合计 170：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 57、host artifact-revisions 17、host artifact-structure 15）。
+- 浏览器 **9/9**：`artifact-edit e2e` **143 checks**（新增 structure duplicate 客户端路径：mock 结构路由、请求 body 带 nodeId/sourceDigest/toIndex、结构操作修订本地卡片标签、编辑器关闭）；`nested-edit-renderer` 41 checks；renderer `nested-css-contract` **25/25**。
+- 构建（本机实测）：host `lib/index.js` **799.7 kB**、client `lib/client.js` 3.86 MB（js 3.69 MB + css 181.8 kB）、standalone 3.30 MB + 514.4 kB；`npm run check` exit 0；pack 43 files ≈4.00 MB / 10.29 MB。
+- 真机 ego（隔离实例，参考会话新建嵌套卡片「结构操作验证」R1：outerCard→Col→alpha/beta）：
+  1. 打开编辑 →「嵌套区块」→ 复制 b1.1.1（alpha）→ **无模型回合**；本地卡「结构操作修订」Revision 2，内容 alpha/alpha/beta；registry `dsh-intelligent-ui-programs.json` 出现 initial + struct program，ledger 1 条。
+  2. 打开 Revision 2 →「嵌套区块」→ 对复制的 b1.1.2（alpha）两段式确认删除 → Revision 3，内容 alpha/beta；编辑器关闭、无错误。
+- 截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m43-structure-duplicate.png`、`real-gui-m43-structure-delete.png`。
+- 限制（必须保留）：结构操作 UI 只有 delete/duplicate（Host 有 same-parent move API 但无 UI；跨容器移动未做）；权威 program 注册表只覆盖 M4-3 安装后且仍在 200/50MB LRU 内的 revision——旧卡/被驱逐 base 返回 `base_missing` 需重新渲染，branch 也要求 base 仍在；本地结构修订卡只在 localStorage、只在触发 Turn 渲染（无 assistant 消息/导出/跨设备，丢失提示仍缺）；无 diff 预览/多步 undo；删除不做 helper GC；`Section`/`Toc`/`@Each`/共享表达式由 CST 规则限制；结构操作与内容编辑不能混合为一个动作；结构操作直接 `markSubmitted` 当前草稿（尚无“草稿过期”确认 UI）；`operationId` 幂等与 `toIndex` 语义见 §7.2。
 
 ## 1. 目标与非目标
 
@@ -352,8 +363,9 @@ GPT 评审后新增/收窄、需 owner 确认：
   - 未通过 gate 不得进入 UI。
 - **M4-1 最小嵌套垂直切片（已完成，工作树，2026-11-05）**：Col/Row/Card 嵌套选择/内容编辑；`nestedEditLibrary` + `display:contents` 补偿层；Host CST 嵌套替换；精确 overlay；Node/E2E/真机见 §0.3。**下一步 M4-2。**
 - **M4-2 同父层级排序（已完成，工作树，2026-11-05）**：`orderByParent`（单 children slot）、客户端「嵌套区块编排」同父 drag/keyboard/重置、Host 最深优先重建与 root/legacy 兼容、order-only meta。Node/E2E/真机见 §0.4。**下一步 M4-3。**
-- **M4-3 受限结构操作（下一步）**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
-- **M4-4 按容器能力扩展**：Row/Box/Grid/Section/Carousel；模型新增区块（若 owner 后续要）；可视化 diff（可选）。
+- **M4-3 受限结构操作（已完成，工作树，2026-11-05）**：权威 program 注册表 + 幂等 ledger + `POST /api/intelligent-ui/artifact-structure`；CST 校验 + 原子 delete/duplicate/move 批量 + revision 记录；客户端 delete/duplicate UI 与本地结构修订卡片。Node/E2E/真机见 §0.5。**下一步 M4-4。**
+- **M4-4 按容器能力扩展（下一步）**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
+- **M4-4 按容器能力扩展（下一步）**：Row/Box/Grid/Section/Carousel；模型新增区块（若 owner 后续要）；跨容器 move；权威恢复收口。
 - **M4-5 收口**：a11y、视觉回归、真实模型 E2E、文档、性能（区块数 60 时的渲染/拖拽）。
 
 每个阶段：Node 测试 + 浏览器 E2E + 真机 + 文档增量，全绿后再进入下一阶段。
@@ -367,6 +379,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **M4-3 新增风险**：权威注册表只覆盖安装后且在 200/50MB LRU 内的 revision，旧卡/被驱逐 base 需重新渲染；结构操作与内容编辑不能混合，且结构操作会直接提交当前草稿（无草稿过期确认）；本地结构卡仅 localStorage/触发 Turn，丢失即无提示；无 diff/undo，删除不 GC helper；`operationId` 幂等与 canonical body 需要严格一致；`move` 无 UI、跨容器未做。
 - **M4-2 新增风险**：嵌套排序没有画布 live preview（列表目标顺序需清晰）；order-only 仍是模型回合（成本/延迟）；同父 scope 与 `@Each`/共享引用的拒绝依赖 CST 校验；根 `targetOrder` 与 `orderByParent.root` 冲突必须保持拒绝；`editedBlockIds` order-only 为 `[]` 可能被旧消费者误读。
 - **M4-1 新增风险**：`display:contents` 包装依赖 25 条直接子选择器 CSS 补偿层，组件 CSS 变更必须同步维护（`nested-css-contract-check` 只做静态清单检查）；嵌套 nodeId 是 revision-scoped，结构操作后旧 id 失效；M4-1 只验证了单个嵌套文本替换，多嵌套/混合容器/深层场景未真机覆盖；Host 仍以信封 program 为基础（权威 program store 未做）。
 
