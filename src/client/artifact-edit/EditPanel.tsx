@@ -33,7 +33,7 @@ import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, t
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { hasArtifactEditContent, useArtifactEditStore } from './store.ts'
-import { applyEditChatContentWidth } from './panel-width.ts'
+import { applyEditChatContentWidth, type ChatContentWidthController } from './panel-width.ts'
 
 /** Props of the edit panel; the card supplies both the snapshot and actions. */
 export interface EditPanelProps {
@@ -273,8 +273,14 @@ function RequestHoverCard({ t, block, order, instruction, onEdit, onDelete, onEn
         <button type="button" className="dsh-iui-edit-card-action" data-dsh-iui-edit-hover-edit onClick={onEdit}>
           <EditGlyph />{t('edit.openRequirement')}
         </button>
-        <button type="button" className="dsh-iui-edit-card-action dsh-iui-edit-card-action-danger" data-dsh-iui-edit-hover-delete onClick={onDelete}>
-          <TrashGlyph />{t('edit.delete')}
+        <button
+          type="button"
+          className="dsh-iui-edit-card-action dsh-iui-edit-card-action-danger"
+          data-dsh-iui-edit-hover-delete
+          title={t('edit.removeRequestHint')}
+          onClick={onDelete}
+        >
+          <TrashGlyph />{t('edit.removeRequest')}
         </button>
       </div>
     </div>,
@@ -329,8 +335,8 @@ function RequestRow({ t, block, order, instruction, onOpen, onEdit, onDelete }: 
           type="button"
           className="dsh-iui-edit-icon-button dsh-iui-edit-icon-button-danger"
           data-dsh-iui-edit-request-delete
-          aria-label={`${t('edit.delete')}: ${title}`}
-          title={t('edit.delete')}
+          aria-label={`${t('edit.removeRequest')}: ${title} — ${t('edit.removeRequestHint')}`}
+          title={`${t('edit.removeRequest')} — ${t('edit.removeRequestHint')}`}
           onClick={onDelete}
         >
           <TrashGlyph />
@@ -788,12 +794,33 @@ export function EditPanel({ t, session, actions, closing = false }: EditPanelPro
     setHoverBlockId(null)
   }
 
-  // While the docked panel is open, narrow the chat content just enough that
-  // the panel cannot overlap it; restore the shell's inline width on exit.
+  // While the docked panel is open, narrow the chat content in lockstep with the
+  // panel animation; on closing, animate the width back before unmount restores
+  // the shell's inline preference.
+  const widthControllerRef = useRef<ChatContentWidthController | null>(null)
+  const widthClosingRef = useRef(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    return applyEditChatContentWidth()
+    const controller = applyEditChatContentWidth()
+    widthControllerRef.current = controller
+    return () => {
+      widthControllerRef.current = null
+      controller.dispose()
+    }
   }, [])
+  useEffect(() => {
+    const controller = widthControllerRef.current
+    if (controller === null) return
+    if (closing && !widthClosingRef.current) {
+      widthClosingRef.current = true
+      controller.close()
+      return
+    }
+    if (!closing && widthClosingRef.current) {
+      widthClosingRef.current = false
+      controller.open()
+    }
+  }, [closing])
 
   useEffect(() => () => {
     deleteTriggerRefs.current.clear()

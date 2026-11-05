@@ -99,6 +99,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const read = expression => cdp.evaluate(expression)
   const wait = (expression, message = expression, options) => cdp.waitFor(expression, message, options)
   const click = selector => read(`document.querySelector(${JSON.stringify(selector)}).click()`)
+  const hover = async selector => {
+    const rect = await read(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().toJSON()`)
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+  }
   const text = selector => read(`(document.querySelector(${JSON.stringify(selector)})?.textContent ?? '')`)
   const count = selector => read(`document.querySelectorAll(${JSON.stringify(selector)}).length`)
   const report = join(root, '.tmp-report')
@@ -766,13 +770,26 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     document.body.appendChild(shell);
     window.__shellWidthEl = shell;
   })()`)
+  await read(`(() => {
+    window.__widthSamples = [];
+    new MutationObserver(() => {
+      const value = parseFloat(window.__shellWidthEl.style.getPropertyValue('--dsh-chat-content-width'));
+      if (Number.isFinite(value)) window.__widthSamples.push(value);
+    }).observe(window.__shellWidthEl, { attributes: true, attributeFilter: ['style'] });
+  })()`)
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'auto width editor')
-  await wait('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width") !== "900px"', 'chat width fitted')
+  await wait(`(() => { const w = parseFloat(window.__shellWidthEl.style.getPropertyValue('--dsh-chat-content-width')); return w >= 650 && w <= 780 })()`, 'chat width fitted')
+  await new Promise(resolve => setTimeout(resolve, 300))
   const fittedWidth = await read(`parseFloat(window.__shellWidthEl.style.getPropertyValue('--dsh-chat-content-width'))`)
   check(fittedWidth >= 680 && fittedWidth <= 780, true, 'editing narrows the chat content width to a non-overlapping value')
+  check(await read(`window.__widthSamples.some(w => w > 720 && w < 890)`), true, 'content width animates through intermediate values while the panel enters')
   check(await count('[data-dsh-iui-edit-expand]'), 0, 'expand button has been removed')
+  await read('window.__widthSamples = []')
   await click('[data-dsh-iui-edit-exit]')
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'panel closing with width animation')
+  await new Promise(resolve => setTimeout(resolve, 300))
+  check(await read(`window.__widthSamples.some(w => w > 720 && w < 890)`), true, 'content width animates back while the panel exits')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'auto width editor closed')
   await wait('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width") === "900px"', 'chat width restored')
   check(await read('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width")'), '900px', 'closing the editor restores the user width')
@@ -795,12 +812,12 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor')
-  await wait('window.__widthContent.style.getPropertyValue("--dsh-chat-content-width") !== ""', 'dynamic width fitted')
+  await wait(`(() => { const w = parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width')); return w >= 1000 && w <= 1015 })()`, 'dynamic width fitted')
   const firstFit = await read(`parseFloat(window.__widthContent.style.getPropertyValue('--dsh-chat-content-width'))`)
-  check(firstFit > 700 && firstFit < 1200, true, 'preference 1200 yields a narrower fitted content width')
+  check(firstFit > 990 && firstFit < 1020, true, 'preference 1200 yields a narrower fitted content width')
   await read(`window.__widthWrapper.style.setProperty('--dsh-chat-user-width', '900px')`)
   await wait(`getComputedStyle(window.__widthContent).getPropertyValue('--dsh-chat-content-width').trim() === '900px'`, 'dynamic width follows preference')
-  check(await read(`window.__widthContent.style.getPropertyValue('--dsh-chat-content-width') !== '1032px'`), true, 'a smaller preference drops the fitted override')
+  check(await read(`window.__widthContent.style.getPropertyValue('--dsh-chat-content-width') !== '1008px'`), true, 'a smaller preference drops the fitted override')
   await click('[data-dsh-iui-edit-exit]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor closed')
   check(await read('window.__widthWrapper.style.getPropertyValue("--dsh-chat-user-width")'), '900px', 'user width preference is preserved')
@@ -854,9 +871,18 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'delete confirm editor')
   await wait('!!document.querySelector("[data-dsh-iui-edit-arrangement-row]")', 'delete confirm rows')
-  const deleteTrigger = '[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-structure-delete]'
+  const actionRow = '[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]'
+  const deleteTrigger = `${actionRow} [data-dsh-iui-edit-structure-delete]`
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await new Promise(resolve => setTimeout(resolve, 200))
+  const pencilX = await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`)
+  await hover(actionRow)
+  await wait(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(`${actionRow} .dsh-iui-edit-structure-actions`)})).opacity) === 1`, 'row structure actions revealed on hover')
+  check(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`), pencilX, 'hovering the row does not move the pencil control')
+  check(await read(`document.querySelector(${JSON.stringify(deleteTrigger)}).getBoundingClientRect().width > 0`), true, 'structural delete is reachable on row hover')
   await click(deleteTrigger)
   await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm]")', 'delete confirmation group')
+  check(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`), pencilX, 'confirming delete does not move the pencil control')
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel') === true`, 'delete confirmation focus')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel')`), true, 'delete confirmation focuses Cancel')
   check(await count('[data-dsh-iui-edit-structure-confirm-delete]'), 1, 'delete confirmation offers a compact Delete action')

@@ -24,6 +24,37 @@ export const CHAT_CONTENT_WIDTH_VAR = '--dsh-chat-content-width'
 export const DEFAULT_CHAT_CONTENT_WIDTH = 748
 /** Floating desktop panel's inset from the viewport's right edge (matches CSS). */
 export const EDIT_PANEL_RIGHT_INSET = 12
+/** Panel and content-width animation duration (must match the CSS panel animation). */
+export const CONTENT_WIDTH_ANIMATION_MS = 220
+
+/** Control points of the shared panel easing: cubic-bezier(.22, 1, .36, 1). */
+const CONTENT_WIDTH_EASING = [0.22, 1, 0.36, 1] as const
+
+/**
+ * Evaluate the shared panel easing curve (cubic-bezier(.22, 1, .36, 1)) for one
+ * normalized time. Used to animate the chat content width in lockstep with the
+ * CSS panel enter/exit animation.
+ * @param progress - normalized time (0..1); clamped.
+ * @returns eased progress (0..1).
+ */
+export function easeContentWidth(progress: number): number {
+  if (!Number.isFinite(progress) || progress <= 0) return 0
+  if (progress >= 1) return 1
+  const [x1, y1, x2, y2] = CONTENT_WIDTH_EASING
+  const bezier = (t: number, p1: number, p2: number): number => {
+    const inverse = 1 - t
+    return 3 * inverse * inverse * t * p1 + 3 * inverse * t * t * p2 + t * t * t
+  }
+  // Solve x(t) = progress by bisection (x is monotonic for these control points).
+  let low = 0
+  let high = 1
+  for (let index = 0; index < 24; index += 1) {
+    const middle = (low + high) / 2
+    if (bezier(middle, x1, x2) < progress) low = middle
+    else high = middle
+  }
+  return bezier((low + high) / 2, y1, y2)
+}
 
 /** Inputs for the docked-panel content width fixed point. */
 export interface FitChatContentWidthOptions {
@@ -138,75 +169,160 @@ function userWidthPreference(element: HTMLElement): number | undefined {
 }
 
 /**
- * Override the chat content width while the edit panel is open.
+ * Controller for the chat content width while one edit panel is docked.
+ * `open()` animates the content from the user's base width to the fitted width;
+ * `close()` animates it back; `dispose()` cancels the animation and restores the
+ * shell's original inline variable.
+ */
+export interface ChatContentWidthController {
+  /** Animate from the current width to the fitted width (panel opening). */
+  readonly open: () => void
+  /** Animate from the current width back to the user's base width (panel closing). */
+  readonly close: () => void
+  /** Cancel animations and restore the shell's original inline value. */
+  readonly dispose: () => void
+}
+
+/** No-op controller used when the shell element or wide breakpoint is absent. */
+const INERT_CONTROLLER: ChatContentWidthController = { open: () => undefined, close: () => undefined, dispose: () => undefined }
+
+/**
+ * Drive the chat content width in lockstep with the docked edit panel.
  *
- * Only active on the wide breakpoint and only when the conversation content
- * element exists. Saves the element's inline `--dsh-chat-content-width`
- * (and priority), writes the fitted value, recomputes on window resize, and
- * restores the saved inline value (or removes the property) when cleaned up.
+ * Both the CSS panel animation and this controller use `CONTENT_WIDTH_ANIMATION_MS`
+ * with the same cubic-bezier(.22, 1, .36, 1) easing, so opening narrows the
+ * content while the panel slides in, and closing restores it while the panel
+ * slides out. User width preferences are never modified permanently: the
+ * original inline value is restored on dispose.
  * @param win - window to read sizes from and listen on (defaults to global).
  * @param doc - document to query the content element in (defaults to global).
- * @returns a cleanup function restoring the shell's original inline value.
+ * @returns a controller for open/close/dispose.
  */
-export function applyEditChatContentWidth(win: Window = window, doc: Document = document): () => void {
-  if (typeof win === 'undefined' || typeof win.matchMedia !== 'function') return () => undefined
+export function applyEditChatContentWidth(win: Window = window, doc: Document = document): ChatContentWidthController {
+  if (typeof win === 'undefined' || typeof win.matchMedia !== 'function') return INERT_CONTROLLER
   const element = chatContentElement(doc)
-  if (element === null) return () => undefined
+  if (element === null) return INERT_CONTROLLER
   const savedValue = element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR)
   const savedPriority = element.style.getPropertyPriority(CHAT_CONTENT_WIDTH_VAR)
-  const originalWidth = preferredContentWidth(win, doc, element)
+  const mountWidth = preferredContentWidth(win, doc, element)
+  const reduceMotion = (): boolean => win.matchMedia('(prefers-reduced-motion: reduce)').matches
+  let current = mountWidth
   let overridden = false
+  let closed = false
+  let disposed = false
   let writing = false
+  let lastInline = savedValue
+  let frame: number | null = null
 
-  const restore = (): void => {
+  const write = (width: number): void => {
+    current = width
+    overridden = true
+    lastInline = `${Math.round(width * 100) / 100}px`
+    writing = true
+    element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, lastInline)
+    // MutationObserver callbacks run after this synchronous write, so clear the
+    // self-write guard in a microtask the observer can see first.
+    void Promise.resolve().then(() => { writing = false })
+  }
+
+  const cancelFrame = (): void => {
+    if (frame === null) return
+    win.cancelAnimationFrame(frame)
+    frame = null
+  }
+
+  const restoreInline = (): void => {
+    cancelFrame()
     if (!overridden) return
     overridden = false
     writing = true
+    lastInline = savedValue
     if (savedValue === '') element.style.removeProperty(CHAT_CONTENT_WIDTH_VAR)
     else element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, savedValue, savedPriority)
-    writing = false
+    void Promise.resolve().then(() => { writing = false })
   }
 
-  /**
-   * Recompute against the user's current shell width preference. The preference
-   * lives on the content element's parent (`--dsh-chat-user-width`); when the
-   * user drags the shell width handle while editing, this observer refits to the
-   * new preference instead of sticking to the mount-time width.
-   */
-  const apply = (): void => {
-    const wide = win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches
-    if (!wide) { restore(); return }
-    const contentWidth = userWidthPreference(element) ?? originalWidth
+  /** Current shell preference (parent custom property) or the mount-time width. */
+  const baseWidth = (): number => userWidthPreference(element) ?? mountWidth
+
+  /** Fitted width for the current viewport and user preference. */
+  const fittedWidth = (): number => {
+    const preference = baseWidth()
     const rect = element.getBoundingClientRect()
     const desired = fitChatContentWidth({
       viewportWidth: win.innerWidth,
-      contentWidth,
+      contentWidth: preference,
       columnLeft: rect.left,
       columnWidth: rect.width,
       panelRightInset: EDIT_PANEL_RIGHT_INSET,
     })
-    if (desired >= contentWidth) { restore(); return }
-    const next = `${desired}px`
-    if (overridden && element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR) === next) return
-    overridden = true
-    writing = true
-    element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, next)
-    writing = false
+    return desired >= preference ? preference : desired
   }
 
-  apply()
-  win.addEventListener('resize', apply)
-  // Observe the parent style for user-handle drags (and the element itself for
-  // shell rewrites), ignoring our own writes to avoid a feedback loop.
-  const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => {
+  /** Animate from the current value to `target`; interrupts any running frame. */
+  const animateTo = (target: number): void => {
+    cancelFrame()
+    if (disposed) return
+    if (Math.abs(target - current) < 0.5) { write(target); return }
+    if (reduceMotion() || typeof win.requestAnimationFrame !== 'function') { write(target); return }
+    const from = current
+    const started = typeof win.performance?.now === 'function' ? win.performance.now() : Date.now()
+    const step = (now: number): void => {
+      frame = null
+      if (disposed) return
+      const progress = Math.min(1, Math.max(0, (now - started) / CONTENT_WIDTH_ANIMATION_MS))
+      write(from + (target - from) * easeContentWidth(progress))
+      if (progress < 1) frame = win.requestAnimationFrame(step)
+      else write(target)
+    }
+    frame = win.requestAnimationFrame(step)
+  }
+
+  /** Recompute after a resize or a user width-handle drag. */
+  const refit = (): void => {
+    if (disposed || closed) return
+    if (!win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches) { restoreInline(); return }
+    write(baseWidth())
+    animateTo(fittedWidth())
+  }
+
+  const open = (): void => {
+    if (disposed) return
+    closed = false
+    if (!win.matchMedia(EDIT_PANEL_MEDIA_QUERY).matches) { restoreInline(); return }
+    // Start from the base layout, then animate to the fitted width on the next
+    // frame so the panel CSS enter animation and the content change are aligned.
+    write(baseWidth())
+    animateTo(fittedWidth())
+  }
+
+  const close = (): void => {
+    if (disposed) return
+    closed = true
+    animateTo(baseWidth())
+  }
+
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    restoreInline()
+    win.removeEventListener('resize', refit)
+    observer?.disconnect()
+  }
+
+  const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(records => {
     if (writing) return
-    apply()
+    // Ignore our own inline writes (they match lastInline); parent style changes
+    // (user width-handle drags) still trigger a refit.
+    const ownWriteOnly = records.every(record => record.target === element && element.style.getPropertyValue(CHAT_CONTENT_WIDTH_VAR) === lastInline)
+    if (ownWriteOnly) return
+    refit()
   })
+  // observe parent for user width-handle drags, element for shell rewrites; ignore
+  // our own writes via the `writing` flag to avoid a feedback loop.
   observer?.observe(element.parentElement ?? element, { attributes: true, attributeFilter: ['style'] })
   if (element.parentElement !== null) observer?.observe(element, { attributes: true, attributeFilter: ['style'] })
-  return () => {
-    win.removeEventListener('resize', apply)
-    observer?.disconnect()
-    restore()
-  }
+  win.addEventListener('resize', refit)
+  open()
+  return { open, close, dispose }
 }

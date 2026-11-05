@@ -6,11 +6,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  applyEditChatContentWidth,
   CHAT_CONTENT_SELECTOR,
   CHAT_CONTENT_WIDTH_VAR,
+  CONTENT_WIDTH_ANIMATION_MS,
   DEFAULT_CHAT_CONTENT_WIDTH,
   EDIT_PANEL_MEDIA_QUERY,
   EDIT_PANEL_RIGHT_INSET,
+  easeContentWidth,
   fitChatContentWidth,
 } from '../../src/client/artifact-edit/panel-width.ts'
 
@@ -95,6 +98,85 @@ test('invalid sizes are passed through unchanged', () => {
   assert.equal(fitChatContentWidth({ viewportWidth: -100, contentWidth: 748 }), 748)
   assert.equal(fitChatContentWidth({ viewportWidth: 1440, contentWidth: 0 }), 0)
   assert.equal(fitChatContentWidth({ viewportWidth: Number.NaN, contentWidth: 748 }), 748)
+})
+
+test('the shared animation easing matches the CSS panel curve', () => {
+  assert.equal(CONTENT_WIDTH_ANIMATION_MS, 220)
+  assert.equal(easeContentWidth(0), 0)
+  assert.equal(easeContentWidth(1), 1)
+  assert.equal(easeContentWidth(-1), 0)
+  assert.equal(easeContentWidth(2), 1)
+  // Ease-out: monotonic, and more than half the distance at the midpoint.
+  let previous = 0
+  for (const progress of [0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+    const eased = easeContentWidth(progress)
+    assert.ok(eased >= previous, `easing is monotonic at ${progress}`)
+    assert.ok(eased >= 0 && eased <= 1, `easing stays in range at ${progress}`)
+    previous = eased
+  }
+  assert.ok(easeContentWidth(0.5) > 0.5)
+  assert.ok(easeContentWidth(0.3) > easeContentWidth(0.2))
+})
+
+test('the controller animates content between the base and fitted widths', () => {
+  const previousObserver = globalThis.MutationObserver
+  globalThis.MutationObserver = undefined
+  try {
+    const frames = []
+    let frameId = 0
+    let now = 0
+    const elementStyle = {
+      values: new Map(),
+      getPropertyValue(name) { return this.values.get(name) ?? '' },
+      getPropertyPriority() { return '' },
+      setProperty(name, value) { this.values.set(name, String(value)) },
+      removeProperty(name) { this.values.delete(name) },
+    }
+    const parentStyle = {
+      getPropertyValue() { return '' },
+    }
+    const element = {
+      style: elementStyle,
+      parentElement: { style: parentStyle },
+      getBoundingClientRect: () => ({ left: 0, width: 1440, top: 0, height: 0 }),
+    }
+    const win = {
+      innerWidth: 1440,
+      getComputedStyle: () => ({ getPropertyValue: () => '900px' }),
+      matchMedia: query => ({ matches: query.includes('prefers-reduced-motion') ? false : true }),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      cancelAnimationFrame: id => { const index = frames.findIndex(entry => entry.id === id); if (index >= 0) frames.splice(index, 1) },
+      requestAnimationFrame: callback => { frameId += 1; frames.push({ id: frameId, callback }); return frameId },
+      performance: { now: () => now },
+    }
+    const doc = { querySelector: () => element }
+    const controller = applyEditChatContentWidth(win, doc)
+    const widthNow = () => Number.parseFloat(elementStyle.getPropertyValue('--dsh-chat-content-width'))
+    assert.equal(widthNow(), 900)
+    const runFrame = at => {
+      now = at
+      const pending = frames.splice(0)
+      for (const entry of pending) entry.callback(now)
+    }
+    runFrame(0)
+    assert.ok(Math.abs(widthNow() - 900) < 0.5, 'animation starts at the base width')
+    runFrame(CONTENT_WIDTH_ANIMATION_MS / 2)
+    const middle = widthNow()
+    assert.ok(middle < 900 && middle > 648, `mid animation ${middle} sits between fitted and base`)
+    runFrame(CONTENT_WIDTH_ANIMATION_MS)
+    assert.ok(Math.abs(widthNow() - 648) < 0.5, 'animation ends at the fitted width')
+    controller.close()
+    runFrame(CONTENT_WIDTH_ANIMATION_MS + CONTENT_WIDTH_ANIMATION_MS / 2)
+    const closingMiddle = widthNow()
+    assert.ok(closingMiddle > 648 && closingMiddle < 900, 'closing animates back toward the base')
+    runFrame(CONTENT_WIDTH_ANIMATION_MS * 2)
+    assert.ok(Math.abs(widthNow() - 900) < 0.5, 'closing ends at the base width')
+    controller.dispose()
+    assert.equal(elementStyle.getPropertyValue('--dsh-chat-content-width'), '', 'dispose removes the inline override')
+  } finally {
+    globalThis.MutationObserver = previousObserver
+  }
 })
 
 test('exposes the DOM contract constants used by the panel effect', () => {

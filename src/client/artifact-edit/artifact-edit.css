@@ -951,7 +951,13 @@
   display: inline-flex;
   flex: none;
   align-items: center;
+  justify-content: flex-end;
   gap: 1px;
+  /* Fixed action slot shared by the hidden, hover and confirming states, so the
+     pencil and Edited tag never shift when the actions appear or swap to the
+     compact Cancel/Delete confirmation. */
+  width: 104px;
+  min-width: 104px;
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -960,6 +966,10 @@
 .dsh-iui-edit-arrangement-row:focus-within > .dsh-iui-edit-structure-actions,
 .dsh-iui-edit-nested-row:hover > .dsh-iui-edit-structure-actions,
 .dsh-iui-edit-nested-row:focus-within > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-structure-actions:has([data-dsh-iui-edit-structure-confirm]) {
+  opacity: 1;
+}
+
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
   width: 22px;
   height: 22px;
@@ -974,9 +984,11 @@
    the icon group. No row tint, no pill, no auto-dismiss. */
 .dsh-iui-edit-structure-confirm {
   display: inline-flex;
-  flex: none;
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
+  min-width: 0;
 }
 
 .dsh-iui-edit-structure-cancel,
