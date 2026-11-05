@@ -207,26 +207,56 @@
   box-shadow: 0 18px 44px rgb(0 0 0 / 22%);
   font: 13px/1.5 var(--dsw-font-family, system-ui);
   overflow: hidden;
+  animation: dsh-iui-edit-panel-in-mobile 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dsh-iui-edit-panel[data-open='true'] {
   display: flex;
 }
 
+/* Exit runs while the card keeps the view mounted (~220ms), then unmounts. */
+.dsh-iui-edit-panel[data-closing='true'] {
+  animation: dsh-iui-edit-panel-out-mobile 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  pointer-events: none;
+}
+
 @media (min-width: 1180px) {
   .dsh-iui-edit-panel {
     display: flex;
-    top: 52px;
-    right: 0;
-    bottom: 0;
+    top: 64px;
+    right: 12px;
+    bottom: 12px;
     left: auto;
     width: clamp(272px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 16px), 360px);
     max-height: none;
-    border: 0;
-    border-left: 1px solid var(--dsw-alias-border-l1);
-    border-radius: 0;
-    box-shadow: -10px 0 30px rgb(0 0 0 / 6%);
+    border: 1px solid var(--dsw-alias-border-l1);
+    border-radius: 16px;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 8%);
+    animation-name: dsh-iui-edit-panel-in-desktop;
   }
+  .dsh-iui-edit-panel[data-closing='true'] {
+    animation-name: dsh-iui-edit-panel-out-desktop;
+  }
+}
+
+@keyframes dsh-iui-edit-panel-in-mobile {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes dsh-iui-edit-panel-out-mobile {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(24px); }
+}
+
+@keyframes dsh-iui-edit-panel-in-desktop {
+  from { opacity: 0; transform: translateX(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes dsh-iui-edit-panel-out-desktop {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(18px) scale(0.985); }
 }
 
 .dsh-iui-edit-panel-head {
@@ -930,11 +960,6 @@
 .dsh-iui-edit-arrangement-row:focus-within > .dsh-iui-edit-structure-actions,
 .dsh-iui-edit-nested-row:hover > .dsh-iui-edit-structure-actions,
 .dsh-iui-edit-nested-row:focus-within > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-arrangement-row.is-confirming-delete > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row.is-confirming-delete > .dsh-iui-edit-structure-actions {
-  opacity: 1;
-}
-
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
   width: 22px;
   height: 22px;
@@ -945,26 +970,53 @@
   cursor: default;
 }
 
-.dsh-iui-edit-structure-delete.is-confirming {
-  width: auto;
-  padding: 0 6px;
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
-  color: var(--dsw-alias-state-error-primary);
+/* Compact, persistent delete confirmation: two quiet 22px buttons in place of
+   the icon group. No row tint, no pill, no auto-dismiss. */
+.dsh-iui-edit-structure-confirm {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
 }
 
-.dsh-iui-edit-confirm-label {
-  color: var(--dsw-alias-state-error-primary);
+.dsh-iui-edit-structure-cancel,
+.dsh-iui-edit-structure-confirm-delete {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--dsw-radius-sm);
+  font: inherit;
   font-size: 10.5px;
-  font-weight: 600;
-  line-height: 1;
+  font-weight: 500;
+  line-height: 20px;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-/* The whole row whispers danger while the delete confirmation is armed. */
-.dsh-iui-edit-arrangement-row.is-confirming-delete,
-.dsh-iui-edit-nested-row.is-confirming-delete {
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, transparent);
-  box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary);
+.dsh-iui-edit-structure-cancel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-edit-structure-cancel:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-structure-confirm-delete {
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-structure-confirm-delete:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent);
+}
+
+.dsh-iui-edit-structure-cancel:disabled,
+.dsh-iui-edit-structure-confirm-delete:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .dsh-iui-edit-structure-busy {
@@ -2018,6 +2070,8 @@
   white-space: nowrap;
 }
 
+.dsh-iui-edit-structure-cancel:focus-visible,
+.dsh-iui-edit-structure-confirm-delete:focus-visible,
 .dsh-iui-edit-move-target:focus-visible,
 .dsh-iui-edit-move-menu:focus-visible,
 .dsh-iui-edit-add-button:focus-visible,
@@ -2026,4 +2080,12 @@
 .dsh-iui-edit-addition-remove:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
+}
+
+/* The panel is the only animated surface; honour reduced motion completely. */
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-edit-panel,
+  .dsh-iui-edit-panel[data-closing='true'] {
+    animation: none;
+  }
 }

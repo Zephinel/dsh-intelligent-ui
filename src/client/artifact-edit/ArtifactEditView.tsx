@@ -24,6 +24,9 @@ import { runtimeStateForProgram } from '../runtime-state.ts'
 import { claimEditLease, hasForeignLease, queryEditLeases, releaseEditLease, renewEditLease, useForeignEditLease } from './tabs.ts'
 import './artifact-edit.css'
 
+/** Edit view props plus the exit-animation flag owned by the card. */
+type ArtifactEditViewClosingProps = ArtifactEditViewProps & { readonly closing?: boolean }
+
 /** Toolbar and canvas for one card in edit mode, plus its request panel. */
 export function ArtifactEditView({
   t,
@@ -32,7 +35,8 @@ export function ArtifactEditView({
   themeStyle,
   scheme,
   onToAssistant,
-}: ArtifactEditViewProps): ReactElement {
+  closing = false,
+}: ArtifactEditViewClosingProps): ReactElement {
   const [tooNarrow, setTooNarrow] = useState<boolean>(
     typeof window === 'undefined' ? false : !isEditViewportWideEnough(window.innerWidth),
   )
@@ -279,7 +283,7 @@ export function ArtifactEditView({
       </div>
       <p className="dsh-iui-edit-frozen">{t('edit.frozenHint')}</p>
 
-      <EditPanel t={t} session={session} actions={actions} />
+      <EditPanel t={t} session={session} actions={actions} closing={closing} />
       {session.activeBlockId === undefined
         ? null
         : <BlockPopover t={t} session={session} actions={actions} scheme={scheme} />}

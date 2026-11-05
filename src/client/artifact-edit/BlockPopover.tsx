@@ -102,10 +102,18 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
       const preferBelow = belowRoom >= MIN_USABLE_HEIGHT || belowRoom >= aboveRoom
       const room = preferBelow ? belowRoom : aboveRoom
       const maxHeight = Math.max(MIN_USABLE_HEIGHT, Math.min(room, viewportHeight - VIEWPORT_MARGIN * 2))
+      const measuredHeight = Math.min(popupHeight, maxHeight)
       const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, viewportWidth - popupWidth - VIEWPORT_MARGIN))
-      const top = preferBelow
-        ? Math.min(rect.bottom + ANCHOR_GAP, viewportHeight - VIEWPORT_MARGIN - maxHeight)
-        : Math.max(VIEWPORT_MARGIN, rect.top - ANCHOR_GAP - Math.min(popupHeight, maxHeight))
+      const preferredTop = preferBelow
+        ? rect.bottom + ANCHOR_GAP
+        : rect.top - ANCHOR_GAP - measuredHeight
+      // Anchors can sit outside the viewport after scrolling (for example when
+      // the popover is opened from the fixed arrangement panel). Clamp both
+      // edges instead of letting the popover render above/behind the viewport.
+      const top = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(preferredTop, viewportHeight - VIEWPORT_MARGIN - measuredHeight),
+      )
       setPlacement(current => current !== null && current.left === left && current.top === top && current.maxHeight === maxHeight
         ? current
         : { left, top, maxHeight })

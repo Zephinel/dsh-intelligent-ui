@@ -10,6 +10,7 @@ import {
   CHAT_CONTENT_WIDTH_VAR,
   DEFAULT_CHAT_CONTENT_WIDTH,
   EDIT_PANEL_MEDIA_QUERY,
+  EDIT_PANEL_RIGHT_INSET,
   fitChatContentWidth,
 } from '../../src/client/artifact-edit/panel-width.ts'
 
@@ -44,6 +45,17 @@ test('the 1180px breakpoint still converges to a positive usable width', () => {
   assert.ok(desired > 0)
   const panel = panelWidthFor(1180, desired)
   assert.equal(desired + 2 * (panel + 24), 1180)
+})
+
+test('the floating panel right inset reserves its 12px and narrows further', () => {
+  // Default (inset 0) stays 672. The content stays centered, so a 12px panel
+  // inset costs half of the available width on each side: the fitted content
+  // loses 2 * 12px: 1440 - 24 - 2 * 384 = 648.
+  assert.equal(fitChatContentWidth({ viewportWidth: 1440, contentWidth: 748, panelRightInset: 0 }), 672)
+  assert.equal(fitChatContentWidth({ viewportWidth: 1440, contentWidth: 748, panelRightInset: 12 }), 648)
+  assert.equal(fitChatContentWidth({ viewportWidth: 1800, contentWidth: 1520, panelRightInset: 12 }), 1008)
+  // A preferred width that already fits stays untouched even with the inset.
+  assert.equal(fitChatContentWidth({ viewportWidth: 1800, contentWidth: 920, panelRightInset: 12 }), 920)
 })
 
 test('a viewport with room for the preferred width is left unchanged', () => {
@@ -87,6 +99,7 @@ test('invalid sizes are passed through unchanged', () => {
 
 test('exposes the DOM contract constants used by the panel effect', () => {
   assert.equal(EDIT_PANEL_MEDIA_QUERY, '(min-width: 1180px)')
+  assert.equal(EDIT_PANEL_RIGHT_INSET, 12)
   assert.equal(CHAT_CONTENT_SELECTOR, '[data-conversation-content][data-conversation-region="chat"]')
   assert.equal(CHAT_CONTENT_WIDTH_VAR, '--dsh-chat-content-width')
   assert.equal(DEFAULT_CHAT_CONTENT_WIDTH, 748)

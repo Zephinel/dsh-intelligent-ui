@@ -40,6 +40,8 @@ export interface EditPanelProps {
   readonly t: Translate
   readonly session: ArtifactEditSession
   readonly actions: ArtifactEditActions
+  /** True while the parent card plays the exit animation before unmounting. */
+  readonly closing?: boolean
 }
 
 /** Number of hues in the shared selection palette. */
@@ -389,69 +391,121 @@ interface NestedGroup {
   readonly childIds: readonly string[]
 }
 
-/** How long the inline delete confirmation stays armed. */
-const STRUCTURE_DELETE_CONFIRM_MS = 3000
 /** How long a structural error stays visible before auto-dismissing. */
 const STRUCTURE_ERROR_TIMEOUT_MS = 8000
 
 /**
  * Hover/focus inline structure actions for one arrangement row.
- * Duplicate applies immediately; delete arms an inline two-step confirmation.
+ * Duplicate and move open a preview immediately; delete swaps the action group
+ * for a compact, persistent Cancel/Delete confirmation (focus goes to Cancel).
  * @param props - locale, target block, busy/confirm state and handlers.
- * @returns the action group.
+ * @returns the action group or its confirmation state.
  */
-function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate, onDelete, onMove }: {
+function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove }: {
   readonly t: Translate
   readonly blockId: string
   readonly busy: boolean
   readonly confirming: boolean
   readonly moveOpen: boolean
   readonly onDuplicate: (anchor: HTMLButtonElement) => void
-  readonly onDelete: (anchor: HTMLButtonElement) => void
+  readonly onRequestDelete: (anchor: HTMLButtonElement) => void
+  readonly onCancelDelete: () => void
+  readonly onConfirmDelete: () => void
   readonly onMove: (anchor: HTMLButtonElement) => void
 }): ReactElement {
-  const deleteLabel = confirming ? t('edit.structureDeleteConfirm') : t('edit.structureDelete')
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const wasConfirmingRef = useRef(false)
+  useEffect(() => {
+    if (confirming) {
+      wasConfirmingRef.current = true
+      if (typeof window === 'undefined') return
+      window.requestAnimationFrame(() => { cancelButtonRef.current?.focus({ preventScroll: true }) })
+      return
+    }
+    if (!wasConfirmingRef.current) return
+    wasConfirmingRef.current = false
+    const trigger = deleteButtonRef.current
+    if (trigger !== null && trigger.isConnected && typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => { trigger.focus({ preventScroll: true }) })
+    }
+  }, [confirming])
   return (
     <span className="dsh-iui-edit-structure-actions">
-      <button
-        type="button"
-        className="dsh-iui-edit-icon-button"
-        data-dsh-iui-edit-structure-duplicate
-        data-block-id={blockId}
-        disabled={busy}
-        aria-label={t('edit.structureDuplicate')}
-        title={t('edit.structureDuplicate')}
-        onClick={event => { event.stopPropagation(); onDuplicate(event.currentTarget) }}
-      >
-        <DuplicateGlyph />
-      </button>
-      <button
-        type="button"
-        className={`dsh-iui-edit-icon-button dsh-iui-edit-structure-delete${confirming ? ' is-confirming' : ''}`}
-        data-dsh-iui-edit-structure-delete
-        data-block-id={blockId}
-        data-confirming={confirming ? 'true' : undefined}
-        disabled={busy}
-        aria-label={deleteLabel}
-        title={deleteLabel}
-        onClick={event => { event.stopPropagation(); onDelete(event.currentTarget) }}
-      >
-        {confirming ? <span className="dsh-iui-edit-confirm-label">{t('edit.structureDeleteConfirm')}</span> : <TrashGlyph />}
-      </button>
-      <button
-        type="button"
-        className="dsh-iui-edit-icon-button"
-        data-dsh-iui-edit-move
-        data-block-id={blockId}
-        disabled={busy}
-        aria-haspopup="menu"
-        aria-expanded={moveOpen ? 'true' : undefined}
-        aria-label={t('edit.moveBlock')}
-        title={t('edit.moveBlock')}
-        onClick={event => { event.stopPropagation(); onMove(event.currentTarget) }}
-      >
-        <MoveGlyph />
-      </button>
+      {confirming ? (
+        <span
+          className="dsh-iui-edit-structure-confirm"
+          data-dsh-iui-edit-structure-confirm
+          role="group"
+          aria-label={t('edit.structureConfirmQuestion')}
+        >
+          <button
+            ref={cancelButtonRef}
+            type="button"
+            className="dsh-iui-edit-structure-cancel"
+            data-dsh-iui-edit-structure-cancel
+            disabled={busy}
+            aria-label={t('edit.structureCancel')}
+            title={t('edit.structureCancel')}
+            onClick={event => { event.stopPropagation(); onCancelDelete() }}
+          >
+            {t('edit.structureCancel')}
+          </button>
+          <button
+            type="button"
+            className="dsh-iui-edit-structure-confirm-delete"
+            data-dsh-iui-edit-structure-confirm-delete
+            disabled={busy}
+            aria-label={t('edit.structureDeleteNow')}
+            title={t('edit.structureDeleteNow')}
+            onClick={event => { event.stopPropagation(); onConfirmDelete() }}
+          >
+            {t('edit.structureDeleteNow')}
+          </button>
+        </span>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="dsh-iui-edit-icon-button"
+            data-dsh-iui-edit-structure-duplicate
+            data-block-id={blockId}
+            disabled={busy}
+            aria-label={t('edit.structureDuplicate')}
+            title={t('edit.structureDuplicate')}
+            onClick={event => { event.stopPropagation(); onDuplicate(event.currentTarget) }}
+          >
+            <DuplicateGlyph />
+          </button>
+          <button
+            ref={deleteButtonRef}
+            type="button"
+            className="dsh-iui-edit-icon-button dsh-iui-edit-structure-delete"
+            data-dsh-iui-edit-structure-delete
+            data-block-id={blockId}
+            disabled={busy}
+            aria-label={t('edit.structureDelete')}
+            title={t('edit.structureDelete')}
+            onClick={event => { event.stopPropagation(); onRequestDelete(event.currentTarget) }}
+          >
+            <TrashGlyph />
+          </button>
+          <button
+            type="button"
+            className="dsh-iui-edit-icon-button"
+            data-dsh-iui-edit-move
+            data-block-id={blockId}
+            disabled={busy}
+            aria-haspopup="menu"
+            aria-expanded={moveOpen ? 'true' : undefined}
+            aria-label={t('edit.moveBlock')}
+            title={t('edit.moveBlock')}
+            onClick={event => { event.stopPropagation(); onMove(event.currentTarget) }}
+          >
+            <MoveGlyph />
+          </button>
+        </>
+      )}
     </span>
   )
 }
@@ -554,7 +608,7 @@ function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
 }
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
-export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement {
+export function EditPanel({ t, session, actions, closing = false }: EditPanelProps): ReactElement {
   const globalId = useId()
   const previewTitleId = useId()
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
@@ -605,7 +659,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
   const [addDraft, setAddDraft] = useState('')
   const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
-  const confirmDeleteTimer = useRef<number | null>(null)
+  const deleteTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const previewTriggerRef = useRef<HTMLElement | null>(null)
   const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
   const previewHadOpenRef = useRef(false)
@@ -742,7 +796,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }, [])
 
   useEffect(() => () => {
-    if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
+    deleteTriggerRefs.current.clear()
     dragCleanup.current?.()
     clearHoverTimers()
     for (const timer of flashTimers.current.values()) window.clearTimeout(timer)
@@ -776,10 +830,6 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }
 
   const clearDeleteConfirm = (): void => {
-    if (confirmDeleteTimer.current !== null) {
-      window.clearTimeout(confirmDeleteTimer.current)
-      confirmDeleteTimer.current = null
-    }
     setConfirmDeleteId(null)
   }
   const previewBusy = preview !== undefined && preview.status === 'loading'
@@ -798,18 +848,23 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     if (rowActionsBusy) return
     startStructurePreview(blockId, 'duplicate', anchor)
   }
-  const requestDeleteBlock = (blockId: string, anchor: HTMLElement | null): void => {
+  const requestDeleteBlock = (blockId: string, anchor: HTMLButtonElement | null): void => {
     if (rowActionsBusy) return
-    if (confirmDeleteId === blockId) {
-      startStructurePreview(blockId, 'delete', anchor)
-      return
-    }
-    if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
+    if (anchor !== null) deleteTriggerRefs.current.set(blockId, anchor)
+    // Persistent two-step confirmation: no timeout, only an explicit cancel,
+    // delete, outside interaction, Escape, preview or busy state ends it.
     setConfirmDeleteId(blockId)
-    confirmDeleteTimer.current = window.setTimeout(() => {
-      confirmDeleteTimer.current = null
-      setConfirmDeleteId(current => current === blockId ? null : current)
-    }, STRUCTURE_DELETE_CONFIRM_MS)
+    announce(t('edit.a11yDeleteConfirm'))
+  }
+  const cancelDeleteConfirm = (): void => {
+    clearDeleteConfirm()
+  }
+  const confirmDeleteBlock = (blockId: string): void => {
+    if (confirmDeleteId !== blockId) return
+    const anchor = deleteTriggerRefs.current.get(blockId) ?? null
+    deleteTriggerRefs.current.delete(blockId)
+    startStructurePreview(blockId, 'delete', anchor)
+    clearDeleteConfirm()
   }
 
   const closeAddForm = (): void => {
@@ -833,7 +888,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }
   const closeMoveMenu = (): void => { setMoveMenu(null) }
   const openMoveMenu = (blockId: string, anchor: HTMLButtonElement): void => {
-    if (moveMenu?.blockId === blockId) { closeMoveMenu(); return }
+    clearDeleteConfirm()
     moveAnchorRef.current = anchor
     const rect = anchor.getBoundingClientRect()
     const count = Math.max(1, moveTargetsFor(blockId).length)
@@ -852,7 +907,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       event.preventDefault()
       event.stopPropagation()
       closeMoveMenu()
-      moveAnchorRef.current?.focus()
+      moveAnchorRef.current?.focus({ preventScroll: true })
       return
     }
     if (event.key === 'Tab') { closeMoveMenu(); return }
@@ -862,7 +917,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     const current = active instanceof HTMLElement ? targets.findIndex(target => target === active) : -1
     const focusAt = (position: number): void => {
       event.preventDefault()
-      targets[(position + targets.length) % targets.length].focus()
+      targets[(position + targets.length) % targets.length].focus({ preventScroll: true })
     }
     if (event.key === 'ArrowDown') { focusAt(current + 1); return }
     if (event.key === 'ArrowUp') { focusAt(current - 1); return }
@@ -902,8 +957,8 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       const menu = moveMenuRef.current
       if (menu === null) return
       const first = menu.querySelector<HTMLButtonElement>('[data-dsh-iui-edit-move-target]')
-      if (first !== null) first.focus()
-      else menu.focus()
+      if (first !== null) first.focus({ preventScroll: true })
+      else menu.focus({ preventScroll: true })
     })
     return () => { window.cancelAnimationFrame(frame) }
   }, [moveMenu])
@@ -929,7 +984,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       event.preventDefault()
       event.stopPropagation()
       closeMoveMenu()
-      moveAnchorRef.current?.focus()
+      moveAnchorRef.current?.focus({ preventScroll: true })
     }
     const onScroll = (): void => { closeMoveMenu() }
     document.addEventListener('pointerdown', onPointerDown, true)
@@ -978,8 +1033,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
         previewHadOpenRef.current = true
         const active = document.activeElement
         previewRestoreFocusRef.current = previewTriggerRef.current ?? (active instanceof HTMLElement ? active : null)
+        clearDeleteConfirm()
         announce(t('edit.a11yPreviewOpened'))
-        window.requestAnimationFrame(() => { previewCancelRef.current?.focus() })
+        window.requestAnimationFrame(() => { previewCancelRef.current?.focus({ preventScroll: true }) })
       }
       closeMoveMenu()
       return
@@ -990,7 +1046,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     const restore = previewRestoreFocusRef.current
     previewRestoreFocusRef.current = null
     previewTriggerRef.current = null
-    if (restore !== null && restore.isConnected) window.requestAnimationFrame(() => { restore.focus() })
+    if (restore !== null && restore.isConnected) window.requestAnimationFrame(() => { restore.focus({ preventScroll: true }) })
   }, [session.structurePreview])
 
   // Escape cancels the preview unless an apply is already in flight.
@@ -1029,10 +1085,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     if (confirmDeleteId === null) return
     const onPointerDown = (event: PointerEvent): void => {
       const target = event.target
-      if (target instanceof Element) {
-        const button = target.closest('[data-dsh-iui-edit-structure-delete]')
-        if (button !== null && button.getAttribute('data-block-id') === confirmDeleteId) return
-      }
+      if (target instanceof Element && target.closest('[data-dsh-iui-edit-structure-confirm]') !== null) return
       clearDeleteConfirm()
     }
     const onKey = (event: KeyboardEvent): void => {
@@ -1236,6 +1289,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       className="dsh-iui-edit-panel"
       aria-label={t('edit.panelTitle')}
       data-dsh-iui-edit-panel
+      data-closing={closing ? 'true' : undefined}
       data-open={session.drawerOpen ? 'true' : 'false'}
       data-status={session.status}
     >
@@ -1366,7 +1420,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                 return (
                   <li
                     key={blockId}
-                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${confirmDeleteId === blockId ? ' is-confirming-delete' : ''}`}
+                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
                     data-dsh-iui-edit-arrangement-row
                     data-block-id={blockId}
                     data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
@@ -1416,7 +1470,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                       confirming={confirmDeleteId === blockId}
                       moveOpen={moveMenu?.blockId === blockId}
                       onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
-                      onDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                      onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                      onCancelDelete={() => { cancelDeleteConfirm() }}
+                      onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
                       onMove={anchor => { openMoveMenu(blockId, anchor) }}
                     />
                   </li>
@@ -1545,7 +1601,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                         return (
                           <li
                             key={blockId}
-                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${confirmDeleteId === blockId ? ' is-confirming-delete' : ''}`}
+                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
                             data-dsh-iui-edit-nested-row
                             data-block-id={blockId}
                             data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
@@ -1596,7 +1652,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                               confirming={confirmDeleteId === blockId}
                               moveOpen={moveMenu?.blockId === blockId}
                               onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
-                              onDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                              onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                              onCancelDelete={() => { cancelDeleteConfirm() }}
+                              onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
                               onMove={anchor => { openMoveMenu(blockId, anchor) }}
                             />
                           </li>

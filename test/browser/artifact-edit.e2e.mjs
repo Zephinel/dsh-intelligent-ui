@@ -119,7 +119,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const arrangementOrder = () => read(`[...document.querySelectorAll('[data-dsh-iui-edit-arrangement-row]')].map(row => row.getAttribute('data-block-id'))`)
   const chipLabel = () => read(`document.querySelector('[data-chip="artifact-edit"]')?.getAttribute('data-chip-label') ?? null`)
   const arrangementSelector = id => `[data-dsh-iui-edit-arrangement-row][data-block-id="${id}"]`
-  const openArrangementEditor = id => click(`${arrangementSelector(id)} [data-dsh-iui-edit-arrangement-edit]`)
+  const openArrangementEditor = async id => {
+    await wait(`!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'previous editor settled')
+    await click(`${arrangementSelector(id)} [data-dsh-iui-edit-arrangement-edit]`)
+  }
   const saveInstruction = async value => {
     await typeInto('[data-dsh-iui-edit-instruction]', value)
     await click('[data-dsh-iui-edit-save]')
@@ -282,6 +285,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(envelope.includes('保持页面其余内容不变'), true, 'envelope carries the global instruction')
   check(envelope.includes('root = Col('), true, 'envelope carries the original program')
   check(envelope.includes('edit_ui_blocks'), true, 'content-edit envelope targets the block tool')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'edit mode ended after send')
   check(await count('[data-dsh-iui-edit-view]'), 0, 'edit mode ends after send')
   await wait('document.querySelector("[data-chip=\\"artifact-edit\\"]") === null', 'chip removed after send')
   await wait('!!document.querySelector("[data-sent-summary] [data-reference-chip]")', 'sent summary chip')
@@ -408,6 +412,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     first.querySelector('[data-dsh-iui-edit-draft-activate]').click();
   })()`)
   await wait(`document.querySelector('[data-dsh-iui-call-id="dst-call-1"]').getAttribute('data-dsh-iui-editing') === 'true'`, 'first draft active again')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-draft-row][data-active="true"]').length === 1 && !document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'one active draft after close animation')
   check(await count('[data-dsh-iui-edit-draft-row][data-active="true"]'), 1, 'exactly one active draft')
   // Delete the second chip; the draft must survive as detached, then re-attach.
   const refs = await read('window.__input().occurrences.filter(item => item.source === "artifact-edit").map(item => item.ref)')
@@ -636,6 +641,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(typeof structureCalls[0].operations[0].sourceDigest, 'string', 'duplicate carries the source digest')
   check(structureCalls[0].operations[0].toIndex, 1, 'duplicate inserts after the source block')
   check((await text('[data-dsh-iui-local-revision]')).includes('结构操作修订'), true, 'local card is labelled as a structural revision')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the structural revision')
   check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after the structural revision')
 
   // 26. Container expansion: Box/Grid/Section/Carousel children are selectable.
@@ -749,6 +755,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
 
   // 30. Editing auto-fits the chat content width and the old expand button is gone.
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  // Normalize any leftover editor from the previous scenarios before measuring.
+  await read(`(() => { if (document.querySelector('[data-dsh-iui-edit-view]')) document.querySelector('[data-dsh-iui-edit-exit]')?.click(); })()`)
+  await wait(`!document.querySelector('[data-dsh-iui-edit-view]') && !document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'editor settled before width test')
   await read(`(() => {
     const shell = document.createElement('div');
     shell.setAttribute('data-conversation-content', '');
@@ -796,6 +805,74 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic width editor closed')
   check(await read('window.__widthWrapper.style.getPropertyValue("--dsh-chat-user-width")'), '900px', 'user width preference is preserved')
   await read('window.__widthWrapper.remove()')
+
+  // 32. Block popover stays fully inside the viewport when the anchor scrolls away.
+  await read(`window.scrollTo(0, document.documentElement.scrollHeight)`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'popover clamp editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-arrangement-row]")', 'popover clamp rows')
+  await read(`window.scrollTo(0, 0)`)
+  await new Promise(resolve => setTimeout(resolve, 300))
+  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-arrangement-edit]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'clamped popover')
+  await new Promise(resolve => setTimeout(resolve, 250))
+  const popRect = await read(`(() => {
+    const pop = document.querySelector('[data-dsh-iui-edit-popover]');
+    const r = pop.getBoundingClientRect();
+    return { top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight };
+  })()`)
+  check(popRect.top >= 12, true, 'popover top is clamped inside the viewport')
+  check(popRect.bottom <= popRect.height - 12 + 0.5, true, 'popover bottom is clamped inside the viewport')
+  check(popRect.left >= 12, true, 'popover left is clamped inside the viewport')
+  check(popRect.right <= popRect.width - 12 + 0.5, true, 'popover right is clamped inside the viewport')
+
+  // 33. Rounded panel animation + persistent compact delete confirmation.
+  await read(`(() => {
+    if (document.querySelector('[data-dsh-iui-edit-popover]')) document.querySelector('[data-dsh-iui-edit-instruction]')?.blur();
+    if (document.querySelector('[data-dsh-iui-edit-view]')) document.querySelector('[data-dsh-iui-edit-exit]')?.click();
+  })()`)
+  await wait(`!document.querySelector('[data-dsh-iui-edit-view]') && !document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'editor settled before polish test')
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'polish editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-panel]")', 'polish panel')
+  const panelStyle = await read(`(() => {
+    const panel = document.querySelector('[data-dsh-iui-edit-panel]');
+    const cs = getComputedStyle(panel);
+    return { radius: parseFloat(cs.borderTopLeftRadius), top: parseFloat(cs.top), right: parseFloat(cs.right), bottom: parseFloat(cs.bottom), overflow: cs.overflow, animation: cs.animationName };
+  })()`)
+  check(panelStyle.radius >= 15, true, 'editor panel uses the rounded card radius')
+  check(panelStyle.top, 64, 'rounded panel keeps the top inset')
+  check(panelStyle.right, 12, 'rounded panel keeps the right inset')
+  check(panelStyle.bottom, 12, 'rounded panel keeps the bottom inset')
+  check(panelStyle.overflow.includes('hidden'), true, 'rounded panel clips its contents')
+  check(panelStyle.animation.includes('in-desktop'), true, 'editor panel plays the enter animation')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'closing panel animation')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')).animationName.includes('out-desktop')`), true, 'editor panel plays the exit animation')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor removed after exit animation')
+
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'delete confirm editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-arrangement-row]")', 'delete confirm rows')
+  const deleteTrigger = '[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-structure-delete]'
+  await click(deleteTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm]")', 'delete confirmation group')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel') === true`, 'delete confirmation focus')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel')`), true, 'delete confirmation focuses Cancel')
+  check(await count('[data-dsh-iui-edit-structure-confirm-delete]'), 1, 'delete confirmation offers a compact Delete action')
+  await new Promise(resolve => setTimeout(resolve, 3600))
+  check(await count('[data-dsh-iui-edit-structure-confirm]'), 1, 'delete confirmation persists without a timeout')
+  await click('[data-dsh-iui-edit-structure-cancel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-structure-confirm]")', 'delete confirmation cancelled')
+  check(await count(deleteTrigger), 1, 'cancel restores the normal row actions')
+  await click(deleteTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'delete confirmation reopened')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'delete preview opened')
+  check(await count('[data-dsh-iui-edit-structure-confirm]'), 0, 'confirming delete clears the inline confirmation')
+  await click('[data-dsh-iui-edit-preview-cancel]')
+  await new Promise(resolve => setTimeout(resolve, 200))
+  await shot('harness-polish-delete-confirm.png')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

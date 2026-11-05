@@ -22,6 +22,8 @@ export const CHAT_CONTENT_SELECTOR = '[data-conversation-content][data-conversat
 export const CHAT_CONTENT_WIDTH_VAR = '--dsh-chat-content-width'
 /** Default content width when the variable is unset (mirrors the shell CSS). */
 export const DEFAULT_CHAT_CONTENT_WIDTH = 748
+/** Floating desktop panel's inset from the viewport's right edge (matches CSS). */
+export const EDIT_PANEL_RIGHT_INSET = 12
 
 /** Inputs for the docked-panel content width fixed point. */
 export interface FitChatContentWidthOptions {
@@ -41,6 +43,8 @@ export interface FitChatContentWidthOptions {
   readonly gap?: number
   /** Never shrink the content below this width. */
   readonly minContent?: number
+  /** Extra gap between the docked panel's right edge and the viewport (px). */
+  readonly panelRightInset?: number
 }
 
 /** Clamp one value into the inclusive range. */
@@ -67,6 +71,7 @@ export function fitChatContentWidth({
   minContent = 360,
   columnLeft = 0,
   columnWidth = viewportWidth,
+  panelRightInset = 0,
 }: FitChatContentWidthOptions): number {
   if (!Number.isFinite(viewportWidth) || !Number.isFinite(contentWidth) || viewportWidth <= 0 || contentWidth <= 0) {
     return contentWidth
@@ -76,13 +81,15 @@ export function fitChatContentWidth({
   }
   // Not enough room for one panel on each side plus the minimum content: leave
   // the shell alone rather than forcing an unusable layout.
-  if (viewportWidth < minContent + 2 * (panelMin + gap)) return contentWidth
+  if (viewportWidth - panelRightInset < minContent + 2 * (panelMin + gap)) return contentWidth
 
   let current = contentWidth
   let desired = contentWidth
   for (let round = 0; round < 8; round += 1) {
     const panelWidth = clamp((viewportWidth - current) / 2 + 16, panelMin, panelMax)
-    const panelLeft = viewportWidth - panelWidth
+    // The floating panel's right edge sits `panelRightInset` inside the
+    // viewport, so its left edge (and the reserved content area) shifts left.
+    const panelLeft = viewportWidth - panelRightInset - panelWidth
     // The content is centered inside the conversation column, which can start
     // after the sidebar. Solve for the width whose right edge stays `gap` left
     // of the docked panel.
@@ -176,6 +183,7 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
       contentWidth,
       columnLeft: rect.left,
       columnWidth: rect.width,
+      panelRightInset: EDIT_PANEL_RIGHT_INSET,
     })
     if (desired >= contentWidth) { restore(); return }
     const next = `${desired}px`

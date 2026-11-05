@@ -37,6 +37,7 @@ import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, typ
 import {
   activateDraft as activateArtifactDraft,
   attachDraft as attachArtifactDraft,
+  activeDraftKeyFor,
   blocksForProgram,
   closeArtifactBlockEditor,
   applyArtifactStructure,
@@ -75,6 +76,9 @@ import {
   useArtifactEditSession,
   useArtifactEditStore,
 } from './artifact-edit/store.ts'
+
+/** Runtime kept mounted after exit so the panel can play its exit animation. */
+const EDITOR_CLOSE_ANIMATION_MS = 220
 
 /** Session-bound, Turn-keyed program source supplied by the plugin's registration. */
 export interface IntelligentUICardsInjected {
@@ -266,6 +270,44 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const editSession = useArtifactEditSession(sessionId, baseRevisionId)
   const editStore = useArtifactEditStore()
   const editing = editSession?.editing === true
+  // The edit view stays mounted for one short exit animation after `editing`
+  // flips false; the timer is cancelled if the user re-enters edit mode first.
+  const [editorMounted, setEditorMounted] = useState(editing)
+  const [editorClosing, setEditorClosing] = useState(false)
+  const lastEditSessionRef = useRef<ArtifactEditSession | undefined>(undefined)
+  useEffect(() => {
+    if (editSession !== undefined) lastEditSessionRef.current = editSession
+  }, [editSession])
+  useEffect(() => {
+    if (editing) {
+      setEditorClosing(false)
+      setEditorMounted(true)
+      return
+    }
+    if (!editorMounted) return
+    // Switching the edit canvas to another draft replaces this editor
+    // immediately; only a real close (no active draft key) animates out.
+    const activeKey = activeDraftKeyFor(sessionId)
+    if (activeKey !== undefined && activeKey !== editKey) {
+      setEditorClosing(false)
+      setEditorMounted(false)
+      return
+    }
+    const reduceMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) {
+      setEditorClosing(false)
+      setEditorMounted(false)
+      return
+    }
+    setEditorClosing(true)
+    const timer = window.setTimeout(() => {
+      setEditorClosing(false)
+      setEditorMounted(false)
+    }, EDITOR_CLOSE_ANIMATION_MS)
+    return () => { window.clearTimeout(timer) }
+  }, [editing, editorMounted, editStore, editKey, sessionId])
   const hasDraft = editSession !== undefined && hasArtifactEditContent(editSession)
   const showDraftBadge = editSession !== undefined && !editing && editSession.status !== 'submitted' && hasDraft
   const attachedDraftTotal = useMemo(() => {
@@ -487,15 +529,16 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           </div>
         : null}
       <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed && !editing}>
-        {editing && editSession !== undefined ? (
+        {editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
           <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
             <ArtifactEditView
               t={t}
-              session={editSession}
+              session={(editSession ?? lastEditSessionRef.current) as ArtifactEditSession}
               actions={editActions}
               themeStyle={themeStyle}
               scheme={scheme}
               onToAssistant={onToAssistant}
+              closing={editorClosing && !editing}
             />
           </div>
         ) : (
