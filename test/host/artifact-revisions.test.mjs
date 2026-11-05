@@ -14,6 +14,7 @@ import { Readable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
 import { MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { THEME } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
 const originalHome = process.env.DSH_HOME
@@ -39,6 +40,9 @@ const revision = (overrides = {}) => ({
   revisionId: 'call-2', artifactId: 'call-1', baseRevisionId: 'call-1', revision: 2,
   sessionId: 's1', style: 'card', editedBlockIds: ['b1'], createdAt: 1, ...overrides,
 })
+
+/** One valid result-owned temporary style snapshot for a card revision. */
+const TEMPORARY_STYLE = { schemaVersion: 1, baseLayout: 'card', directives: 'Result-owned compact style.', theme: THEME }
 
 test('records immutably, clones reads and reloads from the artifact file', () => {
   const { store, file } = mountHome()
@@ -88,6 +92,20 @@ test('round trips lineage across restart and writes only the artifact registry f
   assert.equal(restored.get('call-3').baseRevisionId, 'call-2')
   assert.deepEqual(readdirSync(home), ['dsh-intelligent-ui-artifacts.json'])
   assert.equal(existsSync(`${file}.tmp`), false)
+})
+
+test('a revision record keeps a temporary style snapshot and refuses mismatches', () => {
+  const { store } = mountHome()
+  store.record(revision({ temporaryStyle: TEMPORARY_STYLE }))
+  assert.deepEqual(createArtifactRevisionStore().get('call-2').temporaryStyle, TEMPORARY_STYLE)
+  for (const temporaryStyle of [
+    { ...TEMPORARY_STYLE, baseLayout: 'free' },
+    { ...TEMPORARY_STYLE, directives: 'x'.repeat(2001) },
+    { schemaVersion: 2, baseLayout: 'card', directives: 'x' },
+  ]) {
+    assert.throws(() => store.record(revision({ revisionId: 'call-2', temporaryStyle })), /Invalid/)
+  }
+  assert.deepEqual(store.get('call-2').temporaryStyle, TEMPORARY_STYLE, 'rejected records leave the stored one unchanged')
 })
 
 test('corrupt files, versions, schemas, duplicate ids and oversize collections are preserved on the next atomic write', () => {
@@ -389,4 +407,19 @@ test('restore rejects non-POST requests and preserves authentication denials', a
   }
   // Authentication runs before method dispatch, so even rejected methods were checked.
   assert.equal(checked.length, 4)
+})
+
+test('restore copies a source temporary style into the new revision and response', async () => {
+  const source = revision({ title: 'Temp page', temporaryStyle: TEMPORARY_STYLE })
+  const latest = revision({ revisionId: 'call-3', baseRevisionId: 'call-2', revision: 3, createdAt: 2 })
+  const { restoreRoute, file } = mountRoutes({ revisions: [source, latest] })
+  const response = await postRestore(restoreRoute, { body: RESTORE_BODY })
+  assert.equal(response.status, 201)
+  const body = JSON.parse(response.body)
+  assert.deepEqual(body.revision.temporaryStyle, TEMPORARY_STYLE)
+  assert.equal(body.revision.style, 'card')
+  assert.equal(Object.hasOwn(body.revision, 'styleId'), false)
+  const record = JSON.parse(readFileSync(file, 'utf8')).revisions.find(candidate => candidate.revisionId === body.revision.revisionId)
+  assert.deepEqual(record.temporaryStyle, TEMPORARY_STYLE)
+  assert.equal(record.revisionId, body.revision.revisionId)
 })

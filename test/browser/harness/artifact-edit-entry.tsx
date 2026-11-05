@@ -211,6 +211,20 @@ w.__openChip = () => {
 function pendingRequestId(artifactId: string): string | undefined {
   return submittedDraftsFor(SESSION).find(entry => entry.artifactId === artifactId)?.requestId
 }
+w.__addTempCard = (callId: string = 'temp-call-1', title: string = '临时卡片') => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({
+        program: DST_PROGRAM,
+        title,
+        style: 'card',
+        temporaryStyle: { schemaVersion: 1, baseLayout: 'card', directives: 'keep the card compact and calm' },
+      }) },
+    },
+  }]
+  update()
+}
 w.__applyRevision = (program: string, meta: Record<string, unknown> = {}) => {
   const merged = { artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, editedBlockIds: ['b3', 'b5'], ...meta }
   const requestId = merged.requestId ?? pendingRequestId(String(merged.artifactId))

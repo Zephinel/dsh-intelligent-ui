@@ -395,6 +395,11 @@ export function createArtifactEditController(
       // arguments never travel with it and the recorded request style still wins.
       const composed = composedProgram !== undefined
       if (!composed) {
+        // Temporary-style results are content-editable only through the composed
+        // block path; the full-program fallback keeps its on-demand authorization.
+        if (request.temporaryStyle !== undefined) {
+          throw new Error('render_ui: this artifact uses a result-owned temporary style, so only content edits through edit_ui_blocks are supported. Order-only or global-only edits on a temporary style are not supported; ask the user to edit the page content, or re-render it with a saved style first.')
+        }
         if ('temporaryStyle' in args) {
           throw new Error('render_ui: block editing is not supported for temporary-style results; ask the user to re-render the page with a saved or built-in style before editing.')
         }
@@ -469,6 +474,7 @@ export function createArtifactEditController(
         sessionId,
         style: request.style,
         ...request.styleId === undefined ? {} : { styleId: request.styleId },
+        ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
         ...request.title === undefined ? {} : { title: request.title },
         editedBlockIds,
         createdAt: now(),
@@ -484,6 +490,7 @@ export function createArtifactEditController(
           revision: record.revision,
           editedBlockIds,
           ...normalizedProgram === undefined ? {} : { program: normalizedProgram },
+          ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
         },
         warnings,
       }

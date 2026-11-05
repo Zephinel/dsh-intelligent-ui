@@ -14,6 +14,7 @@ import {
   type ArtifactRevisionMeta,
 } from '../../shared/artifact-edit.ts'
 import type { IntelligentUIProgram, RenderLayout } from '../../shared/intelligent-ui.ts'
+import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 
 /** One locally recorded revision restored from an older one. */
 export interface LocalArtifactRevision {
@@ -25,6 +26,8 @@ export interface LocalArtifactRevision {
   readonly title?: string
   readonly style: RenderLayout
   readonly styleId?: string
+  /** Result-owned temporary style snapshot copied from the source revision. */
+  readonly temporaryStyle?: StyleSnapshot
   /** Loaded Turn the restore was triggered from; the card renders in that Turn. */
   readonly turn?: number
   readonly createdAt: number
@@ -55,6 +58,7 @@ function validRevision(value: unknown): value is LocalArtifactRevision {
     && (record.title === undefined || typeof record.title === 'string')
     && (record.style === 'card' || record.style === 'article' || record.style === 'free')
     && (record.styleId === undefined || typeof record.styleId === 'string')
+    && (record.temporaryStyle === undefined || (isStyleSnapshot(record.temporaryStyle) && record.temporaryStyle.baseLayout === record.style))
     && (record.turn === undefined || (typeof record.turn === 'number' && Number.isSafeInteger(record.turn)))
     && typeof record.createdAt === 'number'
 }
@@ -136,6 +140,7 @@ export function localRevisionProgram(revision: LocalArtifactRevision): Intellige
     ...revision.title === undefined ? {} : { title: revision.title },
     style: revision.style,
     ...revision.styleId === undefined ? {} : { styleId: revision.styleId, styleSource: 'template' as const },
+    ...revision.temporaryStyle === undefined ? {} : { temporaryStyle: revision.temporaryStyle, styleSource: 'temporary' as const },
     artifactId: revision.artifactId,
     revisionId: revision.revisionId,
     baseRevisionId: revision.sourceRevisionId,
@@ -179,6 +184,9 @@ export async function restoreRevision(input: {
     if (typeof meta.artifactId !== 'string' || typeof meta.revisionId !== 'string' || typeof meta.revision !== 'number') return undefined
     if (typeof meta.program !== 'string' || meta.program.trim() === '') return undefined
     if (meta.style !== 'card' && meta.style !== 'article' && meta.style !== 'free') return undefined
+    const temporaryStyle = meta.temporaryStyle !== undefined && isStyleSnapshot(meta.temporaryStyle) && meta.temporaryStyle.baseLayout === meta.style
+      ? meta.temporaryStyle
+      : undefined
     return {
       artifactId: meta.artifactId,
       sourceRevisionId: meta.baseRevisionId ?? input.sourceRevisionId,
@@ -188,6 +196,7 @@ export async function restoreRevision(input: {
       ...meta.title === undefined ? {} : { title: meta.title },
       style: meta.style,
       ...meta.styleId === undefined ? {} : { styleId: meta.styleId },
+      ...temporaryStyle === undefined ? {} : { temporaryStyle },
       createdAt: Date.now(),
     }
   } catch {

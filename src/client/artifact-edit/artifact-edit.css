@@ -1310,3 +1310,21 @@
 .dsh-iui-edit-draft-tag.is-failed {
   color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-label-secondary));
 }
+
+/* Cross-tab soft lease notice; the other tab keeps its draft until takeover. */
+.dsh-iui-edit-lease {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-state-warning-primary, var(--dsw-alias-border-l2));
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-edit-lease .dsh-iui-edit-conflict-title,
+.dsh-iui-edit-lease .dsh-iui-edit-conflict-body {
+  margin: 0;
+}

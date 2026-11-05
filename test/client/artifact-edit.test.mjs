@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
 import {
   ARTIFACT_EDIT_SOURCE,
+  MAX_ARTIFACT_PROGRAM_CHARS,
   buildEditRequestText,
   describeEditRequestProblem,
   describeTargetOrderProblem,
@@ -20,6 +21,8 @@ import {
   parseEditRequestText,
 } from '../../src/shared/artifact-edit.ts'
 import {
+  ARTIFACT_DRAFT_INDEX_PREFIX,
+  ARTIFACT_DRAFT_STORAGE_PREFIX,
   activateDraft,
   activeDraftKeyFor,
   attachDraft,
@@ -35,6 +38,8 @@ import {
   editSessionFor,
   editingSessionFor,
   enableBranch,
+  flushArtifactDraftPersistence,
+  hydrateArtifactDrafts,
   installArtifactComposerBridge,
   moveArtifactBlock,
   moveArtifactBlockBy,
@@ -48,6 +53,7 @@ import {
   saveArtifactBlockInstruction,
   serializeArtifactEditRequest,
   setArtifactGlobalInstruction,
+  supportsBlockEditing,
   undoArtifactRemove,
 } from '../../src/client/artifact-edit/store.ts'
 import {
@@ -56,6 +62,55 @@ import {
   verifyArtifactChipAttachment,
 } from '../../src/client/artifact-edit/composer.ts'
 import { translate, en } from '../../src/shared/locales.ts'
+
+/** Tiny sessionStorage stand-in: the store must work with and without one. */
+function createFakeSessionStorage() {
+  const map = new Map()
+  return {
+    getItem: key => map.has(key) ? map.get(key) : null,
+    setItem: (key, value) => { map.set(String(key), String(value)) },
+    removeItem: key => { map.delete(key) },
+    clear: () => { map.clear() },
+    key: index => [...map.keys()][index] ?? null,
+    get length() { return map.size },
+  }
+}
+
+/** Per-tab storage used by the persistence tests. */
+const testStorage = createFakeSessionStorage()
+try {
+  Object.defineProperty(globalThis, 'sessionStorage', { value: testStorage, configurable: true, writable: true })
+} catch {
+  globalThis.sessionStorage = testStorage
+}
+
+/** Persist one synthetic draft record plus its chat index. */
+function putStoredDraft(sessionId, key, overrides = {}) {
+  const record = {
+    key,
+    sessionId,
+    artifactId: key.slice(sessionId.length + 1),
+    baseRevisionId: key.slice(sessionId.length + 1),
+    baseRevision: 1,
+    requestId: 'req_restore0001',
+    title: DST_TITLE,
+    style: 'card',
+    program: DST_PROGRAM,
+    originalOrder: [...BASE_ORDER],
+    targetOrder: [...BASE_ORDER],
+    orderChanged: false,
+    selection: [{ blockId: 'b3', order: 1, instruction: 'restored edit' }],
+    globalInstruction: '',
+    attached: true,
+    ...overrides,
+  }
+  testStorage.setItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`, JSON.stringify(record))
+  const index = testStorage.getItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}${sessionId}`)
+  const keys = index === null ? [] : JSON.parse(index)
+  if (!keys.includes(key)) keys.push(key)
+  testStorage.setItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}${sessionId}`, JSON.stringify(keys))
+  return record
+}
 
 /** Wait for the store's async revision probe to settle. */
 async function settle() {
@@ -70,6 +125,9 @@ function programFor(callId, overrides = {}) {
 
 /** The sample artifact's editable block ids in page order. */
 const BASE_ORDER = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']
+
+/** Valid result-owned temporary style snapshot used by the M3-4 tests. */
+const TEMP_STYLE = { schemaVersion: 1, baseLayout: 'card', directives: 'Calm editorial palette; keep the type quiet.' }
 
 /** Fake Host revision endpoint. */
 function stubRevision(conflict = false) {
@@ -777,4 +835,257 @@ test('store: branch mode survives closing and reopening the draft', async () => 
   assert.equal(reopened.status, 'ready')
   assert.equal(reopened.branch, true)
   assert.equal(reopened.selection.length, 1)
+})
+
+test('store: unsent drafts persist to sessionStorage and hydrate after a reload', async () => {
+  stubRevision(false)
+  openArtifactEditor('p1', programFor('call_p1'))
+  await settle()
+  const key = editKey('p1', 'call_p1')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'persist me')
+  setArtifactGlobalInstruction(key, 'keep global')
+  moveArtifactBlock(key, 'b4', 1)
+  flushArtifactDraftPersistence()
+
+  const raw = testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`)
+  assert.ok(raw)
+  const stored = JSON.parse(raw)
+  assert.equal(stored.requestId, draftSessionFor(key).requestId)
+  assert.deepEqual(stored.selection.map(entry => [entry.blockId, entry.instruction]), [['b3', 'persist me']])
+  assert.equal(stored.globalInstruction, 'keep global')
+  assert.equal(stored.attached, true)
+  assert.deepEqual(stored.targetOrder.slice(0, 2), ['b1', 'b4'])
+  assert.equal(stored.orderChanged, true)
+  assert.deepEqual(JSON.parse(testStorage.getItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}p1`)), [key])
+
+  // Simulate a reload: the same payload under a chat with no in-memory state.
+  const clone = { ...stored, key: `p2:${stored.baseRevisionId}`, sessionId: 'p2' }
+  testStorage.setItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${clone.key}`, JSON.stringify(clone))
+  testStorage.setItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}p2`, JSON.stringify([clone.key]))
+
+  const restored = editSessionFor('p2', stored.baseRevisionId)
+  assert.ok(restored)
+  assert.equal(restored.key, clone.key)
+  assert.equal(restored.editing, false)
+  assert.equal(restored.status, 'ready')
+  assert.equal(restored.requestId, stored.requestId)
+  assert.equal(restored.attached, true)
+  assert.equal(restored.latestRevision, undefined)
+  assert.deepEqual(restored.selection.map(entry => [entry.blockId, entry.order, entry.instruction]), [['b3', 1, 'persist me']])
+  assert.deepEqual(restored.targetOrder.slice(0, 2), ['b1', 'b4'])
+  assert.equal(restored.orderChanged, true)
+  assert.equal(restored.globalInstruction, 'keep global')
+  assert.equal(restored.blocks.length, BASE_ORDER.length)
+  assert.equal(typeof restored.wrappedProgram, 'string')
+
+  // Hydration is idempotent and re-attaches the restored draft's composer chip.
+  assert.equal(hydrateArtifactDrafts('p2'), 0)
+  await new Promise(resolve => setTimeout(resolve, 320))
+  assert.equal(chip.upserts.some(upsert => upsert.sessionId === 'p2'
+    && upsert.referenceId === `${ARTIFACT_EDIT_SOURCE}:${clone.key}`), true)
+})
+
+test('store: corrupt or unusable persisted drafts are ignored and cleaned up', () => {
+  testStorage.setItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}q1:call_bad`, '{not json')
+  testStorage.setItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}q1`, JSON.stringify(['q1:call_bad']))
+  assert.equal(hydrateArtifactDrafts('q1'), 0)
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}q1:call_bad`), null)
+
+  putStoredDraft('q2', 'q2:call_x', { program: '' })
+  assert.equal(hydrateArtifactDrafts('q2'), 0)
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}q2:call_x`), null)
+
+  putStoredDraft('q3', 'q3:call_x', { program: 'x'.repeat(MAX_ARTIFACT_PROGRAM_CHARS + 1) })
+  assert.equal(hydrateArtifactDrafts('q3'), 0)
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}q3:call_x`), null)
+
+  putStoredDraft('q4', 'q4:call_x', { targetOrder: ['b1'] })
+  assert.equal(hydrateArtifactDrafts('q4'), 0)
+
+  // Unknown block ids inside a stored selection are dropped, not fatal.
+  putStoredDraft('q5', 'q5:call_x', {
+    selection: [
+      { blockId: 'b3', order: 1, instruction: 'known' },
+      { blockId: 'b999', order: 2, instruction: 'unknown' },
+    ],
+  })
+  assert.equal(hydrateArtifactDrafts('q5'), 1)
+  assert.deepEqual(draftSessionFor('q5:call_x').selection.map(entry => entry.blockId), ['b3'])
+})
+
+test('store: discarding or sending a draft clears its persisted copy and index', async () => {
+  stubRevision(false)
+  openArtifactEditor('p4', programFor('call_p4'))
+  await settle()
+  const discardKey = editKey('p4', 'call_p4')
+  openArtifactBlockEditor(discardKey, 'b3')
+  saveArtifactBlockInstruction(discardKey, 'b3', 'to discard')
+  flushArtifactDraftPersistence()
+  assert.ok(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${discardKey}`))
+  discardDraft(discardKey)
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${discardKey}`), null)
+  const discardedIndex = testStorage.getItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}p4`)
+  assert.equal(discardedIndex === null || JSON.parse(discardedIndex).length === 0, true)
+
+  openArtifactEditor('p5', programFor('call_p5'))
+  await settle()
+  const sendKey = editKey('p5', 'call_p5')
+  openArtifactBlockEditor(sendKey, 'b3')
+  saveArtifactBlockInstruction(sendKey, 'b3', 'to send')
+  flushArtifactDraftPersistence()
+  assert.ok(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${sendKey}`))
+  const outcome = await serializeArtifactEditRequest(referenceForSession(sendKey))
+  assert.equal(outcome.ok, true)
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${sendKey}`), null)
+})
+
+test('store: serialize hydrates a restored chip from its deterministic reference', async () => {
+  const key = 'p6:call_r6'
+  const record = putStoredDraft('p6', key)
+  stubRevision(false)
+  const outcome = await serializeArtifactEditRequest(`${ARTIFACT_EDIT_SOURCE}:${key}`)
+  assert.equal(outcome.ok, true)
+  assert.equal(outcome.request.requestId, record.requestId)
+  assert.equal(outcome.request.baseRevisionId, 'call_r6')
+  assert.deepEqual(outcome.request.edits.map(edit => [edit.blockId, edit.instruction]), [['b3', 'restored edit']])
+  assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`), null)
+  assert.equal(draftSessionFor(key).status, 'submitted')
+})
+
+test('store: persistence is a silent no-op without sessionStorage', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage')
+  try {
+    Object.defineProperty(globalThis, 'sessionStorage', { value: undefined, configurable: true, writable: true })
+    assert.doesNotThrow(() => flushArtifactDraftPersistence())
+    assert.equal(editSessionFor('no-storage-chat', 'call_none'), undefined)
+  } finally {
+    if (descriptor !== undefined) Object.defineProperty(globalThis, 'sessionStorage', descriptor)
+    else Object.defineProperty(globalThis, 'sessionStorage', { value: testStorage, configurable: true, writable: true })
+  }
+})
+
+test('store: the chat index rehydrates every persisted draft', () => {
+  const keyA = 'p7:call_r7a'
+  const keyB = 'p7:call_r7b'
+  putStoredDraft('p7', keyA, { requestId: 'req_restore0002' })
+  putStoredDraft('p7', keyB, {
+    requestId: 'req_restore0003',
+    targetOrder: ['b2', 'b1', ...BASE_ORDER.slice(2)],
+    orderChanged: true,
+    attached: false,
+    selection: [{ blockId: 'b5', order: 1, instruction: 'second draft' }],
+  })
+  assert.deepEqual(JSON.parse(testStorage.getItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}p7`)), [keyA, keyB])
+  assert.equal(hydrateArtifactDrafts('p7'), 2)
+  assert.equal(draftSessionFor(keyA).requestId, 'req_restore0002')
+  assert.equal(draftSessionFor(keyB).requestId, 'req_restore0003')
+  assert.equal(draftSessionFor(keyB).attached, false)
+  assert.deepEqual(draftSessionFor(keyB).targetOrder.slice(0, 2), ['b2', 'b1'])
+  assert.equal(draftSessionFor(keyB).orderChanged, true)
+  assert.deepEqual(draftSessionFor(keyB).selection.map(entry => entry.blockId), ['b5'])
+  assert.equal(draftSessionsFor('p7').length, 2)
+})
+
+test('store: temporary-style cards with a valid snapshot open and keep it', async () => {
+  stubRevision(false)
+  const program = programFor('call_temp1', { styleSource: 'temporary', temporaryStyle: TEMP_STYLE })
+  assert.equal(supportsBlockEditing(program), true)
+  assert.deepEqual(openArtifactEditor('t1', program), { ok: true })
+  await settle()
+  const session = draftSessionFor(editKey('t1', 'call_temp1'))
+  assert.deepEqual(session.temporaryStyle, TEMP_STYLE)
+  assert.equal(session.style, 'card')
+  assert.equal(session.styleId, undefined)
+
+  // Missing or invalid snapshots still offer no editor.
+  assert.deepEqual(
+    openArtifactEditor('t1', programFor('call_temp_missing', { styleSource: 'temporary' })),
+    { ok: false, reason: 'unsupported' },
+  )
+  assert.deepEqual(
+    openArtifactEditor('t1', programFor('call_temp_invalid', {
+      styleSource: 'temporary',
+      temporaryStyle: { schemaVersion: 1, baseLayout: 'card', directives: '' },
+    })),
+    { ok: false, reason: 'unsupported' },
+  )
+})
+
+test('store: temporary-style content edits send the snapshot without a style id', async () => {
+  stubRevision(false)
+  openArtifactEditor('t2', programFor('call_temp2', { styleSource: 'temporary', temporaryStyle: TEMP_STYLE }))
+  await settle()
+  const key = editKey('t2', 'call_temp2')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'temp content edit')
+  const outcome = await serializeArtifactEditRequest(referenceForSession(key))
+  assert.equal(outcome.ok, true)
+  assert.deepEqual(outcome.request.temporaryStyle, TEMP_STYLE)
+  assert.equal(outcome.request.styleId, undefined)
+  assert.equal(outcome.request.style, 'card')
+  const text = buildEditRequestText(outcome.request)
+  assert.deepEqual(parseEditRequestText(text).temporaryStyle, TEMP_STYLE)
+  assert.equal(text.includes('"styleId"'), false)
+  assert.equal(draftSessionFor(key).status, 'submitted')
+})
+
+test('store: temporary-style reorder or global-only sends are rejected before probing', async () => {
+  stubRevision(false)
+  openArtifactEditor('t3', programFor('call_temp3', { styleSource: 'temporary', temporaryStyle: TEMP_STYLE }))
+  await settle()
+  const key = editKey('t3', 'call_temp3')
+  moveArtifactBlock(key, 'b5', 0)
+  assert.deepEqual(await serializeArtifactEditRequest(referenceForSession(key)), { ok: false, problem: 'temporary_order' })
+  assert.equal(draftSessionFor(key).status, 'ready')
+  assert.equal(draftSessionFor(key).submittedAt, undefined)
+  assert.equal(editProblemMessage('temporary_order'), en['edit.errorTemporaryOrder'])
+
+  resetArtifactOrder(key)
+  setArtifactGlobalInstruction(key, 'global only')
+  assert.deepEqual(await serializeArtifactEditRequest(referenceForSession(key)), { ok: false, problem: 'temporary_order' })
+  assert.equal(draftSessionFor(key).status, 'ready')
+})
+
+test('store: temporary-style drafts persist and rehydrate their snapshot', async () => {
+  stubRevision(false)
+  openArtifactEditor('t4', programFor('call_temp4', { styleSource: 'temporary', temporaryStyle: TEMP_STYLE }))
+  await settle()
+  const key = editKey('t4', 'call_temp4')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'persisted temp edit')
+  flushArtifactDraftPersistence()
+  const raw = testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`)
+  assert.ok(raw)
+  const stored = JSON.parse(raw)
+  assert.deepEqual(stored.temporaryStyle, TEMP_STYLE)
+  assert.equal(stored.styleId, undefined)
+
+  // Reload simulation under a new chat id.
+  const clone = { ...stored, key: `t4r:${stored.baseRevisionId}`, sessionId: 't4r' }
+  testStorage.setItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${clone.key}`, JSON.stringify(clone))
+  testStorage.setItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}t4r`, JSON.stringify([clone.key]))
+  const restored = editSessionFor('t4r', stored.baseRevisionId)
+  assert.ok(restored)
+  assert.deepEqual(restored.temporaryStyle, TEMP_STYLE)
+  assert.equal(restored.styleId, undefined)
+
+  const outcome = await serializeArtifactEditRequest(referenceForSession(clone.key))
+  assert.equal(outcome.ok, true)
+  assert.deepEqual(outcome.request.temporaryStyle, TEMP_STYLE)
+  assert.equal(outcome.request.styleId, undefined)
+})
+
+test('store: normal drafts still serialize without a temporary style', async () => {
+  stubRevision(false)
+  openArtifactEditor('t5', programFor('call_normal5'))
+  await settle()
+  const key = editKey('t5', 'call_normal5')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', 'normal edit')
+  const outcome = await serializeArtifactEditRequest(referenceForSession(key))
+  assert.equal(outcome.ok, true)
+  assert.equal(outcome.request.temporaryStyle, undefined)
+  assert.equal(outcome.request.styleId, undefined)
+  assert.equal(outcome.request.style, 'card')
 })

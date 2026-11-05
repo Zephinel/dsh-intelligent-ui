@@ -44,7 +44,8 @@ import { ARTIFACT_ID_PATTERN, BLOCK_EDIT_TOOL, isRequestId } from '../shared/art
 import { spliceBlockBundle } from '../shared/artifact-block-bundle.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
-  contrastRatio, describeStyleSnapshotProblem, isCustomStyleId, isStyleSnapshot, type StyleTemplate,
+  contrastRatio, describeStyleSnapshotProblem, isCustomStyleId, isStyleSnapshot,
+  type StyleSnapshot, type StyleTemplate,
 } from '../shared/style-templates.ts'
 import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
@@ -297,6 +298,7 @@ const BLOCK_EDIT_OUTPUT = {
     statements: { type: 'number', description: 'Number of parsed openui-lang statements in the composed page.' },
     style: { type: 'string', enum: RENDER_LAYOUTS, description: 'Recorded answer presentation style of the artifact.' },
     styleId: { type: 'string', description: 'Recorded custom style template id, absent for built-in styles.' },
+    temporaryStyle: { type: 'object', description: 'Recorded result-owned temporary style snapshot; the page keeps this style instead of styleId.' },
     title: { type: 'string', description: 'Recorded page title, when the artifact had one.' },
     warnings: {
       type: 'array',
@@ -321,6 +323,7 @@ interface BlockEditValue {
   readonly style: RenderLayout
   readonly requestId?: string
   readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
   readonly title?: string
   readonly warnings?: readonly string[]
   readonly artifactId: string
@@ -680,6 +683,7 @@ ${section}`
         ...value.title === undefined ? {} : { title: value.title },
         style: value.style,
         ...value.styleId === undefined ? {} : { styleId: value.styleId },
+        ...value.temporaryStyle === undefined ? {} : { temporaryStyle: value.temporaryStyle },
       }),
     },
     async execute(args: { program: string; requestId?: unknown; artifactId?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
@@ -725,6 +729,7 @@ ${section}`
         statements: countStatements(program),
         style: request.style,
         ...request.styleId === undefined ? {} : { styleId: request.styleId },
+        ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
         ...request.title === undefined ? {} : { title: request.title },
         ...applied.warnings.length === 0 ? {} : { warnings: applied.warnings },
         artifactId: lineage.artifactId,

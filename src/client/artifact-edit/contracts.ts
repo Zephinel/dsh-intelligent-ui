@@ -7,6 +7,7 @@ import type { CSSProperties } from 'react'
 import type { Translate } from '../../shared/locales.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import type { RenderLayout } from '../../shared/intelligent-ui.ts'
+import type { StyleSnapshot } from '../../shared/style-templates.ts'
 
 /**
  * Smallest viewport width that can host the edit canvas and the request panel.
@@ -69,6 +70,12 @@ export interface ArtifactEditSession {
   readonly title?: string
   readonly style: RenderLayout
   readonly styleId?: string
+  /**
+   * Result-owned style snapshot for a temporary-style artifact. Content edits
+   * carry it in the request (and never carry a styleId); order-only/global-only
+   * requests are rejected for these drafts.
+   */
+  readonly temporaryStyle?: StyleSnapshot
   /** Original program (never rewrapped). */
   readonly program: string
   /** Program with internal block wrappers, for the edit-mode renderer. */

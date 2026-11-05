@@ -21,7 +21,7 @@ import { ARTIFACT_EDIT_TTL, createArtifactEditController } from '../../src/host/
 import { createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
 import { assertDshToolSchema } from '../../src/host/tool-schema.ts'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
-import { template } from './style-fixtures.mjs'
+import { THEME, template } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
 const homes = []
@@ -89,6 +89,9 @@ function blockFragment(blockIds, replacements) {
 }
 
 const UPDATED_MONTH = ['选地区，再点月份，看当月的状态。', '切换地区，再点月份，查看当月的夏令时状态。']
+
+/** One valid result-owned temporary style snapshot for a card page. */
+const TEMPORARY_STYLE = { schemaVersion: 1, baseLayout: 'card', directives: 'Keep compact groups and clear hierarchy.', theme: THEME }
 
 /** One V1 envelope for a chosen artifact and requestId (multi-card send helper). */
 function artifactRequest({ requestId, artifactId = 'call-original', ...overrides } = {}) {
@@ -825,6 +828,64 @@ test('invalid branch bases are rejected model-readably without recording', async
     /says it targets revision 5, but base revision "call-old-2" is revision 2/,
   )
   assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 3)
+})
+
+test('a temporary-style block edit records and projects the snapshot', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(artifactRequest({ requestId: 'req_temp_0001', temporaryStyle: TEMPORARY_STYLE })))
+  const value = await m.blockTool.execute(
+    { program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_temp_0001' },
+    { agent: m.agent, callId: 'call-temp-1' },
+  )
+  assert.equal(value.style, 'card')
+  assert.equal(Object.hasOwn(value, 'styleId'), false, 'temporary styles never carry a template id')
+  assert.deepEqual(value.temporaryStyle, TEMPORARY_STYLE)
+  const meta = m.blockTool.output.presentationMeta({}, value)
+  assert.deepEqual(meta, {
+    artifactId: 'call-original', revisionId: 'call-temp-1', requestId: 'req_temp_0001',
+    baseRevisionId: 'call-original', revision: 2, editedBlockIds: ['b4'], program: value.program,
+    title: DST_TITLE, style: 'card', temporaryStyle: TEMPORARY_STYLE,
+  })
+  assert.equal(isArtifactRevisionMeta(meta), true)
+  // Output/standard value schemas declare the snapshot as a JSON object.
+  assert.equal(m.blockTool.output.schema.properties.temporaryStyle.type, 'object')
+  assertDshToolSchema(m.blockTool.output.schema, 'edit_ui_blocks.output.schema')
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(record.temporaryStyle, TEMPORARY_STYLE)
+  assert.equal(record.style, 'card')
+  assert.equal(Object.hasOwn(record, 'styleId'), false)
+  assert.equal(record.revisionId, 'call-temp-1')
+})
+
+test('the render_ui full-program fallback stays closed for temporary-style edits', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(artifactRequest({
+    requestId: 'req_temp_order',
+    edits: [],
+    targetOrder: TARGET_ORDER,
+    temporaryStyle: TEMPORARY_STYLE,
+  })))
+  await assert.rejects(
+    () => m.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_temp_order' }, { agent: m.agent, callId: 'call-temp-order' }),
+    /render_ui: this artifact uses a result-owned temporary style, so only content edits through edit_ui_blocks are supported/,
+  )
+  assert.equal(existsSync(m.file), false)
+})
+
+test('invalid temporary-style envelopes are rejected before rendering', async () => {
+  for (const request of [
+    editRequest({ requestId: 'req_temp_bad_layout', temporaryStyle: { ...TEMPORARY_STYLE, baseLayout: 'free' } }),
+    editRequest({ requestId: 'req_temp_with_style', styleId: 'cs_abcdef123456', temporaryStyle: TEMPORARY_STYLE }),
+    editRequest({ requestId: 'req_temp_long', temporaryStyle: { ...TEMPORARY_STYLE, directives: 'x'.repeat(2001) } }),
+  ]) {
+    const m = mount()
+    m.send(buildEditRequestText(request))
+    await assert.rejects(
+      () => m.blockTool.execute({ program: blockFragment(['b4'], { b4: UPDATED_MONTH }) }, { agent: m.agent, callId: 'call-temp-bad' }),
+      /could not be read, so the page was not updated/,
+    )
+    assert.equal(existsSync(m.file), false)
+  }
 })
 
 /** Drive the controller directly so the TTL and session bound are observable. */

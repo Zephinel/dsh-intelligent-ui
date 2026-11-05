@@ -12,6 +12,7 @@
  * imports, so tests can load it through Node's type stripping.
  */
 import type { RenderLayout } from './intelligent-ui.ts'
+import { isStyleSnapshot, type StyleSnapshot } from './style-templates.ts'
 
 /** Envelope version persisted in the model-facing text. */
 export const ARTIFACT_EDIT_SCHEMA_VERSION = 1
@@ -112,6 +113,8 @@ export interface ArtifactEditRequest {
   readonly style: RenderLayout
   /** Recorded custom template id, when the artifact used one. */
   readonly styleId?: string
+  /** Result-owned temporary style snapshot, when the artifact used one. */
+  readonly temporaryStyle?: StyleSnapshot
   /** Instructions, in selection order. Empty for a reorder-only request. */
   readonly edits: readonly ArtifactBlockEdit[]
   /** Target order of every editable top-level block id (a permutation of the base revision's blocks). */
@@ -148,6 +151,8 @@ export interface ArtifactRevisionMeta {
   readonly style?: RenderLayout
   /** Recorded custom template id for a block-edit result. */
   readonly styleId?: string
+  /** Result-owned temporary style snapshot for a block-edit result. */
+  readonly temporaryStyle?: StyleSnapshot
 }
 
 /** Latest-revision probe answered by the Host route. */
@@ -257,7 +262,7 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'edits', 'targetOrder', 'orderChanged', 'branch', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'targetOrder', 'orderChanged', 'branch', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
@@ -267,6 +272,11 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
   if ('title' in value && !isBoundedText(value.title, 1, MAX_ARTIFACT_TITLE_CHARS)) return 'invalid_title'
   if (!isEditLayout(value.style)) return 'invalid_style'
   if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return 'invalid_style_id'
+  if ('temporaryStyle' in value) {
+    if ('styleId' in value) return 'invalid_temporary_style'
+    if (!isStyleSnapshot(value.temporaryStyle) || value.temporaryStyle.baseLayout !== value.style) return 'invalid_temporary_style'
+    if (JSON.stringify(value.temporaryStyle).length > 20_000) return 'invalid_temporary_style'
+  }
   if (!Array.isArray(value.edits) || value.edits.length > MAX_ARTIFACT_EDITS) return 'invalid_edits'
   if (!Array.isArray(value.targetOrder) || value.targetOrder.length === 0 || value.targetOrder.length > MAX_TARGET_ORDER_BLOCKS) return 'invalid_target_order'
   const targetIds = new Set<string>()
@@ -337,6 +347,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     ...request.title === undefined ? {} : { title: request.title },
     style: request.style,
     ...request.styleId === undefined ? {} : { styleId: request.styleId },
+    ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
     edits: request.edits.map(edit => ({
       blockId: edit.blockId,
       nodePath: edit.nodePath,
@@ -359,7 +370,9 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
 
   const contentEdits = request.edits.length > 0
   const styleLine = contentEdits
-    ? `- Keep the recorded page style (${JSON.stringify(request.style)}${request.styleId === undefined ? '' : `, styleId ${JSON.stringify(request.styleId)}`}); the Host reuses it, do not pass style arguments to ${BLOCK_EDIT_TOOL}.`
+    ? request.temporaryStyle !== undefined
+      ? `- Keep the recorded result-owned temporary style (${JSON.stringify(request.style)}); the Host reuses its snapshot, do not pass style or styleId arguments to ${BLOCK_EDIT_TOOL}.`
+      : `- Keep the recorded page style (${JSON.stringify(request.style)}${request.styleId === undefined ? '' : `, styleId ${JSON.stringify(request.styleId)}`}); the Host reuses it, do not pass style arguments to ${BLOCK_EDIT_TOOL}.`
     : request.styleId === undefined
       ? `- Keep the recorded page style: pass style: ${JSON.stringify(request.style)} to render_ui.`
       : `- Keep the recorded page style: pass style: ${JSON.stringify(request.style)} and styleId: ${JSON.stringify(request.styleId)} to render_ui.`
@@ -588,11 +601,12 @@ export function nextEditRequestSummary(text: string, from: number): { start: num
  */
 export function isArtifactRevisionMeta(value: unknown): value is ArtifactRevisionMeta {
   if (!isRecord(value)) return false
-  if (Object.keys(value).some(key => !['artifactId', 'revisionId', 'requestId', 'baseRevisionId', 'revision', 'editedBlockIds', 'program', 'title', 'style', 'styleId'].includes(key))) return false
+  if (Object.keys(value).some(key => !['artifactId', 'revisionId', 'requestId', 'baseRevisionId', 'revision', 'editedBlockIds', 'program', 'title', 'style', 'styleId', 'temporaryStyle'].includes(key))) return false
   if ('program' in value && !isBoundedText(value.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return false
   if ('title' in value && !isBoundedText(value.title, 1, MAX_ARTIFACT_TITLE_CHARS)) return false
   if ('style' in value && !isEditLayout(value.style)) return false
   if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return false
+  if ('temporaryStyle' in value && (!isStyleSnapshot(value.temporaryStyle) || value.temporaryStyle.baseLayout !== value.style)) return false
   return isIdentity(value.artifactId) && isIdentity(value.revisionId)
     && (!('requestId' in value) || isRequestId(value.requestId))
     && (!('baseRevisionId' in value) || isIdentity(value.baseRevisionId))

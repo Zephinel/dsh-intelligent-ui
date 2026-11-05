@@ -16,14 +16,18 @@
  * deletes is treated as "detached": the draft survives and the user can attach
  * it again from the panel or the card badge.
  */
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_REVISION_ROUTE_PATH,
   MAX_ARTIFACT_BATCH_REQUESTS,
   MAX_ARTIFACT_DRAFTS,
+  MAX_ARTIFACT_PROGRAM_CHARS,
   describeEditRequestProblem,
+  describeTargetOrderProblem,
   isArtifactRevisionStatus,
+  isEditLayout,
+  isRequestId,
   isReorderedOrder,
   type ArtifactBlock,
   type ArtifactBlockEdit,
@@ -31,6 +35,7 @@ import {
 } from '../../shared/artifact-edit.ts'
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
+import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
 import type { ArtifactEditSession, OpenEditorResult } from './contracts.ts'
 
@@ -56,7 +61,7 @@ export type SerializeOutcome =
      * chip whose edit session no longer exists (`stale`). `missing` is reserved
      * for an empty/internal reference that never named a session.
      */
-    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing'
+    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing' | 'temporary_order'
   }
 
 interface SessionMapSnapshot {
@@ -129,6 +134,350 @@ function removeReference(key: string): void {
   references.delete(referenceOf(key))
 }
 
+/** Per-tab storage key prefix for one persisted draft. */
+export const ARTIFACT_DRAFT_STORAGE_PREFIX = 'dsh-iui-edit-draft:v1:'
+/** Per-chat storage key prefix for the draft key index. */
+export const ARTIFACT_DRAFT_INDEX_PREFIX = 'dsh-iui-edit-draft-index:v1:'
+/** Debounce before a changed draft is written back to sessionStorage. */
+const DRAFT_PERSIST_DELAY = 250
+
+/**
+ * One draft as stored in sessionStorage: only what is needed to rebuild the
+ * edit session after a reload. Blocks and the wrapped program are recomputed
+ * from `program`, and transient UI state is never persisted.
+ */
+interface PersistedDraft {
+  readonly key: string
+  readonly sessionId: string
+  readonly artifactId: string
+  readonly baseRevisionId: string
+  readonly baseRevision: number
+  readonly requestId: string
+  readonly title?: string
+  readonly style: 'card' | 'article' | 'free'
+  readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
+  readonly program: string
+  readonly originalOrder: readonly string[]
+  readonly targetOrder: readonly string[]
+  readonly orderChanged: boolean
+  readonly selection: readonly { readonly blockId: string; readonly order: number; readonly instruction: string }[]
+  readonly globalInstruction: string
+  readonly attached: boolean
+}
+
+/** Last payload written (or read) per draft, so unchanged drafts are skipped. */
+const persistedDrafts = new Map<string, string>()
+const persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
+/** Keys already looked up in storage once; a missing record is not retried. */
+const hydrateAttempted = new Set<string>()
+
+function draftStorage(): Storage | undefined {
+  try {
+    const storage = (globalThis as { sessionStorage?: Storage }).sessionStorage
+    if (storage !== undefined && storage !== null && typeof storage.getItem === 'function') return storage
+  } catch {
+    /* sessionStorage access can throw in restricted browser contexts */
+  }
+  return undefined
+}
+
+function draftRecordKey(key: string): string {
+  return `${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`
+}
+
+function draftIndexKey(sessionId: string): string {
+  return `${ARTIFACT_DRAFT_INDEX_PREFIX}${sessionId}`
+}
+
+/** Read one chat's persisted draft-key index; empty for a missing record. */
+function readDraftIndex(sessionId: string): string[] {
+  const storage = draftStorage()
+  if (storage === undefined) return []
+  try {
+    const raw = storage.getItem(draftIndexKey(sessionId))
+    if (raw === null) return []
+    const value: unknown = JSON.parse(raw)
+    if (!Array.isArray(value)) return []
+    return value.filter((entry): entry is string => typeof entry === 'string')
+  } catch {
+    return []
+  }
+}
+
+/** Write one chat's persisted draft-key index (best effort). */
+function writeDraftIndex(sessionId: string, keys: readonly string[]): void {
+  const storage = draftStorage()
+  if (storage === undefined) return
+  try {
+    if (keys.length === 0) storage.removeItem(draftIndexKey(sessionId))
+    else storage.setItem(draftIndexKey(sessionId), JSON.stringify(keys))
+  } catch {
+    /* quota/security: persistence stays best effort */
+  }
+}
+
+/** Whether one draft should survive a reload. */
+function isPersistableDraft(session: ArtifactEditSession): boolean {
+  return session.status !== 'submitted' && hasArtifactEditContent(session)
+}
+
+/** Serialize the restore-relevant part of one draft; undefined when not storable. */
+function serializePersistedDraft(session: ArtifactEditSession): string | undefined {
+  if (session.program.length === 0 || session.program.length > MAX_ARTIFACT_PROGRAM_CHARS) return undefined
+  // The shared request contract allows a temporary-style snapshot of at most
+  // 20k characters; do not persist a draft whose snapshot would not be sendable.
+  if (session.temporaryStyle !== undefined) {
+    if (!isStyleSnapshot(session.temporaryStyle)) return undefined
+    if (JSON.stringify(session.temporaryStyle).length > 20_000) return undefined
+  }
+  const record: PersistedDraft = {
+    key: session.key,
+    sessionId: session.sessionId,
+    artifactId: session.artifactId,
+    baseRevisionId: session.baseRevisionId,
+    baseRevision: session.baseRevision,
+    requestId: session.requestId,
+    ...session.title === undefined ? {} : { title: session.title },
+    style: session.style,
+    ...session.styleId === undefined ? {} : { styleId: session.styleId },
+    ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+    program: session.program,
+    originalOrder: [...session.originalOrder],
+    targetOrder: [...session.targetOrder],
+    orderChanged: session.orderChanged,
+    selection: session.selection.map(entry => ({
+      blockId: entry.blockId,
+      order: entry.order,
+      instruction: entry.instruction,
+    })),
+    globalInstruction: session.globalInstruction,
+    attached: session.attached,
+  }
+  try {
+    return JSON.stringify(record)
+  } catch {
+    return undefined
+  }
+}
+
+/** Write one draft immediately unless storage already holds the same payload. */
+function writeDraftNow(key: string): void {
+  const storage = draftStorage()
+  if (storage === undefined) return
+  const session = sessions.get(key)
+  if (session === undefined || !isPersistableDraft(session)) { removePersistedDraft(key, session?.sessionId); return }
+  const payload = serializePersistedDraft(session)
+  if (payload === undefined) { removePersistedDraft(key, session.sessionId); return }
+  if (persistedDrafts.get(key) === payload) return
+  try {
+    storage.setItem(draftRecordKey(key), payload)
+    const index = readDraftIndex(session.sessionId).filter(candidate => candidate !== key)
+    index.push(key)
+    // Cap the per-chat index; the oldest persisted dump is evicted first.
+    while (index.length > MAX_ARTIFACT_DRAFTS) {
+      const evicted = index.shift()
+      if (evicted === undefined) continue
+      try { storage.removeItem(draftRecordKey(evicted)) } catch { /* best effort */ }
+      persistedDrafts.delete(evicted)
+    }
+    writeDraftIndex(session.sessionId, index)
+    persistedDrafts.set(key, payload)
+  } catch {
+    /* quota/security: toast-free best-effort persistence */
+  }
+}
+
+/** Schedule the debounced write of one changed draft. */
+function scheduleDraftPersist(key: string): void {
+  if (draftStorage() === undefined) return
+  const timer = persistTimers.get(key)
+  if (timer !== undefined) clearTimeout(timer)
+  persistTimers.set(key, setTimeout(() => {
+    persistTimers.delete(key)
+    writeDraftNow(key)
+  }, DRAFT_PERSIST_DELAY))
+}
+
+/** Remove one draft from sessionStorage and from its chat's index. */
+function removePersistedDraft(key: string, sessionId?: string): void {
+  const timer = persistTimers.get(key)
+  if (timer !== undefined) { clearTimeout(timer); persistTimers.delete(key) }
+  persistedDrafts.delete(key)
+  const storage = draftStorage()
+  if (storage === undefined) return
+  let owner = sessionId
+  if (owner === undefined) {
+    const session = sessions.get(key)
+    if (session !== undefined) owner = session.sessionId
+    else {
+      try {
+        const raw = storage.getItem(draftRecordKey(key))
+        const value: unknown = raw === null ? undefined : JSON.parse(raw)
+        if (value !== null && typeof value === 'object' && typeof (value as { sessionId?: unknown }).sessionId === 'string') {
+          owner = (value as { sessionId: string }).sessionId
+        }
+      } catch { /* corrupt record: still remove the payload below */ }
+    }
+  }
+  try { storage.removeItem(draftRecordKey(key)) } catch { /* best effort */ }
+  if (owner === undefined) return
+  writeDraftIndex(owner, readDraftIndex(owner).filter(candidate => candidate !== key))
+}
+
+/** Validate one stored draft record; undefined for corrupt/obsolete data. */
+function readPersistedDraft(raw: string): PersistedDraft | undefined {
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { return undefined }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.key !== 'string' || typeof record.sessionId !== 'string') return undefined
+  if (typeof record.artifactId !== 'string' || typeof record.baseRevisionId !== 'string') return undefined
+  if (typeof record.baseRevision !== 'number' || !Number.isSafeInteger(record.baseRevision) || record.baseRevision < 1) return undefined
+  if (!isRequestId(record.requestId)) return undefined
+  if (!isEditLayout(record.style)) return undefined
+  if ('styleId' in record && typeof record.styleId !== 'string') return undefined
+  if ('title' in record && typeof record.title !== 'string') return undefined
+  let temporaryStyle: StyleSnapshot | undefined
+  if ('temporaryStyle' in record) {
+    if (!isStyleSnapshot(record.temporaryStyle)) return undefined
+    if (record.temporaryStyle.baseLayout !== record.style) return undefined
+    if (JSON.stringify(record.temporaryStyle).length > 20_000) return undefined
+    if ('styleId' in record) return undefined
+    temporaryStyle = record.temporaryStyle
+  }
+  if (typeof record.program !== 'string' || record.program.length === 0 || record.program.length > MAX_ARTIFACT_PROGRAM_CHARS) return undefined
+  if (!Array.isArray(record.originalOrder) || !Array.isArray(record.targetOrder)) return undefined
+  if (!record.originalOrder.every(entry => typeof entry === 'string')) return undefined
+  if (!record.targetOrder.every(entry => typeof entry === 'string')) return undefined
+  if (typeof record.orderChanged !== 'boolean' || typeof record.attached !== 'boolean') return undefined
+  if (typeof record.globalInstruction !== 'string') return undefined
+  if (!Array.isArray(record.selection)) return undefined
+  const selection: PersistedDraft['selection'][number][] = []
+  for (const entry of record.selection) {
+    if (entry === null || typeof entry !== 'object') return undefined
+    const candidate = entry as Record<string, unknown>
+    if (typeof candidate.blockId !== 'string' || !/^b[1-9][0-9]{0,3}$/.test(candidate.blockId)) return undefined
+    if (typeof candidate.order !== 'number' || !Number.isSafeInteger(candidate.order) || candidate.order < 1) return undefined
+    if (typeof candidate.instruction !== 'string') return undefined
+    selection.push({ blockId: candidate.blockId, order: candidate.order, instruction: candidate.instruction })
+  }
+  return {
+    key: record.key,
+    sessionId: record.sessionId,
+    artifactId: record.artifactId,
+    baseRevisionId: record.baseRevisionId,
+    baseRevision: record.baseRevision,
+    requestId: record.requestId,
+    ...record.title === undefined ? {} : { title: record.title },
+    style: record.style,
+    ...record.styleId === undefined ? {} : { styleId: record.styleId },
+    ...temporaryStyle === undefined ? {} : { temporaryStyle },
+    program: record.program,
+    originalOrder: record.originalOrder,
+    targetOrder: record.targetOrder,
+    orderChanged: record.orderChanged,
+    selection,
+    globalInstruction: record.globalInstruction,
+    attached: record.attached,
+  }
+}
+
+/**
+ * Hydrate one draft from sessionStorage into the in-memory store.
+ *
+ * Idempotent and non-destructive: an in-memory draft always wins, a missing or
+ * corrupt record is ignored (and cleaned up), and transient state is reset
+ * (`status: 'ready'`, no active canvas/popover). After hydration the chat's
+ * composer chips are re-synced so a restored draft keeps its chip.
+ * @param key - edit-session key (`${sessionId}:${baseRevisionId}`).
+ * @returns the restored draft, or undefined when there is nothing to restore.
+ */
+export function ensureArtifactDraft(key: string): ArtifactEditSession | undefined {
+  const inMemory = sessions.get(key)
+  if (inMemory !== undefined) return inMemory
+  if (hydrateAttempted.has(key)) return undefined
+  hydrateAttempted.add(key)
+  const storage = draftStorage()
+  if (storage === undefined) return undefined
+  let raw: string | null
+  try { raw = storage.getItem(draftRecordKey(key)) } catch { return undefined }
+  if (raw === null) return undefined
+  const record = readPersistedDraft(raw)
+  if (record === undefined || record.key !== key) { removePersistedDraft(key); return undefined }
+  const extraction = blocksForProgram(record.program)
+  if (extraction.blocks.length === 0) { removePersistedDraft(key, record.sessionId); return undefined }
+  const wrappedProgram = wrapProgramForBlockEditing(record.program, extraction)
+  if (wrappedProgram === undefined) { removePersistedDraft(key, record.sessionId); return undefined }
+  const blockIds = extraction.blocks.map(block => block.blockId)
+  if (describeTargetOrderProblem(blockIds, record.targetOrder) !== undefined) {
+    removePersistedDraft(key, record.sessionId)
+    return undefined
+  }
+  const known = new Set(blockIds)
+  const selection = record.selection
+    .filter(entry => known.has(entry.blockId))
+    .map(entry => ({ blockId: entry.blockId, order: entry.order, instruction: entry.instruction }))
+  const session: ArtifactEditSession = {
+    key,
+    sessionId: record.sessionId,
+    artifactId: record.artifactId,
+    baseRevisionId: record.baseRevisionId,
+    baseRevision: record.baseRevision,
+    requestId: record.requestId,
+    attached: record.attached,
+    ...record.title === undefined ? {} : { title: record.title },
+    style: record.style,
+    ...record.styleId === undefined ? {} : { styleId: record.styleId },
+    ...record.temporaryStyle === undefined ? {} : { temporaryStyle: record.temporaryStyle },
+    program: record.program,
+    wrappedProgram,
+    blocks: extraction.blocks,
+    originalOrder: blockIds,
+    targetOrder: [...record.targetOrder],
+    orderChanged: isReorderedOrder(blockIds, record.targetOrder),
+    selection,
+    globalInstruction: record.globalInstruction.slice(0, 4000),
+    editing: false,
+    drawerOpen: false,
+    status: 'ready',
+    activeDraft: '',
+    activeDirty: false,
+  }
+  sessions.set(key, session)
+  persistedDrafts.set(key, raw)
+  referenceForSession(key)
+  publish()
+  scheduleChipSync(record.sessionId)
+  return session
+}
+
+/**
+ * Hydrate every persisted draft of one chat from its storage index.
+ * @param sessionId - chat session id.
+ * @returns number of drafts added to memory.
+ */
+export function hydrateArtifactDrafts(sessionId: string): number {
+  let hydrated = 0
+  for (const key of readDraftIndex(sessionId)) {
+    if (sessions.has(key)) continue
+    if (ensureArtifactDraft(key) !== undefined) hydrated += 1
+  }
+  return hydrated
+}
+
+/**
+ * Flush every pending debounced draft write immediately.
+ * Used by tests and by page-lifecycle flushes that cannot wait for the debounce.
+ */
+export function flushArtifactDraftPersistence(): void {
+  for (const [key, timer] of [...persistTimers]) {
+    clearTimeout(timer)
+    persistTimers.delete(key)
+    writeDraftNow(key)
+  }
+}
+
 function publish(): void {
   const next = new Map<string, ArtifactEditSession>()
   for (const [key, value] of sessions) {
@@ -143,6 +492,13 @@ function publish(): void {
   }
   for (const [sessionId, key] of [...activeKeys]) {
     if (!sessions.has(key)) activeKeys.delete(sessionId)
+  }
+  // Storage hygiene: a draft that was sent, emptied or deleted stops surviving
+  // reloads even while its in-memory record is still retained (submitted drafts
+  // stay in memory only for submission reconciliation).
+  for (const key of [...persistedDrafts.keys()]) {
+    const session = sessions.get(key)
+    if (session === undefined || !isPersistableDraft(session)) removePersistedDraft(key, session?.sessionId)
   }
   snapshot = { sessions: next }
   for (const listener of listeners) listener()
@@ -178,9 +534,10 @@ export function editKey(sessionId: string, baseRevisionId: string): string {
   return `${sessionId}:${baseRevisionId}`
 }
 
-/** Read one draft snapshot without subscribing. */
+/** Read one draft snapshot without subscribing; hydrates it from storage when needed. */
 export function editSessionFor(sessionId: string, baseRevisionId: string): ArtifactEditSession | undefined {
-  return sessions.get(editKey(sessionId, baseRevisionId))
+  const key = editKey(sessionId, baseRevisionId)
+  return sessions.get(key) ?? ensureArtifactDraft(key)
 }
 
 /** Read one draft by its session key without subscribing. */
@@ -188,14 +545,26 @@ export function draftSessionFor(key: string): ArtifactEditSession | undefined {
   return sessions.get(key)
 }
 
-/** Subscribe one card to its own edit draft. */
+/**
+ * Subscribe one card to its own edit draft.
+ *
+ * A draft restored from sessionStorage is hydrated after mount (never during
+ * render): the first render shows the normal card, then the badge/canvas appears
+ * once the store publishes.
+ */
 export function useArtifactEditSession(sessionId: string, baseRevisionId: string): ArtifactEditSession | undefined {
   const store = useArtifactEditStore()
-  return store.sessions.get(editKey(sessionId, baseRevisionId))
+  const key = editKey(sessionId, baseRevisionId)
+  const session = store.sessions.get(key)
+  useEffect(() => {
+    if (session === undefined) ensureArtifactDraft(key)
+  }, [key, session])
+  return session
 }
 
 /** The draft key currently shown in the edit canvas for one chat, if any. */
 export function activeDraftKeyFor(sessionId: string): string | undefined {
+  hydrateArtifactDrafts(sessionId)
   return activeKeys.get(sessionId)
 }
 
@@ -214,6 +583,7 @@ export function editingSessionFor(sessionId: string): ArtifactEditSession | unde
  * @returns the retained drafts.
  */
 export function draftSessionsFor(sessionId: string): ArtifactEditSession[] {
+  hydrateArtifactDrafts(sessionId)
   const drafts: ArtifactEditSession[] = []
   for (const session of sessions.values()) {
     if (session.sessionId !== sessionId || !isUserDraft(session)) continue
@@ -256,10 +626,16 @@ export function blocksForProgram(program: string): ReturnType<typeof extractArti
   return result
 }
 
-/** Whether a card offers block editing at all. */
+/**
+ * Whether a card offers block editing at all.
+ *
+ * Temporary-style results are editable for block content only: the card must
+ * carry a valid result-owned style snapshot (it is sent with the edit request).
+ */
 export function supportsBlockEditing(program: IntelligentUIProgram): boolean {
   if (program.running) return false
-  if (program.styleSource === 'temporary') return false
+  if (program.styleSource === 'temporary' && !isStyleSnapshot(program.temporaryStyle)) return false
+  if (program.temporaryStyle !== undefined && !isStyleSnapshot(program.temporaryStyle)) return false
   const extraction = blocksForProgram(program.program)
   if (extraction.blocks.length === 0) return false
   return wrapProgramForBlockEditing(program.program, extraction) !== undefined
@@ -359,7 +735,7 @@ function scheduleChipSync(sessionId: string, immediate = false): void {
  * @returns whether a retained draft was activated.
  */
 export function activateDraft(key: string): boolean {
-  const session = sessions.get(key)
+  const session = sessions.get(key) ?? ensureArtifactDraft(key)
   if (session === undefined || session.status === 'submitted') return false
   activateKeyFor(session.sessionId, key)
   if (!session.editing) {
@@ -384,6 +760,7 @@ export function attachDraft(key: string): boolean {
   sessions.set(key, { ...session, attached: true, submitFailed: false })
   publish()
   if (hasArtifactEditContent(sessions.get(key) ?? session)) scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
   return true
 }
 
@@ -418,6 +795,7 @@ export function noteArtifactChipMissing(referenceId: string): void {
   if (!hasArtifactEditContent(session)) return
   sessions.set(key, { ...session, attached: false })
   publish()
+  scheduleDraftPersist(key)
 }
 
 /** Run a revision probe and settle one draft's status (and latest revision number). */
@@ -464,6 +842,11 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
   const extraction = blocksForProgram(program.program)
   const wrappedProgram = wrapProgramForBlockEditing(program.program, extraction)
   if (wrappedProgram === undefined) return { ok: false, reason: 'unsupported' }
+  // Temporary-style cards keep their result-owned snapshot in the draft so the
+  // edit request can replay it; such drafts never carry a styleId.
+  const temporaryStyle = isStyleSnapshot(program.temporaryStyle) ? program.temporaryStyle : undefined
+  const style = program.style ?? temporaryStyle?.baseLayout ?? 'card'
+  const styleId = temporaryStyle === undefined ? program.styleId : undefined
   const lineage = lineageOf(program)
   const key = editKey(sessionId, lineage.baseRevisionId)
   const existing = sessions.get(key)
@@ -474,6 +857,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     patch(key, session => ({
       ...session,
       editing: true,
+      style,
+      styleId,
+      temporaryStyle,
       activeBlockId: undefined,
       activeDraft: '',
       activeDirty: false,
@@ -504,8 +890,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       attached,
       branch: false,
       ...program.title === undefined ? {} : { title: program.title },
-      style: program.style ?? 'card',
-      ...program.styleId === undefined ? {} : { styleId: program.styleId },
+      style,
+      ...styleId === undefined ? {} : { styleId },
+      ...temporaryStyle === undefined ? {} : { temporaryStyle },
       program: program.program,
       wrappedProgram,
       blocks: extraction.blocks,
@@ -533,6 +920,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     requestId: newRequestId(),
     attached,
     branch: false,
+    style,
+    styleId,
+    temporaryStyle,
     latestRevision: undefined,
     selection: [],
     removable: undefined,
@@ -641,6 +1031,7 @@ export function saveArtifactBlockInstruction(key: string, blockId: string, text:
   sessions.set(key, { ...session, selection, activeBlockId: undefined, activeDraft: '', activeDirty: false })
   publish()
   scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Remove one saved block request; the block itself and the arrangement stay. */
@@ -663,6 +1054,7 @@ export function removeArtifactSelection(key: string, blockId: string): void {
   })
   publish()
   scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Restore the most recently removed selection with its original badge number. */
@@ -678,6 +1070,7 @@ export function undoArtifactRemove(key: string): void {
   })
   publish()
   scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Apply one target order to a session, deriving orderChanged and publishing. */
@@ -688,6 +1081,7 @@ function applyTargetOrder(key: string, session: ArtifactEditSession, targetOrder
   sessions.set(key, { ...session, targetOrder: next, orderChanged })
   publish()
   scheduleChipSync(session.sessionId, immediate)
+  scheduleDraftPersist(key)
 }
 
 /**
@@ -741,6 +1135,7 @@ export function clearAllArtifactEdits(key: string): void {
   sessions.set(key, { ...session, selection: [], removable: undefined })
   publish()
   scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
 }
 
 /** Replace the global instruction. */
@@ -750,6 +1145,7 @@ export function setArtifactGlobalInstruction(key: string, text: string): void {
   sessions.set(key, { ...session, globalInstruction: text.slice(0, 4000) })
   publish()
   scheduleChipSync(session.sessionId)
+  scheduleDraftPersist(key)
 }
 
 /** Open or close the narrow-viewport request drawer. */
@@ -896,6 +1292,7 @@ export function reconcileArtifactSubmissions(
       activeDirty: false,
       drawerOpen: false,
     })
+    scheduleDraftPersist(key)
     restored += 1
   }
   if (restored > 0 || committed.size > 0) {
@@ -915,6 +1312,11 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // An empty reference never named an edit session (internal caller bug);
   // every other unresolved id is a real chip whose session is gone — stale.
   if (referenceId.trim() === '') return { ok: false, problem: 'missing' }
+  // A chip restored with the draft arrives before the edit store rehydrates:
+  // the deterministic reference names the draft key, so hydrate it lazily.
+  if (!references.has(referenceId) && referenceId.startsWith(`${ARTIFACT_EDIT_SOURCE}:`)) {
+    ensureArtifactDraft(referenceId.slice(ARTIFACT_EDIT_SOURCE.length + 1))
+  }
   const key = references.get(referenceId)
   if (key === undefined) return { ok: false, problem: 'stale' }
   const session = sessions.get(key)
@@ -939,6 +1341,10 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
         instruction: item.instruction.trim(),
       }
     })
+  // A temporary-style artifact cannot fall back to the full-program render_ui
+  // path (it would need on-demand authorization), so reorder/global-only
+  // requests are rejected before any probe.
+  if (session.temporaryStyle !== undefined && edits.length === 0) return { ok: false, problem: 'temporary_order' }
   const request: ArtifactEditRequest = {
     schemaVersion: 1,
     requestId: session.requestId,
@@ -948,7 +1354,8 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     ...session.branch === true ? { branch: true } : {},
     ...session.title === undefined ? {} : { title: session.title },
     style: session.style,
-    ...session.styleId === undefined ? {} : { styleId: session.styleId },
+    ...session.styleId === undefined || session.temporaryStyle !== undefined ? {} : { styleId: session.styleId },
+    ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
     edits,
     targetOrder: [...session.targetOrder],
     ...session.orderChanged ? { orderChanged: true } : {},
@@ -982,6 +1389,7 @@ export function editProblemMessage(problem: Extract<SerializeOutcome, { ok: fals
     case 'stale': return t('edit.errorStale')
     case 'missing': return t('edit.errorSend', { error: t('edit.errorCheck') })
     case 'invalid': return t('edit.errorInvalid')
+    case 'temporary_order': return t('edit.errorTemporaryOrder')
   }
 }
 

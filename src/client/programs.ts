@@ -102,6 +102,7 @@ function blockEditProgram(root: ToolResultNode): IntelligentUIProgram | undefine
     ...meta.title === undefined ? {} : { title: meta.title },
     style,
     ...meta.styleId === undefined ? {} : { styleId: meta.styleId, styleSource: 'template' as const },
+    ...meta.temporaryStyle === undefined ? {} : { temporaryStyle: meta.temporaryStyle, styleSource: 'temporary' as const },
     ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
     artifactId: meta.artifactId,
     revisionId: meta.revisionId,
@@ -153,12 +154,13 @@ function normalizedProgram(meta: unknown): string | undefined {
 }
 
 /** Replayable revision lineage projected by the Host on an edited result. */
-function revisionLineage(meta: unknown): Pick<IntelligentUIProgram, 'artifactId' | 'revisionId' | 'requestId' | 'baseRevisionId' | 'revision' | 'editedBlockIds'> {
+function revisionLineage(meta: unknown): Pick<IntelligentUIProgram, 'artifactId' | 'revisionId' | 'requestId' | 'baseRevisionId' | 'revision' | 'editedBlockIds' | 'temporaryStyle' | 'styleSource'> {
   if (!isArtifactRevisionMeta(meta)) return {}
   return {
     artifactId: meta.artifactId,
     revisionId: meta.revisionId,
     ...meta.requestId === undefined ? {} : { requestId: meta.requestId },
+    ...meta.temporaryStyle === undefined ? {} : { temporaryStyle: meta.temporaryStyle, styleSource: 'temporary' as const },
     ...meta.baseRevisionId === undefined ? {} : { baseRevisionId: meta.baseRevisionId },
     revision: meta.revision,
     ...meta.editedBlockIds === undefined ? {} : { editedBlockIds: meta.editedBlockIds },

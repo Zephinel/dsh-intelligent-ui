@@ -148,6 +148,34 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-block]'), 0, 'no edit wrappers before editing')
   check(await text('[data-dsh-iui-edit-entry]'), '编辑', 'edit entry label')
 
+  // 1b. Draft persistence: an unsent draft survives a page reload.
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'persistence editor')
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'persistence popover')
+  await saveInstruction('persist-me across reload')
+  await new Promise(resolve => setTimeout(resolve, 500))
+  const storedDraft = await read(`(() => {
+    const keys = Object.keys(sessionStorage).filter(key => key.startsWith('dsh-iui-edit-draft:v1:'));
+    return { keys, sample: keys.length === 0 ? null : sessionStorage.getItem(keys[0]) };
+  })()`)
+  check(storedDraft.keys.length >= 1, true, 'edit draft persisted in sessionStorage')
+  check((storedDraft.sample ?? '').includes('persist-me across reload'), true, 'persisted draft keeps its instruction')
+  await cdp.send('Page.reload', { ignoreCache: true })
+  await wait('document.readyState === "complete"', 'page reloaded')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'harness ready after reload')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].length >= 1`, 'restored draft chip')
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'restored draft editor')
+  check((await text('[data-dsh-iui-edit-request-list]')).includes('persist-me across reload'), true, 'reloaded draft shows its saved request')
+  check((await text('[data-dsh-iui-edit-panel]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
+  await shot('harness-m3-draft-restored.png')
+  // Clean the persisted draft, then restart from the pristine harness state.
+  await read('sessionStorage.clear()')
+  await cdp.send('Page.reload', { ignoreCache: true })
+  await wait('document.readyState === "complete"', 'clean reload')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'pristine harness ready')
+
   // 2. Edit mode: no request list, arrangement always complete, summary empty.
   await click('[data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit view')
@@ -481,6 +509,33 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const branchEnvelope = await read('window.__serializeChipMatching("分支")')
   check(branchEnvelope.includes('"branch":true'), true, 'branch request carries branch:true')
   check(branchEnvelope.includes('"baseRevisionId":"dst-call-2"'), true, 'branch request keeps the old base revision')
+  await cdp.send('Emulation.clearDeviceMetricsOverride')
+
+  // 22. Temporary-style results support block content edits only.
+  const tempBefore = await count('[data-dsh-intelligent-ui="card"]')
+  await read('window.__addTempCard("temp-call-1", "临时卡片")')
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${tempBefore + 1}`, 'temporary-style card')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="temp-call-1"]').getAttribute('data-dsh-iui-temp-style')`), 'true', 'temporary-style card is marked')
+  await click('[data-dsh-iui-call-id="temp-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'temporary-style editor')
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'temporary-style popover')
+  await saveInstruction('临时样式内容修改')
+  const tempEnvelope = await read('window.__serializeChipMatching("临时卡片")')
+  check(tempEnvelope.includes('"temporaryStyle"'), true, 'temporary-style envelope carries the snapshot')
+  check(tempEnvelope.includes('"directives":"keep the card compact and calm"'), true, 'temporary-style envelope carries the directives')
+  check(tempEnvelope.includes('"styleId"'), false, 'temporary-style envelope has no style id')
+  // Simulate the Host's composed revision with the snapshot in meta.
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'temp-call-1', revisionId: 'temp-call-2', baseRevisionId: 'temp-call-1', revision: 2, editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '临时卡片', style: 'card', temporaryStyle: { schemaVersion: 1, baseLayout: 'card', directives: 'keep the card compact and calm' } })}, 'temp-call-2')`)
+  await wait(`document.querySelectorAll('[data-dsh-iui-temp-style="true"]').length >= 2`, 'temporary-style revision card')
+  check(await count('[data-dsh-intelligent-ui="card"]'), tempBefore + 2, 'temporary-style revision card rendered')
+  // A temp draft with order/global only is blocked with a clear message.
+  await read('window.__nextTurn()')
+  await click('[data-dsh-iui-call-id="temp-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'temporary order editor')
+  await moveWithKeyboard('b2', 'ArrowUp', 1)
+  const tempOrderError = await read('window.__serializeChipMatching("临时卡片").then(() => null, error => String(error))')
+  check(tempOrderError.includes('临时样式结果只支持区块内容修改'), true, 'temporary order-only draft is blocked with guidance')
   await cdp.send('Emulation.clearDeviceMetricsOverride')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

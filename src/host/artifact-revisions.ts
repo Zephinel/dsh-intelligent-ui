@@ -11,6 +11,7 @@ import {
   type ArtifactRestoreRequest, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
 import { extractArtifactBlocks } from '../shared/artifact-blocks.ts'
+import { isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.ts'
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
 
 /** Retained revision records; oldest creation times are dropped first. */
@@ -25,6 +26,9 @@ const RESTORE_REVISION_PREFIX = 'restore_'
 /** Session identity recorded for revisions created without a model turn. */
 const RESTORE_SESSION_ID = 'local-restore'
 
+/** Mirrors the shared edit-envelope bound for one temporary style snapshot. */
+const MAX_TEMPORARY_STYLE_JSON_CHARS = 20_000
+
 /** One recorded revision of one artifact. */
 export interface ArtifactRevisionRecord {
   readonly revisionId: string
@@ -34,6 +38,8 @@ export interface ArtifactRevisionRecord {
   readonly sessionId: string
   readonly style: RenderLayout
   readonly styleId?: string
+  /** Result-owned temporary style snapshot the revision keeps, copied from the edit request. */
+  readonly temporaryStyle?: StyleSnapshot
   readonly title?: string
   readonly editedBlockIds?: readonly string[]
   readonly createdAt: number
@@ -73,7 +79,7 @@ function isBlockId(value: unknown): value is string {
 function validRecord(value: unknown): value is ArtifactRevisionRecord {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
-  return Object.keys(record).every(key => ['revisionId', 'artifactId', 'baseRevisionId', 'revision', 'sessionId', 'style', 'styleId', 'title', 'editedBlockIds', 'createdAt'].includes(key))
+  return Object.keys(record).every(key => ['revisionId', 'artifactId', 'baseRevisionId', 'revision', 'sessionId', 'style', 'styleId', 'temporaryStyle', 'title', 'editedBlockIds', 'createdAt'].includes(key))
     && isIdentity(record.revisionId) && isIdentity(record.artifactId)
     && (!('baseRevisionId' in record) || (isIdentity(record.baseRevisionId) && record.baseRevisionId !== record.revisionId))
     && typeof record.revision === 'number' && Number.isSafeInteger(record.revision)
@@ -81,6 +87,9 @@ function validRecord(value: unknown): value is ArtifactRevisionRecord {
     && isSessionIdentity(record.sessionId)
     && isEditLayout(record.style)
     && (!('styleId' in record) || (typeof record.styleId === 'string' && STYLE_ID_PATTERN.test(record.styleId)))
+    && (!('temporaryStyle' in record) || (isStyleSnapshot(record.temporaryStyle)
+      && record.temporaryStyle.baseLayout === record.style
+      && JSON.stringify(record.temporaryStyle).length <= MAX_TEMPORARY_STYLE_JSON_CHARS))
     && (!('title' in record) || isBoundedLabel(record.title))
     && (!('editedBlockIds' in record) || (Array.isArray(record.editedBlockIds)
       && record.editedBlockIds.length <= MAX_ARTIFACT_EDITS
@@ -346,6 +355,7 @@ export function registerArtifactRevisionRoutes(ctx: {
                 sessionId: RESTORE_SESSION_ID,
                 style: source.style,
                 ...source.styleId === undefined ? {} : { styleId: source.styleId },
+                ...source.temporaryStyle === undefined ? {} : { temporaryStyle: source.temporaryStyle },
                 ...source.title === undefined ? {} : { title: source.title },
                 createdAt: Date.now(),
               })
@@ -364,6 +374,7 @@ export function registerArtifactRevisionRoutes(ctx: {
                 ...source.title === undefined ? {} : { title: source.title },
                 style: source.style,
                 ...source.styleId === undefined ? {} : { styleId: source.styleId },
+                ...source.temporaryStyle === undefined ? {} : { temporaryStyle: source.temporaryStyle },
               },
             })
           }, (cause: unknown) => {

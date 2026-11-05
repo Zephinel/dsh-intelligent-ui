@@ -19,6 +19,7 @@ import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditViewProps } 
 import { BlockPopover } from './BlockPopover.tsx'
 import { EditPanel } from './EditPanel.tsx'
 import { blocksForProgram, probeArtifactRevisionStatus } from './store.ts'
+import { claimEditLease, hasForeignLease, queryEditLeases, releaseEditLease, renewEditLease, useForeignEditLease } from './tabs.ts'
 import './artifact-edit.css'
 
 /** Toolbar and canvas for one card in edit mode, plus its request panel. */
@@ -91,6 +92,24 @@ export function ArtifactEditView({
     onDeselect: (blockId: string) => { actions.removeSelection(blockId) },
   }), [t, actions, session.selection, session.activeBlockId])
 
+  // Soft cross-tab lease: claim only after other tabs answer a query, and keep
+  // the lease refreshed while the canvas is open. The Host revision check stays
+  // authoritative; this only surfaces the other tab before work is overwritten.
+  const foreignLease = useForeignEditLease(session.key, session.editing)
+  useEffect(() => {
+    if (!session.editing) return
+    queryEditLeases()
+    const claim = window.setTimeout(() => {
+      if (!hasForeignLease(session.key)) claimEditLease(session.key)
+    }, 400)
+    const renew = window.setInterval(() => { renewEditLease(session.key) }, 10_000)
+    return () => {
+      window.clearTimeout(claim)
+      window.clearInterval(renew)
+      releaseEditLease(session.key)
+    }
+  }, [session.key, session.editing])
+
   // Below MIN_EDIT_WIDTH the two-pane editor is not usable; keep the session
   // alive but show the same explanation the card shows before entering.
   if (tooNarrow) {
@@ -128,6 +147,23 @@ export function ArtifactEditView({
         </div>
         <p className="dsh-iui-edit-banner">{t('edit.banner')}</p>
       </div>
+
+      {foreignLease ? (
+        <div className="dsh-iui-edit-lease" role="status" data-dsh-iui-edit-lease-conflict>
+          <div>
+            <p className="dsh-iui-edit-conflict-title">{t('edit.leaseConflictTitle')}</p>
+            <p className="dsh-iui-edit-conflict-body">{t('edit.leaseConflictBody')}</p>
+          </div>
+          <button
+            type="button"
+            className="dsh-iui-edit-button"
+            data-dsh-iui-edit-lease-takeover
+            onClick={() => { claimEditLease(session.key, true) }}
+          >
+            {t('edit.leaseTakeover')}
+          </button>
+        </div>
+      ) : null}
 
       {conflict && session.branch !== true ? (
         <div className="dsh-iui-edit-conflict" role="alert" data-dsh-iui-edit-conflict>
