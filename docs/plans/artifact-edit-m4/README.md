@@ -494,3 +494,11 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 测试：新增嵌套 fixture（多级 Card/Col）、host/client/浏览器 E2E、真实模型场景。
 
 **M4-1 实际触点**：`src/shared/program-cst.ts`（M4-0 已提交）、`src/shared/artifact-edit.ts`（嵌套身份字段/校验）、`src/client/artifact-edit/nested.ts`（新）、`src/client/artifact-edit/{store,contracts,ArtifactEditView}.tsx` + `artifact-edit.css`、`src/client/IntelligentUICards.tsx`、`src/lib/components/block-slot.tsx`（path context/HOC）、`src/lib/components/nested-edit.css`（新）、`src/lib/{library,render}.tsx`（nestedEditLibrary/nestedBlockSlots）、`src/host/artifact-edit.ts`（嵌套 plan/compose）、`src/shared/locales.ts`（嵌套文案）、测试 `test/client/nested-blocks.test.mjs`、`test/browser/nested-edit-renderer.e2e.mjs`、`test/renderer/nested-css-contract-check.mjs`。
+
+## 0.15 第三/四轮用户反馈修复记录（2026-11-05，已提交 7768616）
+
+- 面板改为圆角浮动卡片（桌面 top64/right12/bottom12、radius16、1px 边框、双层阴影、overflow hidden；窄屏 bottom sheet radius14），进退场 220ms panel-only 动画（桌面右滑/窄屏底滑 + 淡入淡出/轻微 scale，`prefers-reduced-motion` 禁用）；退出延迟 ~220ms 卸载，active 草稿切换立即卸载旧编辑器；浮动面板右侧 12px inset 计入宽度 fit（panelRightInset，1440/748+12→648 等）。
+- 删除确认 unslop：去掉 3 秒自动恢复 timer；持久两态（Cancel/Delete 紧凑按钮，无红底/大红 pill），焦点到 Cancel，外部点击/Escape/其它动作取消，live region 播报一次。
+- Block 指令 popover 位置 clamp 修复：anchor 滚出视口时顶边曾为负导致输入框被裁；现在 top 统一 clamp 到 `[12, vh-12-measuredHeight]`。
+- 验证：Node **485/485**（Host 228、Client 236、packaging 21；特性 236）；浏览器 9/9；artifact-edit **202 checks**；nested-edit-renderer 75；nested-css-contract 28+5。构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 193.0）、standalone 3.30+515.8；pack 43 files 4.02/10.37 MB。
+- 说明：`.tmp-report/harness-polish-delete-confirm.png` 是取消预览后的截图，只证明圆角面板，不包含确认态；部署需重启 `dsh-web`。
