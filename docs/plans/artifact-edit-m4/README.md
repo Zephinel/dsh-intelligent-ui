@@ -1,6 +1,6 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0–M4-5、B2-5、B2-6、B1-5、B2-8/B2-9/B2-10 全部完成并提交（B2-6：86b436f；B1-5：4c0b4dd；B2-8/9/10：d6ec446 + 文档提交）— 2026-11-05；下一步发布（B1-7）。**
+> **状态：M4-0–M4-5、B2-5、B2-6、B1-5、B2-8/B2-9/B2-10 全部完成（B2-6：86b436f；B1-5：4c0b4dd；B2-8/9/10：d6ec446 + 文档提交）；用户反馈修复（去 expand 按钮 + 编辑自动宽度适配）已在工作树完成 — 2026-11-05；下一步发布（B1-7）。**
 > owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1–M4-5 已按收窄范围落地（§0.3–§0.8）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
@@ -192,6 +192,16 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - B2-9 窄屏/移动端真机：CDP 390×844 @2x mobile，文档无横向溢出（scrollWidth ≤ innerWidth+1），卡片重排（Row 两栏堆叠），点 Edit 出现 `[data-dsh-iui-edit-narrow-notice]` 不进入编辑画布；900×1000 @2x 编辑画布打开、无横向溢出、编排行可见。截图 `.tmp-report/b29-narrow-390.png`、`.tmp-report/b29-wide-900-editor.png`（gitignored）。
 - B2-10 视觉基线：新增 `test/browser/visual-baselines/`（`article-card-1440.png`、`free-card-1440.png`、`editor-article-1440.png`、`preview-modal-1440.png`、`narrow-390-viewport.png` + `captures.json` + `SHA256SUMS` + README）；环境 macOS/Chrome 156/2×/light，记录浏览器/视口/时间/方法；**手动视觉基线，无自动像素 diff**；现有浏览器套件继续守卫几何/排版；基线目录不进 npm 包。
 - 状态：B2-8/B2-9/B2-10 完成（B2-10 手动基线）；下一步发布（B1-7：版本/CHANGELOG/打包安装验证）。
+
+## 0.13 用户反馈修复记录：去除展开按钮 + 编辑时自动收窄聊天宽度（2026-11-05，已提交 d6d2f50）
+
+- Node 测试 **483/483**（Host 228、Client 234、packaging 21；特性文件合计 234：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 123，其中新增 `panel-width` 9 条）。
+- 浏览器 **9/9**：`artifact-edit` **183 checks**（新增自动宽度拟合/恢复与 expand 按钮不存在检查）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.36 MB；`npm run check` exit 0。
+- 修复：编辑面板 header 删除展开/收起按钮（glyph/state/expanded class/locale 文案一并删除），仅保留 title + spacer + 窄屏 close；新增 `src/client/artifact-edit/panel-width.ts`（`fitChatContentWidth` 固定点公式 + `applyEditChatContentWidth` DOM 覆盖/恢复），`EditPanel` 单 useEffect 挂载/卸载执行；进入编辑自动收窄主聊天内容宽度（内容右缘距面板左缘 24px），退出恢复用户原宽度，不修改 shell 偏好。
+- 真机 ego（1800×1000，用户手动把 chat content 设为 1600px）：打开编辑后 inline `--dsh-chat-content-width` → **1032px**，expand 按钮数量 0，无横向溢出；退出恢复 **1600px**。截图（gitignored）：`.tmp-report/fix-width-editing.png`、`.tmp-report/fix-width-restored.png`。
+- 限制：base width 在面板挂载时捕获一次（编辑中拖动 shell 手柄不会即时跟随，但关闭恢复原 inline/偏好）；仅 ≥1180px docked 模式生效；未来 shell 变量位置变更需更新集中式 selector 常量；面板 CSS clamp 仍以 748 为 fallback。
+- 状态：用户反馈修复完成；下一步发布（B1-7）。
 
 ## 1. 目标与非目标
 
@@ -437,7 +447,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **M4-4 按容器能力扩展（已完成，工作树，2026-11-05）**：
   - 已完成：7 类容器白名单/渲染/CSS 补偿/几何 E2E、Section children 参数映射、CST `insertNode` 与跨容器 `moveNode` 基础（§0.6）；模型新增区块接线路由与客户端表单、跨容器 move UI 与结构操作（§0.7）。
   - 后续（M4-5/B2-5）：a11y、视觉回归、真实模型 E2E、发布收口、严格校验/diff 预览；Carousel 离屏 anchor 裁剪仍列为已知限制。
-- **M4-5 收口（已完成）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 完成**：结构 dry-run + diff 预览与未选区块严格保护（§0.9）。M4 全部阶段完成；B2-6 已完成（§0.10）、B1-5 已完成（§0.11）、B2-8/9/10 已完成（§0.12）；下一步发布（B1-7）。
+- **M4-5 收口（已完成）**：结构操作 diff 预览（Host dry-run + 客户端模态/a11y）、性能 smoke（49 区块/57 nodes）、视觉守卫（几何/排版 E2E，无像素基线）；见 §0.8。**B2-5 完成**：结构 dry-run + diff 预览与未选区块严格保护（§0.9）。M4 全部阶段完成；B2-6 已完成（§0.10）、B1-5 已完成（§0.11）、B2-8/9/10 已完成（§0.12）、用户反馈修复已完成（§0.13）；下一步发布（B1-7）。
 
 每个阶段：Node 测试 + 浏览器 E2E + 真机 + 文档增量，全绿后再进入下一阶段。
 
@@ -450,6 +460,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **编辑宽度适配风险**：base width 只捕获一次（拖动 shell 手柄不即时跟随，但退出恢复）；仅 ≥1180px docked；shell 变量位置变更需更新 selector 常量；面板 clamp fallback 748 与拟合值需保持一致。
 - **B2-8/9/10 风险**：free 只能经 On-demand/授权模板获得（普通 render_ui 会被拒）；视觉基线为手动对照、环境敏感、无自动像素 diff；窄屏只验证 390×844 与 900×1000 两个视口；真机截图留在 gitignored 的 `.tmp-report`。
 - **B1-5 a11y 风险**：live region 单槽会合并快速连续播报；指针拖拽只在 drop 播报；Tab 关闭菜单不回焦；隐藏 hint 仍在可访问性树；未做真机 screen-reader/axe 审计，也无像素基线（B2-10）。
 - **B2-6 运行时状态风险**：快照仅会话内存、刷新丢失；容量 24/5/64KiB 可能淘汰较旧快照；首渲染不继承、继承要求 `baseRevisionId`；第三方组件内部状态与编辑画布交互值不保留，用户可能误以为全部交互都会保留。

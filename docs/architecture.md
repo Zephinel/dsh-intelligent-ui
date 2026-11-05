@@ -129,7 +129,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 每份草稿有稳定 `requestId`（`req_` + 12 位 base36，优先 `crypto.getRandomValues`）与 `attached` 标记。同一聊天最多 6 份有内容草稿（超出时打开编辑返回 `limit`，卡片显示上限提示），每次发送最多 3 份 attached（其余 detached，可附加）；关闭空画布草稿会丢弃，有内容草稿关闭后保留为 detached，仍出现在切换区与卡片角标。
 - 编辑器顶部新增「待提交编辑 (N/6)」切换区（`data-dsh-iui-edit-draft-switcher`）：列出本聊天所有有内容草稿（标题、修订号、修改摘要、active 圆点、冲突/未附加标签、附加/丢弃按钮）；点击切换 active 画布，只有 active 草稿的请求列表/编排/整体说明区显示在下方。非 active 草稿在卡片头部显示角标；通过切换区或卡片编辑入口激活草稿时，对应卡片会滚动到视野内。
 - 打开区块浮层只是草稿，不生成请求；保存非空修改说明才创建请求，并分配当前最小可用编号（删除后可复用）。编号只属于请求，是「编辑请求」行号、区块角标与六色循环（蓝、紫、绿、橙、粉、青，编号 1–6 循环）的依据；没有请求的区块不显示编号、颜色或「已编辑」标签。保存空说明会删除该区块的请求。
-- 编辑器顶部是标题「Artifact 编辑器」与展开/收起（加宽停靠栏）按钮，窄屏另有关闭抽屉按钮。「编辑请求」列表只在存在已保存请求时出现：数量、右对齐的「清空」（只清请求，保留编排与整体说明），以及每项的编号、标题、修改说明与编辑/删除按钮。
+- 编辑器顶部是标题「Artifact 编辑器」与窄屏关闭抽屉按钮（桌面停靠栏无展开/收起按钮）。「编辑请求」列表只在存在已保存请求时出现：数量、右对齐的「清空」（只清请求，保留编排与整体说明），以及每项的编号、标题、修改说明与编辑/删除按钮。
 - 「区块编排」始终可见：标题「区块编排」+「· N 个区块」、重置顺序与提示「拖拽调整区块顺序，点击区块可查看或添加编辑需求。」。重置顺序只把 `targetOrder` 恢复为基础版本的页面顺序，保留全部请求、编号与整体说明。列表按 `targetOrder` 列出全部顶层区块：拖拽把手（指针拖拽，4px 阈值、按行中点显示 2px 插入线，放下才调用一次 `moveBlock`；键盘 ↑/↓ 与 Home/End 也可重排）、只定位不打开浮层的正文（滚动到画布中的区块并高亮约 900ms）、类型图标、截断标题、有请求时的编号/颜色与「已编辑」标签，以及打开浮层的铅笔按钮；悬停有请求的行约 180ms 后显示锚定的小卡片（标题、编号、全文与编辑/删除）。
 - 编排草稿在编辑画布内实时预览：`wrapProgramForBlockEditing(program, extraction, targetOrder)` 按 `targetOrder` 重排真实 `BlockSlot` 包裹的顺序，工具栏显示「预览目标顺序」；预览只影响编辑态，已记录的修订与导出在发送前保持不变。
 - 编辑器内容顺序固定为：头部 →（有请求时）编辑请求 →（可撤销的删除提示）→ 区块编排 → 分隔线 → 「整体编辑说明（可选）」→「将发送给模型」摘要（区块编辑需求 N 项、结构顺序 保持原样/已调整、整体说明 已填写/未填写）与说明。宽视口（≥1180px）是右侧停靠栏，可展开加宽；700–1179px 折叠为底部抽屉，由工具栏的「编辑请求（{count}）」按钮打开；小于 720px 不提供区块编辑，卡片与活动编辑视图都显示「窗口太窄」提示（包含最小宽度说明、关闭或退出按钮），加宽窗口后恢复。冲突时显示「Artifact 已有更新的版本」横幅，可重试或退出；检查中显示「正在检查 Artifact…」。
@@ -269,6 +269,15 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 窄屏/移动端（B2-9）：CDP Emulation 390×844 @2x 下文档无横向溢出（`scrollWidth ≤ innerWidth + 1`），卡片正常重排（Row 两栏堆叠）；点「编辑」出现 `[data-dsh-iui-edit-narrow-notice]` 且不进入编辑画布。900×1000 @2x 下编辑画布可打开、无横向溢出、编排行可见。
 - 视觉基线（B2-10）：`test/browser/visual-baselines/` 保存 5 张手动参考截图（`article-card-1440.png`、`free-card-1440.png`、`editor-article-1440.png`、`preview-modal-1440.png`、`narrow-390-viewport.png`）以及 `captures.json`（浏览器/视口/截图时间与方法）、`SHA256SUMS` 与 README。这是**手动视觉基线，不是自动像素 diff 套件**：现有浏览器套件继续负责几何/排版守卫，基线用于 UI 变更后人工对照；环境敏感（macOS、Chrome 156、2× DPR、light），且测试基线目录不进入 npm 包。
 - 验证计数不变：Node 474/474、浏览器 9/9、`artifact-edit` 180 checks、`nested-edit-renderer` 75、`nested-css-contract` 28/28 + 5/5。
+
+### 编辑时自动内容宽度适配（用户反馈修复）
+
+- 进入编辑（停靠面板挂载）时自动收窄主聊天内容宽度，避免右侧面板覆盖内容；退出编辑时恢复用户原来的宽度。不修改 shell 的宽度偏好，只临时覆盖会话内容元素上的 inline `--dsh-chat-content-width`。
+- 纯函数 `fitChatContentWidth`（`src/client/artifact-edit/panel-width.ts`）：`panelWidth = clamp((viewportWidth - current) / 2 + 16, 272, 360)`，`desired = min(current, viewportWidth - 2 * (panelWidth + 24))`，迭代至固定点（≤8 轮，<0.5px 视为收敛）；`minContent = 360`，视口不足以容纳两侧面板 + 最小内容或用户宽度已适配时返回原值。示例：1440/748→672、2548/1900→1780、1180/748→412、宽屏已适配则不变。
+- DOM helper `applyEditChatContentWidth`：仅在 `matchMedia('(min-width: 1180px)')` 且存在 `[data-conversation-content][data-conversation-region="chat"]` 时生效；保存原 inline 值与 priority，写入拟合后的 px；`resize` 用保存的 base width 重算（不基于自身覆盖值）；低于断点时恢复 inline；清理时恢复原 inline 或移除属性。`EditPanel` 在挂载/卸载的单个 `useEffect` 中调用，不在渲染期读 DOM。
+- 限制：base width 在面板挂载时捕获一次——编辑中拖动 shell 宽度手柄不会即时跟随，但关闭时恢复原 inline 值/用户偏好不丢；仅在 ≥1180px docked 模式生效；若未来 shell 把该变量移到 `body`/`:root`，需要更新集中式 selector 常量；面板自身 CSS clamp 仍以 748 为 fallback（覆盖后 672→360，面板与内容不重叠）。
+- 真机（ego，1800×1000，用户手动把 chat content 设为 1600px）：打开编辑后 inline var 变为 **1032px**（内容右缘距面板左缘 24px 的设计值），expand 按钮数量为 0，无横向溢出；退出后恢复 **1600px**。
+- 测试：`test/client/panel-width.test.mjs`（9 条：公式固定点/已适配不变/最小内容/视口过小/媒体断点/DOM 覆盖与恢复/resize 重算等）；浏览器 `artifact-edit` 183 checks 含自动宽度拟合/恢复与 expand 按钮不存在的用例。
 
 ### 区块片段编辑（Phase 1）
 
