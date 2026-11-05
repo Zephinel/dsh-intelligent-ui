@@ -1,7 +1,7 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）已在工作树实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-2 层级排序。**
-> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1 已按收窄范围落地（§0.3）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
+> **状态：M4-0 已通过；M4-1（嵌套区块内容编辑）与 M4-2（层级排序）已在工作树实现并通过 Node/浏览器/真机验证（未提交）— 2026-11-05；下一步 M4-3 受限结构操作。**
+> owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1/M4-2 已按收窄范围落地（§0.3/§0.4）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
 ## 0. 评审结论（2026-11-05，owner 已确认）
@@ -102,6 +102,15 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 构建（本机实测）：host `lib/index.js` **774.2 kB**、client `lib/client.js` 3.85 MB（js 3.67 MB + css 177.4 kB）、standalone 3.30 MB + 514.4 kB；`npm run check` exit 0；pack 43 files ≈3.99 MB / 10.24 MB。
 - 真机 ego（隔离实例，参考会话新增嵌套卡片）：模型生成「嵌套卡片示例」（Card→Title + Col→两段 Text）；打开编辑 →「嵌套区块」→ 选 `b1.1.1` → 指令「把这段文字改为：嵌套编辑成功。」→ Send；模型调用 `edit_ui_blocks`（带 requestId+artifactId+单块 fragment），Host 记录 **Revision 2**，新卡片显示「嵌套编辑成功。」；对比 program 只有目标 Text 行变化，root/outerCard/未选第二段 Text 逐字节不变。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m41-nested-card.png`、`real-gui-m41-nested-revision.png`、`harness-m4-nested-edit.png`。
 - 限制（必须保留）：嵌套是 opt-in toggle（默认顶层、刷新回顶层、不持久化）；仅 `Col`/`Row`/`Card`；仅内容 replace（无嵌套排序/删除/复制/移动）；`@Each`/opaque/共享引用/ chrome 不可编辑；根层 `targetOrder` 不变；请求必须 all-nested 或 all-legacy（混合拒绝）；`editedBlockIds` 仍为 root id；Host 仍以信封 program 为基础（权威 program store 属 M4-3）；`display:contents` 依赖 25 条 CSS 补偿，需随组件 CSS 维护；真机/真实模型只验证单个嵌套文本替换。
+
+## 0.4 M4-2 验证记录（2026-11-05，工作树，未提交）
+
+- Node 测试 **416/416**（Host 191、Client 204、packaging 21；特性文件合计 155：artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、nested-blocks 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 57、host artifact-revisions 17）。
+- 浏览器 **9/9** 套件：`artifact-edit e2e` **136 checks**（新增 nested arrangement：同父重排、重置可用、chip「调整区块顺序」、信封 `orderByParent` 且保留根 `targetOrder`）；`nested-edit-renderer` 41 checks 不变。
+- renderer：原有 42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4 不变；`nested-css-contract` **25/25**（扫描 359 selectors）。
+- 构建（本机实测）：host `lib/index.js` **781.1 kB**、client `lib/client.js` 3.86 MB（js 3.68 MB + css 179.4 kB）、standalone 3.30 MB + 514.4 kB；`npm run check` exit 0；pack 43 files ≈3.99 MB / 10.26 MB。
+- 真机 ego（隔离实例，参考会话嵌套卡片 Revision 2）：打开编辑 →「嵌套区块」→ 把 inner Col 的第二段 Text 上移 → chip 显示「Reorder blocks」→ Send；模型调用 `render_ui` 返回完整 program（带 `editRequestId`），Host 记录 **Revision 3**；新卡片文本顺序变为「Col 里是两段 Text…」在前、「嵌套编辑成功。」在后，无错误。同时验证 stale Revision 1 chip 会被冲突阻断（预期）；成功路径使用最新 Revision 2。截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m42-nested-order.png`。
+- 限制（必须保留）：嵌套排序仍是 opt-in 且不持久化；没有画布 live preview（列表只显示目标顺序）；不支持跨容器移动；order-only 仍需一次模型 `render_ui` 回合（不是零模型）；不要对正在排序的 parent 子树同时做内容编辑；Host 仍以信封携带的 program 为基础（权威 program store 属 M4-3）；`editedBlockIds` 在 order-only 时为 `[]`。
 
 ## 1. 目标与非目标
 
@@ -220,24 +229,15 @@ M4-1 身份/嵌套渲染/嵌套内容编辑
 
 ## 6. 层级编排
 
-### 6.1 排序表示
+### 6.1 排序表示（M4-2 已实现，简化为单 slot）
 
-- `targetOrder` v2：
-  ```ts
-  interface HierarchicalOrder {
-    readonly byParent: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> // parentNodeId -> slotKey -> childNodeIds
-  }
-  ```
-- 只允许**同一父容器的同一 slot 内**排序：每个 `byParent[parent][slot]` 必须是该 slot 可编辑子节点的完整排列；`slotKey` 默认 `children`，容器适配器可声明其他 slot。
-- 跨容器移动不通过拖拽表达，而是结构操作 `move`（§7）；v1 拖拽限制在同一容器内，UI 在拖到其他容器时提示“用移动到…”菜单。
+- 实际落地为 `ArtifactEditRequest.orderByParent?: Record<'root' | CST nodeId, readonly nodeId[]>`：parent → 该容器 `children` slot 可编辑子节点的完整 nodeId 排列；只发变化的组；不做 `slotKey` 多 slot 泛化（M4-2 只处理默认 `children`）。
+- 只允许**同一父容器内**排序；跨容器移动不通过拖拽表达，而是结构操作 `move`（§7，M4-3）；v1 拖拽限制在同一容器内，跨组拖动被拒绝。
 
-### 6.2 Host 确定性重排
+### 6.2 Host 确定性重排（M4-2 已实现）
 
-- 扩展现有 `reorderProgramToTargetOrder` 为 `reorderProgramToHierarchicalOrder(program, byParent, baseExtraction)`：
-  - 深度优先后序重排，保证父级表达式先定位再重排子级；
-  - 未列入 map 的容器（没有可编辑子区块）不改变；
-  - 任何缺失/重复/未知 id 或深度变化 → 拒绝并可重试。
-- 根层行为与旧 `targetOrder` 完全一致（旧请求仍走现有路径，做向后兼容适配）。
+- 实际实现：`applyOrderByParent(program, request)` 用 `reorderChildren` **最深优先**重排并在每个 parent 后重建树；未列入 `orderByParent` 的容器不改变；未知/重复/非完整排列/跨父/chrome/@Each/共享表达式/opaque 均拒绝且可重试。
+- 根层：`orderByParent.root` 存在时由它拥有根顺序（跳过 legacy `targetOrder`）；否则先应用嵌套排序，再走现有根层 `targetOrder` 确定性重排。order-only 请求（`edits: []`）记录 normalized program 到 revision 并返回 meta；`editedBlockIds` order-only 为 `[]`。
 
 ## 7. 结构操作（删除 / 复制 / 移动 / 新增）
 
@@ -351,8 +351,8 @@ GPT 评审后新增/收窄、需 owner 确认：
   - 固定 fixture（Col 内嵌 Card/Col、共享 helper、@Each 局部变量、Section anchor、不兼容 slot、循环移动）验证 replace/reorder/delete/duplicate/move 与**正确拒绝**。
   - 未通过 gate 不得进入 UI。
 - **M4-1 最小嵌套垂直切片（已完成，工作树，2026-11-05）**：Col/Row/Card 嵌套选择/内容编辑；`nestedEditLibrary` + `display:contents` 补偿层；Host CST 嵌套替换；精确 overlay；Node/E2E/真机见 §0.3。**下一步 M4-2。**
-- **M4-2 同父层级排序（下一步）**：slotKey + 树形编排；Host 重建；旧 targetOrder 兼容。
-- **M4-3 受限结构操作**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
+- **M4-2 同父层级排序（已完成，工作树，2026-11-05）**：`orderByParent`（单 children slot）、客户端「嵌套区块编排」同父 drag/keyboard/重置、Host 最深优先重建与 root/legacy 兼容、order-only meta。Node/E2E/真机见 §0.4。**下一步 M4-3。**
+- **M4-3 受限结构操作（下一步）**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
 - **M4-4 按容器能力扩展**：Row/Box/Grid/Section/Carousel；模型新增区块（若 owner 后续要）；可视化 diff（可选）。
 - **M4-5 收口**：a11y、视觉回归、真实模型 E2E、文档、性能（区块数 60 时的渲染/拖拽）。
 
@@ -367,6 +367,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **M4-2 新增风险**：嵌套排序没有画布 live preview（列表目标顺序需清晰）；order-only 仍是模型回合（成本/延迟）；同父 scope 与 `@Each`/共享引用的拒绝依赖 CST 校验；根 `targetOrder` 与 `orderByParent.root` 冲突必须保持拒绝；`editedBlockIds` order-only 为 `[]` 可能被旧消费者误读。
 - **M4-1 新增风险**：`display:contents` 包装依赖 25 条直接子选择器 CSS 补偿层，组件 CSS 变更必须同步维护（`nested-css-contract-check` 只做静态清单检查）；嵌套 nodeId 是 revision-scoped，结构操作后旧 id 失效；M4-1 只验证了单个嵌套文本替换，多嵌套/混合容器/深层场景未真机覆盖；Host 仍以信封 program 为基础（权威 program store 未做）。
 
 ## 14. 代码触点（预估）
