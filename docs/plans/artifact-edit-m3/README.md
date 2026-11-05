@@ -1,11 +1,11 @@
 # M3 会话与版本模型设计方案
 
-> **状态：as-planned 设计稿；M3-1a / M3-1b / M3-1c 已在工作树实现（未提交）— 2026-11-05。**
+> **状态：as-planned 设计稿；M3-1a / M3-1b / M3-1c / M3-2 已在工作树实现（未提交）— 2026-11-05。**
 > M3 对应 [后续路线图](../artifact-edit-followups/README.md) 的 M3：多卡片并行编辑、旧修订分支/恢复、临时样式编辑、草稿持久化与多标签协调、已淘汰卡片编辑。
-> 本文件描述设计与实施计划；已落地行为以代码与 [架构与行为](../../architecture.md) 为准，M3-1 的验收数据见下方「M3-1 验证记录」。
-> M3-1c（部分失败/未完成 reconciliation UI）已实现并通过 Node/浏览器验证；M3-2/M3-3/M3-4 仍为计划。
+> 本文件描述设计与实施计划；已落地行为以代码与 [架构与行为](../../architecture.md) 为准，M3-1 与 M3-2 的验收数据见下方验证记录。
+> M3-2（旧修订分支 + 零模型本地修订卡片恢复）已实现并通过 Node/浏览器/真机验证；M3-3/M3-4 仍为计划。
 >
-> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b/M3-1c（v1，见 §0.1、§3.6）。
+> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b/M3-1c/M3-2（v1，见 §0.1、§0.2、§3.6、§4）。
 
 ## 0. 外部设计评审对齐（2026-11-05）
 
@@ -31,9 +31,12 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - M3-1a：客户端多草稿 + 多 chip + 草稿切换区 — **已完成（工作树，未提交）**。
 - M3-1b：Host 多 pending + requestId 选择 + 独立提交 — **已完成（工作树，未提交）**。
 - M3-1c：部分失败/未完成 reconciliation UI — **已完成（工作树，未提交）**：修订 meta 回传 `requestId`，Turn 关闭按请求 id 对账，未完成项恢复为 failed 可编辑草稿；限制见 §3.6。
-- 之后：M3-2 分支/本地卡片恢复、M3-3 草稿持久化/软租约、M3-4 临时样式。
+- M3-2：旧修订分支 + 零模型本地修订卡片恢复 — **已完成（工作树，未提交）**：`branch: true` 分支编辑、`POST /api/intelligent-ui/artifact-restore` 恢复路由、localStorage 本地修订卡片；限制见 §4.1/§4.2。
+- 之后：M3-3 草稿持久化/软租约、M3-4 临时样式。
 
 ## 0.1 M3-1 验证记录（2026-11-05，工作树）
+
+> 本节是 M3-1 当时的数据；M3-2 后的最新数据见 §0.2。
 
 - Node 测试 **347/347**（Host 159、Client 167、packaging 21；特性文件合计 98：client artifact-edit 26、artifact-edit-reconcile 4、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 32、host artifact-revisions 10）。
 - 浏览器 **8/8** 套件通过，`artifact-edit e2e` **102 checks**（多卡片场景 + M3-1c：Turn 关闭后成功草稿消失、部分完成时未完成草稿以 failed 角标恢复且可重新附加成 chip）。
@@ -42,6 +45,16 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - E2E 截图（gitignored，未加入 docs assets）：`.tmp-report/harness-m3-batch-reconciled.png`（全部完成对账后无草稿角标）、`.tmp-report/harness-m3-reconcile-failed.png`（部分完成时 failed 草稿角标）。
 - 真机（Lead，隔离第二个 DSH 实例，参考会话额外生成一张小卡片）：真实 Composer 同时显示两个 chip（`Edit 夏令时与冬令时 · Revision 2 · 1 changes`、`Edit 三城夏令时对比 · Revision 1 · 1 changes`），右侧面板「Pending edits (2/6)」；一次 Send 后模型依次调用两次 `edit_ui_blocks`（第一次带 requestId+artifactId，第二次带 artifactId），Host 分别记录 Revision 3 与 Revision 2，两张新卡片渲染，chip 清空。截图：`.tmp-report/real-gui-m3-two-drafts.png`、`.tmp-report/real-gui-m3-batch-revisions.png`（gitignored）。
 - 明确未验证/未完成：真实模型的「部分成功」路径未做真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成；真机只覆盖单卡/双卡成功路径）；纯排序真实模型回合未跑；V2 复合信封、修订注册表级程序权威校验、zero-model 排序执行、多标签/草稿持久化均未做。
+
+## 0.2 M3-2 验证记录（2026-11-05，工作树）
+
+- Node 测试 **364/364**（Host 169、Client 174、packaging 21；特性文件合计 115：client artifact-edit 30、artifact-edit-reconcile 4、local-revisions 3、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 37、host artifact-revisions 15）。
+- 浏览器 **8/8** 套件通过，`artifact-edit e2e` **111 checks**（新增：旧修订卡片 restore → 本地修订卡片、branch 冲突横幅/note/`branch:true` envelope）。
+- renderer 契约不变：42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4。
+- 构建：host `lib/index.js` 740.0 kB、client `lib/client.js` 3.81 MB（js 3.64 MB + css 173.2 kB）、standalone 3.30 MB + 510.5 kB；`npm run check` exit 0；pack 43 files ≈3.97 MB / 10.16 MB。
+- 真机（Lead，隔离 DSH 实例，参考会话）：旧 Revision 2 卡片 restore → 本地卡片 **Revision 7**（1 个 local badge，无模型调用）；再发一个普通新回合后本地卡片仍只渲染一次。分支：旧 Revision 2 进入编辑显示冲突 → 「Create a new revision from this one」→ branch note「The latest revision is 5」→ chip 追加「 · branch」→ 一次 Send 后模型调用 `edit_ui_blocks`，生成 **Revision 6**（base 为旧修订）。
+- 截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m32-local-restore.png`、`.tmp-report/harness-m3-local-revision.png`。
+- 必须记住的限制：本地卡片只存 localStorage（清存储/换设备丢失）；不进入 assistant 消息条目，也不参与导出/图片导出/回放；restore 只对非 latest 修订可用（latest → already_latest）；本地卡片在触发恢复的 Turn 渲染，不在对话最底部；branch 草稿提交失败被对账恢复会丢失 branch 标记；真实模型的「分支部分失败」未单独验证。
 
 ## 1. 目标与非目标
 
@@ -120,33 +133,27 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 ## 4. M3b 旧修订分支与恢复
 
-### 4.1 分支模型（推荐）
+### 4.1 分支模型（已按 v1 落地）
 
-- 在编辑请求 header 增加 `branch?: true`；当它为 true 时，`baseRevisionId` 允许是旧修订，Host 不再因“不是 latest”拒绝，而是校验：
-  1. 该 revision 属于同一 artifact；
-  2. 请求 program 与该修订的程序一致（客户端信封已带 program）；
-  3. 新修订号 = 该 artifact 当前 latest + 1（线性编号不变）；
-  4. 记录 `baseRevisionId` 指向被选择的旧修订，形成分支血缘。
-- 客户端：旧修订卡片（同一 artifact 下 revision < latest 的卡片）增加「基于此修订创建新修订」入口；进入编辑后横幅显示「基于修订 X 创建新修订（当前最新为 Y）」；chip label 带「分支」。
-- 排序/codec 不变；`orderChanged`、`branch` 都进 header。
-- 冲突探测：分支模式下客户端跳过“必须 latest”的阻塞检查，但仍在发送前用 GET 确认 artifact 存在；Host 在 apply 时重新校验。
+- 请求 header 增加 `branch?: true`（`ArtifactEditRequest.branch`），信封 prose 增加「这是分支编辑」说明；旧客户端不发送即普通编辑。客户端在旧修订的冲突横幅提供「从此修订创建新修订」（`data-dsh-iui-edit-branch`）：`enableBranch` 只在 `status === 'conflict'` 且 `latestRevision` 已知时生效，设置 `branch: true`、恢复 `ready`，冲突横幅替换为提示条 `data-dsh-iui-edit-branch-note`（`edit.branchBannerTitle`/`Body` 显示 base 修订与最新修订）；chip 标签追加「 · 分支」。
+- 客户端发送前仍 probe，但 `branch !== true` 时才把 conflict 当发送错误；branch 请求仍带旧 `baseRevisionId`，Host 记录新修订。草稿关闭/重开保留 branch；发送成功后 `markSubmitted` 清除；若提交失败被 Turn 关闭对账恢复为 failed 草稿，branch 标记丢失，需要重新在冲突横幅启用（已知边界）。
+- Host 在 `describeProblem`/`apply` 放宽 branch 的 latest 检查：base 存在时必须属于同一 artifact 且 `record.revision === request.baseRevision`；未记录的 base 只允许 `revision === 1`（首个 render 未入库）；否则返回模型可读错误且不消费 pending。新修订号 = 该 artifact 当前 latest + 1（无 latest 时 `baseRevision + 1`），`baseRevisionId` 指向被选择的旧修订；`targetOrder` 确定性重排、warnings、`requestId` meta 不变；修订号超过 100,000 拒绝。非 branch 路径保持严格 latest 校验与旧文案。
+- 限制：分支让「最新修订」与卡片显示的 revision 分离，由 branch note 说明；真实模型的“分支部分失败”未单独验证。
 
-### 4.2 一键恢复（owner 已选：零模型成本的本地修订卡片）
+### 4.2 一键恢复（已按 v1 落地：零模型本地修订卡片）
 
-- 目标：在旧修订卡片上点「恢复为新修订」，**不调用模型**，Host 直接记录一条新修订（程序 = 被恢复修订的程序，baseRevisionId = 该旧修订，revision = 当前 latest + 1），客户端立即在该卡片所在 Turn 的 Turn Tail 插入一张「修订 N」卡片。
-- 这要求引入**本地修订卡片来源**（不来自工具结果）：
-  - 客户端新增本地 revision card 节点/快照：`{source:'local-revision', artifactId, revisionId, baseRevisionId, revision, program, title, style, styleId, temporaryStyle?, createdAt}`，与会话持久化一起保存，刷新后仍能重建。
-  - 卡片渲染、导出、回放、follow-up 隐藏逻辑需同时识别工具结果卡片与本地修订卡片；旧卡片仍是历史。
-  - Host 新增认证路由 `POST /api/intelligent-ui/artifact-restore`：body `{artifactId, sourceRevisionId, program, title?, style, styleId?, temporaryStyle?}`；校验源修订属于同一 artifact、program 可解析且与源修订的血缘一致；记录新修订并返回 `ArtifactRevisionMeta`。
-  - 失败语义：源修订不存在/被淘汰、program 超限、样式不合法 → 客户端明确提示，不产生卡片；重复点击用请求幂等键（sourceRevisionId + clientRequestId）避免重复记录。
-  - 与分支编辑的关系：恢复后 latest 变为新修订；旧修订仍可继续分支编辑。
-- 风险：本地卡片绕过 Turn 工具结果，需要明确「重放/导出/图片导出/发送到助手」的语义；Token 成本为零但失去模型整理机会；需限制每会话本地卡片数量与程序大小。
+- Host 路由：在现有认证/effect/dispose 下新增精确 **`POST /api/intelligent-ui/artifact-restore`**（与 GET 修订查询共用 disposer；GET 行为不变）。请求体 `{schemaVersion:1, artifactId, sourceRevisionId, program}`：要求 `content-type: application/json`、body ≤300 KiB、15 秒超时，`describeArtifactRestoreProblem` 校验；source 必须存在（404 `source_missing`）、同 artifact（400 `artifact_mismatch`）、非 latest（409 `already_latest`）；program 必须能解析且根为 `Col`（400 `invalid_program`）；修订号超过 100,000 返回 400 `revision_limit`；非 POST 405 `method_not_allowed`。错误统一 `{error:{code,message}}`（400/404/409/413/405），响应 `no-store`。
+- 成功返回 **201** `{ok:true, revision:{artifactId, revisionId, baseRevisionId, revision, program, title?, style, styleId?}}`；记录 `revision = latest + 1`、`revisionId = restore_<16 hex>`（随机 8 字节，最多 8 次冲突重试）、`baseRevisionId = sourceRevisionId`、`sessionId = "local-restore"`，复制 source 的 `style`/`styleId`/`title`，program 不写入注册表（由响应携带）。
+- 客户端 `artifact-edit/local-revisions.ts`：卡片在 GET probe 报告 conflict（非 latest）时显示「恢复为新修订」（`data-dsh-iui-restore`；latest 与 localRevision 卡片不显示），点击 POST 恢复；结果存为 `LocalArtifactRevision` 写入 **localStorage**（key `dsh-intelligent-ui-local-revisions:v1:<sessionId>`，每会话最多 20 张、按 `revisionId` 去重替换、按 `createdAt` 淘汰最旧），并转为 `localRevisionProgram()` 渲染（`localRevision: true`、可继续编辑）。本地卡片按触发恢复的 `turn` 过滤，在该 Turn 的卡片列表中渲染一次。
+- 限制：只在浏览器 localStorage，清存储/换设备丢失；不进入 assistant 消息条目，也不参与导出/图片导出/回放链；恢复只对非 latest 修订可用；本地卡片渲染在触发恢复的 Turn（不是对话最底部）；真实模型“分支部分失败”未单独验证。
 
-### 4.3 验收
+### 4.3 验收（已达成项）
 
-- Host：旧修订 + branch=true 的请求被接受并记录新 revision；非 branch 的旧修订请求仍拒绝；branch 请求的 program 与旧修订不符时拒绝。
-- E2E：旧修订卡片出现分支入口，编辑器横幅/ chip 文案正确；生成的新卡片 revision = latest+1。
-- 文档：修订血缘从线性描述改为「latest + 可指定 base 的分支」。
+- Host：旧修订 + `branch=true` 被接受并记录 `latest+1`；非 branch 旧修订仍拒绝；非法 branch base 被模型可读错误拒绝且不写修订。恢复路由：POST 成功记录 `latest+1` 并返回本地修订；source 缺失/跨 artifact/already latest/非法 body/超长/非 POST/认证拒绝分别拒绝；GET 仍工作；disposer 同时释放两个路由。—— **已通过**（`test/host/artifact-edit.test.mjs` 37 条、`test/host/artifact-revisions.test.mjs` 15 条）。
+- 客户端：本地修订只存本地、替换/上限；本地修订可渲染/可编辑；restore 请求映射 Host 响应。—— **已通过**（`test/client/local-revisions.test.mjs` 3 条）。
+- 浏览器 E2E：旧修订 restore → 本地卡片；branch 冲突横幅 → note → chip「 · 分支」→ `branch:true` envelope。—— **已通过**（artifact-edit 111 checks）。
+- 真机：旧 Revision 2 restore → 本地 Revision 7（无模型调用、只渲染一次）；旧 Revision 2 branch → Revision 6（base 旧修订）。—— **已通过**（2026-11-05，见 §0.2）。
+- 未达成：真实模型的“分支部分失败”独立验证；本地卡片导出/回放语义（明确不支持，属设计限制）。
 
 ## 5. M3c 临时样式结果编辑
 
@@ -209,7 +216,9 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 | 请求 header `requestId` | shared/artifact-edit | 可选字段；客户端每草稿稳定生成 |
 | revision meta `requestId` | shared/artifact-edit + host/index + client programs | M3-1c；可选字段，由 pending request 写入，客户端用于 Turn 关闭对账 |
 | 客户端 submitted 草稿保留与对账（`submitFailed`/`submittedAt`/`reconcileArtifactSubmissions`） | client store + IntelligentUICards | M3-1c；纯客户端内存态，无协议变更 |
-| 请求 header `branch` / `restoreFromRevision` | shared/artifact-edit | M3-2 计划，可选字段 |
+| 请求 header `branch` | shared/artifact-edit + client store + host/artifact-edit | M3-2 已实现；可选布尔字段，旧客户端不发送即普通编辑 |
+| 恢复路由 `POST /api/intelligent-ui/artifact-restore` | shared/artifact-edit + host/artifact-revisions | M3-2 已实现；认证/effect/dispose 与 GET 共用；201 成功、400/404/409/413/405 错误 |
+| 客户端本地修订卡片（`artifact-edit/local-revisions.ts`） | client IntelligentUICards + localStorage | M3-2 已实现；每会话 ≤20、`localRevision` 标记、按 Turn 渲染；不进入导出/消息历史 |
 | 请求 header `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选字段，复用快照校验 |
 | revision meta `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选 |
 | revision 记录 `temporaryStyle` | host/artifact-revisions | M3-4 计划，可选，旧文件可读 |
@@ -218,8 +227,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 ## 8. 里程碑与顺序
 
 0. **设计前置**：M3-1 多卡片交互设计（multi-card-brief.md）已确认并落地为 M3-1a/M3-1b/M3-1c。
-1. **M3-1（多卡片并行 + 部分失败对账）**：3.2–3.6 已实现并通过 Node/浏览器验收（真机成功路径已过；真实模型部分成功未验证）。**下一步 M3-2。**
-2. **M3-2（旧修订分支 + 本地卡片恢复）**：4.1–4.3；包含 Host 恢复路由与本地修订卡片来源。
+1. **M3-1（多卡片并行 + 部分失败对账）**：3.2–3.6 已实现并提交。**已完成。**
+2. **M3-2（旧修订分支 + 本地卡片恢复）**：4.1–4.3 已实现（工作树）；Node/浏览器/真机验证通过。**下一步 M3-3。**
 3. **M3-3（草稿持久化 + 多标签）**：6.1–6.2（软租约已确认）。
 4. **M3-4（临时样式编辑）**：第 5 节（快照授权已确认）。
 5. **M3-5（已淘汰卡片）**：owner 已确认 M3 暂缓。
@@ -231,7 +240,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - 多信封/多 pending 会改动 Host 与 Composer 的核心路径，必须保留单 Artifact 行为作为回归基线。
 - 多卡片并行发送可能放大 token 成本（每条消息最多 3 个完整页面上下文）；Phase 1 仍传整页，Phase 2 输入节省的优先级需用真实模型观测评估。
 - 独立执行意味着可能部分成功：M3-1c 已实现 Turn 关闭对账与 failed 草稿恢复，但没有自动重试/重发；Host pending 按 TTL 保留，turn 归属依赖时间窗口启发式，真实模型的部分成功路径未真机验证。
-- 分支让「latest」与卡片显示的 revision 可能分离，UI 文案和冲突提示容易混淆；需要统一的修订/分支文案。
+- 分支让「latest」与卡片显示的 revision 可能分离，UI 文案和冲突提示容易混淆；M3-2 已用 branch note 说明，但真实模型的“分支部分失败”未单独验证，且 branch 草稿被对账恢复后丢失 branch 标记。
+- 本地修订卡片绕过工具结果：卡片只存 localStorage，不进入 assistant 消息/导出/图片导出/回放链；清存储或换设备会丢失，且渲染在触发恢复的 Turn 而非对话最底部；每会话最多 20 张。
 - 临时样式快照进入用户消息，仍属于同用户可控输入；Host 只接受封闭校验的展示快照，不执行任意 CSS。
 - 草稿持久化可能把 200k 程序写入 sessionStorage；需要配额与清理策略，避免存储爆掉。
 
@@ -240,7 +250,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 | 决策 | 结果 |
 | --- | --- |
 | 多卡片交互 | **已确认并落地 M3-1a/M3-1b/M3-1c**（GPT 外部设计主干采纳；v1 差异见 §0；M3-1c 见 §3.6） |
-| 一键恢复 | **零模型成本的本地修订卡片**（4.2 B）；需要 Host 恢复路由 + 本地卡片来源 |
+| 一键恢复 | **已落地 M3-2：零模型成本的本地修订卡片**（Host POST 恢复路由 + localStorage 本地卡片；不进入导出/消息历史；最新修订不可恢复） |
+| 分支编辑 | **已落地 M3-2**：`branch: true` 信封 + 旧 base 校验 + `latest+1` 修订；非 branch 严格 latest 不变 |
 | 临时样式编辑 | **接受 Host 校验的快照**（第 5 节） |
 | 多标签协调 | **软租约 + 提示**（6.2） |
 | 已淘汰卡片 | **M3 暂缓**（6.3） |

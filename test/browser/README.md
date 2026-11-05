@@ -26,9 +26,13 @@ events but not the full DSH Web integration.
   Turn: when every submitted request produced a revision the drafts and badges
   disappear, and when a batch is only partially fulfilled the untouched draft
   comes back with the `failed` draft badge (**Not completed; draft kept**) and
-  can be re-attached into a new chip. 102 checks; no real model is called (the
-  two-card real-model acceptance was run manually against an isolated second DSH
-  Web instance and is recorded in the M3 plan).
+  can be re-attached into a new chip. The M3-2 scenarios restore an old revision
+  into a local revision card without a model call (local badge, restore-done
+  notice, exactly one copy) and branch from an outdated revision's conflict
+  banner (note names the base revision, chip label gains " · branch", the
+  envelope carries `"branch":true` with the old base). 111 checks; no real model
+  is called (the real-model restore/branch acceptance was run manually against
+  an isolated second DSH Web instance and is recorded in the M3 plan).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.

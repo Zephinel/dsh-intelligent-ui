@@ -21,8 +21,8 @@ Host  lib/index.js（Node）
 ├─ on-demand.ts Operation controller       # session/event 绑定、澄清与终止；projection v6 的 onDemand
 ├─ style-store.ts + style-routes.ts          # 已保存模板；认证 catalog/saveFromResult/update/delete
 ├─ result-store.ts                          # 最多 200 条不可变临时结果快照；事后保存
-├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订并在 meta 回传 requestId；`edit_ui_blocks` 合并/排序；修订注册表 + 认证查询路由
-├─ webServer 路由（可选注入）                # /api/intelligent-ui/export/standalone.{js,css}，供交互页面导出读取
+├─ artifact-edit.ts + artifact-revisions.ts # 解析一消息多信封（parseEditRequestTexts）→ 每会话 Map<requestId, Entry>（最多 3 条 pending）；按 requestId 精确 apply、每请求独立修订并在 meta 回传 requestId；branch 请求允许旧 base（revision = latest+1）；`edit_ui_blocks` 合并/排序；修订注册表 + 认证查询路由 + POST 恢复路由
+├─ webServer 路由（可选注入）                # /api/intelligent-ui/export/standalone.{js,css}；GET 修订查询与 POST /api/intelligent-ui/artifact-restore（零模型恢复）
 └─ ctx.skills.register(intelligent-ui)    # 内嵌 Agent Skill（skills/intelligent-ui/SKILL.md）
 
 Client  lib/client.js（浏览器，DSH module loader 懒加载）
@@ -32,8 +32,8 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 ├─ plugins.bundle.config '@zephinel/dsh-intelligent-ui'  # 插件详情页：可用性、回答样式、我的样式、编排方式与导出（写 Host 设置文档的 volatile 字段）
 ├─ conversation.chat.turnTail 列表项       # 每轮结束时提取程序/临时快照，渲染主题、临时标记、调整/保存操作
 │   └─ <OpenUIRenderer> = @openuidev/react-lang <Renderer> + 移植后的 57 个组件（chrome 走渲染器 i18n context）
-├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染；Turn 关闭时按 requestId 对账 submitted 草稿（成功删除、未完成恢复为 failed 可附加）
-│   └─ BlockSlot（仅编辑模式 library）+ 每草稿一个 Composer 引用 chip（按 ref upsert/remove，标签「编辑 {title} · 修订 N · {摘要}」）+ 已发送消息逐信封摘要节点；`programs.ts::blockEditProgram` + RenderUiRow 错误明细；Host 归一化/合成 program 随 presentationMeta 回放
+├─ 卡片区块编辑与编排（IntelligentUICards + artifact-edit/*）  # 多草稿表格：同一聊天多份编辑草稿、单 active 画布（activeKeys）、每 chat 最多 6 份/发送最多 3 个 attached；卡片显示「编辑」入口、修订 N、非 active 草稿角标；编辑模式挂载编辑视图（画布实时预览目标顺序，<720px 提示）、Artifact 编辑器（顶部「待提交编辑 (N/6)」切换区）与区块浮层；block-edit 修订卡片从 `edit_ui_blocks` 结果 meta 渲染；Turn 关闭时按 requestId 对账 submitted 草稿；旧修订冲突横幅可启用 branch；旧修订可零模型恢复为本地修订卡片
+│   └─ BlockSlot（仅编辑模式 library）+ 每草稿一个 Composer 引用 chip（按 ref upsert/remove，标签「编辑 {title} · 修订 N · {摘要}」，branch 追加「 · 分支」）+ 已发送消息逐信封摘要节点；`programs.ts::blockEditProgram` + `artifact-edit/local-revisions.ts`（localStorage 每会话 ≤20、按 Turn 渲染）+ RenderUiRow 错误明细；Host 归一化/合成 program 随 presentationMeta 回放
 ├─ conversation.chat.assistant-actions 列表项  # 仅该轮记录过 render_ui 的消息出现导出按钮
 │   └─ 菜单（图片：原始 / 圆角 / 卡片；交互页面）→ PNG 或单文件 HTML 下载
 ├─ tool.call.toolview keyed 'render_ui' / 'edit_ui_blocks'  # 进程区只留一行「交互式回答」；失败调用附一行原因（完整文本在 title）
@@ -161,6 +161,20 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - UI：卡片草稿角标新增 `data-state="failed"`，文案「未完成，草稿已保留」（`edit.draftFailed`）；编辑面板切换区对应行显示 `is-failed` 标签（title 为 `edit.draftFailedHint`）。激活草稿或重新附加会清除 `submitFailed`；附加只把草稿加回下一次发送，不会自动重发。
 - 边界与限制：Host 未完成的 pending 仍按 15 分钟 TTL 保留，Turn 关闭不清理；Turn 归属靠发送时间窗口启发式（历史 Turn 不会认领新提交，极端时钟/长延迟场景未验证）；每个请求独立记录修订（无跨 Artifact 事务），因此「部分成功」是正常路径；真实模型的部分成功路径未做真机验证（E2E 用 harness 模拟 Turn 关闭/部分完成；真机只覆盖单卡/双卡成功路径）。
 
+### 分支编辑（M3-2）
+
+- 信封 JSON 头新增可选 `branch: true`（`ArtifactEditRequest.branch`，prose 增加「这是分支编辑」说明；旧客户端不发送即普通编辑）。客户端在旧修订的冲突横幅提供「从此修订创建新修订」（`data-dsh-iui-edit-branch`）：`enableBranch` 只在 `status === 'conflict'` 且已知 `latestRevision` 时生效，置 `branch: true`、恢复 `ready` 并把冲突横幅替换为提示条 `data-dsh-iui-edit-branch-note`（`edit.branchBannerTitle`/`Body`，显示 base 修订与最新修订）；chip 标签追加「 · 分支」（`edit.chip.branchSuffix`）。
+- 客户端不再因 head 不一致阻断 branch 草稿：发送前仍 probe 修订，但 `branch !== true` 时才把 conflict 当发送错误；序列化请求带 `branch: true` 与旧 `baseRevisionId`。草稿关闭/重开保留 branch；发送成功后 `markSubmitted` 清除 branch；若提交失败被 Turn 关闭对账恢复为 failed 草稿，branch 标记会丢失，需要重新在冲突横幅启用（已知边界）。
+- Host 在 `describeProblem` 与 `apply` 中对 branch 请求放宽 latest 检查：base 记录存在时必须同 artifact 且 `record.revision === request.baseRevision`；未记录的 base 只允许 `baseRevision === 1`（首个 render 未入库）；否则返回模型可读错误且不消费 pending。新修订号 = 该 artifact 当前 latest 的 revision + 1（无最新记录时 `baseRevision + 1`），`baseRevisionId` 指向被选择的旧修订；targetOrder 确定性重排、保留警告、`requestId` meta 不变；超过 100,000 修订号时拒绝。非 branch 路径保持严格 latest 校验与旧错误文案。
+- 限制：分支让「最新修订」与卡片显示的修订可能分离，UI 以 branch note 说明；真实模型的「分支部分失败」未单独验证。
+
+### 零模型恢复与本地修订卡片（M3-2）
+
+- Host 恢复路由：在现有认证/`effect`/dispose 下新增精确路由 **`POST /api/intelligent-ui/artifact-restore`**（与 GET 修订查询共用一个 disposer；GET 行为不变）。请求体 `ArtifactRestoreRequest`（`schemaVersion: 1`、`artifactId`、`sourceRevisionId`、`program`）：要求 `content-type: application/json`、body ≤ 300 KiB、15 秒超时，`describeArtifactRestoreProblem` 校验；source 必须存在于注册表（否则 404 `source_missing`）、属于同一 artifact（否则 400 `artifact_mismatch`）、不是 latest（latest → 409 `already_latest`）；program 必须能解析且根为 `Col`（否则 400 `invalid_program`）；revision 超过 100,000 返回 400 `revision_limit`；非 POST 返回 405 `method_not_allowed`。错误统一 `{error:{code,message}}`（400/404/409/413/405），响应 `no-store`。
+- 成功返回 **201** `{ok:true, revision:{artifactId, revisionId, baseRevisionId, revision, program, title?, style, styleId?}}`；记录 `revision = latest + 1`、`revisionId = restore_<16 hex>`（随机 8 字节，冲突重试最多 8 次）、`baseRevisionId = sourceRevisionId`、`sessionId = "local-restore"`，复制 source 的 `style`/`styleId`/`title`，program 不写入注册表（由响应携带）。这不需要模型调用，也不改变 HEAD/latest 之外的既有修订。
+- 客户端 `src/client/artifact-edit/local-revisions.ts`：卡片在 GET probe 报告 conflict（即非 latest）时显示「恢复为新修订」（`data-dsh-iui-restore`；latest 卡片与 `localRevision` 卡片不显示），点击 POST 恢复；成功结果存为 `LocalArtifactRevision` 写入 **`localStorage`**（key `dsh-intelligent-ui-local-revisions:v1:<sessionId>`，每会话最多 20 张，按 `revisionId` 去重/替换、按 `createdAt` 淘汰最旧），并写入 `localRevisionProgram()` 供渲染（`localRevision: true`、`artifactId`/`revisionId`/`baseRevisionId`/`revision`、`style`/`styleId`、可继续编辑）。本地卡片按 `turn`（触发恢复的 Turn）过滤渲染，在该 Turn 的卡片列表中出现一次；`IntelligentUICards` 用 `useLocalRevisions` 合并本地卡片与工具结果卡片。
+- 限制：本地卡片只存在于浏览器 localStorage——清存储或换设备会丢失；不进入 assistant 消息条目，也不参与导出、图片导出、回放链（这些仍只认工具结果/meta 卡片）；恢复只对非 latest 修订可用；本地卡片渲染在触发恢复的 Turn，而不是对话最底部；真实模型「分支部分失败」未单独验证。
+
 ### 区块片段编辑（Phase 1）
 
 - `src/shared/artifact-block-bundle.ts` 提供纯数据切片与回填。`extractBlockBundle(program, blockIds)` 返回：被选区块的表达式源码（裸语句引用解析为右侧表达式）、它们传递依赖的 `frozenStatements`（只读语句源码）、`stateSources`（`$name = ...` 声明）与全部顶层区块的 `outline`，并带 `statementId`/标题。
@@ -186,11 +200,12 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - `test/client/artifact-blocks.test.mjs`（8 条）：识别顺序、包裹后程序可解析且布局不变、Article 根只暴露 Section 而不是 Toc/页面标题、不支持根的原因、目标校验与保留警告、确定性排序移动根子节点并保留 chrome 槽位、信封往返与形状校验、发送消息摘要范围。
 - `test/client/artifact-edit.test.mjs`（26 条）：信封往返（含 targetOrder、requestId 与内容修改指向 `edit_ui_blocks`）、编排字段校验、排列与 no-op 判定、发送消息摘要的排序信息、编辑会话（保存才创建请求、只调顺序合法、重置保留请求/编号/整体说明、清空请求保留编排、空/无变化/冲突阻止发送、重开恢复请求与顺序、自定义模板 styleId、临时样式与不支持程序不进入编辑）、确定性 chip 引用与 stale、静默修订探测、chip 文案与多草稿切换/上限/附加状态。
 - `test/client/artifact-edit-reconcile.test.mjs`（4 条）：未完成的 submitted 草稿恢复为 failed/detached 且重建 requestId、已完成的 submitted 草稿被删除、混合结果逐条独立对账、历史 Turn 不会认领新提交（时间窗口）。
+- `test/client/local-revisions.test.mjs`（3 条）：恢复的本地修订只存本地、按 revisionId 替换并按 `createdAt` 淘汰、超过 20 条上限；本地修订转换为可编辑/可渲染的卡片程序；`restoreRevision` POST 源身份并映射 Host 返回的修订。
 - `test/client/artifact-edit-batch.test.mjs`（7 条）：v1 批次上限常量、requestId 线格式、信封头携带 requestId 与多信封指引、一条消息按顺序解析多个信封、坏信封不影响兄弟信封、普通消息解析为空、发送摘要范围不跨信封。
 - `test/client/artifact-block-bundle.test.mjs`（11 条）：选中区块表达式与传递冻结依赖/`$state` 切片、单块与双块回填顺序、chrome/根参数/基础语句保持、微程序使用基础 `$state` 或新增辅助语句、块数不匹配、未知/重复 id 与辅助语句重名、`@Each` 循环变量与对象字面量键不算未定义引用、引用组合后不存在的标识符被拒绝。
-- `test/host/artifact-edit.test.mjs`（32 条）：在既有编辑/片段覆盖之外，新增一条消息两个信封 → 两条 pending 且独立应用、缺 selector 被拒且保持 armed、未知 requestId/artifactId 不匹配被拒且不消费、一条 stale 一条有效时独立成功、`render_ui` 用 `editRequestId` 应用只调顺序请求并保留 block 请求、同 Artifact 同消息只 arm 第一条、超过 3 个信封只 arm 前三条；以及 `edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
-- `test/host/artifact-revisions.test.mjs`（10 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰、路由认证/方法/参数。
-- 浏览器 `test/browser/artifact-edit.e2e.mjs`（102 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景——两张卡片两份草稿与两个 chip、非 active 草稿保留与切换、切换区 (2/6)、手动删除 chip → detached → 重新附加、一条消息两个信封且各带 requestId、两次独立 block-edit 修订落成两张卡片、发送摘要两条 chip；新增 Turn 关闭对账——全部完成时草稿全部消失，部分完成时未完成草稿以 `data-state="failed"`「未完成，草稿已保留」角标恢复且可重新附加成 chip；不调用真实模型。
+- `test/host/artifact-edit.test.mjs`（37 条）：在既有编辑/片段/多 pending 覆盖之外，新增 branch：旧修订 branch=true 记录 `latest+1`、未记录的 revision 1 允许 branch、非 branch 旧修订仍被 stale 拒绝、非法 branch base 被模型可读错误拒绝且不写修订；以及 `edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
+- `test/host/artifact-revisions.test.mjs`（15 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰；GET 路由认证/方法/参数；恢复路由：与 GET 共用 disposer、POST 成功记录 latest+1 并返回本地修订、source 缺失/跨 artifact/already latest 拒绝、body/program/大小校验、非 POST 与认证拒绝。
+- 浏览器 `test/browser/artifact-edit.e2e.mjs`（111 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景——两张卡片两份草稿与两个 chip、非 active 草稿保留与切换、切换区 (2/6)、手动删除 chip → detached → 重新附加、一条消息两个信封且各带 requestId、两次独立 block-edit 修订落成两张卡片、发送摘要两条 chip；Turn 关闭对账——全部完成时草稿全部消失，部分完成时未完成草稿以 `data-state="failed"`「未完成，草稿已保留」角标恢复且可重新附加成 chip；M3-2——旧修订卡片 restore → 本地修订卡片（`data-dsh-iui-local-revision`、恢复完成提示）与旧修订冲突横幅 branch → note → chip「 · 分支」→ 信封 `"branch":true`；不调用真实模型。
 
 ## 布局与间距契约
 
