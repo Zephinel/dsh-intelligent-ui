@@ -616,6 +616,12 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const previewTriggerRef = useRef<HTMLElement | null>(null)
   const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
   const previewHadOpenRef = useRef(false)
+  const [liveMessage, setLiveMessage] = useState('')
+  const liveSequenceRef = useRef(0)
+  const a11yHintId = useId()
+  const moveMenuHintId = useId()
+  const addHintId = useId()
+  const moveMenuRef = useRef<HTMLDivElement>(null)
   const previewDialogRef = useRef<HTMLDivElement>(null)
   const previewCancelRef = useRef<HTMLButtonElement>(null)
   const moveAnchorRef = useRef<HTMLButtonElement | null>(null)
@@ -754,6 +760,21 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     return () => { document.removeEventListener('keydown', onKey) }
   }, [hoverBlockId])
 
+  /**
+   * Announce one short status through the polite live region. Clearing first
+   * and setting on the next frame makes repeated identical messages audible;
+   * the sequence guard drops stale frames when several announcements race.
+   */
+  const announce = (message: string): void => {
+    liveSequenceRef.current += 1
+    const sequence = liveSequenceRef.current
+    setLiveMessage('')
+    if (typeof window === 'undefined') { setLiveMessage(message); return }
+    window.requestAnimationFrame(() => {
+      if (liveSequenceRef.current === sequence) setLiveMessage(message)
+    })
+  }
+
   const clearDeleteConfirm = (): void => {
     if (confirmDeleteTimer.current !== null) {
       window.clearTimeout(confirmDeleteTimer.current)
@@ -808,6 +829,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     if (instruction === '') return
     actions.saveBlockAddition(parentId, instruction)
     closeAddForm()
+    announce(t('edit.a11yAdded'))
   }
   const closeMoveMenu = (): void => { setMoveMenu(null) }
   const openMoveMenu = (blockId: string, anchor: HTMLButtonElement): void => {
@@ -821,10 +843,43 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     if (top + estimatedHeight > window.innerHeight - CARD_MARGIN) top = Math.max(CARD_MARGIN, rect.top - estimatedHeight - 4)
     setMoveMenu({ blockId, left, top })
   }
+  const moveMenuTargets = (): HTMLButtonElement[] => {
+    const menu = moveMenuRef.current
+    return menu === null ? [] : [...menu.querySelectorAll<HTMLButtonElement>('[data-dsh-iui-edit-move-target]')]
+  }
+  const onMoveMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeMoveMenu()
+      moveAnchorRef.current?.focus()
+      return
+    }
+    if (event.key === 'Tab') { closeMoveMenu(); return }
+    const targets = moveMenuTargets()
+    if (targets.length === 0) return
+    const active = document.activeElement
+    const current = active instanceof HTMLElement ? targets.findIndex(target => target === active) : -1
+    const focusAt = (position: number): void => {
+      event.preventDefault()
+      targets[(position + targets.length) % targets.length].focus()
+    }
+    if (event.key === 'ArrowDown') { focusAt(current + 1); return }
+    if (event.key === 'ArrowUp') { focusAt(current - 1); return }
+    if (event.key === 'Home') { focusAt(0); return }
+    if (event.key === 'End') { focusAt(targets.length - 1); return }
+    if ((event.key === 'Enter' || event.key === ' ') && current >= 0) {
+      event.preventDefault()
+      event.stopPropagation()
+      targets[current].click()
+    }
+  }
   const chooseMoveTarget = (targetId: string): void => {
     if (moveMenu === null) return
+    const target = moveTargets.find(candidate => candidate.id === targetId)
     previewTriggerRef.current = moveAnchorRef.current
     closeMoveMenu()
+    announce(t('edit.a11yMoved', { target: target?.title ?? targetId }))
     if (actions.previewMoveBlockTo !== undefined) {
       actions.previewMoveBlockTo(moveMenu.blockId, targetId)
       return
@@ -838,6 +893,20 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     closeAddForm()
     closeMoveMenu()
   }, [session.nestedMode])
+
+  // Opening the move menu puts focus on the first target (or the menu itself
+  // when there is no target) so arrow-key navigation works immediately.
+  useEffect(() => {
+    if (moveMenu === null) return
+    const frame = window.requestAnimationFrame(() => {
+      const menu = moveMenuRef.current
+      if (menu === null) return
+      const first = menu.querySelector<HTMLButtonElement>('[data-dsh-iui-edit-move-target]')
+      if (first !== null) first.focus()
+      else menu.focus()
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [moveMenu])
 
   // A structural operation (including moveBlockTo) cancels transient menus.
   useEffect(() => {
@@ -860,6 +929,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       event.preventDefault()
       event.stopPropagation()
       closeMoveMenu()
+      moveAnchorRef.current?.focus()
     }
     const onScroll = (): void => { closeMoveMenu() }
     document.addEventListener('pointerdown', onPointerDown, true)
@@ -882,6 +952,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const cancelPreview = (): void => {
     if (previewConfirming) return
     actions.cancelStructurePreview()
+    announce(t('edit.a11yPreviewClosed'))
   }
   const trapPreviewFocus = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== 'Tab') return
@@ -907,6 +978,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
         previewHadOpenRef.current = true
         const active = document.activeElement
         previewRestoreFocusRef.current = previewTriggerRef.current ?? (active instanceof HTMLElement ? active : null)
+        announce(t('edit.a11yPreviewOpened'))
         window.requestAnimationFrame(() => { previewCancelRef.current?.focus() })
       }
       closeMoveMenu()
@@ -929,7 +1001,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       event.preventDefault()
       event.stopPropagation()
       if (previewConfirming) return
-      actions.cancelStructurePreview()
+      cancelPreview()
     }
     document.addEventListener('keydown', onKey, true)
     return () => { document.removeEventListener('keydown', onKey, true) }
@@ -1072,6 +1144,9 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       if (commit && drag !== null && drag.moved && target !== null) {
         if (drag.parentId === undefined) actions.moveBlock(drag.blockId, target.index)
         else actions.moveNestedBlock(drag.parentId, drag.blockId, target.index)
+        announce(drag.parentId === undefined
+          ? t('edit.a11yReorderedRoot', { index: target.index + 1 })
+          : t('edit.a11yReorderedNested', { index: target.index + 1 }))
       }
     }
     const onMove = (moveEvent: PointerEvent): void => {
@@ -1120,11 +1195,18 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     const index = order.indexOf(blockId)
     if (index < 0) return
     const last = order.length - 1
+    const announcePosition = (position: number): void => {
+      announce(parentId === undefined
+        ? t('edit.a11yReorderedRoot', { index: position })
+        : t('edit.a11yReorderedNested', { index: position }))
+    }
     const moveBy = (delta: number): void => {
+      announcePosition(index + delta + 1)
       if (parentId === undefined) actions.moveBlockBy(blockId, delta)
       else actions.moveNestedBlockBy(parentId, blockId, delta)
     }
     const moveTo = (toIndex: number): void => {
+      announcePosition(toIndex + 1)
       if (parentId === undefined) actions.moveBlock(blockId, toIndex)
       else actions.moveNestedBlock(parentId, blockId, toIndex)
     }
@@ -1158,6 +1240,8 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       data-open={session.drawerOpen ? 'true' : 'false'}
       data-status={session.status}
     >
+      <span id={a11yHintId} className="dsh-iui-edit-a11y-hint" data-dsh-iui-edit-a11y-hint>{t('edit.a11yDragHint')}</span>
+      <div className="dsh-iui-edit-a11y-live" role="status" aria-live="polite" aria-atomic="true" data-dsh-iui-edit-live>{liveMessage}</div>
       <header className="dsh-iui-edit-panel-head">
         <span className="dsh-iui-edit-panel-title">{t('edit.panelTitle')}</span>
         <span className="dsh-iui-edit-panel-spacer" />
@@ -1308,6 +1392,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                       className="dsh-iui-edit-grip"
                       data-dsh-iui-edit-grip
                       aria-label={`${t('edit.moveHandle')}: ${title}`}
+                      aria-describedby={a11yHintId}
                       title={t('edit.moveHandle')}
                       onPointerDown={event => { startDrag(event, blockId) }}
                       onKeyDown={event => { onGripKeyDown(event, blockId, undefined, session.targetOrder) }}
@@ -1397,6 +1482,8 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                   className="dsh-iui-edit-nested-group"
                   data-dsh-iui-edit-nested-group
                   data-parent-id={parentId}
+                  role="group"
+                  aria-label={`${parentTitle} · ${parentKind}`}
                 >
                   <div className="dsh-iui-edit-nested-group-head">
                     <span className="dsh-iui-edit-nested-group-title" title={parentTitle}>{parentTitle}</span>
@@ -1416,10 +1503,12 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                   </div>
                   {addFormParentId !== parentId ? null : (
                     <div className="dsh-iui-edit-add-form" data-dsh-iui-edit-add-form data-parent-id={parentId}>
-                      <p className="dsh-iui-edit-add-hint">{t('edit.addBlockHint')}</p>
+                      <p className="dsh-iui-edit-add-hint" id={addHintId}>{t('edit.addBlockHint')}</p>
                       <textarea
                         className="dsh-iui-edit-add-textarea"
                         data-dsh-iui-edit-add-input
+                        aria-label={t('edit.addBlockHint')}
+                        aria-describedby={addHintId}
                         rows={2}
                         maxLength={2000}
                         value={addDraft}
@@ -1482,6 +1571,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                               className="dsh-iui-edit-grip"
                               data-dsh-iui-edit-nested-grip
                               aria-label={`${t('edit.moveHandle')}: ${title}`}
+                              aria-describedby={a11yHintId}
                               title={t('edit.moveHandle')}
                               onPointerDown={event => { startDrag(event, blockId, parentId, group.childIds) }}
                               onKeyDown={event => { onGripKeyDown(event, blockId, parentId, group.childIds) }}
@@ -1551,7 +1641,11 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                         data-parent-id={parentId}
                         aria-label={t('edit.addBlockRemove')}
                         title={t('edit.addBlockRemove')}
-                        onClick={event => { event.stopPropagation(); actions.removeBlockAddition(parentId) }}
+                        onClick={event => {
+                          event.stopPropagation()
+                          actions.removeBlockAddition(parentId)
+                          announce(t('edit.a11yRemoved'))
+                        }}
                       >
                         <TrashGlyph />
                       </button>
@@ -1613,14 +1707,19 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       )}
       {moveMenu === null ? null : createPortal(
         <div
+          ref={moveMenuRef}
           className="dsh-iui-edit-move-menu"
           data-dsh-iui-edit-move-menu
           role="menu"
+          tabIndex={-1}
           aria-label={t('edit.moveBlockTitle')}
+          aria-describedby={moveMenuHintId}
           style={{ left: moveMenu.left, top: moveMenu.top }}
           onPointerDown={event => { event.stopPropagation() }}
           onClick={event => { event.stopPropagation() }}
+          onKeyDown={onMoveMenuKeyDown}
         >
+          <span id={moveMenuHintId} className="dsh-iui-edit-a11y-hint" data-dsh-iui-edit-a11y-menu-hint>{t('edit.a11yMenuHint')}</span>
           <div className="dsh-iui-edit-move-title">{t('edit.moveBlockTitle')}</div>
           {moveTargets.length === 0 ? (
             <div className="dsh-iui-edit-move-empty" data-dsh-iui-edit-move-empty>{t('edit.moveBlockEmpty')}</div>

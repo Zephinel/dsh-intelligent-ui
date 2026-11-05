@@ -2013,3 +2013,28 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* B1-5 keyboard/drag a11y: visually hidden helper text and live status. */
+.dsh-iui-edit-a11y-hint,
+.dsh-iui-edit-a11y-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-move-target:focus-visible,
+.dsh-iui-edit-move-menu:focus-visible,
+.dsh-iui-edit-add-button:focus-visible,
+.dsh-iui-edit-add-save:focus-visible,
+.dsh-iui-edit-add-cancel:focus-visible,
+.dsh-iui-edit-addition-remove:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}

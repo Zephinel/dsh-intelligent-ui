@@ -59,8 +59,11 @@ events but not the full DSH Web integration.
   scenario then toggles **Strict protection**, checks it is off by default and
   that the envelope carries `"strict":true` with the strict instruction. The
   B2-6 scenario then applies an edit revision and checks the new card inherits
-  the runtime `$state` (the selected DST option and its derived note). 175
-  checks; no real model is called (the
+  the runtime `$state` (the selected DST option and its derived note). The B1-5
+  scenario then checks the live region announces nested reorders and additions,
+  the nested grip references the hidden keyboard hint, and the **Move to…**
+  menu focuses its first target and moves focus with arrow keys. 180 checks;
+  no real model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).
