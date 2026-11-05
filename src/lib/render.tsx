@@ -53,6 +53,13 @@ export interface OpenUIRendererProps {
    * Defaults to false; when false the normal/top-level edit output is unchanged.
    */
   readonly nestedBlockSlots?: boolean
+  /**
+   * Initial renderer runtime state (`$state` values and form field snapshots).
+   * Restored when a revision card remounts; omitted for the first render.
+   */
+  readonly runtimeState?: Record<string, unknown>
+  /** Reports the renderer's latest runtime state so a host can snapshot it. */
+  readonly onRuntimeStateChange?: (state: Record<string, unknown>) => void
 }
 
 /** Open an @OpenUrl action, if the model wrote an http(s) URL. */
@@ -130,7 +137,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false, runtimeState, onRuntimeStateChange }: OpenUIRendererProps): ReactElement {
   const activeLibrary = nestedBlockSlots ? nestedEditLibrary : blockSlots ? blockEditLibrary : library
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
@@ -153,6 +160,8 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
                 isStreaming={false}
                 onAction={(event) => handleAction(event as ActionEvent, onToAssistant)}
                 onError={onError}
+                {...runtimeState === undefined ? {} : { initialState: runtimeState }}
+                {...onRuntimeStateChange === undefined ? {} : { onStateUpdate: onRuntimeStateChange }}
               />
               {fatal.length > 0 && (
                 <ProgramFallback

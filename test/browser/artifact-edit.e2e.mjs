@@ -718,6 +718,23 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(strictEnvelope.includes('"strict":true'), true, 'envelope carries strict mode')
   check(strictEnvelope.includes('"instruction":"strict protection edit"'), true, 'strict edit instruction is sent')
 
+  // 29. B2-6: runtime $state survives a new revision card.
+  const originalCard = '[data-dsh-iui-call-id="dst-call-1"]'
+  await read(`(() => {
+    const card = document.querySelector('${originalCard}');
+    const option = [...card.querySelectorAll('[role="radio"]')].find(button => button.textContent.trim() === '夏令时');
+    option.click();
+  })()`)
+  await wait(`document.querySelector('${originalCard}').innerText.includes('钟表被拨快 1 小时')`, 'runtime state changed')
+  const runtimeCardsBefore = await read('document.querySelectorAll(\'[data-dsh-intelligent-ui="card"]\').length')
+  await read(`window.__applyRevision(${JSON.stringify(DST_PROGRAM)})`)
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${runtimeCardsBefore + 1}`, 'revision card appended')
+  await wait(`document.querySelectorAll('[data-dsh-iui-call-id="dst-call-2"]').length >= 1`, 'new revision card present')
+  const revisionState = await read(`[...document.querySelectorAll('[data-dsh-iui-call-id="dst-call-2"]')].at(-1).innerText`)
+  check(revisionState.includes('钟表被拨快 1 小时'), true, 'new revision inherits the runtime $state')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-call-id="dst-call-2"]')].at(-1).querySelector('[role="radio"][aria-checked="true"]')?.textContent`), '夏令时', 'new revision keeps the selected state')
+  await shot('harness-b26-runtime-state.png')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

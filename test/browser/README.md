@@ -57,7 +57,9 @@ events but not the full DSH Web integration.
   on Cancel and add/remove/same diff rows, confirming sends the real apply, and
   a cross-container move is previewed and applied as two requests. The B2-5
   scenario then toggles **Strict protection**, checks it is off by default and
-  that the envelope carries `"strict":true` with the strict instruction. 173
+  that the envelope carries `"strict":true` with the strict instruction. The
+  B2-6 scenario then applies an edit revision and checks the new card inherits
+  the runtime `$state` (the selected DST option and its derived note). 175
   checks; no real model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and

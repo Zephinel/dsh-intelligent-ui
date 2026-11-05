@@ -20,6 +20,7 @@ import { BlockPopover } from './BlockPopover.tsx'
 import { EditPanel } from './EditPanel.tsx'
 import { blocksForProgram, probeArtifactRevisionStatus } from './store.ts'
 import { nestedBlocksForProgram } from './nested.ts'
+import { runtimeStateForProgram } from '../runtime-state.ts'
 import { claimEditLease, hasForeignLease, queryEditLeases, releaseEditLease, renewEditLease, useForeignEditLease } from './tabs.ts'
 import './artifact-edit.css'
 
@@ -59,6 +60,14 @@ export function ArtifactEditView({
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [session.key, session.status])
+  // B2-6: the edit canvas is frozen: it shows the state captured for the base
+  // revision (falling back to the artifact's latest snapshot) and never writes.
+  const editRuntimeState = useMemo(() => runtimeStateForProgram({
+    artifactId: session.artifactId,
+    revisionId: session.baseRevisionId,
+    baseRevisionId: session.baseRevisionId,
+    callId: session.baseRevisionId,
+  }), [session.artifactId, session.baseRevisionId])
   const blockCount = session.blocks.length
   const requestCount = session.selection.length
   // M4-1: nested blocks are opt-in per canvas. The CST map resolves renderer
@@ -250,6 +259,7 @@ export function ArtifactEditView({
                 scheme={scheme}
                 onToAssistant={onToAssistant}
                 t={t}
+                runtimeState={editRuntimeState}
               />
             </BlockSlotPathContext.Provider>
           ) : (
@@ -262,6 +272,7 @@ export function ArtifactEditView({
               scheme={scheme}
               onToAssistant={onToAssistant}
               t={t}
+              runtimeState={editRuntimeState}
             />
           )}
         </BlockSlotContext.Provider>

@@ -26,6 +26,7 @@ import { resolveCardTheme } from './export-html-plan.ts'
 import type { StyleCatalog } from './styles.ts'
 import { useStyleScheme } from './theme-mode.ts'
 import { programsFromToolNodes, type ToolCallNode } from './programs.ts'
+import { recordRuntimeState, runtimeStateForProgram } from './runtime-state.ts'
 import { RendererBoundary } from './RendererBoundary.tsx'
 import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
@@ -249,6 +250,18 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const title = program.title !== undefined && program.title.trim() !== '' ? program.title : t('card.title')
   const style = program.style ?? 'card'
   const baseRevisionId = program.revisionId ?? program.callId
+  // B2-6: a new revision card restores the runtime state of the revision it was
+  // edited from; the mount reports its own latest state back for the next edit.
+  const runtimeProgramRef = useMemo(() => ({
+    artifactId: program.artifactId ?? program.callId,
+    revisionId: program.revisionId ?? program.callId,
+    baseRevisionId: program.baseRevisionId,
+    callId: program.callId,
+  }), [program.artifactId, program.revisionId, program.baseRevisionId, program.callId])
+  const runtimeState = useMemo(() => runtimeStateForProgram(runtimeProgramRef), [runtimeProgramRef])
+  const handleRuntimeStateChange = useCallback((state: Record<string, unknown>) => {
+    recordRuntimeState(runtimeProgramRef, state)
+  }, [runtimeProgramRef])
   const editKey = `${sessionId}:${baseRevisionId}`
   const editSession = useArtifactEditSession(sessionId, baseRevisionId)
   const editStore = useArtifactEditStore()
@@ -488,7 +501,17 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
         ) : (
           <RendererBoundary t={t}>
             <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
-              <OpenUIRenderer program={program.program} title={program.title} scopeId={program.callId} onToAssistant={onToAssistant} themeStyle={themeStyle} scheme={scheme} t={t} />
+              <OpenUIRenderer
+                program={program.program}
+                title={program.title}
+                scopeId={program.callId}
+                onToAssistant={onToAssistant}
+                themeStyle={themeStyle}
+                scheme={scheme}
+                t={t}
+                runtimeState={runtimeState}
+                onRuntimeStateChange={handleRuntimeStateChange}
+              />
             </div>
           </RendererBoundary>
         )}
