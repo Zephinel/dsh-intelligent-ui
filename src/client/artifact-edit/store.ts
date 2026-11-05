@@ -38,12 +38,12 @@ import {
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
-import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
+import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
-import type { ArtifactEditSession, OpenEditorResult } from './contracts.ts'
+import type { ArtifactEditSession, ArtifactStructurePreviewLine, OpenEditorResult } from './contracts.ts'
 
 /** Composer integration the store talks to; registered by the chip module. */
 export interface ArtifactComposerBridge {
@@ -1302,6 +1302,210 @@ export function resetArtifactNestedOrder(key: string): void {
  * @param op - operation kind.
  * @param turn - latest loaded Turn, used to place the local card.
  */
+/** Build the wire operation for one display block; undefined when it cannot be resolved. */
+function structureOperationForBlock(
+  session: ArtifactEditSession,
+  blockId: string,
+  op: 'delete' | 'duplicate',
+): { operation: { op: 'delete' | 'duplicate'; nodeId: string; sourceDigest: string; toIndex?: number } } | undefined {
+  const nested = nestedBlocksForProgram(session.program)
+  const target = nested?.blocks.find(block => block.blockId === blockId)
+  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) return undefined
+  if (op === 'delete') return { operation: { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest } }
+  const group = target.parentBlockId === undefined
+    ? nested.blocks.filter(block => block.parentBlockId === undefined)
+    : nested.blocks.filter(block => block.parentBlockId === target.parentBlockId)
+  const index = group.findIndex(block => block.blockId === blockId)
+  return { operation: { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) } }
+}
+
+/** Build a cross-container move operation from one display block and target. */
+function moveOperationForBlock(
+  session: ArtifactEditSession,
+  blockId: string,
+  targetParentBlockId: string | 'root',
+): { operation: { op: 'move'; nodeId: string; sourceDigest: string; toIndex: number; toParentNodeId: string } } | undefined {
+  const nested = nestedBlocksForProgram(session.program)
+  const target = nested?.blocks.find(block => block.blockId === blockId)
+  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) return undefined
+  const targetParentNodeId = targetParentBlockId === 'root'
+    ? nested.rootNodeId
+    : nested.blocks.find(block => block.blockId === targetParentBlockId)?.nodeId
+  if (targetParentNodeId === undefined) return undefined
+  const children = targetParentBlockId === 'root'
+    ? nested.blocks.filter(block => block.parentBlockId === undefined)
+    : nested.blocks.filter(block => block.parentBlockId === targetParentBlockId)
+  return {
+    operation: {
+      op: 'move',
+      nodeId: target.nodeId,
+      sourceDigest: target.sourceDigest,
+      toParentNodeId: targetParentNodeId,
+      toIndex: children.length,
+    },
+  }
+}
+
+/** Minimal line diff; enough to review a structure change. */
+function diffProgramLines(before: string, after: string): ArtifactStructurePreviewLine[] {
+  const a = before.split('\n')
+  const b = after.split('\n')
+  if (a.length > 400 || b.length > 400) {
+    return [
+      { kind: 'remove', text: `(${a.length} lines before)` },
+      { kind: 'add', text: `(${b.length} lines after)` },
+    ]
+  }
+  const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    }
+  }
+  const lines: ArtifactStructurePreviewLine[] = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      lines.push({ kind: 'same', text: a[i] })
+      i += 1
+      j += 1
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      lines.push({ kind: 'remove', text: a[i] })
+      i += 1
+    } else {
+      lines.push({ kind: 'add', text: b[j] })
+      j += 1
+    }
+  }
+  while (i < a.length) { lines.push({ kind: 'remove', text: a[i] }); i += 1 }
+  while (j < b.length) { lines.push({ kind: 'add', text: b[j] }); j += 1 }
+  return lines
+}
+
+/** Preview one deterministic structure operation without recording a revision. */
+async function previewStructureOperation(
+  key: string,
+  kind: 'delete' | 'duplicate' | 'move',
+  blockId: string,
+  targetParentBlockId: string | 'root' | undefined,
+  operation: { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string },
+  failureKey: string,
+): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return
+  sessions.set(key, {
+    ...session,
+    structurePreview: {
+      kind,
+      blockId,
+      ...targetParentBlockId === undefined ? {} : { targetParentBlockId },
+      status: 'loading',
+    },
+    structureError: undefined,
+  })
+  publish()
+  try {
+    const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        artifactId: session.artifactId,
+        baseRevisionId: session.baseRevisionId,
+        operationId: newRequestId(),
+        operations: [operation],
+        preview: true,
+        ...session.branch === true ? { branch: true } : {},
+        ...session.title === undefined ? {} : { title: session.title },
+        style: session.style,
+        ...session.styleId === undefined ? {} : { styleId: session.styleId },
+        ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+      }),
+    })
+    const value: unknown = await response.json().catch(() => undefined)
+    if (!response.ok || !isArtifactStructurePreview(value)) {
+      const message = translate(failureKey)
+      sessions.set(key, {
+        ...session,
+        structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: message },
+      })
+      publish()
+      return
+    }
+    sessions.set(key, {
+      ...session,
+      structurePreview: {
+        kind,
+        blockId,
+        ...targetParentBlockId === undefined ? {} : { targetParentBlockId },
+        status: 'ready',
+        afterProgram: value.preview.program,
+        changedBlockIds: value.preview.changedBlockIds,
+        diff: diffProgramLines(session.program, value.preview.program),
+      },
+    })
+    publish()
+  } catch {
+    sessions.set(key, {
+      ...session,
+      structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: translate(failureKey) },
+    })
+    publish()
+  }
+}
+
+/** Open a diff confirmation for a delete/duplicate operation. */
+export function previewArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate'): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const built = structureOperationForBlock(session, blockId, op)
+  if (built === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
+    publish()
+    return
+  }
+  void previewStructureOperation(key, op, blockId, undefined, built.operation, 'edit.structureFailed')
+}
+
+/** Open a diff confirmation for a cross-container move. */
+export function previewMoveArtifactBlockTo(key: string, blockId: string, targetParentBlockId: string | 'root'): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const built = moveOperationForBlock(session, blockId, targetParentBlockId)
+  if (built === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
+    publish()
+    return
+  }
+  void previewStructureOperation(key, 'move', blockId, targetParentBlockId, built.operation, 'edit.moveBlockFailed')
+}
+
+/** Apply the currently previewed operation, then surface the local revision card. */
+export function confirmArtifactStructurePreview(key: string, turn?: number): void {
+  const session = sessions.get(key)
+  const preview = session?.structurePreview
+  if (session === undefined || preview === undefined || preview.status !== 'ready') return
+  const built = preview.kind === 'move'
+    ? moveOperationForBlock(session, preview.blockId, preview.targetParentBlockId ?? 'root')
+    : structureOperationForBlock(session, preview.blockId, preview.kind)
+  if (built === undefined) {
+    sessions.set(key, { ...session, structurePreview: { ...preview, status: 'failed', error: translate('edit.structureFailed') } })
+    publish()
+    return
+  }
+  sessions.set(key, { ...session, structurePreview: undefined })
+  void submitStructureOperation(key, built.operation, turn, preview.kind === 'move' ? 'edit.moveBlockFailed' : 'edit.structureFailed')
+}
+
+/** Dismiss the structure preview without applying it. */
+export function cancelArtifactStructurePreview(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.structurePreview === undefined) return
+  sessions.set(key, { ...session, structurePreview: undefined })
+  publish()
+}
+
 /** Submit one structural operation and turn the result into a local revision card. */
 async function submitStructureOperation(
   key: string,

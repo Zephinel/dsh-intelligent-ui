@@ -52,7 +52,11 @@ events but not the full DSH Web integration.
   paths: an addition instruction appears in its group and the envelope carries
   the `additions` entry, while the **Move to…** menu excludes root/current
   parent/ancestors and sends one move structure request with the target node id
-  and index. 164 checks; no real model is called (the
+  and index. The M4-5 flow then previews a structure operation: the dry-run
+  request returns a preview, the modal exposes `aria-modal` with initial focus
+  on Cancel and add/remove/same diff rows, confirming sends the real apply, and
+  a cross-container move is previewed and applied as two requests. 170 checks;
+  no real model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).

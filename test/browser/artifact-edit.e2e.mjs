@@ -594,7 +594,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     window.fetch = (input, init) => {
       const url = typeof input === 'string' ? input : String(input?.url ?? '');
       if (url.includes('/api/intelligent-ui/artifact-structure')) {
-        window.__structureCalls.push(JSON.parse(init.body));
+        const body = JSON.parse(init.body);
+        window.__structureCalls.push(body);
+        if (body.preview === true) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nmockPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1'], touched: [{ nodeId: body.operations[0].nodeId, nodePath: 'root/children[0]', op: body.operations[0].op }] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        }
         const result = {
           artifactId: 'nested-call-1',
           revisionId: 'struct_e2e_duplicate',
@@ -613,10 +617,18 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'structure editor')
   await click('[data-dsh-iui-edit-arrangement-list] [data-dsh-iui-edit-structure-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'structure preview dialog')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-structure-preview]').getAttribute('aria-modal')`), 'true', 'preview dialog is modal')
+  await wait(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`, 'preview initial focus')
+  check(await read(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`), true, 'initial focus is on cancel')
+  check((await count('[data-dsh-iui-edit-preview-diff] [data-diff="add"]')) > 0, true, 'preview shows added diff rows')
+  await click('[data-dsh-iui-edit-preview-confirm]')
   await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local structural revision card')
   const structureCalls = await read('window.__structureCalls')
-  check(structureCalls.length, 1, 'one structure request was sent')
-  check(structureCalls[0].operations[0].op, 'duplicate', 'duplicate operation sent')
+  check(structureCalls.length, 2, 'preview then apply requests were sent')
+  check(structureCalls[0].preview, true, 'first request is the dry-run preview')
+  check(structureCalls[1].preview === undefined, true, 'second request is the real apply')
+  check(structureCalls[0].operations[0].op, 'duplicate', 'duplicate operation previewed')
   check(typeof structureCalls[0].operations[0].nodeId, 'string', 'duplicate carries the CST node id')
   check(typeof structureCalls[0].operations[0].sourceDigest, 'string', 'duplicate carries the source digest')
   check(structureCalls[0].operations[0].toIndex, 1, 'duplicate inserts after the source block')
@@ -680,12 +692,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(moveTargets.length > 0, true, 'move menu offers a valid container')
   const moveTarget = moveTargets[0]
   await click(`[data-dsh-iui-edit-move-target][data-target-id="${moveTarget}"]`)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'move preview dialog')
+  await click('[data-dsh-iui-edit-preview-confirm]')
   await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local move revision card')
   const moveCalls = await read('window.__structureCalls')
-  check(moveCalls.length, 1, 'one move structure request was sent')
-  check(moveCalls[0].operations[0].op, 'move', 'move operation sent')
-  check(typeof moveCalls[0].operations[0].toParentNodeId, 'string', 'move carries the target parent node id')
-  check(typeof moveCalls[0].operations[0].toIndex, 'number', 'move carries the target index')
+  check(moveCalls.length, 2, 'move preview then apply requests were sent')
+  check(moveCalls[0].preview, true, 'move preview is a dry run')
+  check(moveCalls[1].operations[0].op, 'move', 'move operation sent')
+  check(typeof moveCalls[1].operations[0].toParentNodeId, 'string', 'move carries the target parent node id')
+  check(typeof moveCalls[1].operations[0].toIndex, 'number', 'move carries the target index')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

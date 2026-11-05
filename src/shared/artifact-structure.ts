@@ -45,6 +45,8 @@ export interface ArtifactStructureRequest {
   readonly operationId: string
   readonly operations: readonly ArtifactStructureOperation[]
   readonly branch?: boolean
+  /** Dry-run: validate and compute the resulting program without recording a revision. */
+  readonly preview?: boolean
   readonly title?: string
   readonly style: RenderLayout
   readonly styleId?: string
@@ -102,7 +104,7 @@ export function describeStructureRequestProblem(value: unknown): string | undefi
   const keys = Object.keys(value)
   if (keys.some(key => ![
     'schemaVersion', 'artifactId', 'baseRevisionId', 'operationId', 'operations',
-    'branch', 'title', 'style', 'styleId', 'temporaryStyle',
+    'branch', 'preview', 'title', 'style', 'styleId', 'temporaryStyle',
   ].includes(key))) return 'unknown_field'
   if (value.schemaVersion !== 1) return 'unsupported_version'
   if (typeof value.artifactId !== 'string' || !ARTIFACT_ID_PATTERN.test(value.artifactId)) return 'invalid_artifact_id'
@@ -116,6 +118,7 @@ export function describeStructureRequestProblem(value: unknown): string | undefi
     if (problem !== undefined) return problem
   }
   if ('branch' in value && typeof value.branch !== 'boolean') return 'invalid_branch'
+  if ('preview' in value && typeof value.preview !== 'boolean') return 'invalid_preview'
   if ('title' in value && !isBoundedText(value.title, 1, 200)) return 'invalid_title'
   if (!isEditLayout(value.style)) return 'invalid_style'
   if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return 'invalid_style_id'
@@ -143,4 +146,36 @@ export function isArtifactStructureResult(value: unknown): value is ArtifactStru
   if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return false
   if ('temporaryStyle' in value && (!isStyleSnapshot(value.temporaryStyle) || value.temporaryStyle.baseLayout !== value.style)) return false
   return true
+}
+
+
+/** One structured preview of a structural operation batch (no revision recorded). */
+export interface ArtifactStructurePreview {
+  readonly program: string
+  readonly operations: readonly ArtifactStructureOperation[]
+  /** Root-level block ids whose subtrees were touched. */
+  readonly changedBlockIds: readonly string[]
+  /** Compact per-touched-node labels for the confirmation dialog. */
+  readonly touched: readonly { readonly nodeId: string; readonly nodePath: string; readonly op: string }[]
+}
+
+/** Host response for a preview request. */
+export interface ArtifactStructurePreviewResponse {
+  readonly ok: true
+  readonly preview: ArtifactStructurePreview
+}
+
+/** Validate one untrusted structure preview response. */
+export function isArtifactStructurePreview(value: unknown): value is ArtifactStructurePreviewResponse {
+  if (!isRecord(value) || value.ok !== true) return false
+  const preview = value.preview
+  if (!isRecord(preview)) return false
+  if (Object.keys(preview).some(key => !['program', 'operations', 'changedBlockIds', 'touched'].includes(key))) return false
+  if (!isBoundedText(preview.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return false
+  if (!Array.isArray(preview.changedBlockIds) || preview.changedBlockIds.some(id => typeof id !== 'string')) return false
+  if (!Array.isArray(preview.touched)) return false
+  return preview.touched.every(entry => isRecord(entry)
+    && typeof entry.nodeId === 'string'
+    && typeof entry.nodePath === 'string'
+    && typeof entry.op === 'string')
 }

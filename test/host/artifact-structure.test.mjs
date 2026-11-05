@@ -11,7 +11,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
-import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructureResult } from '../../src/shared/artifact-structure.ts'
+import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../src/shared/artifact-structure.ts'
 import { NESTED_PROGRAM, NESTED_TITLE, SCOPED_PROGRAM } from '../browser/fixtures/nested-artifact.ts'
 import { buildArtifactTree } from '../../src/shared/program-cst.ts'
 import { buildEditRequestText } from '../../src/shared/artifact-edit.ts'
@@ -58,6 +58,9 @@ const operationId = (label) => {
   operationCounter += 1
   return `op_${label}_${String(operationCounter).padStart(4, '0')}`
 }
+
+/** Files the preview path must never write. */
+const ledgerFile = (home) => join(home, 'dsh-intelligent-ui-structure-operations.json')
 
 /** Full plugin harness with captured HTTP routes and tools. */
 function mount(options = {}) {
@@ -438,6 +441,124 @@ test('cross-container moves are scoped, bounded and atomic in one batch', async 
   })
   assert.equal(rejected.status, 400)
   assert.match(rejected.body.error.message, /writable children slot|@Each/)
+})
+
+test('a structure preview applies the batch and returns the compact diff without writing state', async () => {
+  const m = mount()
+  await seed(m)
+  const programsBefore = readFileSync(m.programFile, 'utf8')
+  const body = structureBody({ preview: true, operationId: operationId('preview-delete'), operations: [deleteOp(NESTED_TREE, 'n5')] })
+  const response = await postStructure(m.structureRoute(), { body })
+  assert.equal(response.status, 200, JSON.stringify(response.body))
+  assert.equal(isArtifactStructurePreview(response.body), true)
+  const preview = response.body.preview
+  assert.match(preview.program.split('\n')[1], /Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.deepEqual(preview.changedBlockIds, ['b1'])
+  assert.deepEqual(preview.operations, body.operations, 'operations are echoed for the dialog summary')
+  assert.ok(preview.touched.length > 0)
+  for (const entry of preview.touched) {
+    assert.deepEqual(Object.keys(entry).sort(), ['nodeId', 'nodePath', 'op'])
+    assert.match(entry.nodeId, /^n[1-9][0-9]*$/)
+    assert.match(entry.nodePath, /^root/)
+    assert.ok(entry.op.length > 0 && entry.op.length <= 40)
+  }
+  const parentTouch = preview.touched.find(entry => entry.nodeId === 'n4')
+  assert.ok(parentTouch !== undefined, 'the rewritten parent is reported as touched')
+  assert.equal(parentTouch.op, 'delete')
+  assert.equal(readFileSync(m.programFile, 'utf8'), programsBefore, 'the program registry is unchanged')
+  assert.equal(existsSync(m.file), false, 'no revision is recorded')
+  assert.equal(existsSync(ledgerFile(m.home)), false, 'the idempotency ledger is untouched')
+  assert.equal(createArtifactProgramStore().size(), 1)
+})
+
+test('previews cover duplicate, same-parent move and cross-parent move shapes', async () => {
+  const cases = [
+    { name: 'duplicate', operation: duplicateOp(NESTED_TREE, 'n5', 1), changed: ['b1'], op: 'duplicate' },
+    { name: 'same-parent-move', operation: moveOp(NESTED_TREE, 'n5', 2), changed: ['b1'], op: 'move' },
+    { name: 'cross-parent-move', operation: crossMoveOp(NESTED_TREE, 'n5', 'n8', 0), changed: ['b1', 'b2'], op: 'move' },
+  ]
+  for (const entry of cases) {
+    const m = mount()
+    await seed(m)
+    const response = await postStructure(m.structureRoute(), {
+      body: structureBody({ preview: true, operationId: operationId(`preview-${entry.name}`), operations: [entry.operation] }),
+    })
+    assert.equal(response.status, 200, `${entry.name}: ${JSON.stringify(response.body)}`)
+    assert.equal(isArtifactStructurePreview(response.body), true, entry.name)
+    assert.deepEqual([...response.body.preview.changedBlockIds].sort(), entry.changed, entry.name)
+    assert.ok(response.body.preview.touched.some(touched => touched.op === entry.op), entry.name)
+    assert.equal(existsSync(m.file), false, `${entry.name}: preview records no revision`)
+    assert.equal(existsSync(ledgerFile(m.home)), false, `${entry.name}: preview writes no ledger`)
+  }
+})
+
+test('a preview failure does not consume the operationId for the real apply', async () => {
+  const m = mount()
+  await seed(m)
+  const opid = operationId('preview-then-apply')
+  const bad = structureBody({
+    preview: true, operationId: opid,
+    operations: [{ ...deleteOp(NESTED_TREE, 'n5'), sourceDigest: 'deadbeefdeadbeef' }],
+  })
+  const previewFailure = await postStructure(m.structureRoute(), { body: bad })
+  assert.equal(previewFailure.status, 400)
+  assert.match(previewFailure.body.error.message, /changed since it was selected/)
+  assert.equal(existsSync(m.file), false)
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+  // The same operationId is still free for the real apply.
+  const applied = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: opid, operations: [deleteOp(NESTED_TREE, 'n5')] }),
+  })
+  assert.equal(applied.status, 201, JSON.stringify(applied.body))
+  assert.equal(applied.body.result.revision, 2)
+  assert.equal(createArtifactRevisionStore().latestFor('call-original').revisionId, applied.body.result.revisionId)
+  assert.equal(existsSync(ledgerFile(m.home)), true)
+  const replay = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: opid, operations: [deleteOp(NESTED_TREE, 'n5')] }),
+  })
+  assert.equal(replay.status, 200)
+  assert.deepEqual(replay.body, applied.body)
+})
+
+test('preview then real apply with the same operationId succeeds', async () => {
+  const m = mount()
+  await seed(m)
+  const opid = operationId('preview-apply-flow')
+  const body = structureBody({ operationId: opid, operations: [duplicateOp(NESTED_TREE, 'n5', 1)] })
+  const preview = await postStructure(m.structureRoute(), { body: { ...body, preview: true } })
+  assert.equal(preview.status, 200)
+  assert.equal(isArtifactStructurePreview(preview.body), true)
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+  const applied = await postStructure(m.structureRoute(), { body })
+  assert.equal(applied.status, 201)
+  assert.equal(applied.body.result.revision, 2)
+  assert.equal(applied.body.result.operationId, opid)
+})
+
+test('preview uses the same base/latest/validation error path as apply', async () => {
+  const m = mount()
+  await seed(m)
+  const cases = [
+    [{ preview: true, baseRevisionId: 'call-other', operations: [deleteOp(NESTED_TREE, 'n5')] }, 404, 'base_missing', /authoritative program for the base revision/],
+    [{ preview: true, operationId: operationId('preview-bad-digest'), operations: [{ ...deleteOp(NESTED_TREE, 'n5'), sourceDigest: 'deadbeefdeadbeef' }] }, 400, 'invalid_input', /changed since it was selected/],
+    [{ preview: true, operations: [deleteOp(NESTED_TREE, 'n3')] }, 400, 'invalid_input', /page chrome/],
+    [{ preview: 'yes', operations: [deleteOp(NESTED_TREE, 'n5')] }, 400, 'invalid_input', /invalid_preview/],
+  ]
+  for (const [overrides, status, code, expected] of cases) {
+    const response = await postStructure(m.structureRoute(), {
+      body: structureBody({ operationId: operationId('preview-errors'), ...overrides }),
+    })
+    assert.equal(response.status, status, JSON.stringify(response.body))
+    assert.equal(response.body.error.code, code)
+    assert.match(response.body.error.message, expected)
+  }
+  // A stale base is still a conflict for previews.
+  await postStructure(m.structureRoute(), { body: structureBody({ operationId: operationId('preview-base'), operations: [deleteOp(NESTED_TREE, 'n5')] }) })
+  const stale = await postStructure(m.structureRoute(), {
+    body: structureBody({ preview: true, operationId: operationId('preview-stale'), operations: [deleteOp(NESTED_TREE, 'n6')] }),
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(stale.body.error.code, 'base_not_latest')
 })
 
 test('nodes inside a shared named expression are rejected by the structure route', async () => {

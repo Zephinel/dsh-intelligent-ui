@@ -20,6 +20,7 @@ import {
   MAX_ARTIFACT_STRUCTURE_OPERATIONS,
   describeStructureRequestProblem,
   type ArtifactStructureOperation,
+  type ArtifactStructurePreview,
   type ArtifactStructureRequest,
   type ArtifactStructureResult,
 } from '../shared/artifact-structure.ts'
@@ -46,6 +47,9 @@ export const MAX_STRUCTURE_OPERATION_RECORDS = 200
 /** Containers the structure route may address (M4-3 v1). */
 import { NESTED_CONTAINER_TYPES } from '../shared/artifact-containers.ts'
 export const STRUCTURE_CONTAINER_TYPES = NESTED_CONTAINER_TYPES
+
+/** Compact touched entries returned in a preview response. */
+const MAX_STRUCTURE_PREVIEW_TOUCHED = 120
 
 /** Session identity recorded for revisions created by the structure route. */
 const STRUCTURE_SESSION_ID = 'structure-route'
@@ -299,10 +303,18 @@ export interface StructureBatchFailure {
   readonly message: string
 }
 
+/** Compact label for one CST node touched by a structure batch (no source text). */
+export interface StructurePreviewTouchedEntry {
+  readonly nodeId: string
+  readonly nodePath: string
+  readonly op: string
+}
+
 export interface StructureBatchSuccess {
   readonly ok: true
   readonly program: string
   readonly affectedRootBlockIds: readonly string[]
+  readonly touched: readonly StructurePreviewTouchedEntry[]
 }
 
 function batchFailure(status: number, code: string, message: string): StructureBatchFailure {
@@ -481,6 +493,16 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
   const baseTree = validated.tree
   const extraction = rootBlockIndex(baseTree)
   const affected = new Set<string>()
+  const touched = new Map<string, StructurePreviewTouchedEntry>()
+  const recordTouched = (entries: readonly { nodeId: string; nodePath: string; op: string }[], opName: string): void => {
+    for (const entry of entries) {
+      const op = entry.op === 'ancestor' ? 'ancestor' : opName
+      const existing = touched.get(entry.nodeId)
+      if (existing === undefined || existing.op === 'ancestor') {
+        touched.set(entry.nodeId, { nodeId: entry.nodeId, nodePath: entry.nodePath, op })
+      }
+    }
+  }
   let program = baseProgram
   let tree = baseTree
   for (const operation of operations) {
@@ -526,6 +548,7 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
       const code = result.code === 'operation_conflict' ? 'operation_conflict' : 'invalid_input'
       return batchFailure(400, code, `structure operation ${operation.op} on ${JSON.stringify(operation.nodeId)} failed: ${result.message}`)
     }
+    recordTouched(result.touched, operation.op)
     program = result.program
     tree = result.tree
   }
@@ -535,7 +558,12 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
   if (inspected.ok === false) {
     return batchFailure(400, 'program_invalid', `the edited page is not a valid structure (${inspected.code}): ${inspected.message}`)
   }
-  return { ok: true, program, affectedRootBlockIds: [...affected] }
+  return {
+    ok: true,
+    program,
+    affectedRootBlockIds: [...affected],
+    touched: [...touched.values()].slice(0, MAX_STRUCTURE_PREVIEW_TOUCHED),
+  }
 }
 
 /** Root-level child index containing one node. */
@@ -701,16 +729,18 @@ function resultFromRecord(record: ArtifactStructureOperationRecord, program: str
 function executeStructureRequest(
   services: ArtifactStructureServices,
   body: ArtifactStructureRequest,
-): { readonly ok: true; readonly status: number; readonly body: { ok: true; result: ArtifactStructureResult } } | StructureBatchFailure {
+): { readonly ok: true; readonly status: number; readonly body: { ok: true; result: ArtifactStructureResult } | { ok: true; preview: ArtifactStructurePreview } } | StructureBatchFailure {
   const { revisions, programs, operations } = services
-  const replay = operations.get(body.artifactId, body.operationId)
-  if (replay !== undefined) {
-    if (replay.requestDigest !== structureRequestDigest(body)) {
-      return batchFailure(409, 'operation_replayed', 'this operationId was already used for a different structure request; use a new operationId.')
+  if (body.preview !== true) {
+    const replay = operations.get(body.artifactId, body.operationId)
+    if (replay !== undefined) {
+      if (replay.requestDigest !== structureRequestDigest(body)) {
+        return batchFailure(409, 'operation_replayed', 'this operationId was already used for a different structure request; use a new operationId.')
+      }
+      const program = programs.lookup(body.artifactId, replay.revisionId)
+      if (program === undefined) return batchFailure(500, 'storage', 'the recorded structure result program is no longer available.')
+      return { ok: true, status: 200, body: { ok: true, result: resultFromRecord(replay, program) } }
     }
-    const program = programs.lookup(body.artifactId, replay.revisionId)
-    if (program === undefined) return batchFailure(500, 'storage', 'the recorded structure result program is no longer available.')
-    return { ok: true, status: 200, body: { ok: true, result: resultFromRecord(replay, program) } }
   }
   const latest = revisions.latestFor(body.artifactId)
   const firstProgram = programs.lookup(body.artifactId, body.artifactId)
@@ -730,6 +760,21 @@ function executeStructureRequest(
   }
   const applied = applyStructureBatch(baseProgram, body.operations)
   if (applied.ok === false) return applied
+  if (body.preview === true) {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        ok: true,
+        preview: {
+          program: applied.program,
+          operations: body.operations,
+          changedBlockIds: applied.affectedRootBlockIds,
+          touched: applied.touched,
+        },
+      },
+    }
+  }
   const revision = (latest === undefined ? 1 : latest.revision) + 1
   const revisionId = structureRevisionId(revisions)
   const record: ArtifactRevisionRecord = {

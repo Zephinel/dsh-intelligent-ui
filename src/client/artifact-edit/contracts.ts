@@ -35,6 +35,24 @@ export interface ArtifactEditSelectionView {
 }
 
 /** Immutable snapshot of one artifact edit session. */
+/** One diff line in the structure preview dialog. */
+export interface ArtifactStructurePreviewLine {
+  readonly kind: 'same' | 'add' | 'remove'
+  readonly text: string
+}
+
+/** Client state for one deterministic structure dry-run. */
+export interface ArtifactStructurePreviewState {
+  readonly kind: 'delete' | 'duplicate' | 'move'
+  readonly blockId: string
+  readonly targetParentBlockId?: string
+  readonly status: 'loading' | 'ready' | 'failed'
+  readonly afterProgram?: string
+  readonly changedBlockIds?: readonly string[]
+  readonly diff?: readonly ArtifactStructurePreviewLine[]
+  readonly error?: string
+}
+
 export interface ArtifactEditSession {
   /** `${sessionId}:${baseRevisionId}`. */
   readonly key: string
@@ -111,6 +129,8 @@ export interface ArtifactEditSession {
   /** When this draft was submitted, for bounded retention. */
   readonly submittedAt?: number
   readonly error?: string
+  /** Structure operation dry-run preview awaiting confirmation. */
+  readonly structurePreview?: ArtifactStructurePreviewState
   /** Pending model-generated additions, one per target container in v1. */
   readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[]
   /** Structural operation request in flight; row actions are disabled meanwhile. */
@@ -159,6 +179,14 @@ export interface ArtifactEditActions {
   resetNestedOrder(): void
   /** Apply one deterministic delete/duplicate operation without a model turn. */
   applyStructure(blockId: string, op: 'delete' | 'duplicate'): void
+  /** Preview a delete/duplicate operation and open its diff confirmation. */
+  previewStructure(blockId: string, op: 'delete' | 'duplicate'): void
+  /** Preview moving a block into another container / the page root. */
+  previewMoveBlockTo(blockId: string, targetParentBlockId: string | 'root'): void
+  /** Apply the currently previewed structure operation. */
+  confirmStructurePreview(): void
+  /** Dismiss the current structure preview without applying it. */
+  cancelStructurePreview(): void
   /** Save (or replace) a model-generated addition for one nested container. */
   saveBlockAddition(parentBlockId: string, instruction: string): void
   /** Remove the pending addition of one nested container. */

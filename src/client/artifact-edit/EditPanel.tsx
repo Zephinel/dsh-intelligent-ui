@@ -380,6 +380,9 @@ interface MoveTarget {
   readonly meta: string
 }
 
+/** Focusable descendants used by the preview dialog focus trap. */
+const PREVIEW_FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 /** Menu geometry used for placement and viewport clamping. */
 const MOVE_MENU_WIDTH = 228
 const MOVE_MENU_MAX_HEIGHT = 280
@@ -409,8 +412,8 @@ function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate,
   readonly busy: boolean
   readonly confirming: boolean
   readonly moveOpen: boolean
-  readonly onDuplicate: () => void
-  readonly onDelete: () => void
+  readonly onDuplicate: (anchor: HTMLButtonElement) => void
+  readonly onDelete: (anchor: HTMLButtonElement) => void
   readonly onMove: (anchor: HTMLButtonElement) => void
 }): ReactElement {
   const deleteLabel = confirming ? t('edit.structureDeleteConfirm') : t('edit.structureDelete')
@@ -424,7 +427,7 @@ function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate,
         disabled={busy}
         aria-label={t('edit.structureDuplicate')}
         title={t('edit.structureDuplicate')}
-        onClick={event => { event.stopPropagation(); onDuplicate() }}
+        onClick={event => { event.stopPropagation(); onDuplicate(event.currentTarget) }}
       >
         <DuplicateGlyph />
       </button>
@@ -437,7 +440,7 @@ function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate,
         disabled={busy}
         aria-label={deleteLabel}
         title={deleteLabel}
-        onClick={event => { event.stopPropagation(); onDelete() }}
+        onClick={event => { event.stopPropagation(); onDelete(event.currentTarget) }}
       >
         {confirming ? <span className="dsh-iui-edit-confirm-label">{t('edit.structureDeleteConfirm')}</span> : <TrashGlyph />}
       </button>
@@ -559,6 +562,7 @@ function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
 export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement {
   const globalId = useId()
+  const previewTitleId = useId()
   const [expanded, setExpanded] = useState(false)
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
   const [dragBlockId, setDragBlockId] = useState<string | null>(null)
@@ -601,12 +605,20 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const structureBusy = session.structureBusy === true
   const structureError = session.structureError
   const applyStructure = actions.applyStructure
+  const preview = session.structurePreview
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [previewConfirming, setPreviewConfirming] = useState(false)
   const [dismissedStructureError, setDismissedStructureError] = useState<string | null>(null)
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
   const [addDraft, setAddDraft] = useState('')
   const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
   const confirmDeleteTimer = useRef<number | null>(null)
+  const previewTriggerRef = useRef<HTMLElement | null>(null)
+  const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
+  const previewHadOpenRef = useRef(false)
+  const previewDialogRef = useRef<HTMLDivElement>(null)
+  const previewCancelRef = useRef<HTMLButtonElement>(null)
+  const moveAnchorRef = useRef<HTMLButtonElement | null>(null)
   // Nested edit mode: one group per container with at least two editable
   // direct children. The pending order falls back to the base order, and any
   // child missing from the pending record is appended so no row disappears.
@@ -690,6 +702,20 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     return targets
   }
   const moveTargets = moveMenu === null ? [] : moveTargetsFor(moveMenu.blockId)
+  const previewSummaryCount = preview?.changedBlockIds?.length ?? preview?.diff?.filter(line => line.kind !== 'same').length ?? 0
+  const previewBlock = preview === undefined ? undefined : blocks.get(preview.blockId)
+  const previewTarget = preview?.targetParentBlockId === undefined || preview.targetParentBlockId === 'root'
+    ? undefined
+    : blocks.get(preview.targetParentBlockId)
+  const previewBlockTitle = previewBlock === undefined
+    ? undefined
+    : previewBlock.title !== undefined && previewBlock.title.trim() !== '' ? previewBlock.title : blockKindLabel(previewBlock.kind, t)
+  const previewTargetTitle = preview?.targetParentBlockId === undefined
+    ? undefined
+    : preview.targetParentBlockId === 'root' ? t('edit.nestedRoot') : previewTarget?.title !== undefined && previewTarget.title.trim() !== '' ? previewTarget.title : previewTarget === undefined ? undefined : blockKindLabel(previewTarget.kind, t)
+  const previewOperationLabel = preview === undefined
+    ? ''
+    : preview.kind === 'delete' ? t('edit.structureDelete') : preview.kind === 'duplicate' ? t('edit.structureDuplicate') : t('edit.moveBlock')
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -735,16 +761,26 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     }
     setConfirmDeleteId(null)
   }
-  const duplicateBlock = (blockId: string): void => {
-    if (structureBusy) return
+  const previewBusy = preview !== undefined && preview.status === 'loading'
+  const rowActionsBusy = structureBusy || previewBusy || previewConfirming
+  const startStructurePreview = (blockId: string, op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
+    previewTriggerRef.current = anchor
     clearDeleteConfirm()
-    applyStructure(blockId, 'duplicate')
+    if (actions.previewStructure !== undefined) {
+      actions.previewStructure(blockId, op)
+      return
+    }
+    // Older stores without the dry-run API keep the direct apply path.
+    applyStructure(blockId, op)
   }
-  const requestDeleteBlock = (blockId: string): void => {
-    if (structureBusy) return
+  const duplicateBlock = (blockId: string, anchor: HTMLElement | null): void => {
+    if (rowActionsBusy) return
+    startStructurePreview(blockId, 'duplicate', anchor)
+  }
+  const requestDeleteBlock = (blockId: string, anchor: HTMLElement | null): void => {
+    if (rowActionsBusy) return
     if (confirmDeleteId === blockId) {
-      clearDeleteConfirm()
-      applyStructure(blockId, 'delete')
+      startStructurePreview(blockId, 'delete', anchor)
       return
     }
     if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
@@ -776,6 +812,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   const closeMoveMenu = (): void => { setMoveMenu(null) }
   const openMoveMenu = (blockId: string, anchor: HTMLButtonElement): void => {
     if (moveMenu?.blockId === blockId) { closeMoveMenu(); return }
+    moveAnchorRef.current = anchor
     const rect = anchor.getBoundingClientRect()
     const count = Math.max(1, moveTargetsFor(blockId).length)
     const estimatedHeight = Math.min(MOVE_MENU_MAX_HEIGHT, 34 + count * MOVE_MENU_ROW_HEIGHT)
@@ -786,8 +823,13 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }
   const chooseMoveTarget = (targetId: string): void => {
     if (moveMenu === null) return
-    actions.moveBlockTo(moveMenu.blockId, targetId)
+    previewTriggerRef.current = moveAnchorRef.current
     closeMoveMenu()
+    if (actions.previewMoveBlockTo !== undefined) {
+      actions.previewMoveBlockTo(moveMenu.blockId, targetId)
+      return
+    }
+    actions.moveBlockTo(moveMenu.blockId, targetId)
   }
 
   // The add form only belongs to nested mode; escaping it cancels the draft.
@@ -831,6 +873,72 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
       window.removeEventListener('resize', onScroll)
     }
   }, [moveMenu])
+
+  const confirmPreview = (): void => {
+    if (previewConfirming || structureBusy || preview === undefined || preview.status !== 'ready') return
+    setPreviewConfirming(true)
+    actions.confirmStructurePreview()
+  }
+  const cancelPreview = (): void => {
+    if (previewConfirming) return
+    actions.cancelStructurePreview()
+  }
+  const trapPreviewFocus = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Tab') return
+    const dialog = previewDialogRef.current
+    if (dialog === null) return
+    const focusable = [...dialog.querySelectorAll<HTMLElement>(PREVIEW_FOCUSABLE)]
+    if (focusable.length === 0) { event.preventDefault(); return }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey) {
+      if (document.activeElement === first || !dialog.contains(document.activeElement)) { event.preventDefault(); last.focus() }
+      return
+    }
+    if (document.activeElement === last || !dialog.contains(document.activeElement)) { event.preventDefault(); first.focus() }
+  }
+
+  // Preview dialog: remember the trigger, move focus in (non-destructive first),
+  // and restore it when the dialog disappears.
+  useEffect(() => {
+    const current = session.structurePreview
+    if (current !== undefined) {
+      if (!previewHadOpenRef.current) {
+        previewHadOpenRef.current = true
+        const active = document.activeElement
+        previewRestoreFocusRef.current = previewTriggerRef.current ?? (active instanceof HTMLElement ? active : null)
+        window.requestAnimationFrame(() => { previewCancelRef.current?.focus() })
+      }
+      closeMoveMenu()
+      return
+    }
+    if (!previewHadOpenRef.current) return
+    previewHadOpenRef.current = false
+    setPreviewConfirming(false)
+    const restore = previewRestoreFocusRef.current
+    previewRestoreFocusRef.current = null
+    previewTriggerRef.current = null
+    if (restore !== null && restore.isConnected) window.requestAnimationFrame(() => { restore.focus() })
+  }, [session.structurePreview])
+
+  // Escape cancels the preview unless an apply is already in flight.
+  useEffect(() => {
+    if (session.structurePreview === undefined) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (previewConfirming) return
+      actions.cancelStructurePreview()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('keydown', onKey, true) }
+  }, [session.structurePreview, previewConfirming])
+
+  // A failed preview or a closed dialog clears the in-flight confirm state.
+  useEffect(() => {
+    if (session.structurePreview === undefined || session.structurePreview.status === 'failed') setPreviewConfirming(false)
+  }, [session.structurePreview])
 
   // A structural operation disables the actions and cancels a pending confirm.
   useEffect(() => {
@@ -1231,11 +1339,11 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                     <StructureActions
                       t={t}
                       blockId={blockId}
-                      busy={structureBusy}
+                      busy={rowActionsBusy}
                       confirming={confirmDeleteId === blockId}
                       moveOpen={moveMenu?.blockId === blockId}
-                      onDuplicate={() => { duplicateBlock(blockId) }}
-                      onDelete={() => { requestDeleteBlock(blockId) }}
+                      onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
+                      onDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                       onMove={anchor => { openMoveMenu(blockId, anchor) }}
                     />
                   </li>
@@ -1406,11 +1514,11 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                             <StructureActions
                               t={t}
                               blockId={blockId}
-                              busy={structureBusy}
+                              busy={rowActionsBusy}
                               confirming={confirmDeleteId === blockId}
                               moveOpen={moveMenu?.blockId === blockId}
-                              onDuplicate={() => { duplicateBlock(blockId) }}
-                              onDelete={() => { requestDeleteBlock(blockId) }}
+                              onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
+                              onDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                               onMove={anchor => { openMoveMenu(blockId, anchor) }}
                             />
                           </li>
@@ -1530,6 +1638,86 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
               <span className="dsh-iui-edit-move-target-meta">{target.meta}</span>
             </button>
           ))}
+        </div>,
+        document.body,
+      )}
+      {preview === undefined ? null : createPortal(
+        <div
+          className="dsh-iui-edit-preview-backdrop"
+          data-dsh-iui-edit-preview-backdrop
+          onPointerDown={event => { if (event.target === event.currentTarget) cancelPreview() }}
+        >
+          <div
+            ref={previewDialogRef}
+            className="dsh-iui-edit-preview-dialog"
+            data-dsh-iui-edit-structure-preview
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={previewTitleId}
+            onKeyDown={trapPreviewFocus}
+          >
+            <div className="dsh-iui-edit-preview-head">
+              <h2 id={previewTitleId} className="dsh-iui-edit-preview-title">{t('edit.previewTitle')}</h2>
+              <p className="dsh-iui-edit-preview-subtitle">
+                <span className="dsh-iui-edit-preview-operation">{previewOperationLabel}</span>
+                {previewBlockTitle === undefined ? null : <span className="dsh-iui-edit-preview-block">{previewBlockTitle}</span>}
+                {previewTargetTitle === undefined ? null : <span className="dsh-iui-edit-preview-target">→ {previewTargetTitle}</span>}
+              </p>
+            </div>
+            {preview.status === 'loading' ? (
+              <div className="dsh-iui-edit-preview-loading" data-dsh-iui-edit-preview-loading role="status">
+                <span className="dsh-iui-edit-preview-spinner" aria-hidden="true" />
+                {t('edit.previewLoading')}
+              </div>
+            ) : null}
+            {preview.status === 'failed' ? (
+              <div className="dsh-iui-edit-preview-failed" data-dsh-iui-edit-preview-failed role="alert">
+                {preview.error ?? t('edit.previewFailed')}
+              </div>
+            ) : null}
+            {preview.status === 'ready' ? (
+              <>
+                <p className="dsh-iui-edit-preview-summary">{t('edit.previewSummary', { count: previewSummaryCount })}</p>
+                {(preview.diff ?? []).length === 0 ? null : (
+                  <ol className="dsh-iui-edit-preview-diff" data-dsh-iui-edit-preview-diff>
+                    {(preview.diff ?? []).map((line, index) => (
+                      <li key={`${line.kind}:${index}`} className="dsh-iui-edit-preview-line" data-diff={line.kind}>
+                        <span className="dsh-iui-edit-preview-mark" aria-hidden="true">
+                          {line.kind === 'add' ? `+ ${t('edit.previewAdd')}` : line.kind === 'remove' ? `- ${t('edit.previewRemove')}` : '·'}
+                        </span>
+                        <code className="dsh-iui-edit-preview-text">{line.text}</code>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </>
+            ) : null}
+            <div className="dsh-iui-edit-preview-actions">
+              <button
+                ref={previewCancelRef}
+                type="button"
+                className="dsh-iui-edit-preview-cancel"
+                data-dsh-iui-edit-preview-cancel
+                disabled={previewConfirming}
+                aria-label={t('edit.previewCancel')}
+                onClick={cancelPreview}
+              >
+                {t('edit.previewCancel')}
+              </button>
+              {preview.status === 'ready' ? (
+                <button
+                  type="button"
+                  className="dsh-iui-edit-preview-confirm"
+                  data-dsh-iui-edit-preview-confirm
+                  disabled={previewConfirming || structureBusy}
+                  aria-label={t('edit.previewConfirm')}
+                  onClick={confirmPreview}
+                >
+                  {t('edit.previewConfirm')}
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>,
         document.body,
       )}
