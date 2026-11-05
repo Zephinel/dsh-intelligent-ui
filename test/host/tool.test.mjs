@@ -433,7 +433,7 @@ test('temporary success records its exact snapshot without changing templates or
   assert.equal(m.view().style, template().id)
   assert.equal(m.view().globalStyle, template().id)
   assert.equal(readFileSync(join(m.home, 'dsh-intelligent-ui-styles.json'), 'utf8'), before)
-  assert.deepEqual(readdirSync(m.home), ['dsh-intelligent-ui-results.json', ...files])
+  assert.deepEqual(readdirSync(m.home), ['dsh-intelligent-ui-programs.json', 'dsh-intelligent-ui-results.json', ...files])
   const records = JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-results.json'), 'utf8'))
   assert.equal(records.version, 1)
   assert.equal(records.results[0].resultId, 'temporary-result')

@@ -38,6 +38,7 @@ import {
   attachDraft as attachArtifactDraft,
   blocksForProgram,
   closeArtifactBlockEditor,
+  applyArtifactStructure,
   closeArtifactEditor,
   clearAllArtifactEdits,
   clearArtifactBlockInstruction,
@@ -273,6 +274,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
     setNestedMode: (key, enabled) => { setArtifactNestedMode(key, enabled) },
+    applyStructure: (blockId, op) => { void applyArtifactStructure(editKey, blockId, op, turnNumber) },
     moveNestedBlock: (parentBlockId, blockId, toIndex) => { moveArtifactNestedBlock(editKey, parentBlockId, blockId, toIndex) },
     moveNestedBlockBy: (parentBlockId, blockId, delta) => { moveArtifactNestedBlockBy(editKey, parentBlockId, blockId, delta) },
     resetNestedOrder: () => { resetArtifactNestedOrder(editKey) },
@@ -382,7 +384,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               >{t('edit.attachDraft')}</button>
             : null}
           {program.localRevision === true
-            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t('edit.localRevision')}</span>
+            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t(program.localRevisionKind === 'structure' ? 'edit.structureRevision' : 'edit.localRevision')}</span>
             : null}
           {restoreState === 'available'
             ? <button

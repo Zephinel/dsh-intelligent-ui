@@ -58,6 +58,8 @@ export interface IntelligentUIProgram {
   readonly editedBlockIds?: readonly string[]
   /** Client-owned revision card that was restored without a model turn. */
   readonly localRevision?: boolean
+  /** Provenance of a local revision card, when produced by a structural operation. */
+  readonly localRevisionKind?: 'restore' | 'structure'
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
 }

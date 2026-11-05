@@ -164,6 +164,16 @@ function TrashGlyph(): ReactElement {
   )
 }
 
+/** Overlapping-cards glyph for structural duplicate. */
+function DuplicateGlyph(): ReactElement {
+  return (
+    <Glyph size={13}>
+      <rect x="2.5" y="5" width="8.5" height="8.5" rx="1.5" />
+      <path d="M5.5 5V3.5A1.5 1.5 0 0 1 7 2h5a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 10h-1.5" />
+    </Glyph>
+  )
+}
+
 /** Position of the anchored request card in viewport coordinates. */
 interface CardPlacement {
   readonly left: number
@@ -347,6 +357,57 @@ interface NestedGroup {
   readonly childIds: readonly string[]
 }
 
+/** How long the inline delete confirmation stays armed. */
+const STRUCTURE_DELETE_CONFIRM_MS = 3000
+/** How long a structural error stays visible before auto-dismissing. */
+const STRUCTURE_ERROR_TIMEOUT_MS = 8000
+
+/**
+ * Hover/focus inline structure actions for one arrangement row.
+ * Duplicate applies immediately; delete arms an inline two-step confirmation.
+ * @param props - locale, target block, busy/confirm state and handlers.
+ * @returns the action group.
+ */
+function StructureActions({ t, blockId, busy, confirming, onDuplicate, onDelete }: {
+  readonly t: Translate
+  readonly blockId: string
+  readonly busy: boolean
+  readonly confirming: boolean
+  readonly onDuplicate: () => void
+  readonly onDelete: () => void
+}): ReactElement {
+  const deleteLabel = confirming ? t('edit.structureDeleteConfirm') : t('edit.structureDelete')
+  return (
+    <span className="dsh-iui-edit-structure-actions">
+      <button
+        type="button"
+        className="dsh-iui-edit-icon-button"
+        data-dsh-iui-edit-structure-duplicate
+        data-block-id={blockId}
+        disabled={busy}
+        aria-label={t('edit.structureDuplicate')}
+        title={t('edit.structureDuplicate')}
+        onClick={event => { event.stopPropagation(); onDuplicate() }}
+      >
+        <DuplicateGlyph />
+      </button>
+      <button
+        type="button"
+        className={`dsh-iui-edit-icon-button dsh-iui-edit-structure-delete${confirming ? ' is-confirming' : ''}`}
+        data-dsh-iui-edit-structure-delete
+        data-block-id={blockId}
+        data-confirming={confirming ? 'true' : undefined}
+        disabled={busy}
+        aria-label={deleteLabel}
+        title={deleteLabel}
+        onClick={event => { event.stopPropagation(); onDelete() }}
+      >
+        {confirming ? <span className="dsh-iui-edit-confirm-label">{t('edit.structureDeleteConfirm')}</span> : <TrashGlyph />}
+      </button>
+    </span>
+  )
+}
+
 /** Short request summary for one draft row. */
 function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
   const count = draft.selection.length
@@ -486,6 +547,12 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     return list
   }, [editStore, session.sessionId])
   const attachedDraftCount = useMemo(() => drafts.filter(draft => draft.attached).length, [drafts])
+  const structureBusy = session.structureBusy === true
+  const structureError = session.structureError
+  const applyStructure = actions.applyStructure
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [dismissedStructureError, setDismissedStructureError] = useState<string | null>(null)
+  const confirmDeleteTimer = useRef<number | null>(null)
   // Nested edit mode: one group per container with at least two editable
   // direct children. The pending order falls back to the base order, and any
   // child missing from the pending record is appended so no row disappears.
@@ -531,6 +598,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
   }
 
   useEffect(() => () => {
+    if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
     dragCleanup.current?.()
     clearHoverTimers()
     for (const timer of flashTimers.current.values()) window.clearTimeout(timer)
@@ -547,6 +615,70 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey) }
   }, [hoverBlockId])
+
+  const clearDeleteConfirm = (): void => {
+    if (confirmDeleteTimer.current !== null) {
+      window.clearTimeout(confirmDeleteTimer.current)
+      confirmDeleteTimer.current = null
+    }
+    setConfirmDeleteId(null)
+  }
+  const duplicateBlock = (blockId: string): void => {
+    if (structureBusy) return
+    clearDeleteConfirm()
+    applyStructure(blockId, 'duplicate')
+  }
+  const requestDeleteBlock = (blockId: string): void => {
+    if (structureBusy) return
+    if (confirmDeleteId === blockId) {
+      clearDeleteConfirm()
+      applyStructure(blockId, 'delete')
+      return
+    }
+    if (confirmDeleteTimer.current !== null) window.clearTimeout(confirmDeleteTimer.current)
+    setConfirmDeleteId(blockId)
+    confirmDeleteTimer.current = window.setTimeout(() => {
+      confirmDeleteTimer.current = null
+      setConfirmDeleteId(current => current === blockId ? null : current)
+    }, STRUCTURE_DELETE_CONFIRM_MS)
+  }
+
+  // A structural operation disables the actions and cancels a pending confirm.
+  useEffect(() => {
+    if (structureBusy) clearDeleteConfirm()
+  }, [structureBusy])
+
+  // Structural errors show inline and auto-dismiss; a dismissal is per message.
+  useEffect(() => {
+    if (structureError === undefined) { setDismissedStructureError(null); return }
+    const timer = window.setTimeout(() => { setDismissedStructureError(structureError) }, STRUCTURE_ERROR_TIMEOUT_MS)
+    return () => { window.clearTimeout(timer) }
+  }, [structureError])
+
+  // A pending delete confirmation cancels on any click outside its button or Escape.
+  useEffect(() => {
+    if (confirmDeleteId === null) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (target instanceof Element) {
+        const button = target.closest('[data-dsh-iui-edit-structure-delete]')
+        if (button !== null && button.getAttribute('data-block-id') === confirmDeleteId) return
+      }
+      clearDeleteConfirm()
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      clearDeleteConfirm()
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [confirmDeleteId])
 
   const computeDrop = (clientY: number): DropTarget | null => {
     const drag = dragRef.current
@@ -808,11 +940,20 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
           </div>
         )}
 
-        <section className="dsh-iui-edit-section dsh-iui-edit-arrangement" aria-label={t('edit.arrangement')}>
+        <section
+          className="dsh-iui-edit-section dsh-iui-edit-arrangement"
+          aria-label={t('edit.arrangement')}
+          aria-busy={structureBusy ? true : undefined}
+        >
           <div className="dsh-iui-edit-section-head">
             <span className="dsh-iui-edit-section-title">{t('edit.arrangement')}</span>
             <span className="dsh-iui-edit-section-meta">· {t('edit.blockCount', { count: session.blocks.length })}</span>
             <span className="dsh-iui-edit-section-spacer" />
+            {structureBusy ? (
+              <span className="dsh-iui-edit-structure-busy" role="status" data-dsh-iui-edit-structure-busy>
+                {t('edit.structureBusy')}
+              </span>
+            ) : null}
             <button
               type="button"
               className="dsh-iui-edit-section-action"
@@ -824,6 +965,21 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
               <ResetGlyph />{t('edit.resetOrder')}
             </button>
           </div>
+          {structureError !== undefined && structureError !== dismissedStructureError ? (
+            <div className="dsh-iui-edit-structure-error" role="alert" data-dsh-iui-edit-structure-error>
+              <span className="dsh-iui-edit-structure-error-text">{structureError}</span>
+              <button
+                type="button"
+                className="dsh-iui-edit-structure-error-dismiss"
+                data-dsh-iui-edit-structure-error-dismiss
+                aria-label={t('edit.cancel')}
+                title={t('edit.cancel')}
+                onClick={() => { setDismissedStructureError(structureError) }}
+              >
+                {t('edit.cancel')}
+              </button>
+            </div>
+          ) : null}
           <p className="dsh-iui-edit-arrangement-hint">{t('edit.arrangementHint')}</p>
           <div className="dsh-iui-edit-arrangement-wrap">
             <ul
@@ -841,9 +997,10 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                 return (
                   <li
                     key={blockId}
-                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
+                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${confirmDeleteId === blockId ? ' is-confirming-delete' : ''}`}
                     data-dsh-iui-edit-arrangement-row
                     data-block-id={blockId}
+                    data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                     data-order-index={index}
                     data-dragging={dragging ? 'true' : undefined}
                     onPointerEnter={() => { scheduleHover(blockId) }}
@@ -882,6 +1039,14 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                     >
                       <EditGlyph />
                     </button>
+                    <StructureActions
+                      t={t}
+                      blockId={blockId}
+                      busy={structureBusy}
+                      confirming={confirmDeleteId === blockId}
+                      onDuplicate={() => { duplicateBlock(blockId) }}
+                      onDelete={() => { requestDeleteBlock(blockId) }}
+                    />
                   </li>
                 )
               })}
@@ -901,6 +1066,7 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
           <section
             className="dsh-iui-edit-section dsh-iui-edit-nested-arrangement"
             aria-label={t('edit.nestedArrangement')}
+            aria-busy={structureBusy ? true : undefined}
             data-dsh-iui-edit-nested-arrangement
           >
             <div className="dsh-iui-edit-section-head">
@@ -954,9 +1120,10 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                         return (
                           <li
                             key={blockId}
-                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
+                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${confirmDeleteId === blockId ? ' is-confirming-delete' : ''}`}
                             data-dsh-iui-edit-nested-row
                             data-block-id={blockId}
+                            data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                             data-parent-id={parentId}
                             data-order-index={index}
                             data-depth={block.depth}
@@ -996,6 +1163,14 @@ export function EditPanel({ t, session, actions }: EditPanelProps): ReactElement
                             >
                               <EditGlyph />
                             </button>
+                            <StructureActions
+                              t={t}
+                              blockId={blockId}
+                              busy={structureBusy}
+                              confirming={confirmDeleteId === blockId}
+                              onDuplicate={() => { duplicateBlock(blockId) }}
+                              onDelete={() => { requestDeleteBlock(blockId) }}
+                            />
                           </li>
                         )
                       })}

@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
+import { ARTIFACT_STRUCTURE_ROUTE_PATH } from '../../src/shared/artifact-structure.ts'
 import { MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
 import { THEME } from './style-fixtures.mjs'
 
@@ -249,7 +250,7 @@ test('one disposer disposes the status and restore routes together', () => {
   for (const dispose of disposers) dispose()
   assert.deepEqual(
     disposedPaths.filter(path => path.startsWith('/api/intelligent-ui/artifact-')).sort(),
-    [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH].sort(),
+    [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH, ARTIFACT_STRUCTURE_ROUTE_PATH].sort(),
   )
 })
 

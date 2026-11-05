@@ -111,6 +111,10 @@ export interface ArtifactEditSession {
   /** When this draft was submitted, for bounded retention. */
   readonly submittedAt?: number
   readonly error?: string
+  /** Structural operation request in flight; row actions are disabled meanwhile. */
+  readonly structureBusy?: boolean
+  /** Last structural operation failure, shown inline in the arrangement panel. */
+  readonly structureError?: string
   /** Most recent removal, offered as an inline undo in the panel. */
   readonly removable?: { readonly blockId: string; readonly order: number; readonly instruction: string; readonly title?: string }
 }
@@ -151,6 +155,8 @@ export interface ArtifactEditActions {
   moveNestedBlockBy(parentBlockId: string, blockId: string, delta: number): void
   /** Restore every nested group to its base order. */
   resetNestedOrder(): void
+  /** Apply one deterministic delete/duplicate operation without a model turn. */
+  applyStructure(blockId: string, op: 'delete' | 'duplicate'): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
   /** Turn the conflict into a branch edit based on this (older) revision. */

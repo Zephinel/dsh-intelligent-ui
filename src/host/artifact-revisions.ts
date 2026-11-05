@@ -258,9 +258,14 @@ function readRestoreJson(req: IncomingMessage): Promise<unknown> {
  * Expose the latest-revision probe and the zero-model restore route behind the
  * existing connection authentication; both routes share one disposer.
  */
+/** Optional sink fed with the authoritative program of every recorded restore revision (M4-3). */
+export interface ArtifactRevisionProgramSink {
+  record(input: { readonly artifactId: string; readonly revisionId: string; readonly program: string }): void
+}
+
 export function registerArtifactRevisionRoutes(ctx: {
   inject?: (dependencies: readonly string[], callback: (scoped: RevisionRouteServices) => void) => unknown
-}, store: ArtifactRevisionStore): void {
+}, store: ArtifactRevisionStore, programs?: ArtifactRevisionProgramSink): void {
   ctx.inject?.(['webServer', 'connection'], scoped => {
     const { webServer, connection } = scoped
     if (typeof webServer?.register !== 'function' || typeof connection?.requestRejection !== 'function') return
@@ -359,6 +364,7 @@ export function registerArtifactRevisionRoutes(ctx: {
                 ...source.title === undefined ? {} : { title: source.title },
                 createdAt: Date.now(),
               })
+              programs?.record({ artifactId: request.artifactId, revisionId, program: request.program })
             } catch {
               sendError(res, 409, 'conflict', 'The revision registry rejected the restored revision; retry the restore.')
               return

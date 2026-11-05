@@ -52,6 +52,11 @@ import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
 import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
 import {
+  createArtifactProgramStore,
+  createArtifactStructureOperationStore,
+  registerArtifactStructureRoute,
+} from './artifact-structure.ts'
+import {
   composeNestedEditProgram,
   createArtifactEditController,
   isNestedEditRequest,
@@ -559,11 +564,18 @@ export function apply(ctx: {
   const store = createStyleStore(ctx)
   const results = createResultStore(ctx)
   const revisions = createArtifactRevisionStore(ctx)
+  const artifactPrograms = createArtifactProgramStore(ctx)
+  const artifactStructureOperations = createArtifactStructureOperationStore(ctx)
   const artifactEdits = createArtifactEditController(ctx as never, revisions)
   const onDemand = createOnDemandController(ctx as never)
   const mode = installSessionControls(ctx as never, config, store, onDemand)
   registerStyleRoutes(ctx as never, store, results)
-  registerArtifactRevisionRoutes(ctx as never, revisions)
+  registerArtifactRevisionRoutes(ctx as never, revisions, artifactPrograms)
+  registerArtifactStructureRoute(ctx as never, {
+    revisions,
+    programs: artifactPrograms,
+    operations: artifactStructureOperations,
+  })
   // The extension ships its own configuration on the Plugins detail page, so ask
   // the Host settings service to suppress its generated form. Optional: minimal deployments without the
   // settings service keep the tool and prompt working.
@@ -750,6 +762,7 @@ ${section}`
         editedBlockIds: lineage.editedBlockIds ?? [],
         program,
       }
+      artifactPrograms.record({ artifactId: lineage.artifactId, revisionId: lineage.revisionId, program })
       return value
     },
   })
@@ -964,7 +977,7 @@ ${section}`
         if (!onDemand.complete(sessionId!, { resultId: exec!.callId! })) throw new Error('render_ui: on-demand operation was cancelled or replaced before completion.')
       }
       warnings.push(...findings.map(finding => finding.message))
-      return { statements, style: requestedStyle, styleSource: temporary ? 'temporary' : template === undefined ? 'builtin' : 'template',
+      const rendered = { statements, style: requestedStyle, styleSource: temporary ? 'temporary' : template === undefined ? 'builtin' : 'template',
         ...template === undefined ? {} : { styleId: template.id }, ...warnings.length === 0 ? {} : { warnings },
         ...lineage === undefined ? {} : {
           artifactId: lineage.artifactId,
@@ -975,6 +988,15 @@ ${section}`
           ...lineage.editedBlockIds === undefined ? {} : { editedBlockIds: [...lineage.editedBlockIds] },
           ...lineage.program === undefined ? {} : { program: lineage.program },
         } }
+      const callId = exec?.callId
+      if (callId !== undefined) {
+        artifactPrograms.record({
+          artifactId: lineage?.artifactId ?? callId,
+          revisionId: lineage?.revisionId ?? callId,
+          program: lineage?.program ?? program,
+        })
+      }
+      return rendered
     },
   })
 }

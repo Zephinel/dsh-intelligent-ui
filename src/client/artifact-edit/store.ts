@@ -35,6 +35,8 @@ import {
 } from '../../shared/artifact-edit.ts'
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { nestedBlocksForProgram } from './nested.ts'
+import { addLocalRevision } from './local-revisions.ts'
+import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
@@ -1279,6 +1281,86 @@ export function resetArtifactNestedOrder(key: string): void {
   publish()
   scheduleChipSync(session.sessionId, true)
   scheduleDraftPersist(key)
+}
+
+/**
+ * Apply one deterministic structural operation (delete or duplicate) through the
+ * Host's authoritative revision route, then surface the result as a local
+ * revision card in the current Turn. No model turn is involved.
+ * @param key - edit-session key.
+ * @param blockId - display block id inside the current canvas.
+ * @param op - operation kind.
+ * @param turn - latest loaded Turn, used to place the local card.
+ */
+export async function applyArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate', turn?: number): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
+  const nested = nestedBlocksForProgram(session.program)
+  const target = nested?.blocks.find(block => block.blockId === blockId)
+  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
+    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
+    publish()
+    return
+  }
+  const group = target.parentBlockId === undefined
+    ? nested.blocks.filter(block => block.parentBlockId === undefined)
+    : nested.blocks.filter(block => block.parentBlockId === target.parentBlockId)
+  const index = group.findIndex(block => block.blockId === blockId)
+  const operation = op === 'duplicate'
+    ? { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) }
+    : { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
+  sessions.set(key, { ...session, structureBusy: true, structureError: undefined })
+  publish()
+  try {
+    const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        artifactId: session.artifactId,
+        baseRevisionId: session.baseRevisionId,
+        operationId: newRequestId(),
+        operations: [operation],
+        ...session.branch === true ? { branch: true } : {},
+        ...session.title === undefined ? {} : { title: session.title },
+        style: session.style,
+        ...session.styleId === undefined ? {} : { styleId: session.styleId },
+        ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+      }),
+    })
+    if (!response.ok) {
+      sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+      publish()
+      return
+    }
+    const value: unknown = await response.json()
+    if (value !== null && typeof value === 'object' && (value as { ok?: unknown }).ok === true) {
+      const result = (value as { result?: unknown }).result
+      if (isArtifactStructureResult(result)) {
+        addLocalRevision(session.sessionId, {
+          kind: 'structure',
+          artifactId: result.artifactId,
+          sourceRevisionId: result.baseRevisionId,
+          revisionId: result.revisionId,
+          revision: result.revision,
+          program: result.program,
+          ...result.title === undefined ? {} : { title: result.title },
+          style: result.style,
+          ...result.styleId === undefined ? {} : { styleId: result.styleId },
+          ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
+          ...turn === undefined ? {} : { turn },
+          createdAt: Date.now(),
+        })
+        markSubmitted(key)
+        return
+      }
+    }
+    sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+    publish()
+  } catch {
+    sessions.set(key, { ...session, structureBusy: false, structureError: translate('edit.structureFailed') })
+    publish()
+  }
 }
 
 /** Open or close the narrow-viewport request drawer. */

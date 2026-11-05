@@ -16,8 +16,10 @@ import {
 import type { IntelligentUIProgram, RenderLayout } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 
-/** One locally recorded revision restored from an older one. */
+/** One locally recorded revision restored or structurally derived without a model turn. */
 export interface LocalArtifactRevision {
+  /** How the revision was produced; absent in older restore records. */
+  readonly kind?: 'restore' | 'structure'
   readonly artifactId: string
   readonly sourceRevisionId: string
   readonly revisionId: string
@@ -146,6 +148,7 @@ export function localRevisionProgram(revision: LocalArtifactRevision): Intellige
     baseRevisionId: revision.sourceRevisionId,
     revision: revision.revision,
     localRevision: true,
+    ...revision.kind === 'structure' ? { localRevisionKind: 'structure' as const } : {},
     running: false,
   }
 }

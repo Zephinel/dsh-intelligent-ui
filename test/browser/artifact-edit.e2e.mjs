@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { build } from 'esbuild'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 import { DST_PROGRAM } from './fixtures/dst-artifact.ts'
+import { NESTED_PROGRAM } from './fixtures/nested-artifact.ts'
 import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
 
 const root = new URL('../../', import.meta.url).pathname
@@ -582,6 +583,42 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const nestedOrderEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
   check(nestedOrderEnvelope.includes('"orderByParent"'), true, 'envelope carries the hierarchical order')
   check(nestedOrderEnvelope.includes('"targetOrder"'), true, 'envelope keeps the legacy root target order')
+
+  // 25. Deterministic structure operation: duplicate a block, local revision card.
+  await read(`(() => {
+    window.__structureCalls = [];
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        window.__structureCalls.push(JSON.parse(init.body));
+        const result = {
+          artifactId: 'nested-call-1',
+          revisionId: 'struct_e2e_duplicate',
+          baseRevisionId: JSON.parse(init.body).baseRevisionId,
+          revision: 2,
+          operationId: JSON.parse(init.body).operationId,
+          program: ${JSON.stringify(NESTED_PROGRAM)},
+          style: 'card',
+          title: '嵌套区块样例',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return original(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'structure editor')
+  await click('[data-dsh-iui-edit-arrangement-list] [data-dsh-iui-edit-structure-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local structural revision card')
+  const structureCalls = await read('window.__structureCalls')
+  check(structureCalls.length, 1, 'one structure request was sent')
+  check(structureCalls[0].operations[0].op, 'duplicate', 'duplicate operation sent')
+  check(typeof structureCalls[0].operations[0].nodeId, 'string', 'duplicate carries the CST node id')
+  check(typeof structureCalls[0].operations[0].sourceDigest, 'string', 'duplicate carries the source digest')
+  check(structureCalls[0].operations[0].toIndex, 1, 'duplicate inserts after the source block')
+  check((await text('[data-dsh-iui-local-revision]')).includes('结构操作修订'), true, 'local card is labelled as a structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after the structural revision')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

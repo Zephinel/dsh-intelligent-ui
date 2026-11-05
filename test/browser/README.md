@@ -44,7 +44,10 @@ events but not the full DSH Web integration.
   inside one nested parent in the **Nested block order** list: the list rows
   swap, the reset control enables, the composer chip reports the reorder, and
   the envelope carries `orderByParent` while keeping the legacy root
-  `targetOrder`. 136 checks; no real model is called (the
+  `targetOrder`. The M4-3 scenario then duplicates a nested block through the
+  row action (one mocked structure POST with nodeId/sourceDigest/toIndex),
+  checks the structural-revision local card label and that the editor closes.
+  143 checks; no real model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).

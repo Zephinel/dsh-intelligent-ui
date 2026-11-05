@@ -918,6 +918,114 @@
   background: transparent;
 }
 
+/* -------------------------------------------------------------------------
+ * M4-3 structural row actions (duplicate / two-step inline delete).
+ *
+ * The actions stay out of the eye until the row is hovered or something inside
+ * it has keyboard focus; keeping them in the DOM (opacity rather than display)
+ * lets Tab reach them and reveals them through :focus-within. Sizes match the
+ * existing 26px pencil/drag controls, so row height does not change.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-edit-structure-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dsh-iui-edit-arrangement-row:hover > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-arrangement-row:focus-within > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-nested-row:hover > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-nested-row:focus-within > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-arrangement-row.is-confirming-delete > .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-nested-row.is-confirming-delete > .dsh-iui-edit-structure-actions {
+  opacity: 1;
+}
+
+.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
+  width: 22px;
+  height: 22px;
+}
+
+.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.dsh-iui-edit-structure-delete.is-confirming {
+  width: auto;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-confirm-label {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The whole row whispers danger while the delete confirmation is armed. */
+.dsh-iui-edit-arrangement-row.is-confirming-delete,
+.dsh-iui-edit-nested-row.is-confirming-delete {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-structure-busy {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* Inline structural failure (no alert/confirm dialog). */
+.dsh-iui-edit-structure-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 34%, var(--dsw-alias-border-l2));
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-structure-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-structure-error-dismiss {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-structure-error-dismiss:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-structure-error-dismiss:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
 .dsh-iui-edit-undo {
   display: flex;
   align-items: center;
