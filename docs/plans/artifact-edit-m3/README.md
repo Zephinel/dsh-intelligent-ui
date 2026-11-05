@@ -1,11 +1,11 @@
 # M3 会话与版本模型设计方案
 
-> **状态：as-planned 设计稿；M3-1a / M3-1b / M3-1c / M3-2 已在工作树实现（未提交）— 2026-11-05。**
+> **状态：as-planned 设计稿；M3-1a / M3-1b / M3-1c / M3-2 / M3-3 / M3-4 已在工作树实现（未提交）— 2026-11-05；M3 全部完成。**
 > M3 对应 [后续路线图](../artifact-edit-followups/README.md) 的 M3：多卡片并行编辑、旧修订分支/恢复、临时样式编辑、草稿持久化与多标签协调、已淘汰卡片编辑。
-> 本文件描述设计与实施计划；已落地行为以代码与 [架构与行为](../../architecture.md) 为准，M3-1 与 M3-2 的验收数据见下方验证记录。
-> M3-2（旧修订分支 + 零模型本地修订卡片恢复）已实现并通过 Node/浏览器/真机验证；M3-3/M3-4 仍为计划。
+> 本文件描述设计与实施计划；已落地行为以代码与 [架构与行为](../../architecture.md) 为准，M3-1/M3-2/M3-3/M3-4 的验收数据见下方验证记录。
+> M3-4（临时样式快照内容编辑）已实现并通过 Node/浏览器验证；M3 四项全部完成，下一步 M4（嵌套容器、编排增删复制）与 B1/B2 收口项。
 >
-> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b/M3-1c/M3-2（v1，见 §0.1、§0.2、§3.6、§4）。
+> **2026-11-05 owner 评审结果**：一键恢复选择**零模型成本的本地修订卡片**（4.2 B）；临时样式编辑接受 **Host 校验的快照**（第 5 节）；多标签采用**软租约 + 提示**（6.2）；已淘汰卡片 **M3 暂缓**（6.3）。多卡片交互模型 owner 要求先交给 GPT 做外部设计，上下文见 [multi-card-brief.md](multi-card-brief.md)；设计已确认并落地为 M3-1a/M3-1b/M3-1c/M3-2/M3-3/M3-4（v1，见 §0.1–§0.4、§3.6、§4、§5、§6）。
 
 ## 0. 外部设计评审对齐（2026-11-05）
 
@@ -32,7 +32,9 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - M3-1b：Host 多 pending + requestId 选择 + 独立提交 — **已完成（工作树，未提交）**。
 - M3-1c：部分失败/未完成 reconciliation UI — **已完成（工作树，未提交）**：修订 meta 回传 `requestId`，Turn 关闭按请求 id 对账，未完成项恢复为 failed 可编辑草稿；限制见 §3.6。
 - M3-2：旧修订分支 + 零模型本地修订卡片恢复 — **已完成（工作树，未提交）**：`branch: true` 分支编辑、`POST /api/intelligent-ui/artifact-restore` 恢复路由、localStorage 本地修订卡片；限制见 §4.1/§4.2。
-- 之后：M3-3 草稿持久化/软租约、M3-4 临时样式。
+- M3-3：草稿持久化 + 跨标签软租约 — **已完成（工作树，未提交）**：sessionStorage per-tab 草稿持久化与懒恢复、BroadcastChannel 软租约横幅/接管；限制见 §6.1/§6.2。
+- M3-4：临时样式快照内容编辑 — **已完成（工作树，未提交）**：`temporaryStyle` 契约/客户端内容编辑/Host record+meta+restore 复制/`render_ui` 回退拒绝；限制见 §5.1/§5.2。
+- M3 全部完成；下一步 M4（嵌套容器、编排增删复制）与 B1/B2 收口项。
 
 ## 0.1 M3-1 验证记录（2026-11-05，工作树）
 
@@ -55,6 +57,25 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - 真机（Lead，隔离 DSH 实例，参考会话）：旧 Revision 2 卡片 restore → 本地卡片 **Revision 7**（1 个 local badge，无模型调用）；再发一个普通新回合后本地卡片仍只渲染一次。分支：旧 Revision 2 进入编辑显示冲突 → 「Create a new revision from this one」→ branch note「The latest revision is 5」→ chip 追加「 · branch」→ 一次 Send 后模型调用 `edit_ui_blocks`，生成 **Revision 6**（base 为旧修订）。
 - 截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m32-local-restore.png`、`.tmp-report/harness-m3-local-revision.png`。
 - 必须记住的限制：本地卡片只存 localStorage（清存储/换设备丢失）；不进入 assistant 消息条目，也不参与导出/图片导出/回放；restore 只对非 latest 修订可用（latest → already_latest）；本地卡片在触发恢复的 Turn 渲染，不在对话最底部；branch 草稿提交失败被对账恢复会丢失 branch 标记；真实模型的「分支部分失败」未单独验证。
+
+## 0.3 M3-3 验证记录（2026-11-05，工作树）
+
+- Node 测试 **373/373**（Host 169、Client 183、packaging 21；特性文件合计 124：client artifact-edit 36、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 37、host artifact-revisions 15）。
+- 浏览器 **8/8** 套件通过，`artifact-edit e2e` **115 checks**（新增：草稿写入 sessionStorage、刷新后 Composer chip/请求列表恢复、清理后回到初始态）。
+- renderer 契约不变：42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4。
+- 构建（本机实测）：host `lib/index.js` 740.2 kB、client `lib/client.js` 3.82 MB（js 3.65 MB + css 173.5 kB）、standalone 3.30 MB + 510.5 kB；pack 43 files ≈3.97 MB / 10.17 MB。
+- 真机（Lead，隔离 DSH 实例，参考会话）：两个标签页打开同一 session；tab2 打开同卡片编辑时出现租约横幅「Another tab is editing this revision / Take over editing」，点击接管后 tab2 横幅消失、tab1 出现租约横幅。tab 编辑后保存草稿，Reload 后 Composer 恢复 chip 文本 `Edit 夏令时与冬令时 · Revision 7 · 1 changes`，卡片出现草稿角标。
+- 截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m33-lease.png`、`.tmp-report/real-gui-m33-draft-restored.png`、`.tmp-report/harness-m3-draft-restored.png`。
+- 必须记住的限制：sessionStorage 仅同标签页（刷新保留、跨标签不共享）；branch/latestRevision/submitFailed 与撤销记录不持久化（branch 恢复后需重新在冲突横幅启用）；超大 program 不持久化；租约仅提示，不合并/不阻止编辑；BroadcastChannel 不可用时降级无提示；Host 修订校验仍是最终权威；极端并发/时钟偏移未验证。
+- 说明：本记录是 M3-3 验收时的快照；M3-4 完成后当前树为 Node 383/383、artifact-edit 121 checks，最新数据见 §0.4（§0.1–§0.3 均为各自里程碑的当时数据）。
+
+## 0.4 M3-4 验证记录（2026-11-05，工作树）
+
+- Node 测试 **383/383**（Host 174、Client 188、packaging 21；特性文件合计 134：client artifact-edit 41、artifact-edit-reconcile 4、local-revisions 3、edit-tabs 3、artifact-blocks 8、artifact-edit-batch 7、artifact-block-bundle 11、host artifact-edit 40、host artifact-revisions 17）。
+- 浏览器 **8/8**；`artifact-edit e2e` **121 checks**（新增：临时样式卡片标记/编辑入口、信封携带 snapshot 且无 styleId、临时样式修订卡片、仅排序被阻止并显示引导）。
+- renderer 契约不变：42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4。
+- 构建（本机实测）：host `lib/index.js` 741.2 kB、client `lib/client.js` 3.82 MB（js 3.65 MB + css 173.5 kB）、standalone 3.30 MB + 510.5 kB；`npm run check` exit 0；pack 43 files ≈3.97 MB / 10.18 MB。
+- 限制：临时样式结果只支持区块内容编辑；纯排序/纯整体说明不支持（客户端 `edit.errorTemporaryOrder` + Host `render_ui` 回退拒绝），需要已保存/内置样式；没有有效快照的临时卡片不可编辑；临时样式路径未单独做真实模型/真机验证（E2E 模拟）。M3 至此全部完成（M3-1/2/3/4）；M4 与 B1/B2 收口项未开始。
 
 ## 1. 目标与非目标
 
@@ -155,43 +176,41 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - 真机：旧 Revision 2 restore → 本地 Revision 7（无模型调用、只渲染一次）；旧 Revision 2 branch → Revision 6（base 旧修订）。—— **已通过**（2026-11-05，见 §0.2）。
 - 未达成：真实模型的“分支部分失败”独立验证；本地卡片导出/回放语义（明确不支持，属设计限制）。
 
-## 5. M3c 临时样式结果编辑
+## 5. M3c 临时样式结果编辑（已按 v1 落地）
 
-### 5.1 授权模型（推荐）
+### 5.1 授权与契约（已实现）
 
-- 编辑请求 header 增加 `temporaryStyle` 快照（复用 `StyleSnapshot` 校验：schemaVersion/baseLayout/非空 directives/可选封闭主题），并与 `style` 保持一致。
-- Host 不要求 on-demand 运行中的授权（编辑不是生成新样式），但要求：
-  - 快照通过 `isStyleSnapshot` + 对比度/枚举校验；
-  - `temporaryStyle.baseLayout === style`；
-  - 请求来自已渲染结果的编辑信封（`artifactId/baseRevisionId` 可解析）。
-- 新修订的 meta 增加 `temporaryStyle` 与 `styleSource:'temporary'`；客户端从 meta 渲染「临时样式」徽章与主题。
-- 修订记录增加可选 `temporaryStyle`（受大小上限保护），供查询/回放使用。
+- 编辑请求 header 增加可选 `temporaryStyle` 快照（`ArtifactEditRequest.temporaryStyle?: StyleSnapshot`，复用 `StyleSnapshot` 校验），并与 `style` 保持一致；不能与 `styleId` 同用；JSON ≤ 20,000 字符。
+- Host 不要求 on-demand 运行中的授权（编辑不是生成新样式），但校验：`isStyleSnapshot`、`temporaryStyle.baseLayout === style`、请求本身可解析。`edit_ui_blocks` 的 composed 路径允许快照；`render_ui` 的完整程序回退对临时样式保持关闭，并返回专门错误（只支持 `edit_ui_blocks` 内容编辑，排序/整体说明需要已保存/内置样式）。
+- 修订记录 `ArtifactRevisionRecord` 增加可选 `temporaryStyle`（校验同上，旧 registry 文件兼容）；`edit_ui_blocks` 输出 schema/值/output meta/`presentationMeta`/lineage 透传快照；客户端 `programs.ts` 从 meta 读回 `temporaryStyle` 与 `styleSource:'temporary'`，渲染临时样式徽章/主题；本地恢复卡片复制快照。
+- 恢复路由 `POST artifact-restore` 复制 `source.temporaryStyle` 到新 record 与响应 `revision.temporaryStyle`。
 
-### 5.2 范围限制（v1）
+### 5.2 范围限制（v1，已实现）
 
-- 临时样式结果支持**内容修改**（`edit_ui_blocks`），因为 Host 只重新合成程序、不重新授权样式。
-- 纯排序/仅整体说明的临时样式结果**暂不支持**：它们需要 `render_ui` 的完整程序路径，而 `render_ui` 对 temporaryStyle 仍要求 on-demand 授权。UI 在 Send 前提示；后续可让 Host 直接做确定性重排（不需模型）再生成卡片，但那需要新的卡片来源，留给后续里程碑。
+- 临时样式结果支持**内容修改**（`edit_ui_blocks`），Host 只重新合成程序、复用快照，不重新授权样式。
+- 纯排序/仅整体说明的临时样式结果**不支持**：客户端 serialize 在 probe 前返回 `temporary_order` → `edit.errorTemporaryOrder`（草稿不消费）；Host `render_ui` 回退也明确拒绝。需要用户先用已保存/内置样式重新渲染。
+- 没有有效快照的临时卡片不可编辑；内容+排序混合请求允许（Host 确定性重排）。
 
-### 5.3 验收
+### 5.3 验收（已达成项）
 
-- 单测：临时样式快照通过校验进入请求；非法/不匹配快照被拒绝；meta/记录带 temporaryStyle。
-- E2E：临时样式卡片出现编辑入口，内容编辑后新卡片 badge 仍为临时样式。
-- 真机：on-demand 生成的临时样式结果完成一次内容编辑。
+- 单测：临时样式内容编辑成功且 record/meta/schema 带 `temporaryStyle`、无 styleId；非法/与 styleId 同用/超大快照被拒绝；`render_ui` 回退拒绝；record 校验与 restore 复制快照。—— **已通过**（`test/host/artifact-edit.test.mjs` 40 条、`test/host/artifact-revisions.test.mjs` 17 条、`test/client/artifact-edit.test.mjs` 41 条）。
+- E2E：临时样式卡片出现编辑入口，内容编辑后新卡片 badge 仍为临时样式；仅排序草稿被阻止并显示引导。—— **已通过**（artifact-edit 121 checks）。
+- 真机/真实模型：**未单独验证**（临时样式路径用 E2E 模拟；真机只覆盖普通样式内容编辑与多卡片/分支/恢复/草稿恢复）。
 
 ## 6. M3d 草稿持久化、多标签、已淘汰卡片
 
-### 6.1 草稿持久化
+### 6.1 草稿持久化（已按 v1 落地）
 
-- 将会话快照（key/artifactId/baseRevisionId/program/selection/targetOrder/global/draft 状态）写入 `sessionStorage`，键 `artifact-edit-draft:v1:${ref}`；program 受 200k 上限，超出则不持久化并提示。
-- 写入 debounce 250ms；关闭编辑、发送成功、清空草稿时删除。
-- 恢复：卡片挂载或 codec 解析 chip 时，若内存无 session，则按 ref 读取快照并水合；损坏/版本不符则忽略并保持现有 stale 提示。
+- `store.ts` 把未提交草稿按标签页写入 `sessionStorage`：每条草稿键 `dsh-iui-edit-draft:v1:<sessionId>:<baseRevisionId>`，每会话索引键 `dsh-iui-edit-draft-index:v1:<sessionId>`；只存恢复所需字段（ids/requestId/style/program/originalOrder/targetOrder/orderChanged/selection/globalInstruction/attached），`blocks`/包裹程序在恢复时重算，瞬时 UI 状态不持久化。
+- 写入 250ms debounce（内容未变跳过）；每会话索引最多 6 条并淘汰最旧；discard/发送成功/对账删除/空草稿 prune 清理记录与索引；配额/JSON/受限上下文错误静默。
+- 懒恢复：`ensureArtifactDraft(key)`、`hydrateArtifactDrafts(sessionId)`、`flushArtifactDraftPersistence()`；`editSessionFor`/`useArtifactEditSession`（挂载后 useEffect 水合）/`serializeArtifactEditRequest`（确定性 ref 反解 key）/`draftSessionsFor`/`activeDraftKeyFor`/`activateDraft` 在内存缺失时触发恢复。恢复后 `status:'ready'`、`editing:false`、selection 过滤、targetOrder 重新校验、chip 250ms 内重同步。
+- 限制（已实现）：仅同标签页（刷新保留、跨标签不共享）；`branch`/`latestRevision`/`submitFailed`/撤销记录不持久化（branch 恢复后需重新在冲突横幅启用）；超过 200k 的 program 不持久化；无自动 `pagehide` flush（仅导出函数）。
 
-### 6.2 多标签协调
+### 6.2 多标签协调（已按 v1 落地：软租约）
 
-- `BroadcastChannel('artifact-edit')` 广播 `{type:'revision-recorded', artifactId, revisionId, revision}`、`{type:'edit-lease', artifactId, tabId, expiresAt}`。
-- 编辑租约：进入编辑时尝试获取 30s 租约并每 15s 续租；另一标签进入同一 artifact 时显示横幅「另一标签页正在编辑此修订」并提供“只读查看/接管编辑”。
-- 收到 revision-recorded 时触发一次静默 probe，提前出现冲突横幅。
-- v1 不做自动合并；租约丢失只提示，不强制退出。
+- `BroadcastChannel('dsh-iui-artifact-edit-tabs:v1')` 广播 `lease`/`release`/`query`；lease 记录 `{tabId, expiresAt}`，TTL 30 秒、每 10 秒续租；打开编辑器先 query，400ms 后仅在无 foreign lease 时 claim，接管按钮强制 claim；关闭/卸载释放。
+- 其他标签持有 lease 时，编辑器显示 `data-dsh-iui-edit-lease-conflict` 横幅（标题/说明/「接管编辑」按钮 `data-dsh-iui-edit-lease-takeover`）；接管后本标签横幅消失，原标签收到 lease 后显示横幅。
+- 限制（已实现）：租约只提示，不合并、不阻止编辑；只覆盖“正在编辑”的修订，不覆盖草稿所有未发送修改；广播不可用时降级为无提示；Host 修订校验仍是最终权威；极端并发/过期时钟未验证。收到 revision-recorded 后自动 probe 的设想未在 v1 实现（仍靠 15 秒后台 probe + 冲突横幅）。
 
 ### 6.3 已淘汰卡片
 
@@ -200,10 +219,11 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
   - B. Host 在修订记录中保存每个 Artifact 最近一次 program（有界），并通过 card 恢复命令重开编辑。
 - 两个方案都需要新的 UI/卡片来源，建议 M3 暂不实现 B2-4，只在路线图保留并标注「依赖修订列表 UI」。如果 owner 要求 M3 内完成，需要先确认入口形态。
 
-### 6.4 验收
+### 6.4 验收（已达成项）
 
-- 单测：快照写入/读取/损坏容错；租约冲突提示事件。
-- E2E：编辑草稿后刷新页面，重新打开同一卡片恢复 selection/targetOrder/global；两个标签页出现租约提示。
+- 单测：未发送草稿写入 sessionStorage、刷新后 hydrate、损坏/不可用记录清理、discard/发送清除记录与索引、确定性 ref 恢复、无 sessionStorage no-op、聊天索引恢复全部草稿（`test/client/artifact-edit.test.mjs` 6 条）；另一标签 lease 可见并阻止静默 claim、takeover 替换并释放、过期 lease 忽略（`test/client/edit-tabs.test.mjs` 3 条）。—— **已通过**。
+- E2E：草稿保存后刷新，Composer chip 与请求列表恢复；真机（两个标签页 + 租约横幅/接管 + Reload 后 chip 恢复）见 §0.3。—— **已通过**（artifact-edit 115 checks + 真机，2026-11-05）。
+- 未达成：自动 `pagehide` flush；revision-recorded 触发的即时 probe（v1 未实现）；跨标签草稿共享（设计限制）。
 
 ## 7. 数据与 API 变更汇总
 
@@ -219,6 +239,10 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 | 请求 header `branch` | shared/artifact-edit + client store + host/artifact-edit | M3-2 已实现；可选布尔字段，旧客户端不发送即普通编辑 |
 | 恢复路由 `POST /api/intelligent-ui/artifact-restore` | shared/artifact-edit + host/artifact-revisions | M3-2 已实现；认证/effect/dispose 与 GET 共用；201 成功、400/404/409/413/405 错误 |
 | 客户端本地修订卡片（`artifact-edit/local-revisions.ts`） | client IntelligentUICards + localStorage | M3-2 已实现；每会话 ≤20、`localRevision` 标记、按 Turn 渲染；不进入导出/消息历史 |
+| 草稿持久化（sessionStorage 键/索引 + hydrate API） | client store | M3-3 已实现；per-tab、刷新保留、跨标签不共享；branch/submitFailed/撤销不持久化 |
+| 请求 header `temporaryStyle` + revision meta `temporaryStyle` | shared/artifact-edit | M3-4 已实现；可选快照，`baseLayout===style`、不与 `styleId` 同用、≤20k；内容编辑专用 |
+| revision record `temporaryStyle` | host/artifact-revisions | M3-4 已实现；可选、旧文件可读、restore 复制 |
+| 跨标签软租约（`artifact-edit/tabs.ts` + BroadcastChannel） | client ArtifactEditView | M3-3 已实现；30s TTL/10s 续租、query→claim、takeover；仅提示不合并；不可用时无提示 |
 | 请求 header `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选字段，复用快照校验 |
 | revision meta `temporaryStyle` | shared/artifact-edit | M3-4 计划，可选 |
 | revision 记录 `temporaryStyle` | host/artifact-revisions | M3-4 计划，可选，旧文件可读 |
@@ -228,10 +252,11 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 
 0. **设计前置**：M3-1 多卡片交互设计（multi-card-brief.md）已确认并落地为 M3-1a/M3-1b/M3-1c。
 1. **M3-1（多卡片并行 + 部分失败对账）**：3.2–3.6 已实现并提交。**已完成。**
-2. **M3-2（旧修订分支 + 本地卡片恢复）**：4.1–4.3 已实现（工作树）；Node/浏览器/真机验证通过。**下一步 M3-3。**
-3. **M3-3（草稿持久化 + 多标签）**：6.1–6.2（软租约已确认）。
-4. **M3-4（临时样式编辑）**：第 5 节（快照授权已确认）。
-5. **M3-5（已淘汰卡片）**：owner 已确认 M3 暂缓。
+2. **M3-2（旧修订分支 + 本地卡片恢复）**：4.1–4.3 已实现（工作树）；Node/浏览器/真机验证通过。**已完成。**
+3. **M3-3（草稿持久化 + 多标签）**：6.1–6.4 已实现（工作树）；Node/浏览器/真机验证通过。**已完成。**
+4. **M3-4（临时样式编辑）**：第 5 节已实现（工作树）；Node/浏览器验证通过。**M3 全部完成。**
+5. **M4（结构扩展）**：嵌套容器、编排增删复制；B1/B2 收口项（a11y、视觉回归、真机验收记录、发布）同步推进。
+6. **M3-5（已淘汰卡片）**：owner 已确认 M3 暂缓。
 
 每个里程碑：实现 + Node 测试 + 浏览器 E2E + 真机验收 + 文档增量同步，全绿后才进入下一个。
 
@@ -242,6 +267,8 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 - 独立执行意味着可能部分成功：M3-1c 已实现 Turn 关闭对账与 failed 草稿恢复，但没有自动重试/重发；Host pending 按 TTL 保留，turn 归属依赖时间窗口启发式，真实模型的部分成功路径未真机验证。
 - 分支让「latest」与卡片显示的 revision 可能分离，UI 文案和冲突提示容易混淆；M3-2 已用 branch note 说明，但真实模型的“分支部分失败”未单独验证，且 branch 草稿被对账恢复后丢失 branch 标记。
 - 本地修订卡片绕过工具结果：卡片只存 localStorage，不进入 assistant 消息/导出/图片导出/回放链；清存储或换设备会丢失，且渲染在触发恢复的 Turn 而非对话最底部；每会话最多 20 张。
+- 草稿持久化与租约（M3-3）：sessionStorage 是 per-tab，跨标签不共享草稿；branch/submitFailed/撤销不持久化；租约仅提示、不合并、不阻止编辑，频道不可用时无提示；这些都属于“已知边界”，Host 修订校验仍是最终权威。
+- 临时样式编辑（M3-4）：只支持内容编辑，排序/整体说明被双重拒绝；无有效快照不可编辑；临时样式路径未单独真机/真实模型验证，E2E 模拟可能低估真实模型行为差异。
 - 临时样式快照进入用户消息，仍属于同用户可控输入；Host 只接受封闭校验的展示快照，不执行任意 CSS。
 - 草稿持久化可能把 200k 程序写入 sessionStorage；需要配额与清理策略，避免存储爆掉。
 
@@ -252,6 +279,6 @@ GPT 的多卡片设计已评审并采纳其主干；以下是与本仓库现状�
 | 多卡片交互 | **已确认并落地 M3-1a/M3-1b/M3-1c**（GPT 外部设计主干采纳；v1 差异见 §0；M3-1c 见 §3.6） |
 | 一键恢复 | **已落地 M3-2：零模型成本的本地修订卡片**（Host POST 恢复路由 + localStorage 本地卡片；不进入导出/消息历史；最新修订不可恢复） |
 | 分支编辑 | **已落地 M3-2**：`branch: true` 信封 + 旧 base 校验 + `latest+1` 修订；非 branch 严格 latest 不变 |
-| 临时样式编辑 | **接受 Host 校验的快照**（第 5 节） |
-| 多标签协调 | **软租约 + 提示**（6.2） |
+| 临时样式编辑 | **已落地 M3-4：接受 Host 校验的快照**（第 5 节）；只支持内容编辑，排序/整体说明需已保存/内置样式 |
+| 多标签协调 | **已落地 M3-3：软租约 + 提示**（BroadcastChannel，30s TTL/10s 续租，接管只转移提示；不合并、不阻止编辑；不可用时无提示） |
 | 已淘汰卡片 | **M3 暂缓**（6.3） |

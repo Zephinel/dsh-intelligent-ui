@@ -30,9 +30,16 @@ events but not the full DSH Web integration.
   into a local revision card without a model call (local badge, restore-done
   notice, exactly one copy) and branch from an outdated revision's conflict
   banner (note names the base revision, chip label gains " · branch", the
-  envelope carries `"branch":true` with the old base). 111 checks; no real model
-  is called (the real-model restore/branch acceptance was run manually against
-  an isolated second DSH Web instance and is recorded in the M3 plan).
+  envelope carries `"branch":true` with the old base). The M3-3 scenario saves an
+  unsent draft, checks its `sessionStorage` payload, reloads the page and
+  confirms the composer chip and the pending request list are restored, then
+  resets to the pristine harness state. The M3-4 scenario then edits a
+  temporary-style card's block content: the card carries the temporary marker,
+  the envelope carries the style snapshot without a style id, the revision card
+  keeps the temporary style, and an order-only draft is blocked with the
+  saved-style guidance. 121 checks; no real model is called (the real-model
+  restore/branch and cross-tab lease acceptance were run manually against an
+  isolated second DSH Web instance and are recorded in the M3 plan).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
