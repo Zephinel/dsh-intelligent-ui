@@ -1,6 +1,6 @@
 # M4 设计方案：嵌套区块与结构编排（区块增删/复制）
 
-> **状态：M4-0/M4-1/M4-2/M4-3 均已完成并提交（M4-3：f4d296f feat + 70fae30 docs）— 2026-11-05；下一步 M4-4 容器扩展/模型新增/跨容器/权威恢复收口。**
+> **状态：M4-0/M4-1/M4-2/M4-3 已完成并提交；M4-4 第一阶段（7 类容器扩展 + insertNode/跨容器 moveNode 引擎基础）已提交（25869cc feat）— 2026-11-05；M4-4 剩余：模型新增区块、跨容器 move UI、权威恢复收口。**
 > owner 已确认 §0 的 5 个产品方向；GPT 评审结论为 **RETHINK**，其阻断项已吸收为 §0.1 修订；M4-0 的 CST/渲染/结构操作可行性 spike 已通过（§0.2），M4-1/M4-2/M4-3 已按收窄范围落地（§0.3–§0.5）。现有行为以 [架构与行为](../../architecture.md) 为准，M3 完成记录见 [M3 计划](../artifact-edit-m3/README.md) §0.4。
 > 背景：owner 在 B0-6 同时选择了「扩展到嵌套容器」与「编排支持新增/删除/复制区块」；路线图 M4 还包含 B2-5（严格校验 + diff 预览）与 B2-6（运行态部分保留）。
 
@@ -123,6 +123,16 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - 截图（gitignored，未加入 docs assets）：`.tmp-report/real-gui-m43-structure-duplicate.png`、`real-gui-m43-structure-delete.png`。
 - 限制（必须保留）：结构操作 UI 只有 delete/duplicate（Host 有 same-parent move API 但无 UI；跨容器移动未做）；权威 program 注册表只覆盖 M4-3 安装后且仍在 200/50MB LRU 内的 revision——旧卡/被驱逐 base 返回 `base_missing` 需重新渲染，branch 也要求 base 仍在；本地结构修订卡只在 localStorage、只在触发 Turn 渲染（无 assistant 消息/导出/跨设备，丢失提示仍缺）；无 diff 预览/多步 undo；删除不做 helper GC；`Section`/`Toc`/`@Each`/共享表达式由 CST 规则限制；结构操作与内容编辑不能混合为一个动作；结构操作直接 `markSubmitted` 当前草稿（尚无“草稿过期”确认 UI）；`operationId` 幂等与 `toIndex` 语义见 §7.2。
 
+## 0.6 M4-4 第一阶段记录（2026-11-05，已提交 25869cc；M4-4 进行中）
+
+- Node 测试 **437/437**（Host 206、Client 210、packaging 21；特性文件合计 188）。
+- 浏览器 **9/9**：`artifact-edit` **149 checks**（新增 Box/Grid/Section/Carousel 可选与信封 Grid 子块 id）；`nested-edit-renderer` **75 checks**（7 类容器 / 18 slots、0px 几何、Carousel 滚动/overlay 命中）。
+- renderer：`nested-css-contract` **28/28 direct + 5/5 scoped**；其余 42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4 不变。
+- 构建（本机实测）：host `lib/index.js` **801.9 kB**、client `lib/client.js` 3.87 MB（js 3.69 MB + css 183.2 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.00 MB / 10.30 MB；`npm run check` exit 0。
+- 真机 ego（隔离实例，参考会话新建「M44 容器验证」）：Box/Grid/Section 正常渲染；打开编辑 →「嵌套区块」→ 识别 b1.1 Box、b2.1 Grid、b3 Section 及其子块；复制 Grid 子块 b2.1.1 → 结构路由本地卡 **Revision 2**，Grid 内容变为 grid one/grid one/grid two，无错误。截图（gitignored）：`.tmp-report/real-gui-m44-containers.png`。
+- 已完成：共享容器白名单 `artifact-containers.ts`（7 类容器，单一来源）、`program-cst` 容器 children 参数映射（Section 第 2 参数）、renderer 自动覆盖 + CSS 补偿 28 direct/5 scoped、`insertNode` 与跨容器 `moveNode` 引擎基础（18 engine tests）、Carousel 几何/overlay 验证。
+- 未完成（仍属 M4-4）：模型新增区块（shared `additions` schema 已声明但 Host/UI 未接入，**不是可用功能**）、跨容器 move 的 UI、权威恢复/旧卡提示、Carousel 离屏 item anchor 与 track rect 的相交裁剪、结构 diff/确认。
+
 ## 1. 目标与非目标
 
 目标：
@@ -194,7 +204,7 @@ M4-1 身份/嵌套渲染/嵌套内容编辑
 
 ### 4.2 可编辑容器与选择条件
 
-- 可下钻容器（建议）：`Col`、`Row`、`Box`、`Grid`、`Card`、`Section`、`Carousel`（`Popover` 不展开，避免浮层编辑）。
+- 可下钻容器（M4-4 已实现）：`Col`、`Row`、`Box`、`Grid`、`Card`、`Section`、`Carousel`（`Popover` 不展开）；单一来源 `src/shared/artifact-containers.ts`，Section 的 children 是第 2 个参数。
 - chrome（`Caption/Divider/Spacer/Toc/Title`）在任何层级都不作为区块。
 - 叶子组件（Text/Table/Chart/Button…）是区块终点；不再向下拆内部节点。
 - 限制：深度 ≤ 4、单页区块总数 ≤ 60、单容器直接子区块 ≤ 30（数值待定，见 §10）。
@@ -243,7 +253,7 @@ M4-1 身份/嵌套渲染/嵌套内容编辑
 ### 6.1 排序表示（M4-2 已实现，简化为单 slot）
 
 - 实际落地为 `ArtifactEditRequest.orderByParent?: Record<'root' | CST nodeId, readonly nodeId[]>`：parent → 该容器 `children` slot 可编辑子节点的完整 nodeId 排列；只发变化的组；不做 `slotKey` 多 slot 泛化（M4-2 只处理默认 `children`）。
-- 只允许**同一父容器内**排序；跨容器移动不通过拖拽表达，而是结构操作 `move`（§7，M4-3）；v1 拖拽限制在同一容器内，跨组拖动被拒绝。
+- 只允许**同一父容器内**排序；跨容器移动不通过拖拽表达，而是结构操作 `move`（`program-cst` 已支持跨容器 `moveNode`，但 M4-4 尚无 UI）；v1 拖拽限制在同一容器内，跨组拖动被拒绝。
 
 ### 6.2 Host 确定性重排（M4-2 已实现）
 
@@ -365,7 +375,9 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **M4-2 同父层级排序（已完成，工作树，2026-11-05）**：`orderByParent`（单 children slot）、客户端「嵌套区块编排」同父 drag/keyboard/重置、Host 最深优先重建与 root/legacy 兼容、order-only meta。Node/E2E/真机见 §0.4。**下一步 M4-3。**
 - **M4-3 受限结构操作（已完成，工作树，2026-11-05）**：权威 program 注册表 + 幂等 ledger + `POST /api/intelligent-ui/artifact-structure`；CST 校验 + 原子 delete/duplicate/move 批量 + revision 记录；客户端 delete/duplicate UI 与本地结构修订卡片。Node/E2E/真机见 §0.5。**下一步 M4-4。**
 - **M4-4 按容器能力扩展（下一步）**：Delete → Duplicate → 同父 Move → 跨容器 Move；Host 权威 base program + operationId 幂等 + CAS；本地卡片缓存 + Host 恢复；并发/失败隔离；真机验证。M4-1 未实现权威 program store（结构提交的前置）。
-- **M4-4 按容器能力扩展（下一步）**：Row/Box/Grid/Section/Carousel；模型新增区块（若 owner 后续要）；跨容器 move；权威恢复收口。
+- **M4-4 按容器能力扩展（进行中，2026-11-05）**：
+  - 第一阶段（已完成，工作树）：7 类容器白名单/渲染/CSS 补偿/几何 E2E、Section children 参数映射、CST `insertNode` 与跨容器 `moveNode` 基础；见 §0.6。
+  - 剩余：模型新增区块（`additions` Host/UI 接线）、跨容器 move UI、权威恢复/旧卡提示、Carousel 离屏 anchor 裁剪、结构 diff/确认。
 - **M4-5 收口**：a11y、视觉回归、真实模型 E2E、文档、性能（区块数 60 时的渲染/拖拽）。
 
 每个阶段：Node 测试 + 浏览器 E2E + 真机 + 文档增量，全绿后再进入下一阶段。
@@ -379,6 +391,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **复制语义**：Section anchor/Toc、@Each 局部变量、共享状态可能产生重复 id 或错误引用；v1 限制或显式重写。
 - **性能**：60 区块的树/overlay/拖拽；需要虚拟化或限制，先测再定。
 - **模型上下文**：嵌套内容编辑的 bundle 可能变大；沿用冻结依赖 + 深度限制。
+- **M4-4 第一阶段风险**：Carousel 的离屏 item anchor 可能超出 track，绘制需与 track rect 相交裁剪（未做）；CSS 补偿层从 28 direct + 5 scoped 继续增长，组件 CSS 变更必须同步维护；Section children 参数映射（第 2 参数）与其他容器（第 1 参数）不同，后续新增容器必须登记；shared `additions` schema 已存在但 Host/UI 未接入，文档不得声称模型新增区块可用；跨容器 move 引擎已支持但无 UI。
 - **M4-3 新增风险**：权威注册表只覆盖安装后且在 200/50MB LRU 内的 revision，旧卡/被驱逐 base 需重新渲染；结构操作与内容编辑不能混合，且结构操作会直接提交当前草稿（无草稿过期确认）；本地结构卡仅 localStorage/触发 Turn，丢失即无提示；无 diff/undo，删除不 GC helper；`operationId` 幂等与 canonical body 需要严格一致；`move` 无 UI、跨容器未做。
 - **M4-2 新增风险**：嵌套排序没有画布 live preview（列表目标顺序需清晰）；order-only 仍是模型回合（成本/延迟）；同父 scope 与 `@Each`/共享引用的拒绝依赖 CST 校验；根 `targetOrder` 与 `orderByParent.root` 冲突必须保持拒绝；`editedBlockIds` order-only 为 `[]` 可能被旧消费者误读。
 - **M4-1 新增风险**：`display:contents` 包装依赖 25 条直接子选择器 CSS 补偿层，组件 CSS 变更必须同步维护（`nested-css-contract-check` 只做静态清单检查）；嵌套 nodeId 是 revision-scoped，结构操作后旧 id 失效；M4-1 只验证了单个嵌套文本替换，多嵌套/混合容器/深层场景未真机覆盖；Host 仍以信封 program 为基础（权威 program store 未做）。
