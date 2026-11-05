@@ -34,6 +34,7 @@ import {
   type ArtifactEditRequest,
 } from '../../shared/artifact-edit.ts'
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
+import { nestedBlocksForProgram } from './nested.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
@@ -894,6 +895,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       ...styleId === undefined ? {} : { styleId },
       ...temporaryStyle === undefined ? {} : { temporaryStyle },
       program: program.program,
+      nestedMode: false,
       wrappedProgram,
       blocks: extraction.blocks,
       originalOrder: extraction.blocks.map(block => block.blockId),
@@ -1148,6 +1150,47 @@ export function setArtifactGlobalInstruction(key: string, text: string): void {
   scheduleDraftPersist(key)
 }
 
+/**
+ * Toggle nested-container block selection. Nested blocks are only offered when
+ * the CST tree finds supported container children; switching modes clears the
+ * current selection so display ids cannot collide with root requests.
+ * @param key - edit-session key.
+ * @param enabled - whether to show nested blocks.
+ */
+export function setArtifactNestedMode(key: string, enabled: boolean): boolean {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return false
+  if (enabled) {
+    const nested = nestedBlocksForProgram(session.program)
+    if (nested === undefined || !nested.hasNested) return false
+    if (session.nestedMode === true) return true
+    sessions.set(key, {
+      ...session,
+      nestedMode: true,
+      blocks: nested.blocks,
+      selection: [],
+      activeBlockId: undefined,
+      activeDraft: '',
+      activeDirty: false,
+    })
+  } else {
+    const extraction = blocksForProgram(session.program)
+    sessions.set(key, {
+      ...session,
+      nestedMode: false,
+      blocks: extraction.blocks,
+      selection: [],
+      activeBlockId: undefined,
+      activeDraft: '',
+      activeDirty: false,
+    })
+  }
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
+  return true
+}
+
 /** Open or close the narrow-viewport request drawer. */
 export function setArtifactDrawerOpen(key: string, open: boolean): void {
   patch(key, session => session.drawerOpen === open ? undefined : { ...session, drawerOpen: open })
@@ -1338,6 +1381,10 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
         selectionOrder: item.order,
         componentType: block?.componentType ?? 'Card',
         ...block?.title === undefined ? {} : { title: block.title },
+        ...block?.nodeId === undefined ? {} : { nodeId: block.nodeId },
+        ...block?.sourceDigest === undefined ? {} : { sourceDigest: block.sourceDigest },
+        ...block?.parentBlockId === undefined ? {} : { parentBlockId: block.parentBlockId },
+        ...block?.depth === undefined ? {} : { depth: block.depth },
         instruction: item.instruction.trim(),
       }
     })

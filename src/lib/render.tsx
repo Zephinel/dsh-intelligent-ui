@@ -30,7 +30,7 @@ import { ArticleScope } from './components/article'
 // Scoped upstream globals reset; must be evaluated before the library sheets.
 import './components/reset.css'
 import { webUrl } from './components/style'
-import { blockEditLibrary, library } from './library'
+import { blockEditLibrary, library, nestedEditLibrary } from './library'
 import { I18nProvider, useT } from './i18n'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
@@ -47,6 +47,12 @@ export interface OpenUIRendererProps {
   readonly t?: Translate
   /** Render through the edit-mode library so internal block wrappers resolve. */
   readonly blockSlots?: boolean
+  /**
+   * Render through the nested edit-mode library (M4): every direct child of an
+   * allowlisted container is wrapped in a nested `BlockSlot` with a stable path.
+   * Defaults to false; when false the normal/top-level edit output is unchanged.
+   */
+  readonly nestedBlockSlots?: boolean
 }
 
 /** Open an @OpenUrl action, if the model wrote an http(s) URL. */
@@ -124,7 +130,8 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false }: OpenUIRendererProps): ReactElement {
+  const activeLibrary = nestedBlockSlots ? nestedEditLibrary : blockSlots ? blockEditLibrary : library
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
   // Warnings still render; only real errors get the fallback note.
@@ -142,7 +149,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
             <>
               <Renderer
                 response={program}
-                library={blockSlots ? blockEditLibrary : library}
+                library={activeLibrary}
                 isStreaming={false}
                 onAction={(event) => handleAction(event as ActionEvent, onToAssistant)}
                 onError={onError}

@@ -1,0 +1,139 @@
+/**
+ * Nested edit-mode block wrappers (M4).
+ *
+ * The nested renderer inserts one `BlockSlot` around every direct child of an
+ * allowlisted container (`Col`, `Row`, `Card`). Those wrappers must not change
+ * layout, so both the wrapper and its body render with `display: contents`.
+ *
+ * `display: contents` removes the box, but it also hides the real child from the
+ * library's direct-child selectors (`> *`, `:first-child`, `:has(> …)`,
+ * `.iui-flow` rhythm, card title styling, row/grid child rules). Every such
+ * rule that can apply inside an allowlisted container is re-pointed through
+ * `[data-dsh-iui-block-path] > .dsh-iui-block-body` here. Keep this file in sync
+ * with `components.css`; `test/renderer/nested-css-contract-check.mjs` scans for
+ * uncompensated direct-child selectors.
+ *
+ * Root-level production wrappers (no `data-dsh-iui-block-path`) are untouched by
+ * every rule below, so the existing block-editing rendering keeps its exact DOM
+ * and geometry.
+ */
+
+/* -------------------------------------------------------------------------
+ * Layout-transparent wrapper + body.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-block[data-dsh-iui-block-path],
+.dsh-iui-block[data-dsh-iui-block-path] > .dsh-iui-block-body {
+  display: contents;
+}
+
+/* -------------------------------------------------------------------------
+ * Row children (`.iui-row > *`, badges/buttons, image rows).
+ * ---------------------------------------------------------------------- */
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > * {
+  min-width: 0;
+}
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-badge {
+  align-self: center;
+  flex: none;
+}
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-button {
+  align-self: center;
+}
+
+.iui-row[style*="align-items"] > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-badge, .iui-button),
+.iui-col[style*="align-items"] > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-badge, .iui-button) {
+  align-self: auto;
+}
+
+.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-image),
+.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box > .iui-image),
+.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable .iui-image) {
+  align-items: flex-start;
+  gap: var(--iui-space-group-lg);
+}
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-image, .iui-box:has(> .iui-image), .iui-pressable:has(.iui-image)):not([style*="width"]) {
+  flex: none;
+  width: clamp(120px, 33%, 200px);
+}
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box:has(> .iui-image) > .iui-image,
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable:has(.iui-image) .iui-image,
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-image {
+  aspect-ratio: 4 / 3;
+}
+
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box:has(> .iui-image),
+.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable:has(.iui-image) {
+  overflow: clip;
+}
+
+.iui-form > .iui-row:last-child:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-button) {
+  margin-top: calc(var(--iui-action-gap) - var(--iui-field-gap));
+}
+
+/* -------------------------------------------------------------------------
+ * Card title / caption presentation (`> :first-child` rules).
+ * ---------------------------------------------------------------------- */
+
+.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child,
+.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > .iui-row:first-child > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 560;
+}
+
+.iui-card > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-caption:first-child,
+.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > .iui-row:first-child > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-caption:first-child {
+  margin-top: 2px;
+  color: var(--iui-content-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* -------------------------------------------------------------------------
+ * `.iui-flow` rhythm: sibling margins move onto the real first child.
+ *
+ * Cascade note: in the library, `.iui-flow > .iui-title + :is(.iui-text,
+ * .iui-caption, …)` (inner = 8px) wins over the card caption rule (2px) because
+ * it comes later with equal specificity. The card flow override below repeats
+ * that ordering, so a flowing card keeps the 8px title→caption gap.
+ * ---------------------------------------------------------------------- */
+
+.iui-flow > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+  margin-top: var(--iui-space-section);
+}
+
+:is(.iui-flow .iui-flow, .iui-card.iui-flow) > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+  margin-top: var(--iui-space-group);
+}
+
+.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+  margin-top: var(--iui-space-group);
+}
+
+.iui-flow > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-text:first-child {
+  margin-top: var(--iui-space-group);
+}
+
+.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
+  margin-top: var(--iui-space-inner);
+}
+
+.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-badge) {
+  margin-top: var(--iui-space-inner);
+}
+
+.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-caption:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-title:first-child {
+  margin-top: var(--iui-space-tight);
+}
+
+/* Same specificity as the card-caption compensation above, later in the sheet:
+   a flowing card's title→text/caption gap is the library's inner rhythm (8px). */
+.iui-card.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
+  margin-top: var(--iui-space-inner);
+}

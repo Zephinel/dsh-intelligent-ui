@@ -12,13 +12,14 @@
  * to be, so entering and leaving edit mode keeps one card and one body.
  */
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { BlockSlotContext, type BlockSlotContextValue } from '../../lib/components/block-slot.tsx'
+import { BlockSlotContext, BlockSlotPathContext, type BlockSlotContextValue } from '../../lib/components/block-slot.tsx'
 import { wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { OpenUIRenderer } from '../../lib/render.tsx'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditViewProps } from './contracts.ts'
 import { BlockPopover } from './BlockPopover.tsx'
 import { EditPanel } from './EditPanel.tsx'
 import { blocksForProgram, probeArtifactRevisionStatus } from './store.ts'
+import { nestedBlocksForProgram } from './nested.ts'
 import { claimEditLease, hasForeignLease, queryEditLeases, releaseEditLease, renewEditLease, useForeignEditLease } from './tabs.ts'
 import './artifact-edit.css'
 
@@ -60,6 +61,21 @@ export function ArtifactEditView({
   }, [session.key, session.status])
   const blockCount = session.blocks.length
   const requestCount = session.selection.length
+  // M4-1: nested blocks are opt-in per canvas. The CST map resolves renderer
+  // paths to display block ids for the nested edit library.
+  const nested = useMemo(() => nestedBlocksForProgram(session.program), [session.program])
+  const canNest = nested?.hasNested === true
+  const nestedPathContext = useMemo(() => nested === undefined || !session.nestedMode
+    ? undefined
+    : {
+        parentPath: '',
+        resolve: (path: string) => {
+          const block = nested.byPath.get(path)
+          return block === undefined
+            ? undefined
+            : { blockId: block.blockId, nodeId: block.nodeId ?? path, blockIndex: block.originalIndex }
+        },
+      }, [nested, session.nestedMode])
   const conflict = session.status === 'conflict'
   const checking = session.status === 'checking'
   // The arrangement draft is previewed live: the block slots are reordered in
@@ -131,6 +147,16 @@ export function ArtifactEditView({
           <span className="dsh-iui-edit-toolbar-title">{t('edit.title')}</span>
           <span className="dsh-iui-edit-count">{t('edit.availableBlocks', { count: blockCount })}</span>
           {session.orderChanged ? <span className="dsh-iui-edit-preview" data-dsh-iui-edit-preview>{t('edit.previewOrder')}</span> : null}
+          {canNest
+            ? <button
+                type="button"
+                className="dsh-iui-edit-button"
+                data-dsh-iui-edit-nested
+                aria-pressed={session.nestedMode === true}
+                title={session.nestedMode === true ? t('edit.nestedRoot') : t('edit.nestedHint')}
+                onClick={() => { actions.setNestedMode(session.key, session.nestedMode !== true) }}
+              >{session.nestedMode === true ? t('edit.nestedRoot') : t('edit.nestedToggle')}</button>
+            : null}
           <span className="dsh-iui-edit-toolbar-spacer" />
           <button
             type="button"
@@ -145,7 +171,7 @@ export function ArtifactEditView({
             {t('edit.exit')}
           </button>
         </div>
-        <p className="dsh-iui-edit-banner">{t('edit.banner')}</p>
+        <p className="dsh-iui-edit-banner">{session.nestedMode === true ? t('edit.nestedHint') : t('edit.banner')}</p>
       </div>
 
       {foreignLease ? (
@@ -204,16 +230,31 @@ export function ArtifactEditView({
 
       <div className="dsh-iui-edit-canvas" aria-busy={checking ? true : undefined}>
         <BlockSlotContext.Provider value={slots}>
-          <OpenUIRenderer
-            program={program}
-            title={session.title}
-            scopeId={session.baseRevisionId}
-            blockSlots
-            themeStyle={themeStyle}
-            scheme={scheme}
-            onToAssistant={onToAssistant}
-            t={t}
-          />
+          {session.nestedMode === true && nestedPathContext !== undefined ? (
+            <BlockSlotPathContext.Provider value={nestedPathContext}>
+              <OpenUIRenderer
+                program={session.program}
+                title={session.title}
+                scopeId={session.baseRevisionId}
+                nestedBlockSlots
+                themeStyle={themeStyle}
+                scheme={scheme}
+                onToAssistant={onToAssistant}
+                t={t}
+              />
+            </BlockSlotPathContext.Provider>
+          ) : (
+            <OpenUIRenderer
+              program={program}
+              title={session.title}
+              scopeId={session.baseRevisionId}
+              blockSlots
+              themeStyle={themeStyle}
+              scheme={scheme}
+              onToAssistant={onToAssistant}
+              t={t}
+            />
+          )}
         </BlockSlotContext.Provider>
       </div>
       <p className="dsh-iui-edit-frozen">{t('edit.frozenHint')}</p>

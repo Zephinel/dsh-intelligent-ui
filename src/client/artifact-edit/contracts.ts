@@ -78,6 +78,8 @@ export interface ArtifactEditSession {
   readonly temporaryStyle?: StyleSnapshot
   /** Original program (never rewrapped). */
   readonly program: string
+  /** Whether the canvas shows editable blocks nested inside supported containers. */
+  readonly nestedMode?: boolean
   /** Program with internal block wrappers, for the edit-mode renderer. */
   readonly wrappedProgram?: string
   readonly blocks: readonly ArtifactBlock[]
@@ -135,6 +137,8 @@ export interface ArtifactEditActions {
   /** Exit the edit canvas; a non-empty draft stays as a detached draft + chip. */
   closeEditor(): void
   setDrawerOpen(open: boolean): void
+  /** Toggle nested-container block selection in the edit canvas. */
+  setNestedMode(key: string, enabled: boolean): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
   /** Turn the conflict into a branch edit based on this (older) revision. */

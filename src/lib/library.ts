@@ -28,7 +28,7 @@ import { Icon, Image, SearchImage } from "./components/media";
 import { svgComponents } from "./components/svg";
 import { Table } from "./components/table";
 import { Badge, Caption, Label, Link, List, ListItem, Markdown, Text, Title } from "./components/text";
-import { BlockSlot } from "./components/block-slot";
+import { BlockSlot, wrapNestedContainer, type NestedContainerComponent } from "./components/block-slot";
 
 /** The model-facing component catalog, in prompt order. */
 const components = [
@@ -80,6 +80,27 @@ export const library = createLibrary({ root: "Col", components, functions, actio
 export const blockEditLibrary = createLibrary({
   root: "Col",
   components: [...components, BlockSlot],
+  functions,
+  actions,
+  componentGroups,
+});
+
+/** Containers whose direct children become nested editable blocks (M4-1). */
+const NESTED_CONTAINER_NAMES = new Set(["Col", "Row", "Card"]);
+
+/**
+ * Edit-mode library variant (M4-1): the same components, but every allowlisted
+ * container renderer is wrapped so its direct children render inside a nested
+ * `BlockSlot`. Root-level production wrappers from `wrapProgramForBlockEditing`
+ * are not re-wrapped. Only `OpenUIRenderer` with `nestedBlockSlots` uses this
+ * library; the normal and top-level edit-mode libraries are unchanged.
+ */
+export const nestedEditLibrary = createLibrary({
+  root: "Col",
+  components: Object.values(blockEditLibrary.components).map(component =>
+    NESTED_CONTAINER_NAMES.has(component.name)
+      ? wrapNestedContainer(component as unknown as NestedContainerComponent) as unknown as typeof component
+      : component) as never,
   functions,
   actions,
   componentGroups,

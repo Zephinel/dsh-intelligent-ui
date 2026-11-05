@@ -6,11 +6,206 @@ import {
   type ArtifactEditRequest, type ArtifactRevisionMeta, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
 import { artifactEditWarnings, extractArtifactBlocks, reorderProgramToTargetOrder, verifyEditTargets } from '../shared/artifact-blocks.ts'
+import {
+  applyOperations as applyCstOperations,
+  buildArtifactTree,
+  inspectProgramStructure,
+  parseProgramCst,
+  type ArtifactTree,
+  type ArtifactTreeNode,
+  type CstExpr,
+} from '../shared/program-cst.ts'
 import type { ArtifactRevisionRecord, ArtifactRevisionStore } from './artifact-revisions.ts'
 
 /** How long an observed edit request stays armed for the next render_ui call. */
 export const ARTIFACT_EDIT_TTL = 15 * 60 * 1000
 const MAX_PENDING_SESSIONS = 64
+
+/** Containers M4-1 nested content edits may address (mirrors the CST whitelist). */
+export const NESTED_EDIT_CONTAINER_TYPES = ['Col', 'Row', 'Card'] as const
+
+/** One validated nested edit plan: the base tree plus the selected nodes. */
+interface NestedEditPlan {
+  readonly tree: ArtifactTree
+  readonly nodes: readonly ArtifactTreeNode[]
+}
+
+interface NestedEditFailure {
+  readonly ok: false
+  readonly message: string
+}
+
+/** Whether any edit of one request carries a revision-scoped CST node id. */
+export function isNestedEditRequest(request: ArtifactEditRequest): boolean {
+  return request.edits.some(edit => edit.nodeId !== undefined)
+}
+
+/** Whether `ancestorId` is a strict ancestor of `nodeId` in the tree. */
+function isTreeNodeAncestor(tree: ArtifactTree, ancestorId: string, nodeId: string): boolean {
+  let cursor = tree.nodes.get(nodeId)?.parentNodeId
+  while (cursor !== undefined) {
+    if (cursor === ancestorId) return true
+    cursor = tree.nodes.get(cursor)?.parentNodeId
+  }
+  return false
+}
+
+/** Validate one all-nested request against its base program tree. */
+function planNestedEdits(program: string, request: ArtifactEditRequest): { readonly ok: true; readonly plan: NestedEditPlan } | NestedEditFailure {
+  const edits = request.edits
+  if (edits.length === 0) return { ok: false, message: 'the nested edit request has no blocks.' }
+  const nestedCount = edits.filter(edit => edit.nodeId !== undefined).length
+  if (nestedCount !== edits.length) {
+    return { ok: false, message: 'nested block edits must all carry a nodeId; mixing top-level and nested edits in one request is not supported.' }
+  }
+  const tree = buildArtifactTree(program, {
+    baseRevisionId: request.baseRevisionId,
+    containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+  })
+  if (tree.limitsExceeded !== undefined) {
+    return { ok: false, message: `the page is too large or nested too deeply for nested editing (${tree.limitsExceeded}).` }
+  }
+  const nodes: ArtifactTreeNode[] = []
+  const seen = new Set<string>()
+  for (const edit of edits) {
+    const nodeId = edit.nodeId as string
+    if (seen.has(nodeId)) return { ok: false, message: `block node ${JSON.stringify(nodeId)} is selected more than once.` }
+    seen.add(nodeId)
+    const node = tree.nodes.get(nodeId)
+    if (node === undefined) {
+      return { ok: false, message: `block node ${JSON.stringify(nodeId)} is not part of the current revision; ask the user to reload the page and reselect the block.` }
+    }
+    if (node.depth <= 0) return { ok: false, message: 'the root layout cannot be edited as one block.' }
+    if (node.chrome) return { ok: false, message: `block node ${JSON.stringify(nodeId)} is page chrome and cannot be edited as a block.` }
+    if (node.scoped) return { ok: false, message: `block node ${JSON.stringify(nodeId)} is inside an @Each template, which is not editable in this release.` }
+    if (node.shared) return { ok: false, message: `block node ${JSON.stringify(nodeId)} belongs to a shared named expression; editing it would change every instance.` }
+    if (node.opaque || node.problem !== undefined) {
+      return { ok: false, message: `block node ${JSON.stringify(nodeId)} is not structurally editable in this release.` }
+    }
+    if (edit.sourceDigest === undefined) {
+      return { ok: false, message: `block node ${JSON.stringify(nodeId)} is missing its source digest; ask the user to reload the page and reselect it.` }
+    }
+    if (edit.sourceDigest.toLowerCase() !== node.digest.toLowerCase()) {
+      return { ok: false, message: `block node ${JSON.stringify(nodeId)} changed since it was selected; ask the user to reload the page and reselect it.` }
+    }
+    if (edit.componentType !== node.componentType) {
+      return { ok: false, message: `block node ${JSON.stringify(nodeId)} no longer matches its recorded component; ask the user to reload the page and reselect it.` }
+    }
+    nodes.push(node)
+  }
+  for (let left = 0; left < nodes.length; left += 1) {
+    for (let right = left + 1; right < nodes.length; right += 1) {
+      const first = nodes[left] as ArtifactTreeNode
+      const second = nodes[right] as ArtifactTreeNode
+      if (isTreeNodeAncestor(tree, first.nodeId, second.nodeId) || isTreeNodeAncestor(tree, second.nodeId, first.nodeId)) {
+        return { ok: false, message: 'nested edits cannot include a block together with its ancestor or descendant.' }
+      }
+    }
+  }
+  return { ok: true, plan: { tree, nodes } }
+}
+
+/** Model-readable problem with one nested request, or undefined when it is valid. */
+export function describeNestedEditProblem(program: string, request: ArtifactEditRequest): string | undefined {
+  const plan = planNestedEdits(program, request)
+  return plan.ok ? undefined : plan.message
+}
+
+/** Root-level display block ids whose subtrees contain the edited nested nodes. */
+function nestedRootBlockIds(program: string, tree: ArtifactTree, nodes: readonly ArtifactTreeNode[]): string[] {
+  const extraction = extractArtifactBlocks(program)
+  const ids = new Set<string>()
+  for (const node of nodes) {
+    let cursor = node
+    while (cursor.parentNodeId !== undefined && cursor.parentNodeId !== tree.rootNodeId) {
+      const parent = tree.nodes.get(cursor.parentNodeId)
+      if (parent === undefined) break
+      cursor = parent
+    }
+    if (cursor.parentNodeId !== tree.rootNodeId) continue
+    const block = extraction.blocks.find(candidate => candidate.rootIndex === cursor.childIndex)
+    if (block !== undefined) ids.add(block.blockId)
+  }
+  return [...ids]
+}
+
+/**
+ * Compose the model's nested mini program into the base page.
+ *
+ * The mini program's root Col children are matched to the selected edits in
+ * `selectionOrder`, helper statements are appended (never redefined), and the
+ * replacements are applied atomically through the source CST engine so the
+ * untouched subtrees are byte-verified. Structure-changing operations are not
+ * part of M4-1.
+ * @param request - validated nested edit request.
+ * @param fragmentProgram - model mini program for the selected blocks.
+ * @returns the composed page program, or a model-readable problem.
+ */
+export function composeNestedEditProgram(
+  request: ArtifactEditRequest,
+  fragmentProgram: string,
+): { readonly ok: true; readonly program: string } | NestedEditFailure {
+  const fragment = fragmentProgram.trim()
+  const fragmentCst = parseProgramCst(fragment)
+  if (fragmentCst.problem !== undefined) {
+    return { ok: false, message: `the mini program is not valid openui-lang (${fragmentCst.problem.message}).` }
+  }
+  const rootStatement = fragmentCst.root
+  if (rootStatement === undefined || rootStatement.expr.kind !== 'call' || rootStatement.expr.name !== 'Col') {
+    return { ok: false, message: 'the mini program must be root = Col([...]).' }
+  }
+  const childrenArg = rootStatement.expr.items?.[0]
+  if (childrenArg === undefined || childrenArg.kind !== 'array') {
+    return { ok: false, message: 'the mini program must be root = Col([...]) with one expression per selected block.' }
+  }
+  const ordered = [...request.edits].sort((left, right) => left.selectionOrder - right.selectionOrder)
+  const expressions = childrenArg.items ?? []
+  if (expressions.length !== ordered.length) {
+    return { ok: false, message: `return exactly ${ordered.length} root children, one per selected block in selection order.` }
+  }
+  const baseCst = parseProgramCst(request.program)
+  if (baseCst.problem !== undefined) {
+    return { ok: false, message: `the page program is not in the supported subset (${baseCst.problem.message}).` }
+  }
+  const declared = new Set(baseCst.statements.map(statement => statement.name))
+  const helpers: string[] = []
+  for (const statement of fragmentCst.statements) {
+    if (statement.name === 'root') continue
+    if (declared.has(statement.name)) {
+      return { ok: false, message: `helper statement ${JSON.stringify(statement.name)} redefines an existing page statement; reuse the existing statement instead.` }
+    }
+    declared.add(statement.name)
+    helpers.push(statement.source)
+  }
+  let extended = request.program
+  if (helpers.length > 0) extended = `${extended.replace(/\s+$/, '')}\n${helpers.join('\n')}\n`
+  const plan = planNestedEdits(extended, request)
+  if (!plan.ok) return plan
+  const replacements = ordered.map((edit, index) => {
+    const expression = expressions[index] as CstExpr
+    return {
+      op: 'replace' as const,
+      nodeId: edit.nodeId as string,
+      source: fragment.slice(expression.range.start, expression.range.end).trim(),
+    }
+  })
+  const applied = applyCstOperations(extended, replacements, {
+    tree: plan.plan.tree,
+    baseRevisionId: request.baseRevisionId,
+    containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+  })
+  if (!applied.ok) {
+    return { ok: false, message: `the nested edit could not be applied (${applied.code}): ${applied.message}` }
+  }
+  const inspected = inspectProgramStructure(applied.program, {
+    baseRevisionId: request.baseRevisionId,
+    containerTypes: [...NESTED_EDIT_CONTAINER_TYPES],
+  })
+  if (!inspected.ok) {
+    return { ok: false, message: `the edited page is not a valid structure (${inspected.code}): ${inspected.message}` }
+  }
+  return { ok: true, program: applied.program }
+}
 /** Pending requests retained per session; one send arms at most a full batch. */
 const MAX_SESSION_REQUESTS = MAX_ARTIFACT_BATCH_REQUESTS
 
@@ -292,9 +487,14 @@ export function createArtifactEditController(
     if (orderProblem !== undefined) {
       return `render_ui: the block edit request has an invalid target order (${orderProblem}); it must list every top-level block id exactly once. ${RELOAD}`
     }
-    const targetProblem = verifyEditTargets(extraction, request.edits)
-    if (targetProblem !== undefined) {
-      return `render_ui: this block edit request does not match the program it was made for (${targetProblem}). ${RELOAD}`
+    if (isNestedEditRequest(request)) {
+      const nestedProblem = describeNestedEditProblem(request.program, request)
+      if (nestedProblem !== undefined) return `render_ui: ${nestedProblem}`
+    } else {
+      const targetProblem = verifyEditTargets(extraction, request.edits)
+      if (targetProblem !== undefined) {
+        return `render_ui: this block edit request does not match the program it was made for (${targetProblem}). ${RELOAD}`
+      }
     }
     if (isNoOpEditRequest(request, baseBlockIds)) return NO_OP_MESSAGE
     if (request.branch !== true) {
@@ -442,8 +642,19 @@ export function createArtifactEditController(
           ? 'edit_ui_blocks: the composed block program is not a valid artifact page; call edit_ui_blocks again with one complete expression per selected block.'
           : 'render_ui: an updated artifact page must keep root = Col([...]); the program was not recorded as a new revision. Fix the root and call render_ui again.')
       }
+      const nested = isNestedEditRequest(request)
+      let nestedPlan: NestedEditPlan | undefined
+      if (nested) {
+        const plan = planNestedEdits(request.program, request)
+        if (!plan.ok) throw new Error(`${tool}: ${plan.message}`)
+        nestedPlan = plan.plan
+      }
       const baseExtraction = extractArtifactBlocks(request.program)
-      const editedBlockIds = request.edits.map(edit => edit.blockId)
+      // Nested edits are recorded through the root-level blocks they affect so the
+      // revision metadata and warnings keep their existing block-id contract.
+      const editedBlockIds = nestedPlan === undefined
+        ? request.edits.map(edit => edit.blockId)
+        : nestedRootBlockIds(request.program, nestedPlan.tree, nestedPlan.nodes)
       // The Host owns the mechanical arrangement; the client `orderChanged` hint is not trusted.
       let effectiveProgram = program
       let normalizedProgram: string | undefined

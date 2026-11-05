@@ -52,7 +52,9 @@ import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
 import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
 import {
+  composeNestedEditProgram,
   createArtifactEditController,
+  isNestedEditRequest,
   type PendingArtifactEdit, type PendingArtifactEditSummary, type PendingArtifactSelector,
 } from './artifact-edit.ts'
 import { MAX_CLARIFICATION_ROUNDS, MAX_RENDER_CALLS, createOnDemandController } from './on-demand.ts'
@@ -718,12 +720,20 @@ ${section}`
       }
       const fragment = typeof args.program === 'string' ? args.program.trim() : ''
       if (fragment === '') throw new Error('edit_ui_blocks: program must be a non-empty mini openui-lang program with root = Col([...]).')
-      const spliced = spliceBlockBundle(request.program, request.edits.map(edit => edit.blockId), fragment)
-      if (!spliced.ok) {
-        throw new Error(`edit_ui_blocks: the block program does not fit this edit (${spliced.error}). Return exactly one complete top-level expression per selected block in request order, use only existing or newly defined statement names, keep every statement name unique, and call edit_ui_blocks again.`)
+      let composedProgram: string
+      if (isNestedEditRequest(request)) {
+        const composed = composeNestedEditProgram(request, fragment)
+        if (!composed.ok) throw new Error(`edit_ui_blocks: ${composed.message}`)
+        composedProgram = composed.program
+      } else {
+        const spliced = spliceBlockBundle(request.program, request.edits.map(edit => edit.blockId), fragment)
+        if (!spliced.ok) {
+          throw new Error(`edit_ui_blocks: the block program does not fit this edit (${spliced.error}). Return exactly one complete top-level expression per selected block in request order, use only existing or newly defined statement names, keep every statement name unique, and call edit_ui_blocks again.`)
+        }
+        composedProgram = spliced.program
       }
-      const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, composedProgram: spliced.program, requestId: pendingEdit.requestId })
-      const program = applied.lineage.program ?? spliced.program
+      const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, composedProgram, requestId: pendingEdit.requestId })
+      const program = applied.lineage.program ?? composedProgram
       const lineage = applied.lineage
       const value: BlockEditValue = {
         statements: countStatements(program),

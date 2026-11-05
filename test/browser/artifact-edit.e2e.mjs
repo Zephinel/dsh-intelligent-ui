@@ -538,6 +538,26 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(tempOrderError.includes('临时样式结果只支持区块内容修改'), true, 'temporary order-only draft is blocked with guidance')
   await cdp.send('Emulation.clearDeviceMetricsOverride')
 
+  // 23. Nested edit mode: toggle, select a nested block, send identity fields.
+  const nestedBefore = await count('[data-dsh-intelligent-ui="card"]')
+  await read('window.__addNestedCard()')
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${nestedBefore + 1}`, 'nested card')
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested editor')
+  check(await count('[data-dsh-iui-edit-nested]'), 1, 'nested mode toggle is offered')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-block-node]').length >= 8`, 'nested block wrappers')
+  check(await count('[data-dsh-iui-block="b1.1.1"]'), 1, 'nested block has its display id')
+  await click('[data-dsh-iui-block="b1.1.1"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'nested popover')
+  await saveInstruction('nested text change')
+  check((await text('[data-dsh-iui-edit-request-list]')).includes('nested text change'), true, 'nested request saved')
+  const nestedEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
+  check(nestedEnvelope.includes('"blockId":"b1.1.1"'), true, 'envelope carries the nested display id')
+  check(nestedEnvelope.includes('"nodeId"'), true, 'envelope carries the CST node id')
+  check(nestedEnvelope.includes('"sourceDigest"'), true, 'envelope carries the source digest')
+  await shot('harness-m4-nested-edit.png')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

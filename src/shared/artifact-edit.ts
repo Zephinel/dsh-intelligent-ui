@@ -65,8 +65,16 @@ export type ArtifactBlockKind = (typeof ARTIFACT_BLOCK_KINDS)[number]
 
 /** One addressable root-level block of one Artifact revision. */
 export interface ArtifactBlock {
-  /** Stable per-revision identity: `b<originalIndex>`. */
+  /** Display identity: top-level `bN`; nested `bN.M.K`. */
   readonly blockId: string
+  /** Revision-scoped identity from the shared CST tree (top-level and nested). */
+  readonly nodeId?: string
+  /** Parent display block id, absent for root-level blocks. */
+  readonly parentBlockId?: string
+  /** Nesting depth; 0 for root-level blocks. */
+  readonly depth?: number
+  /** Digest of the node's resolved expression source, used to bind edits to a revision. */
+  readonly sourceDigest?: string
   /** Structural path of the underlying OpenUI Lang node, e.g. `root[3]`. */
   readonly nodePath: string
   /** Position among the editable blocks, 1-based. */
@@ -87,6 +95,12 @@ export interface ArtifactBlock {
 export interface ArtifactBlockEdit {
   readonly blockId: string
   readonly nodePath: string
+  /** Revision-scoped CST node id for nested edits; absent for legacy top-level requests. */
+  readonly nodeId?: string
+  /** Digest of the base node's source, checked by the Host before replacement. */
+  readonly sourceDigest?: string
+  readonly parentBlockId?: string
+  readonly depth?: number
   readonly originalIndex: number
   /** Selection order in this edit session; 1-based, stable while selected. */
   readonly selectionOrder: number
@@ -241,9 +255,13 @@ export function isArtifactBlock(value: unknown): value is ArtifactBlock {
 export function describeBlockEditProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  if (keys.some(key => !['blockId', 'nodePath', 'originalIndex', 'selectionOrder', 'componentType', 'title', 'instruction'].includes(key))) return 'unknown_field'
-  if (typeof value.blockId !== 'string' || !/^b[1-9][0-9]{0,3}$/.test(value.blockId)) return 'invalid_block_id'
-  if (typeof value.nodePath !== 'string' || !/^root\[[0-9]{1,4}\]$/.test(value.nodePath)) return 'invalid_node_path'
+  if (keys.some(key => !['blockId', 'nodePath', 'nodeId', 'sourceDigest', 'parentBlockId', 'depth', 'originalIndex', 'selectionOrder', 'componentType', 'title', 'instruction'].includes(key))) return 'unknown_field'
+  if (typeof value.blockId !== 'string' || !/^b[1-9][0-9]{0,3}(\.[1-9][0-9]{0,2})*$/.test(value.blockId)) return 'invalid_block_id'
+  if (typeof value.nodePath !== 'string' || !/^(root\[[0-9]{1,4}\]|root(\/children\[[0-9]{1,4}\])+(\/template\[[0-9]{1,4}\])?)$/.test(value.nodePath)) return 'invalid_node_path'
+  if ('nodeId' in value && (typeof value.nodeId !== 'string' || value.nodeId.length > 80)) return 'invalid_node_id'
+  if ('sourceDigest' in value && (typeof value.sourceDigest !== 'string' || !/^[a-f0-9]{8,32}$/i.test(value.sourceDigest))) return 'invalid_source_digest'
+  if ('parentBlockId' in value && (typeof value.parentBlockId !== 'string' || !/^b[1-9][0-9]{0,3}(\.[1-9][0-9]{0,2})*$/.test(value.parentBlockId))) return 'invalid_parent_block_id'
+  if ('depth' in value && (typeof value.depth !== 'number' || !Number.isSafeInteger(value.depth) || value.depth < 0 || value.depth > 8)) return 'invalid_depth'
   if (typeof value.originalIndex !== 'number' || !Number.isSafeInteger(value.originalIndex) || value.originalIndex < 1) return 'invalid_original_index'
   if (typeof value.selectionOrder !== 'number' || !Number.isSafeInteger(value.selectionOrder) || value.selectionOrder < 1 || value.selectionOrder > 999) return 'invalid_selection_order'
   if (typeof value.componentType !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(value.componentType)) return 'invalid_component_type'
@@ -291,7 +309,7 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
     if (problem !== undefined) return problem
     const block = edit as ArtifactBlockEdit
     if (ids.has(block.blockId)) return 'duplicate_block_id'
-    if (!targetIds.has(block.blockId)) return 'edit_not_in_target_order'
+    if (block.nodeId === undefined && !targetIds.has(block.blockId)) return 'edit_not_in_target_order'
     ids.add(block.blockId)
     // Selection order may legitimately have gaps after deletions; duplicates are not allowed.
     if (orders.has(block.selectionOrder)) return 'duplicate_selection_order'
@@ -351,6 +369,10 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     edits: request.edits.map(edit => ({
       blockId: edit.blockId,
       nodePath: edit.nodePath,
+      ...edit.nodeId === undefined ? {} : { nodeId: edit.nodeId },
+      ...edit.sourceDigest === undefined ? {} : { sourceDigest: edit.sourceDigest },
+      ...edit.parentBlockId === undefined ? {} : { parentBlockId: edit.parentBlockId },
+      ...edit.depth === undefined ? {} : { depth: edit.depth },
       originalIndex: edit.originalIndex,
       selectionOrder: edit.selectionOrder,
       componentType: edit.componentType,

@@ -104,9 +104,14 @@ try {
 }
 body { margin:0; background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary); font:14px/1.5 var(--dsw-font-family); }
 main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
-/* M4 spike: contents mode removes both wrapper boxes so layout can be compared. */
+/* M4 spike: contents mode removes both wrapper boxes so layout can be compared.
+   The production nested-edit.css (shipped with M4-1) already makes every path
+   wrapper display:contents; box mode forces the historical real-box comparison
+   back on with a higher-specificity override. */
 html[data-spike-layout="contents"] [data-dsh-iui-block-path] { display: contents; }
 html[data-spike-layout="contents"] [data-dsh-iui-block-path] > .dsh-iui-block-body { display: contents; }
+html[data-spike-layout="box"] [data-dsh-iui-block-path],
+html[data-spike-layout="box"] [data-dsh-iui-block-path] > .dsh-iui-block-body { display: block; }
 /* Compensation layer for direct-child selectors that cannot see through a
    display:contents wrapper (card title styling, .iui-flow rhythm, flex/grid
    child rules). Only applied by the 'edit-fixed' mode. */
@@ -357,8 +362,8 @@ html[data-spike-compensate="true"] .iui-grid > [data-dsh-iui-block-path] > .dsh-
   console.log(`\nCONCLUSION:`)
   console.log(`- A works: runtime-synthesized BlockSlot element nodes are accepted by renderNode and render real nested wrappers (11 slots, depth 4).`)
   console.log(`- B works: wrapping the Col/Row/Card component renderers and replacing their direct children recursively is enough; no per-component implementation change is required to produce nested slots.`)
-  console.log(`- display:contents alone is NOT layout-transparent: direct-child CSS (.iui-flow rhythm, .iui-card first-title styling, .iui-row > *) stops matching -> card ${contentsDelta.maxCardDelta}px / text ${contentsDelta.maxTextDelta}px drift, body ${contentsDelta.bodyHeight.join(' vs ')}px.`)
-  console.log(`- Real wrapper boxes preserve most sibling rhythm (${boxedDelta.maxCardDelta}px card drift on this fixture) but add box heights (card ${boxedGeometry.cards[0].height}px vs ${baseline.cards[0].height}px, body ${boxedDelta.bodyHeight.join(' vs ')}px) and still lose direct-child presentation rules; they are not free either.`)
+  console.log(`- historical M4-0b finding: display:contents alone is NOT layout-transparent (raw drift card 57.5px / text 67px / body 283 vs 216px because direct-child CSS stops matching). The shipped M4-1 nested-edit.css compensation layer now yields card ${contentsDelta.maxCardDelta}px / text ${contentsDelta.maxTextDelta}px on the same contents render.`)
+  console.log(`- Real wrapper boxes are not a viable alternative (card ${boxedGeometry.cards[0].height}px vs ${baseline.cards[0].height}px, body ${boxedDelta.bodyHeight.join(' vs ')}px, drift ${boxedDelta.maxCardDelta}px): they add boxes and the compensation margins double up on top of the real wrapper boxes.`)
   console.log(`- A compensation layer over display:contents (rewriting the affected direct-child selectors through the slot wrapper) restores EXACT parity: card ${fixedDelta.maxCardDelta}px / text ${fixedDelta.maxTextDelta}px / body ${fixedDelta.bodyHeight.join(' vs ')}px.`)
   console.log(`- Col, Row and Card all hold; click/hover maps to the innermost slot, parent padding maps to the parent slot, and depth-ordered overlays hit-test correctly.`)
   console.log(`nested-block-spike e2e: ${checks} checks passed`)

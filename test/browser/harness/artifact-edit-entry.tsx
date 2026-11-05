@@ -15,6 +15,7 @@ import { translate, en, zh } from '../../../src/shared/locales.ts'
 import type { IntelligentUIModeView } from '../../../src/shared/intelligent-ui.ts'
 import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DST_PROGRAM, DST_TITLE } from '../fixtures/dst-artifact.ts'
+import { NESTED_PROGRAM, NESTED_TITLE } from '../fixtures/nested-artifact.ts'
 import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 
@@ -210,6 +211,15 @@ w.__openChip = () => {
 }
 function pendingRequestId(artifactId: string): string | undefined {
   return submittedDraftsFor(SESSION).find(entry => entry.artifactId === artifactId)?.requestId
+}
+w.__addNestedCard = (callId: string = 'nested-call-1', title: string = NESTED_TITLE) => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program: NESTED_PROGRAM, title, style: 'card' }) },
+    },
+  }]
+  update()
 }
 w.__addTempCard = (callId: string = 'temp-call-1', title: string = '临时卡片') => {
   nodes = [...nodes, {

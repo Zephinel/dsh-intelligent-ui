@@ -79,8 +79,10 @@ function wrapContainer(original: SpikeComponent): SpikeComponent {
     renderNode: (value: unknown) => unknown
     statementId?: string
   }): unknown {
-    const parentPath = useContext(BlockSlotPathContext) ?? 'root'
-    const wrapped = { ...props, children: wrapChildren(parentPath, props.children) }
+    const pathContext = useContext(BlockSlotPathContext)
+    const parentPath = pathContext?.parentPath ?? ''
+    const base = parentPath === '' ? 'root' : parentPath
+    const wrapped = { ...props, children: wrapChildren(base, props.children) }
     return original.component({ props: wrapped, renderNode, statementId })
   }
   return { ...original, component: SpikeContainer }

@@ -21,6 +21,8 @@ import { ARTIFACT_EDIT_TTL, createArtifactEditController } from '../../src/host/
 import { createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
 import { assertDshToolSchema } from '../../src/host/tool-schema.ts'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
+import { NESTED_PROGRAM, NESTED_TITLE } from '../browser/fixtures/nested-artifact.ts'
+import { buildArtifactTree } from '../../src/shared/program-cst.ts'
 import { THEME, template } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
@@ -118,6 +120,50 @@ function branchRequest(overrides = {}) {
 /** Concatenate one envelope per Composer chip into the one user message the Host observes. */
 function batchText(...requests) {
   return requests.map(request => buildEditRequestText(request)).join('\n\n')
+}
+
+/** M4-1 base tree for the nested fixture (Col/Row/Card containers). */
+const NESTED_TREE = buildArtifactTree(NESTED_PROGRAM, { containerTypes: ['Col', 'Row', 'Card'] })
+
+/** One nested edit bound to a CST node id and content digest. */
+function nestedEdit(nodeId, selectionOrder = 1, overrides = {}) {
+  const node = NESTED_TREE.nodes.get(nodeId)
+  if (node === undefined) throw new Error(`nested fixture node ${nodeId} is missing`)
+  return {
+    blockId: `b1.${selectionOrder}`,
+    nodePath: node.nodePath,
+    nodeId,
+    sourceDigest: node.digest,
+    parentBlockId: 'b1',
+    depth: node.depth,
+    originalIndex: 1,
+    selectionOrder,
+    componentType: node.componentType,
+    ...node.title === undefined ? {} : { title: node.title },
+    instruction: '改这一块的文案。',
+    ...overrides,
+  }
+}
+
+/** One all-nested edit request for the nested fixture. */
+function nestedRequest(edits, overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactId: 'call-original',
+    baseRevisionId: 'call-original',
+    baseRevision: 1,
+    title: NESTED_TITLE,
+    style: 'card',
+    edits,
+    targetOrder: ['b1', 'b2'],
+    program: NESTED_PROGRAM,
+    ...overrides,
+  }
+}
+
+/** The model mini program for a nested edit. */
+function nestedFragment(...expressions) {
+  return `root = Col([${expressions.join(', ')}])`
 }
 
 /** One durable revision record for the pre-seeded stale-batch tests. */
@@ -886,6 +932,172 @@ test('invalid temporary-style envelopes are rejected before rendering', async ()
     )
     assert.equal(existsSync(m.file), false)
   }
+})
+
+test('a nested content edit rewrites one nested block and preserves untouched source bytes', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')])))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A nested", "sm")') }, { agent: m.agent, callId: 'call-nested-1' })
+  assert.equal(value.artifactId, 'call-original')
+  assert.equal(value.revision, 2)
+  assert.deepEqual(value.editedBlockIds, ['b1'], 'the affected root-level block id is recorded')
+  const lines = value.program.split('\n')
+  assert.equal(lines[0], NESTED_PROGRAM.split('\n')[0])
+  assert.match(lines[1], /Col\(\[Text\("A nested", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.equal(lines[2], NESTED_PROGRAM.split('\n')[2], 'the second card statement is byte-identical')
+  assert.equal(lines[3], NESTED_PROGRAM.split('\n')[3], 'the shared helper statement is byte-identical')
+  assert.equal(value.warnings, undefined, 'only the edited root block changed, so no preservation warning')
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.revisionId, 'call-nested-1')
+  assert.deepEqual(record.editedBlockIds, ['b1'])
+  assert.equal(m.blockTool.output.presentationMeta({}, value).program, value.program)
+  await assert.rejects(
+    () => m.blockTool.execute({ program: nestedFragment('Text("X", "sm")') }, { agent: m.agent, callId: 'call-nested-retry' }),
+    /no block edit request is pending/,
+  )
+})
+
+test('a nested edit can target a root-level block node and stays a content replacement', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n2')])))
+  const value = await m.blockTool.execute({ program: nestedFragment('Card([Title("新外层", "sm"), Text("内容", "sm")])') }, { agent: m.agent, callId: 'call-nested-root-child' })
+  assert.match(value.program.split('\n')[0], /root = Col\(\[Card\(\[Title\("新外层", "sm"\), Text\("内容", "sm"\)\]\), secondCard\]\)/)
+  assert.equal(value.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2])
+})
+
+test('multiple nested edits are mapped by selection order and only change their own subtrees', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n11', 2), nestedEdit('n5', 1)])))
+  const value = await m.blockTool.execute({
+    program: nestedFragment('Text("A two", "sm")', 'Text("C two", "sm")'),
+  }, { agent: m.agent, callId: 'call-nested-two' })
+  const lines = value.program.split('\n')
+  assert.match(lines[1], /Text\("A two", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\)/)
+  assert.match(lines[2], /Row\(\[Text\("C two", "sm"\), Text\("D", "sm"\)\]\)/)
+  assert.deepEqual([...value.editedBlockIds].sort(), ['b1', 'b2'])
+  assert.equal(value.warnings, undefined)
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
+})
+
+test('nested edit fragments may append new helper statements without redefining page names', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')])))
+  const value = await m.blockTool.execute({
+    program: 'root = Col([newText])\nnewText = Text("from a helper", "sm")',
+  }, { agent: m.agent, callId: 'call-nested-helper' })
+  assert.match(value.program.split('\n')[1], /Col\(\[newText, Text\("B", "sm"\)/)
+  assert.ok(value.program.endsWith('newText = Text("from a helper", "sm")'))
+  assert.equal(value.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2])
+})
+
+test('a nested edit combines with root targetOrder reordering', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], { targetOrder: ['b2', 'b1'] })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A ordered", "sm")') }, { agent: m.agent, callId: 'call-nested-order' })
+  const lines = value.program.split('\n')
+  assert.equal(lines[0], 'root = Col([secondCard, outerCard])', 'the deterministic root reorder still applies')
+  assert.match(lines[1], /Text\("A ordered", "sm"\)/)
+  assert.equal(lines[2], NESTED_PROGRAM.split('\n')[2])
+  assert.equal(typeof value.program, 'string')
+})
+
+test('a nested edit from an older branch revision records latest+1 and edits the nested block', async () => {
+  const m = mount({
+    revisions: [
+      revisionRecord(),
+      revisionRecord({ revisionId: 'call-old-3', baseRevisionId: 'call-old-2', revision: 3, createdAt: 2 }),
+    ],
+  })
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], {
+    artifactId: 'call-old',
+    baseRevisionId: 'call-old-2',
+    baseRevision: 2,
+    branch: true,
+  })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A branch", "sm")') }, { agent: m.agent, callId: 'call-nested-branch' })
+  assert.equal(value.artifactId, 'call-old')
+  assert.equal(value.baseRevisionId, 'call-old-2')
+  assert.equal(value.revision, 4)
+  assert.match(value.program.split('\n')[1], /Text\("A branch", "sm"\)/)
+})
+
+test('a nested edit keeps a result-owned temporary style snapshot', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')], { temporaryStyle: TEMPORARY_STYLE })))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A temp", "sm")') }, { agent: m.agent, callId: 'call-nested-temp' })
+  assert.deepEqual(value.temporaryStyle, TEMPORARY_STYLE)
+  assert.equal(value.style, 'card')
+  assert.equal(Object.hasOwn(value, 'styleId'), false)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(record.temporaryStyle, TEMPORARY_STYLE)
+})
+
+test('unsafe nested requests are rejected before rendering and record nothing', async () => {
+  // Stale content digest: observer arms an unusable request, tool calls stay rejected.
+  const digest = mount()
+  digest.send(buildEditRequestText(nestedRequest([nestedEdit('n5', 1, { sourceDigest: 'deadbeef' })])))
+  await assert.rejects(
+    () => digest.blockTool.execute({ program: nestedFragment('Text("X", "sm")') }, { agent: digest.agent, callId: 'call-nested-digest' }),
+    /changed since it was selected; ask the user to reload the page and reselect it/,
+  )
+  await assert.rejects(
+    () => digest.blockTool.execute({ program: nestedFragment('Text("X", "sm")') }, { agent: digest.agent, callId: 'call-nested-digest-2' }),
+    /changed since it was selected/,
+  )
+  assert.equal(existsSync(digest.file), false)
+  // Unknown node id.
+  const unknown = mount()
+  unknown.send(buildEditRequestText(nestedRequest([nestedEdit('n5', 1, { nodeId: 'n99' })])))
+  await assert.rejects(
+    () => unknown.blockTool.execute({ program: nestedFragment('Text("X", "sm")') }, { agent: unknown.agent, callId: 'call-nested-unknown' }),
+    /is not part of the current revision/,
+  )
+  assert.equal(existsSync(unknown.file), false)
+  // Ancestor + descendant selected together.
+  const ancestors = mount()
+  ancestors.send(buildEditRequestText(nestedRequest([nestedEdit('n2', 1), nestedEdit('n5', 2)])))
+  await assert.rejects(
+    () => ancestors.blockTool.execute({ program: nestedFragment('Card([Text("x")])', 'Text("y", "sm")') }, { agent: ancestors.agent, callId: 'call-nested-ancestor' }),
+    /cannot include a block together with its ancestor or descendant/,
+  )
+  assert.equal(existsSync(ancestors.file), false)
+  // Mixed legacy and nested edits.
+  const mixed = mount()
+  mixed.send(buildEditRequestText(nestedRequest([nestedEdit('n5', 1), blockEdit('b2', 'legacy nested mix', 2)])))
+  await assert.rejects(
+    () => mixed.blockTool.execute({ program: nestedFragment('Text("X", "sm")') }, { agent: mixed.agent, callId: 'call-nested-mixed' }),
+    /mixing top-level and nested edits in one request is not supported/,
+  )
+  assert.equal(existsSync(mixed.file), false)
+})
+
+test('nested edit validation rejects duplicate and chrome node targets', async () => {
+  const duplicate = mount()
+  duplicate.send(buildEditRequestText(nestedRequest([nestedEdit('n5', 1), nestedEdit('n5', 2, { blockId: 'b1.2' })])))
+  await assert.rejects(
+    () => duplicate.blockTool.execute({ program: nestedFragment('Text("a", "sm")', 'Text("b", "sm")') }, { agent: duplicate.agent, callId: 'call-nested-duplicate' }),
+    /is selected more than once/,
+  )
+  assert.equal(existsSync(duplicate.file), false)
+  const chrome = mount()
+  chrome.send(buildEditRequestText(nestedRequest([nestedEdit('n3')])))
+  await assert.rejects(
+    () => chrome.blockTool.execute({ program: nestedFragment('Title("X", "sm")') }, { agent: chrome.agent, callId: 'call-nested-chrome' }),
+    /is page chrome and cannot be edited as a block/,
+  )
+  assert.equal(existsSync(chrome.file), false)
+})
+
+test('a malformed nested fragment fails retryably and keeps the request armed', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(nestedRequest([nestedEdit('n5')])))
+  await assert.rejects(
+    () => m.blockTool.execute({ program: nestedFragment('Text("a", "sm")', 'Text("b", "sm")') }, { agent: m.agent, callId: 'call-nested-mismatch' }),
+    /return exactly 1 root children, one per selected block in selection order/,
+  )
+  assert.equal(existsSync(m.file), false)
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("A retry", "sm")') }, { agent: m.agent, callId: 'call-nested-retry-ok' })
+  assert.equal(value.revision, 2)
 })
 
 /** Drive the controller directly so the TTL and session bound are observable. */
