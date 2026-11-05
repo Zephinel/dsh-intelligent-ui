@@ -10,6 +10,11 @@
  * clicking any part of the block selects it instead of operating its controls
  * (the read-only behaviour the edit mode promises).
  *
+ * It also carries an optional nested `path` (M4 spike): a path-aware wrapper
+ * provides `BlockSlotPathContext` to its descendants so container renderers can
+ * derive stable child paths, and exposes the path as an attribute for overlay
+ * anchoring. Without `path` every behaviour above stays byte-identical.
+ *
  * This component is registered only in the edit-mode library, never in the
  * model-facing catalog.
  */
@@ -50,6 +55,13 @@ export interface BlockSlotContextValue {
 /** Provided by the edit view; absent in normal card rendering. */
 export const BlockSlotContext = createContext<BlockSlotContextValue | null>(null);
 
+/**
+ * Path of the nearest nested block wrapper, when the wrapper was created with a
+ * `path`. Root-level wrappers leave it undefined, so existing edit rendering is
+ * unchanged; nested wrappers (M4) let container renderers build child paths.
+ */
+export const BlockSlotPathContext = createContext<string | undefined>(undefined);
+
 /** Palette size used by the selection colours. */
 const COLOR_COUNT = 6;
 
@@ -60,16 +72,27 @@ export const BlockSlot = defineComponent({
     blockId: z.string(),
     blockIndex: z.number(),
     children,
+    /** Nested path (M4): `root/0`, `root/0/1`, ...; absent for root-level wrappers. */
+    path: z.string().optional(),
   }),
   description: "Internal edit-mode block wrapper. Not for model use.",
   component: function BlockSlotView({ props, renderNode }) {
     const context = useContext(BlockSlotContext);
     const host = useRef<HTMLDivElement>(null);
+    // A path-aware wrapper publishes its path; children stay in the same DOM.
+    const renderedChildren = props.path === undefined
+      ? renderNode(props.children)
+      : <BlockSlotPathContext.Provider value={props.path}>{renderNode(props.children)}</BlockSlotPathContext.Provider>;
     // Normal card rendering: layout-transparent pass-through.
     if (context === null) {
       return (
-        <div className="dsh-iui-block" data-dsh-iui-block={props.blockId} data-dsh-iui-block-index={props.blockIndex}>
-          <div className="dsh-iui-block-body">{renderNode(props.children)}</div>
+        <div
+          className="dsh-iui-block"
+          data-dsh-iui-block={props.blockId}
+          data-dsh-iui-block-index={props.blockIndex}
+          data-dsh-iui-block-path={props.path}
+        >
+          <div className="dsh-iui-block-body">{renderedChildren}</div>
         </div>
       );
     }
@@ -113,7 +136,7 @@ export const BlockSlot = defineComponent({
         onClick={editing ? (event) => { event.stopPropagation(); activate(); } : undefined}
         onKeyDown={editing ? onKeyDown : undefined}
       >
-        <div className="dsh-iui-block-body">{renderNode(props.children)}</div>
+        <div className="dsh-iui-block-body">{renderedChildren}</div>
         <span className="dsh-iui-block-layer" aria-hidden="true" />
         {selection === undefined ? null : (
           <>
