@@ -620,6 +620,24 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-local-revision]')).includes('结构操作修订'), true, 'local card is labelled as a structural revision')
   check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after the structural revision')
 
+  // 26. Container expansion: Box/Grid/Section/Carousel children are selectable.
+  await read('window.__addNestedContainersCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="nested-containers-call-1"]\')', 'nested containers card')
+  await click('[data-dsh-iui-call-id="nested-containers-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested containers editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested containers arrangement')
+  check((await count('[data-dsh-iui-edit-nested-group]')) >= 4, true, 'Box/Grid/Section/Carousel groups appear')
+  check(await count('[data-dsh-iui-block="b1.1.1"]'), 1, 'Box child is selectable')
+  check(await count('[data-dsh-iui-block="b2.1.1"]'), 1, 'Grid child is selectable')
+  check(await count('[data-dsh-iui-block="b3.1"]'), 1, 'Section child is selectable')
+  check(await count('[data-dsh-iui-block="b4.1.1"]'), 1, 'Carousel child is selectable')
+  await click('[data-dsh-iui-block="b2.1.1"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'grid nested popover')
+  await saveInstruction('grid nested change')
+  const expandedEnvelope = await read('window.__serializeChipMatching("嵌套容器样例")')
+  check(expandedEnvelope.includes('"blockId":"b2.1.1"'), true, 'container expansion envelope carries the Grid child id')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }

@@ -7,6 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ANCHOR_PROGRAM, NESTED_PROGRAM, SCOPED_PROGRAM } from '../browser/fixtures/nested-artifact.ts'
+import { NESTED_CONTAINERS_PROGRAM } from '../browser/fixtures/nested-containers.ts'
 import {
   DEFAULT_CONTAINER_TYPES,
   MAX_CST_OPERATIONS,
@@ -16,6 +17,7 @@ import {
   collectSymbols,
   digestSource,
   duplicateNode,
+  insertNode,
   inspectProgramStructure,
   moveNode,
   parseProgramCst,
@@ -365,4 +367,164 @@ test('collectSymbols and inspectProgramStructure expose declarations, references
   expectFailure(inspectProgramStructure('root = Col([card])\ncard = Card([Text(@Format(mystery, "number", 0))])'), 'unknown_reference')
   expectFailure(inspectProgramStructure('root = Card([Text("x")])'), 'root_not_col')
   expectFailure(inspectProgramStructure('root = Col([a])\na = Text("x"'), 'parse_error')
+})
+
+
+/** Container whitelist covering every M4-4 nested container. */
+const ALL_CONTAINERS = ['Col', 'Row', 'Box', 'Grid', 'Card', 'Carousel', 'Section']
+
+test('insertNode inserts inline expressions into Card, Col and root slots with chrome preserved', () => {
+  // Card: the Title chrome child must stay first while the new block goes before the mapped child.
+  const card = expectOk(insertNode(NESTED_PROGRAM, 'n2', 'children', 0, 'Text("new card child", "sm")'))
+  assert.match(card.program.split('\n')[1], /Card\(\[Title\("外层卡片", "sm"\), Text\("new card child", "sm"\), Col\(\[/)
+  assert.equal(card.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2], 'the second card statement is byte-identical')
+  assert.equal(card.program.split('\n')[3], NESTED_PROGRAM.split('\n')[3])
+  const insertedCardNode = [...card.tree.nodes.values()].find(entry => entry.source === 'Text("new card child", "sm")')
+  assert.ok(insertedCardNode !== undefined)
+  assert.equal(insertedCardNode.componentType, 'Text')
+  assert.equal(insertedCardNode.parentNodeId, card.tree.nodes.get(card.tree.rootNodeId).childSlots.children[0])
+  assert.ok(card.touched.some(entry => entry.nodeId === 'n2' && entry.op === 'insert'))
+  // The chrome Title lives inside the rewritten slot, but its bytes and position are preserved.
+  assert.match(card.program.split('\n')[1], /^outerCard = Card\(\[Title\("外层卡片", "sm"\), Text\("new card child"/)
+  assert.equal((card.program.match(/Title\("外层卡片", "sm"\)/g) ?? []).length, 1)
+  assert.match(card.edits[0].summary, /Text\("new card child", "sm"\)/)
+  // Col middle insert.
+  const middle = expectOk(insertNode(NESTED_PROGRAM, 'n4', 'children', 1, 'Text("mid", "sm")'))
+  assert.match(middle.program.split('\n')[1], /Col\(\[Text\("A", "sm"\), Text\("mid", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  // Col append.
+  const appended = expectOk(insertNode(NESTED_PROGRAM, 'n4', 'children', 3, 'Text("tail", "sm")'))
+  assert.match(appended.program.split('\n')[1], /Col\(\[Text\("A", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\), Text\("tail", "sm"\)\]\)/)
+  // Root Col: a new top-level block can be inserted between the two root children.
+  const root = expectOk(insertNode(NESTED_PROGRAM, 'n1', 'children', 1, 'Text("top level", "sm")'))
+  assert.equal(root.program.split('\n')[0], 'root = Col([outerCard, Text("top level", "sm"), secondCard])')
+  assert.equal(root.program.split('\n')[1], NESTED_PROGRAM.split('\n')[1], 'the first root block definition is untouched')
+  const rootChildren = root.tree.nodes.get(root.tree.rootNodeId).childSlots.children
+  assert.equal(rootChildren.length, 3)
+  assert.equal(root.tree.nodes.get(rootChildren[1]).source, 'Text("top level", "sm")')
+  assert.equal(root.tree.nodes.get(rootChildren[1]).depth, 1)
+  // The batch API supports insert as well.
+  const batched = expectOk(applyOperations(NESTED_PROGRAM, [{ op: 'insert', parentNodeId: 'n4', slotKey: 'children', index: 0, source: 'Text("batch", "sm")' }]))
+  assert.match(batched.program.split('\n')[1], /Col\(\[Text\("batch", "sm"\), Text\("A", "sm"\)/)
+})
+
+test('insertNode rejects invalid parents, sources, indexes and structure limits', () => {
+  expectFailure(insertNode(NESTED_PROGRAM, 'n99', 'children', 0, 'Text("x", "sm")'), 'unknown_node')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n5', 'children', 0, 'Text("x", "sm")'), 'incompatible_container')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'template', 0, 'Text("x", "sm")'), 'unknown_slot')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', -1, 'Text("x", "sm")'), 'invalid_index')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 4, 'Text("x", "sm")'), 'invalid_index')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 1.5, 'Text("x", "sm")'), 'invalid_index')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, ''), 'invalid_source')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, 'cond ? Text("a") : Text("b")'), 'invalid_source')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, 'Text("a", "sm")\nText("b", "sm")'), 'invalid_source')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, 'WrongComponent("x")'), 'parse_error')
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, 'Text(@Format(mystery, "number", 0), "sm")'), 'unknown_reference')
+  const scoped = buildArtifactTree(SCOPED_PROGRAM, { containerTypes: [...DEFAULT_CONTAINER_TYPES] })
+  const dynamicCol = scoped.outline.find(entry => entry.componentType === 'Col' && entry.depth === 2)
+  assert.ok(dynamicCol !== undefined)
+  expectFailure(insertNode(SCOPED_PROGRAM, dynamicCol.nodeId, 'children', 0, 'Text("x", "sm")'), 'unsupported_container')
+  // Depth: an empty depth-3 Box may not receive a depth-4 child.
+  const deepProgram = 'root = Col([a])\na = Card([Col([b])])\nb = Box([])'
+  const deepOptions = { containerTypes: ['Col', 'Card', 'Box'], maxDepth: 3 }
+  const deepTree = buildArtifactTree(deepProgram, deepOptions)
+  assert.equal(deepTree.limitsExceeded, undefined)
+  const box = deepTree.outline.find(entry => entry.componentType === 'Box')
+  expectFailure(insertNode(deepProgram, box.nodeId, 'children', 0, 'Text("x", "sm")', deepOptions), 'too_deep')
+  // Node count: inserting into a page already at the node cap is rejected.
+  expectFailure(insertNode(NESTED_PROGRAM, 'n4', 'children', 0, 'Text("x", "sm")', { maxNodes: 10 }), 'too_many_nodes')
+})
+
+test('Section maps its second children argument and stays reorderable/insertable', () => {
+  const tree = buildArtifactTree(NESTED_CONTAINERS_PROGRAM, { containerTypes: ALL_CONTAINERS })
+  assert.deepEqual(tree.problems, [])
+  assert.equal(tree.limitsExceeded, undefined)
+  assert.deepEqual(tree.stats, { nodeCount: 19, maxDepth: 3 })
+  const section = [...tree.nodes.values()].find(entry => entry.componentType === 'Section')
+  assert.ok(section !== undefined)
+  assert.equal(section.slotKey, 'children')
+  assert.deepEqual(section.children, ['n13', 'n14'])
+  assert.equal(NESTED_CONTAINERS_PROGRAM.slice(section.slotRange.start, section.slotRange.end), 'Text("section one", "sm"), Text("section two", "sm")')
+  const firstChild = tree.nodes.get(section.children[0])
+  assert.equal(firstChild.nodePath, 'root/children[2]/children[0]')
+  assert.equal(firstChild.depth, 2)
+  assert.equal(NESTED_CONTAINERS_PROGRAM.slice(firstChild.range.start, firstChild.range.end), 'Text("section one", "sm")')
+  // Other containers keep children as their first argument.
+  for (const [type, expected] of [['Box', ['n5', 'n6']], ['Grid', ['n10', 'n11']], ['Carousel', ['n18', 'n19']]]) {
+    const container = [...tree.nodes.values()].find(entry => entry.componentType === type)
+    assert.equal(container.componentType, type)
+    assert.deepEqual(container.children, expected, type)
+  }
+  // Insert into the Section children slot (second argument), keeping title/anchor intact.
+  const inserted = expectOk(insertNode(NESTED_CONTAINERS_PROGRAM, section.nodeId, 'children', 1, 'Text("section new", "sm")', { containerTypes: ALL_CONTAINERS }))
+  assert.equal(inserted.program.split('\n')[3], 'sectionCard = Section("Section 容器", [Text("section one", "sm"), Text("section new", "sm"), Text("section two", "sm")], "m44-section")')
+  // Default whitelist keeps Section a leaf instead of guessing a children slot.
+  const narrow = buildArtifactTree(NESTED_CONTAINERS_PROGRAM, { containerTypes: [...DEFAULT_CONTAINER_TYPES] })
+  assert.deepEqual(narrow.problems, [])
+  const narrowSection = [...narrow.nodes.values()].find(entry => entry.componentType === 'Section')
+  assert.deepEqual(narrowSection.children, [])
+})
+
+test('cross-container move moves blocks between sibling containers and preserves source bytes', () => {
+  const moved = expectOk(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 0, { containerTypes: [...DEFAULT_CONTAINER_TYPES] }))
+  const lines = moved.program.split('\n')
+  assert.match(lines[1], /Card\(\[Title\("外层卡片", "sm"\), Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)\]\)/)
+  assert.match(lines[2], /secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row\(\[Text\("C", "sm"\), Text\("D", "sm"\)\]\)\], "soft"\)/)
+  assert.equal(lines[0], NESTED_PROGRAM.split('\n')[0])
+  assert.equal(lines[3], NESTED_PROGRAM.split('\n')[3], 'the helper statement is byte-identical')
+  assert.ok(moved.unchanged.some(entry => entry.nodeId === 'n3'), 'the source chrome title is untouched')
+  // The target chrome Title sits inside the rewritten target slot but keeps its bytes and order.
+  assert.match(moved.program.split('\n')[2], /^secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row/)
+  assert.equal((moved.program.match(/Title\("第二张卡片", "sm"\)/g) ?? []).length, 1)
+  const movedText = [...moved.tree.nodes.values()].find(entry => entry.source === 'Text("A", "sm")')
+  const secondCard = [...moved.tree.nodes.values()].find(entry => entry.componentType === 'Card' && entry.children.includes(movedText.nodeId))
+  assert.equal(movedText.parentNodeId, secondCard.nodeId, 'the moved text now lives under the second card')
+  // Move into a nested Row container (Row becomes a container in this tree).
+  const wide = expectOk(moveNode(NESTED_PROGRAM, 'n5', 'n10', 'children', 2, { containerTypes: [...DEFAULT_CONTAINER_TYPES, 'Row'] }))
+  assert.match(wide.program.split('\n')[1], /Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)/)
+  assert.match(wide.program.split('\n')[2], /Row\(\[Text\("C", "sm"\), Text\("D", "sm"\), Text\("A", "sm"\)\]\)/)
+  // Move between two inline sibling containers in the same definition.
+  const sibling = 'root = Col([left, right])\nleft = Card([Title("L", "sm"), Col([Text("x", "sm")])])\nright = Card([Title("R", "sm"), Col([Text("y", "sm")])])'
+  const siblingTree = buildArtifactTree(sibling, { containerTypes: [...DEFAULT_CONTAINER_TYPES] })
+  const x = [...siblingTree.nodes.values()].find(entry => entry.source === 'Text("x", "sm")')
+  const rightCol = [...siblingTree.nodes.values()].find(entry => entry.componentType === 'Col' && entry.children.includes([...siblingTree.nodes.values()].find(node => node.source === 'Text("y", "sm")').nodeId))
+  const siblingMoved = expectOk(moveNode(sibling, x.nodeId, rightCol.nodeId, 'children', 1))
+  assert.match(siblingMoved.program.split('\n')[2], /Col\(\[Text\("y", "sm"\), Text\("x", "sm"\)\]\)/)
+  assert.equal(siblingMoved.program.split('\n')[1], 'left = Card([Title("L", "sm"), Col([])])')
+})
+
+test('cross-container move rejects unsafe targets and keeps same-parent semantics', () => {
+  // Target root is an ancestor of the source parent: nested slots are unsupported.
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n1', 'children', 0), 'unsupported_move_nested')
+  // Target inside the moved node's own subtree.
+  expectFailure(moveNode(NESTED_PROGRAM, 'n2', 'n4', 'children', 0), 'move_into_self')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n1', 'n4', 'children', 0), 'cannot_edit_root')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n3', 'n4', 'children', 0), 'unsupported_chrome')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n99', 'children', 0), 'unknown_node')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n99', 'n4', 'children', 0), 'unknown_node')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n3', 'children', 0), 'incompatible_container')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 2), 'invalid_index')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', -1), 'invalid_index')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 0.5), 'invalid_index')
+  // Scoped and shared nodes cannot leave their runtime/definition scope.
+  const scopedTree = buildArtifactTree(SCOPED_PROGRAM, { containerTypes: [...DEFAULT_CONTAINER_TYPES] })
+  const template = [...scopedTree.nodes.values()].find(entry => entry.scoped)
+  expectFailure(moveNode(SCOPED_PROGRAM, template.nodeId, 'n1', 'children', 0), 'unsupported_scope')
+  const sharedProgram = 'root = Col([card, card2])\ncard = Card([Text("x")])\ncard2 = card'
+  const sharedTree = buildArtifactTree(sharedProgram, { containerTypes: [...DEFAULT_CONTAINER_TYPES] })
+  const sharedCard = [...sharedTree.nodes.values()].find(entry => entry.componentType === 'Card' && entry.shared)
+  expectFailure(moveNode(sharedProgram, sharedCard.nodeId, 'n1', 'children', 0), 'shared_named_reference')
+  // Same-parent move keeps the old full-index-after-removal contract.
+  const sameParent = expectOk(moveNode(NESTED_PROGRAM, 'n5', 'n4', 'children', 2))
+  assert.equal(sameParent.program, expectOk(reorderChildren(NESTED_PROGRAM, 'n4', 'children', ['n6', 'n7', 'n5'])).program)
+})
+
+test('cross-container move works into and out of a Section children slot', () => {
+  const tree = buildArtifactTree(NESTED_CONTAINERS_PROGRAM, { containerTypes: ALL_CONTAINERS })
+  const section = [...tree.nodes.values()].find(entry => entry.componentType === 'Section')
+  const sectionText = tree.nodes.get(section.children[0])
+  const box = [...tree.nodes.values()].find(entry => entry.componentType === 'Box')
+  const moved = expectOk(moveNode(NESTED_CONTAINERS_PROGRAM, sectionText.nodeId, box.nodeId, 'children', 2, { containerTypes: ALL_CONTAINERS }))
+  assert.equal(moved.program.split('\n')[1], 'boxCard = Card([Title("Box 容器", "sm"), Box([Text("box one", "sm"), Text("box two", "sm"), Text("section one", "sm")], "col", 2)])')
+  assert.equal(moved.program.split('\n')[3], 'sectionCard = Section("Section 容器", [Text("section two", "sm")], "m44-section")')
+  assert.equal(moved.program.split('\n')[2], NESTED_CONTAINERS_PROGRAM.split('\n')[2])
 })

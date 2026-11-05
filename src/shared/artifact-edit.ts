@@ -110,6 +110,20 @@ export interface ArtifactBlockEdit {
   readonly instruction: string
 }
 
+/** Maximum model-generated additions in one request. */
+export const MAX_ARTIFACT_ADDITIONS = 4
+
+/** One request to add a model-generated block inside a container. */
+export interface ArtifactBlockAddition {
+  readonly parentBlockId: string
+  /** CST node id of the parent container (root node id for the page root). */
+  readonly parentNodeId: string
+  /** Insertion index among the parent's editable children. */
+  readonly index: number
+  /** User-authored instruction for the new block. */
+  readonly instruction: string
+}
+
 /** The complete structured edit intent sent to the model. */
 export interface ArtifactEditRequest {
   readonly schemaVersion: typeof ARTIFACT_EDIT_SCHEMA_VERSION
@@ -131,6 +145,8 @@ export interface ArtifactEditRequest {
   readonly temporaryStyle?: StyleSnapshot
   /** Instructions, in selection order. Empty for a reorder-only request. */
   readonly edits: readonly ArtifactBlockEdit[]
+  /** Requests for model-generated new blocks, in insertion order. */
+  readonly additions?: readonly ArtifactBlockAddition[]
   /** Target order of every editable top-level block id (a permutation of the base revision's blocks). */
   readonly targetOrder: readonly string[]
   /**
@@ -286,7 +302,7 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'globalInstruction', 'program']
+  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'additions', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
@@ -322,6 +338,17 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
     orders.add(block.selectionOrder)
   }
   if ('orderChanged' in value && typeof value.orderChanged !== 'boolean') return 'invalid_order_changed'
+  if ('additions' in value) {
+    if (!Array.isArray(value.additions) || value.additions.length > MAX_ARTIFACT_ADDITIONS) return 'invalid_additions'
+    for (const addition of value.additions) {
+      if (!isRecord(addition)) return 'invalid_additions'
+      if (Object.keys(addition).some(key => !['parentBlockId', 'parentNodeId', 'index', 'instruction'].includes(key))) return 'invalid_additions'
+      if (typeof addition.parentBlockId !== 'string' || !/^b[1-9][0-9]{0,3}(\.[1-9][0-9]{0,2})*$/.test(addition.parentBlockId)) return 'invalid_additions'
+      if (typeof addition.parentNodeId !== 'string' || !/^n[1-9][0-9]{0,4}$/.test(addition.parentNodeId)) return 'invalid_additions'
+      if (typeof addition.index !== 'number' || !Number.isSafeInteger(addition.index) || addition.index < 0 || addition.index > 99) return 'invalid_additions'
+      if (!isBoundedText(addition.instruction, 1, MAX_BLOCK_INSTRUCTION_CHARS)) return 'invalid_additions'
+    }
+  }
   if ('orderByParent' in value) {
     const groups = value.orderByParent
     if (!isRecord(groups)) return 'invalid_order_by_parent'
@@ -402,6 +429,7 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
     })),
     targetOrder: [...request.targetOrder],
     ...request.orderByParent === undefined ? {} : { orderByParent: request.orderByParent },
+    ...request.additions === undefined ? {} : { additions: request.additions },
     ...request.orderChanged === true ? { orderChanged: true } : {},
     ...request.branch === true ? { branch: true } : {},
     ...request.globalInstruction === undefined ? {} : { globalInstruction: request.globalInstruction },
@@ -545,6 +573,7 @@ export function isReorderedOrder(originalOrder: readonly string[], targetOrder: 
  */
 export function isNoOpEditRequest(request: ArtifactEditRequest, baseBlockIds: readonly string[]): boolean {
   return request.edits.length === 0
+    && (request.additions?.length ?? 0) === 0
     && (request.globalInstruction?.trim() ?? '') === ''
     && !isReorderedOrder(baseBlockIds, request.targetOrder)
 }

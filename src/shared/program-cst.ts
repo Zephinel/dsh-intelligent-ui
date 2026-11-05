@@ -30,6 +30,14 @@ export const DEFAULT_CONTAINER_TYPES = ['Col', 'Card'] as const
 
 /** Root children that are page chrome and never editable/structural targets. */
 const CHROME_COMPONENTS = new Set(['Caption', 'Divider', 'Spacer', 'Toc', 'Title'])
+/**
+ * Which positional argument of each container holds its children array.
+ * Col/Row/Box/Grid/Card/Carousel take children first; Section(title, children,
+ * anchor) takes them second. Components without an entry default to argument 0.
+ */
+const CONTAINER_CHILDREN_ARG_INDEX: Readonly<Record<string, number>> = {
+  Col: 0, Row: 0, Box: 0, Grid: 0, Card: 0, Carousel: 0, Section: 1,
+}
 
 const parser = createParser((librarySpec as { schema: unknown }).schema as never, 'Col')
 
@@ -237,6 +245,13 @@ export type CstOperation =
   | { readonly op: 'replace'; readonly nodeId: string; readonly source: string }
   | { readonly op: 'reorder'; readonly parentNodeId: string; readonly slotKey?: string; readonly order: readonly string[] }
   | { readonly op: 'remove'; readonly nodeId: string }
+  | {
+    readonly op: 'insert'
+    readonly parentNodeId: string
+    readonly slotKey?: string
+    readonly index: number
+    readonly source: string
+  }
   | {
     readonly op: 'duplicate'
     readonly nodeId: string
@@ -771,18 +786,20 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
     ast: ElementNode,
     call: CstExpr,
   ): { astChildren: readonly unknown[]; itemExprs: readonly CstExpr[]; slotRange?: CstRange } | undefined => {
-    const firstArg = call.kind === 'call' ? call.items?.[0] : undefined
+    const childrenArgIndex = CONTAINER_CHILDREN_ARG_INDEX[ast.typeName] ?? 0
+    const childrenArg = call.kind === 'call' ? call.items?.[childrenArgIndex] : undefined
     const astChildren = astChildEntries(ast)
-    if (firstArg === undefined) return astChildren.length === 0 ? { astChildren, itemExprs: [] } : undefined
-    if (firstArg.kind === 'array') {
-      const itemExprs = firstArg.items ?? []
+    if (childrenArg === undefined) return astChildren.length === 0 ? { astChildren, itemExprs: [] } : undefined
+    if (childrenArg.kind === 'array') {
+      const itemExprs = childrenArg.items ?? []
       if (astChildren.length !== itemExprs.length) return undefined
-      return { astChildren, itemExprs, slotRange: { start: firstArg.range.start + 1, end: firstArg.range.end - 1 } }
+      return { astChildren, itemExprs, slotRange: { start: childrenArg.range.start + 1, end: childrenArg.range.end - 1 } }
     }
-    // A single dynamic children expression (e.g. `Col(@Each(...))`): the runtime
-    // instances are not statically addressable, so there is no rewritable slot.
-    if (call.kind === 'call' && call.items?.length === 1 && astChildren.length === 1 && !isOpaque(firstArg)) {
-      return { astChildren, itemExprs: [firstArg] }
+    // A single dynamic children expression (e.g. `Col(@Each(...))` or
+    // `Section("t", @Each(...), "anchor")`): the runtime instances are not
+    // statically addressable, so there is no rewritable slot.
+    if (astChildren.length === 1 && !isOpaque(childrenArg)) {
+      return { astChildren, itemExprs: [childrenArg] }
     }
     return undefined
   }
@@ -1236,6 +1253,44 @@ function childSources(tree: ArtifactTree, ids: readonly string[]): string[] {
   return ids.map(id => (tree.nodes.get(id) as ArtifactTreeNode).source)
 }
 
+/** Direct children a user can place blocks between (chrome and opaque nodes excluded). */
+function editableChildIds(tree: ArtifactTree, parent: ArtifactTreeNode): readonly string[] {
+  return slotChildIds(parent).filter(nodeId => tree.nodes.get(nodeId)?.editable === true)
+}
+
+/**
+ * Map an editable-child insertion index to a full slot index, keeping chrome
+ * children at their current positions: index < editableCount inserts before
+ * that editable child; index === editableCount appends after the last editable
+ * child (before any trailing chrome, or at the end when there is none).
+ */
+function editableInsertionIndex(tree: ArtifactTree, parent: ArtifactTreeNode, index: number): number | undefined {
+  if (!Number.isInteger(index) || index < 0) return undefined
+  const children = slotChildIds(parent)
+  const editable = editableChildIds(tree, parent)
+  if (index > editable.length) return undefined
+  if (index < editable.length) return children.indexOf(editable[index] as string)
+  const last = editable[editable.length - 1]
+  return last === undefined ? children.length : children.indexOf(last) + 1
+}
+
+/** Whether two source ranges overlap (adjacent ranges do not). */
+function rangesOverlap(left: CstRange, right: CstRange): boolean {
+  return left.start < right.end && right.start < left.end
+}
+
+/** Validate one inline expression source for insertion. */
+function insertSourceFailure(source: string): CstFailure | undefined {
+  const trimmed = source.trim()
+  if (trimmed === '') return failure('invalid_source', 'The inserted expression source is empty.')
+  if (/[\r\n]/.test(trimmed)) return failure('invalid_source', 'The inserted expression source must be a single-line expression.')
+  const expr = scanExpression(trimmed, { start: 0, end: trimmed.length })
+  if (isOpaque(expr) || !fullySupported(expr)) {
+    return failure('invalid_source', 'The inserted expression source is outside the supported expression subset.')
+  }
+  return undefined
+}
+
 // ---------------------------------------------------------------------------
 // Operation preparation
 // ---------------------------------------------------------------------------
@@ -1352,6 +1407,43 @@ function uniqueCopyName(baseName: string, declared: ReadonlySet<string>): string
   return undefined
 }
 
+function prepareInsert(
+  program: string,
+  tree: ArtifactTree,
+  operation: { parentNodeId: string; slotKey?: string; index: number; source: string },
+  options: CstOperationOptions,
+): { ok: true; prepared: PreparedEdits } | CstFailure {
+  const slotKey = operation.slotKey ?? 'children'
+  if (slotKey !== 'children') return failure('unknown_slot', `Only the "children" slot supports insertion in this release, got ${JSON.stringify(slotKey)}.`)
+  const parentResult = requireContainer(tree, operation.parentNodeId, options)
+  if (parentResult.ok === false) return parentResult
+  const parent = parentResult.node
+  const sourceProblem = insertSourceFailure(operation.source)
+  if (sourceProblem !== undefined) return sourceProblem
+  const trimmed = operation.source.trim()
+  const children = slotChildIds(parent)
+  const editable = editableChildIds(tree, parent)
+  const index = editableInsertionIndex(tree, parent, operation.index)
+  if (index === undefined) {
+    return failure('invalid_index', `The insert index must be between 0 and ${editable.length}.`)
+  }
+  const nextChildren = [...children]
+  nextChildren.splice(index, 0, trimmed)
+  const sources = nextChildren.map(entry => (tree.nodes.get(entry) as ArtifactTreeNode | undefined)?.source ?? entry)
+  return {
+    ok: true,
+    prepared: {
+      edits: [{
+        start: (parent.slotRange as CstRange).start,
+        end: (parent.slotRange as CstRange).end,
+        text: sources.join(', '),
+        op: 'insert',
+      }],
+      explicitTouched: [parent.nodeId],
+    },
+  }
+}
+
 function prepareDuplicate(
   program: string,
   tree: ArtifactTree,
@@ -1444,7 +1536,7 @@ function prepareMove(
   if (sourceParent.slotRange === undefined) return failure('incompatible_container', 'The source parent children cannot be mapped to a source range.')
   const differentParent = sourceParent.nodeId !== target.nodeId
   if (differentParent && (isAncestor(tree, sourceParent.nodeId, target.nodeId) || isAncestor(tree, target.nodeId, sourceParent.nodeId))) {
-    return failure('unsupported_move_nested', 'Moving between a container and one of its descendants is not supported in this spike; move within sibling containers.')
+    return failure('unsupported_move_nested', 'Moving between a container and an ancestor/descendant container is not supported: their children slots are nested. Move to a sibling or unrelated container instead.')
   }
   const sourceChildren = slotChildIds(sourceParent)
   const sourceIndex = sourceChildren.indexOf(node.nodeId)
@@ -1452,17 +1544,23 @@ function prepareMove(
   const removed = sourceChildren.filter(id => id !== node.nodeId)
   if (differentParent) {
     const targetChildren = slotChildIds(target)
-    if (!Number.isInteger(operation.index) || operation.index < 0 || operation.index > targetChildren.length) {
-      return failure('invalid_index', `The target index must be between 0 and ${targetChildren.length}.`)
+    const targetEditable = editableChildIds(tree, target)
+    const targetIndex = editableInsertionIndex(tree, target, operation.index)
+    if (targetIndex === undefined) {
+      return failure('invalid_index', `The target index must be between 0 and ${targetEditable.length} editable children.`)
     }
     const inserted = [...targetChildren]
-    inserted.splice(operation.index, 0, node.nodeId)
+    inserted.splice(targetIndex, 0, node.nodeId)
     if (target.slotRange === undefined) return failure('incompatible_container', 'The target slot cannot be rewritten.')
+    const sourceSlot = sourceParent.slotRange as CstRange
+    if (rangesOverlap(sourceSlot, target.slotRange)) {
+      return failure('unsupported_move_nested', 'The source and target children slots overlap; moving inside the source container source region is not supported.')
+    }
     return {
       ok: true,
       prepared: {
         edits: [
-          { start: sourceParent.slotRange.start, end: sourceParent.slotRange.end, text: childSources(tree, removed).join(', '), op: 'move' },
+          { start: sourceSlot.start, end: sourceSlot.end, text: childSources(tree, removed).join(', '), op: 'move' },
           { start: target.slotRange.start, end: target.slotRange.end, text: childSources(tree, inserted).join(', '), op: 'move' },
         ],
         explicitTouched: [sourceParent.nodeId, target.nodeId],
@@ -1659,17 +1757,45 @@ export function duplicateNode(
 }
 
 /**
+ * Insert one inline expression as a new child of a container slot.
+ *
+ * The index counts editable children only (chrome children keep their current
+ * relative positions), so index 0 inserts before the first editable child,
+ * index === editableCount after the last one. The root Col can be the parent.
+ * @param program - base program.
+ * @param parentNodeId - node id of the destination container (root node id is allowed).
+ * @param slotKey - destination slot; only `children` is supported.
+ * @param index - insertion index among the parent's editable children.
+ * @param sourceExpr - inline expression source to insert.
+ * @param options - base tree binding and tree options.
+ * @returns the edited program and verification report, or a failure.
+ */
+export function insertNode(
+  program: string,
+  parentNodeId: string,
+  slotKey: string,
+  index: number,
+  sourceExpr: string,
+  options: CstOperationOptions = {},
+): CstOperationResult {
+  return runSingle(program, options, tree => prepareInsert(program, tree, { parentNodeId, slotKey, index, source: sourceExpr }, options))
+}
+
+/**
  * Move one node into a target container slot.
  *
- * v1 limitation: source and target parent containers may not be each other's
- * ancestor/descendant (rejected with {@link CstErrorCode} `unsupported_move_nested`)
- * because the two rewritten source regions would overlap; sibling containers
- * and same-parent moves are supported.
+ * Same-parent moves keep the original semantics: `index` is the index in the
+ * parent's children slot after the node is removed (a complete reorder).
+ * Cross-container moves (the two parents may not be ancestor/descendant) use an
+ * editable-children index in the destination slot, like {@link insertNode};
+ * chrome children keep their positions. Moving into a container's own
+ * descendant or into an ancestor/descendant container is rejected with
+ * {@link CstErrorCode} `unsupported_move_nested`/`move_into_self`.
  * @param program - base program.
  * @param nodeId - revision-scoped node id.
  * @param targetParentId - node id of the destination container.
  * @param slotKey - destination slot; only `children` is supported.
- * @param index - insertion index after the node is removed from its source slot.
+ * @param index - same-parent: full slot index after removal; cross-parent: editable index in the target.
  * @param options - base tree binding and tree options.
  * @returns the edited program and verification report, or a failure.
  */
@@ -1714,6 +1840,9 @@ export function applyOperations(program: string, operations: readonly CstOperati
         break
       case 'remove':
         prepared = prepareRemove(program, base.tree, operation, options)
+        break
+      case 'insert':
+        prepared = prepareInsert(program, base.tree, operation, options)
         break
       case 'duplicate':
         prepared = prepareDuplicate(program, base.tree, operation, options)

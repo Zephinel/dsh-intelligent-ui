@@ -23,7 +23,8 @@ export const ARTIFACT_EDIT_TTL = 15 * 60 * 1000
 const MAX_PENDING_SESSIONS = 64
 
 /** Containers M4-1 nested content edits may address (mirrors the CST whitelist). */
-export const NESTED_EDIT_CONTAINER_TYPES = ['Col', 'Row', 'Card'] as const
+import { NESTED_CONTAINER_TYPES } from '../shared/artifact-containers.ts'
+export const NESTED_EDIT_CONTAINER_TYPES = NESTED_CONTAINER_TYPES
 
 /** One validated nested edit plan: the base tree plus the selected nodes. */
 interface NestedEditPlan {

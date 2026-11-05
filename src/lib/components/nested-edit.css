@@ -137,3 +137,60 @@
 .iui-card.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
   margin-top: var(--iui-space-inner);
 }
+
+/* -------------------------------------------------------------------------
+ * M4-4 expanded containers: Grid, Box, Section, Carousel.
+ *
+ * Grid children become grid items through the contents wrapper, so they keep
+ * the parent rules (`gap`, track placement) but lose `.iui-grid > *`'s
+ * min-width:0. Carousel wraps every child in `.iui-carousel-item`; the nested
+ * wrapper now sits between the item and the real child, so the item's
+ * card/pressable height rule and the grid/carousel flow typography cap need
+ * re-pointing. Box and Section children are plain column/flow children, already
+ * covered by the row/flow compensations above.
+ * ---------------------------------------------------------------------- */
+
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > * {
+  min-width: 0;
+}
+
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-card,
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable {
+  height: 100%;
+}
+
+/* The structural title/body cap inside a grid cell or carousel item applies to
+   the flow container that is now one wrapper deeper. */
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-lg,
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-lg {
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: -0.3px;
+}
+
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-xl,
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-xl {
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.4px;
+}
+
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-2xl,
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-2xl {
+  font-size: 26px;
+  line-height: 32px;
+  letter-spacing: -0.5px;
+}
+
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-3xl,
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-3xl {
+  font-size: 30px;
+  line-height: 36px;
+  letter-spacing: -0.6px;
+}
+
+.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg),
+.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) {
+  font-size: 15px;
+  line-height: 22px;
+}

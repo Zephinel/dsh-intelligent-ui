@@ -47,7 +47,9 @@ events but not the full DSH Web integration.
   `targetOrder`. The M4-3 scenario then duplicates a nested block through the
   row action (one mocked structure POST with nodeId/sourceDigest/toIndex),
   checks the structural-revision local card label and that the editor closes.
-  143 checks; no real model is called (the
+  The M4-4 scenario selects Box/Grid/Section/Carousel children in nested mode
+  and checks the envelope carries a Grid child id. 149 checks; no real model is
+  called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
   are recorded in the M3/M4 plans).
@@ -86,7 +88,9 @@ events but not the full DSH Web integration.
 - `nested-edit-renderer.e2e.mjs` mounts the edit-mode nested library and measures
   the `display:contents` wrappers: card/text 0px drift, innermost click and
   hover, overlay union rects, the reorder path mapping and unchanged ordinary
-  rendering without wrappers. 41 checks.
+  rendering without wrappers. M4-4 extends it to all seven containers (18 slots),
+  Box/Grid/Section/Carousel parent chains and Carousel scrolling/overlay
+  hit-testing. 75 checks; Carousel off-screen anchors are a known follow-up.
 
 ```bash
 npm run build && npm run test:browser

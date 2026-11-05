@@ -6,10 +6,11 @@
  * source digest are carried alongside for the Host-side nested edit validation.
  */
 import { buildArtifactTree, type ArtifactTreeNode } from '../../shared/program-cst.ts'
+import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 
 /** Containers whose direct children are offered as nested blocks in M4-1. */
-export const NESTED_CONTAINERS = ['Col', 'Row', 'Card'] as const
+export const NESTED_CONTAINERS = NESTED_CONTAINER_TYPES
 
 /** One editable display block plus its path mapping for the renderer. */
 export interface NestedBlockEntry {

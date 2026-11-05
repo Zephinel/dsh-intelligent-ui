@@ -1,4 +1,5 @@
 import { createLibrary } from "@openuidev/react-lang";
+import { NESTED_CONTAINER_TYPES } from "../shared/artifact-containers.ts";
 import { actions } from "./actions";
 import { functions } from "./functions";
 import "./components/theme.css";
@@ -86,7 +87,7 @@ export const blockEditLibrary = createLibrary({
 });
 
 /** Containers whose direct children become nested editable blocks (M4-1). */
-const NESTED_CONTAINER_NAMES = new Set(["Col", "Row", "Card"]);
+const NESTED_CONTAINER_NAMES = new Set<string>(NESTED_CONTAINER_TYPES);
 
 /**
  * Edit-mode library variant (M4-1): the same components, but every allowlisted

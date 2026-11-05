@@ -3,10 +3,14 @@
  * Static CSS contract check for the nested edit-mode wrappers (M4-1).
  *
  * Every direct-child selector in `components.css` whose owner can be an
- * allowlisted nested container (`Col`, `Row`, `Card`, or a `.iui-flow` element)
- * is silently broken by the `display:contents` BlockSlot wrapper. This script
- * scans those selectors, requires an explicit compensation entry, and verifies
- * that `nested-edit.css` really contains the compensation selector text.
+ * allowlisted nested container (Col/Row/Box/Grid/Card/Section/Carousel or a
+ * `.iui-flow` element) is silently broken by the `display:contents` BlockSlot
+ * wrapper. This script scans those selectors, requires an explicit compensation
+ * entry, and verifies that `nested-edit.css` really contains the compensation
+ * selector text. It also guards the scoped typography rules that use a
+ * structural child selector inside `:is(...)` (grid/carousel flow caps): a
+ * wrapper hides the flow child from that scope, so the cap has to be repeated
+ * through the wrapper.
  *
  * Run: node test/renderer/nested-css-contract-check.mjs
  */
@@ -19,7 +23,7 @@ const componentsCss = readFileSync(resolve(root, 'src/lib/components/components.
 const nestedCss = readFileSync(resolve(root, 'src/lib/components/nested-edit.css'), 'utf8')
 
 /** Owners whose direct children are replaced by a nested BlockSlot wrapper. */
-const NESTED_OWNER = /(\.iui-col|\.iui-row|\.iui-card|\.iui-flow)(?![\w-])/
+const NESTED_OWNER = /(\.iui-col|\.iui-row|\.iui-grid|\.iui-box|\.iui-card|\.iui-section-body|\.iui-carousel-item|\.iui-flow)(?![\w-])/
 
 /**
  * Source selector (components.css) -> compensation selector fragment that must
@@ -27,6 +31,9 @@ const NESTED_OWNER = /(\.iui-col|\.iui-row|\.iui-card|\.iui-flow)(?![\w-])/
  */
 const COMPENSATIONS = new Map([
   ['.iui-row > *', '.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > *'],
+  ['.iui-grid > *', '.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > *'],
+  ['.iui-carousel-item > .iui-card', '.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-card'],
+  ['.iui-carousel-item > .iui-pressable', '.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable'],
   ['.iui-row > .iui-badge', '.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-badge'],
   ['.iui-row > .iui-button', '.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-button'],
   ['.iui-row[style*="align-items"] > :is(.iui-badge, .iui-button)', '.iui-row[style*="align-items"] > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-badge, .iui-button)'],
@@ -52,6 +59,24 @@ const COMPENSATIONS = new Map([
   ['.iui-flow > .iui-title + :is(.iui-text, .iui-caption, .iui-row:has(> .iui-badge))', '.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption)'],
   ['.iui-flow > .iui-caption + .iui-title', '.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-caption:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-title:first-child'],
 ])
+
+/** Structural scope used by the grid/carousel typography caps. */
+const SCOPED_SCOPE = ':is(.iui-card, .iui-grid > .iui-flow, .iui-carousel-item > .iui-flow)'
+
+/** Scope suffix -> selector fragments that must be repeated through the wrapper. */
+const SCOPED_COMPENSATIONS = [
+  '.iui-title-lg',
+  '.iui-title-xl',
+  '.iui-title-2xl',
+  '.iui-title-3xl',
+  '.iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg)',
+].map(suffix => ({
+  suffix,
+  expected: [
+    `.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow ${suffix}`,
+    `.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow ${suffix}`,
+  ],
+}))
 
 /** Collapse whitespace so selector fragments compare reliably. */
 function normalize(selector) {
@@ -122,8 +147,20 @@ for (const selector of flagged) {
   if (!nestedAllText.includes(normalize(compensation))) missingSelectorText.push({ selector, compensation })
 }
 
-console.log(`nested-css-contract: scanned ${sourceSelectors.length} selectors, ${flagged.length} direct-child selectors under Col/Row/Card/iui-flow`)
-console.log(`nested-css-contract: ${flagged.length - uncompensated.length - missingSelectorText.length}/${flagged.length} compensated`)
+const scopedSelectors = sourceSelectors.filter(selector => selector.startsWith(`${SCOPED_SCOPE} `))
+const scopedUncompensated = []
+const scopedMissingText = []
+for (const selector of scopedSelectors) {
+  const suffix = selector.slice(SCOPED_SCOPE.length + 1)
+  const entry = SCOPED_COMPENSATIONS.find(candidate => candidate.suffix === suffix)
+  if (entry === undefined) { scopedUncompensated.push(selector); continue }
+  const missing = entry.expected.filter(fragment => !nestedAllText.includes(normalize(fragment)))
+  if (missing.length > 0) scopedMissingText.push({ selector, expected: missing })
+}
+const staleScoped = SCOPED_COMPENSATIONS.filter(entry => !scopedSelectors.includes(`${SCOPED_SCOPE} ${entry.suffix}`))
+
+console.log(`nested-css-contract: scanned ${sourceSelectors.length} selectors, ${flagged.length} direct-child selectors under Col/Row/Box/Grid/Card/Section/Carousel/iui-flow, ${scopedSelectors.length} scoped typography selectors`)
+console.log(`nested-css-contract: direct ${flagged.length - uncompensated.length - missingSelectorText.length}/${flagged.length} compensated, scoped ${scopedSelectors.length - scopedUncompensated.length - scopedMissingText.length}/${scopedSelectors.length} compensated`)
 if (uncompensated.length > 0) {
   console.error('uncompensated direct-child selectors (add a rule to nested-edit.css and an entry here):')
   for (const selector of uncompensated) console.error(`  - ${selector}`)
@@ -137,5 +174,17 @@ if (stale.length > 0) {
   console.warn(`nested-css-contract: ${stale.length} stale compensation entries (source selector no longer found):`)
   for (const selector of stale) console.warn(`  - ${selector}`)
 }
-if (uncompensated.length > 0 || missingSelectorText.length > 0) process.exit(1)
+if (scopedUncompensated.length > 0) {
+  console.error('uncompensated scoped typography selectors (add a wrapper-path rule to nested-edit.css and an entry here):')
+  for (const selector of scopedUncompensated) console.error(`  - ${selector}`)
+}
+if (scopedMissingText.length > 0) {
+  console.error('scoped compensation declared but missing from nested-edit.css:')
+  for (const entry of scopedMissingText) console.error(`  - ${entry.selector}
+      expected: ${entry.expected.join(' | ')}`)
+}
+if (staleScoped.length > 0) {
+  console.warn(`nested-css-contract: ${staleScoped.length} stale scoped entries (source selector no longer found)`)
+}
+if (uncompensated.length > 0 || missingSelectorText.length > 0 || scopedUncompensated.length > 0 || scopedMissingText.length > 0) process.exit(1)
 console.log('nested-css-contract: ok')

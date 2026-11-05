@@ -44,7 +44,8 @@ export const MAX_PROGRAM_STORE_BYTES = 50 * 1024 * 1024
 export const MAX_STRUCTURE_OPERATION_RECORDS = 200
 
 /** Containers the structure route may address (M4-3 v1). */
-export const STRUCTURE_CONTAINER_TYPES = ['Col', 'Row', 'Card'] as const
+import { NESTED_CONTAINER_TYPES } from '../shared/artifact-containers.ts'
+export const STRUCTURE_CONTAINER_TYPES = NESTED_CONTAINER_TYPES
 
 /** Session identity recorded for revisions created by the structure route. */
 const STRUCTURE_SESSION_ID = 'structure-route'
