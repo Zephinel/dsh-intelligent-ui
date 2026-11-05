@@ -106,6 +106,14 @@ events but not the full DSH Web integration.
   Box/Grid/Section/Carousel parent chains and Carousel scrolling/overlay
   hit-testing. 75 checks; Carousel off-screen anchors are a known follow-up.
 
+- B2-8/B2-9/B2-10 verification (real GUI, not part of the suites): Article and
+  free-composition layouts were validated (free requires On-demand UI; a plain
+  `render_ui` with free is rejected), 390×844 mobile shows no horizontal
+  overflow and the narrow-width notice instead of the editor while 900×1000
+  opens the editor, and manual visual baselines live in
+  [`visual-baselines/`](visual-baselines/README.md) (5 PNGs + captures.json +
+  SHA256SUMS; human comparison only, no automated pixel diff).
+
 ```bash
 npm run build && npm run test:browser
 # CHROME_BIN=/path/to/chrome npm run test:browser  # non-macOS / custom Chrome

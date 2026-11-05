@@ -239,8 +239,8 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 客户端 store：`session.structurePreview`（loading/ready/failed，含 kind/blockId/target/afterProgram/changedBlockIds/diff lines）；actions `previewStructure`/`previewMoveBlockTo`/`confirmStructurePreview`/`cancelStructurePreview`；行级 LCS diff（>400 行降级为摘要）；preview 不 `markSubmitted`，只有 confirm 才走 apply 并写本地结构修订卡；`base_missing`/`artifact_missing` 仍显示既有的「重新渲染卡片」提示。
 - 模态 UI：结构动作改为 preview→模态确认（duplicate/delete 先预览；delete 保留两段式确认后再进预览；`Move to…` 选择目标后预览）。dialog hooks：`data-dsh-iui-edit-structure-preview`、loading/failed、`data-dsh-iui-edit-preview-diff`（`data-diff="add|remove|same"`）、confirm/cancel；`aria-modal`/`aria-labelledby`、初始焦点在 Cancel、Tab/Shift+Tab focus trap、Esc/backdrop 取消、关闭后焦点返回触发按钮、确认期间 disabled、`prefers-reduced-motion` 下 spinner 简化；保留旧的直接 apply fallback。
 - 未选区块严格模式（B2-5）：请求可选 `strict?: boolean`（shared header 投影；信封 prose 在 strict 时提示模型不得改动未选区块）。客户端会话保存 `strict`（默认关），工具栏「严格保护 / Strict protection」toggle（`data-dsh-iui-edit-strict`、`aria-pressed`、submitted/error 时 disabled），store `setStrictMode` 将 strict 序列化进请求。Host 在完成合成、计算保留警告之后、**记录 revision / 消费 pending 之前**检查：`strict === true` 且存在未选顶层区块 warning 时抛模型可读错误（前缀 `render_ui:`/`edit_ui_blocks:`，最多 3 条按 label 的摘要、不含源码），保持 pending armed、不写 revision/registry/ledger，模型可用同一请求修正后重试。比较发生在 content stage（`orderByParent`/root `targetOrder` 重排之前），因此合法排序不会误报。覆盖范围与限制：warning 口径为已识别的顶层 Artifact blocks（statement name → title+component type → unique title、digest），排除 selected/edited ids；不检测「选中的顶层区块内部、未被选中的嵌套子节点」改动；`edit_ui_blocks` 的 fragment 合成本身不能改未选顶层块，完整 `render_ui`（`edits: []`）覆盖全部顶层块；`strictOff` 文案当前未使用；严格拒绝路径由 Host 单测覆盖，未做真机验证。
-- 性能与视觉守卫：新增 `test/client/nested-performance.test.mjs`（2 条 smoke：7 卡片 / 49 可编辑区块 / 57 CST nodes 的 tree + nested mapping <2s；`insertNode`+reorder <2s，预算宽松）；视觉回归仍由 `nested-edit-renderer` E2E 守卫（7 类容器 / 18 slots、card/text/body 0px 几何、Grid/Carousel 排版 18px/15px、Carousel 滚动/overlay），未新增像素快照基线。
-- 限制：M4-5 只完成结构操作 diff 预览与 a11y/性能 smoke——**没有**像素级视觉快照基线、没有完整 screen-reader/axe 审计；preview loading 无客户端超时（依赖 fetch 失败）；模态背景用遮罩阻止指针，但未设置 `inert`/`aria-hidden`。**B2-5 的「未选区块内容严格模式（warning→strict）」仍未做**，本次只做结构操作 Host dry-run/严格校验 + diff 预览。既有 M4 限制（Carousel 离屏 anchor、跨容器 append-only/root target、additions 与 orderByParent 分开发送、每容器 1 addition、无多步 undo/GC、base_missing 仅 inline、本地结构卡限制）不变。
+- 性能与视觉守卫：新增 `test/client/nested-performance.test.mjs`（2 条 smoke：7 卡片 / 49 可编辑区块 / 57 CST nodes 的 tree + nested mapping <2s；`insertNode`+reorder <2s，预算宽松）；视觉回归仍由 `nested-edit-renderer` E2E 守卫（7 类容器 / 18 slots、card/text/body 0px 几何、Grid/Carousel 排版 18px/15px、Carousel 滚动/overlay）；B2-10 后另有 `test/browser/visual-baselines/` 手动视觉基线，仍无自动像素 diff。
+- 限制：M4-5 只完成结构操作 diff 预览与 a11y/性能 smoke——当时没有像素级视觉快照基线（B2-10 已提供手动基线，仍无自动像素 diff）、没有完整 screen-reader/axe 审计；preview loading 无客户端超时（依赖 fetch 失败）；模态背景用遮罩阻止指针，但未设置 `inert`/`aria-hidden`。**B2-5 的「未选区块内容严格模式（warning→strict）」仍未做**，本次只做结构操作 Host dry-run/严格校验 + diff 预览。既有 M4 限制（Carousel 离屏 anchor、跨容器 append-only/root target、additions 与 orderByParent 分开发送、每容器 1 addition、无多步 undo/GC、base_missing 仅 inline、本地结构卡限制）不变。
 - 真机（ego，隔离实例「M44 容器验证」R4）：打开编辑 →「嵌套区块」→ 复制 Box 组 → 模态 diff 显示 `boxCard ... + boxGroup_copy1` 等 add/remove/same 行，summary 为 1 个顶层区块 → 确认 → 本地结构修订卡 **Revision 5**（Box 内容重复为 box one/box two 两次），无错误。
 
 ### 运行时状态部分保留（B2-6）
@@ -259,8 +259,16 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 隐藏提示：`[data-dsh-iui-edit-a11y-hint]`（`edit.a11yDragHint`）由根层/嵌套拖拽手柄 `aria-describedby` 引用；移动菜单 `aria-describedby` 指向隐藏的菜单提示（`edit.a11yMenuHint`）。
 - 移动菜单键盘行为：打开时聚焦第一个 target（无 target 时聚焦 `tabIndex=-1` 容器）、ArrowUp/Down 循环、Home/End、Enter/Space 选择、Escape 关闭并把焦点返回触发按钮、Tab 关闭；`role=menu`/`menuitem` 沿用。
 - 其它语义：添加表单 textarea `aria-label` + `aria-describedby` 到可见提示；嵌套组 `role=group` + 可访问名称（父标题 · kind）；菜单 target、添加控件、addition 移除新增 `:focus-visible` 焦点环。
-- 限制：live region 是单个 polite 槽位，快速连续重排会合并播报；指针拖拽只在 drop 时播报；Tab 关闭菜单不强制回焦（Escape 会）；隐藏提示仍在可访问性树中；未做真机 screen-reader/axe 审计，也没有像素级视觉基线（B2-10）。
+- 限制：live region 是单个 polite 槽位，快速连续重排会合并播报；指针拖拽只在 drop 时播报；Tab 关闭菜单不强制回焦（Escape 会）；隐藏提示仍在可访问性树中；未做真机 screen-reader/axe 审计；B2-10 提供手动视觉基线，但无自动像素 diff。
 - 测试：浏览器 `artifact-edit` 180 checks（新增 live region 嵌套重排/添加播报、grip `aria-describedby`、移动菜单首焦点与 ArrowDown 焦点变化）；临时 Chrome harness 121 checks 覆盖 live region 语义、hint/describedby、group 语义、根/嵌套键盘播报、添加表单 aria、菜单方向键循环/Home/End/Enter/Escape+焦点返回、空菜单容器焦点、preview open/cancel 播报。
+
+### 真机验证与视觉基线（B2-8/B2-9/B2-10）
+
+- Article 版式（B2-8）：模型 `render_ui` 使用 `style=article`（会话日志确认）时卡片进入 article chrome；打开编辑后对根层 3 个区块做键盘重排（b1/b2 交换）并给区块填写指令，Send 后模型生成 **Revision 2**，新卡仍为 article 版式、顺序与内容更新、无错误。
+- 自由版式（B2-8）：普通 `render_ui` 只接受 card/article；free 必须经 **On-demand UI**（Composer UI 菜单选择 On-demand UI，模型再以 `style=free` + `temporaryStyle` 调用 `render_ui`）生成临时样式自由版式卡（Temporary style，Row 两栏）。编辑该卡（单个根区块，无重排）并填写内容指令后，**Revision 2 仍为 temporary/free**、内容更新、无错误。**普通 `render_ui` 传 `style=free` 会被 Host 拒绝**；free 只能来自 On-demand UI 或授权的 free 模板。
+- 窄屏/移动端（B2-9）：CDP Emulation 390×844 @2x 下文档无横向溢出（`scrollWidth ≤ innerWidth + 1`），卡片正常重排（Row 两栏堆叠）；点「编辑」出现 `[data-dsh-iui-edit-narrow-notice]` 且不进入编辑画布。900×1000 @2x 下编辑画布可打开、无横向溢出、编排行可见。
+- 视觉基线（B2-10）：`test/browser/visual-baselines/` 保存 5 张手动参考截图（`article-card-1440.png`、`free-card-1440.png`、`editor-article-1440.png`、`preview-modal-1440.png`、`narrow-390-viewport.png`）以及 `captures.json`（浏览器/视口/截图时间与方法）、`SHA256SUMS` 与 README。这是**手动视觉基线，不是自动像素 diff 套件**：现有浏览器套件继续负责几何/排版守卫，基线用于 UI 变更后人工对照；环境敏感（macOS、Chrome 156、2× DPR、light），且测试基线目录不进入 npm 包。
+- 验证计数不变：Node 474/474、浏览器 9/9、`artifact-edit` 180 checks、`nested-edit-renderer` 75、`nested-css-contract` 28/28 + 5/5。
 
 ### 区块片段编辑（Phase 1）
 
