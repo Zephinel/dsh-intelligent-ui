@@ -32,7 +32,8 @@ import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
-import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions } from './artifact-edit/local-revisions.ts'
+import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
+import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession } from './artifact-edit/contracts.ts'
 import {
   activateDraft as activateArtifactDraft,
@@ -239,6 +240,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const [limitNotice, setLimitNotice] = useState(false)
   const [detachedNotice, setDetachedNotice] = useState(false)
   const [restoreState, setRestoreState] = useState<'checking' | 'available' | 'busy' | 'done' | 'error' | 'hidden'>('checking')
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [restoredRevision, setRestoredRevision] = useState<number | undefined>()
   const cardRef = useRef<HTMLElement>(null)
   const skipActivationScroll = useRef(false)
@@ -319,6 +321,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     return count
   }, [editStore, sessionId])
   const blocks = useMemo(() => blocksForProgram(program.program).blocks, [program.program])
+  const blocksById = useMemo(() => new Map(blocks.map(block => [block.blockId, block])), [blocks])
   const editable = !program.running && blocks.length > 0 && supportsBlockEditing(program)
   const editActions = useMemo<ArtifactEditActions>(() => ({
     openBlockEditor: blockId => { openArtifactBlockEditor(editKey, blockId) },
@@ -387,6 +390,13 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     setRestoreState('busy')
     const revision = await restoreRevision({ artifactId: restoreArtifactId, sourceRevisionId: restoreRevisionId, program: program.program })
     if (revision === undefined) { setRestoreState('error'); return }
+    addLocalRevision(sessionId, { ...revision, turn: turnNumber })
+    setRestoredRevision(revision.revision)
+    setRestoreState('done')
+  }
+  // A restore triggered from the history dialog reuses the same local-revision
+  // pipeline as the inline restore action; addLocalRevision renders the card.
+  const handleHistoryRestored = (revision: LocalArtifactRevision): void => {
     addLocalRevision(sessionId, { ...revision, turn: turnNumber })
     setRestoredRevision(revision.revision)
     setRestoreState('done')
@@ -475,8 +485,28 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           {restoreState === 'error'
             ? <span className="dsh-iui-state" data-dsh-iui-restore-error>{t('edit.restoreFailed')}</span>
             : null}
+          <button
+            type="button"
+            className="dsh-iui-head-icon"
+            data-dsh-iui-history-open
+            data-history-trigger="icon"
+            aria-label={t('edit.historyOpen')}
+            title={t('edit.historyOpen')}
+            onClick={() => { setHistoryOpen(true) }}
+          >
+            <RemixIcon name="history-line" size={14} />
+          </button>
           {program.revision !== undefined && program.revision > 1
-            ? <span className="dsh-iui-revision" data-dsh-iui-revision>{t('edit.revision', { n: program.revision })}</span>
+            ? <button
+                type="button"
+                className="dsh-iui-revision dsh-iui-revision-button"
+                data-dsh-iui-revision
+                data-dsh-iui-history-open
+                data-history-trigger="badge"
+                aria-label={t('edit.historyOpen')}
+                title={t('edit.historyOpen')}
+                onClick={() => { setHistoryOpen(true) }}
+              >{t('edit.revision', { n: program.revision })}</button>
             : null}
           {editable
             ? <button
@@ -539,6 +569,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               scheme={scheme}
               onToAssistant={onToAssistant}
               closing={editorClosing && !editing}
+              onOpenHistory={() => { setHistoryOpen(true) }}
             />
           </div>
         ) : (
@@ -566,6 +597,16 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           {error === null ? null : <span className="dsh-iui-style-error" role="alert">{error}</span>}
         </div>
       ) : null}
+      {historyOpen
+        ? <ArtifactHistory
+            t={t}
+            artifactId={restoreArtifactId}
+            currentRevisionId={restoreRevisionId}
+            blocks={blocksById}
+            onClose={() => { setHistoryOpen(false) }}
+            onRestored={revision => { handleHistoryRestored(revision); setHistoryOpen(false) }}
+          />
+        : null}
     </section>
   )
 }

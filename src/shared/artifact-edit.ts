@@ -211,6 +211,54 @@ export interface ArtifactRevisionStatus {
 /** Route path for the latest-revision probe. */
 export const ARTIFACT_REVISION_ROUTE_PATH = '/api/intelligent-ui/artifact-revisions'
 
+
+/** Route path for one artifact's revision history (metadata only). */
+export const ARTIFACT_HISTORY_ROUTE_PATH = '/api/intelligent-ui/artifact-history'
+
+/** Route path for fetching one revision's program on demand. */
+export const ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH = '/api/intelligent-ui/artifact-history/program'
+
+/** Why a revision exists. */
+export type ArtifactHistorySource = 'initial' | 'edit' | 'structure' | 'restore'
+
+/** One revision in one artifact's history (metadata only, newest first). */
+export interface ArtifactHistoryRevision {
+  readonly revisionId: string
+  readonly revision: number
+  readonly baseRevisionId?: string
+  readonly title?: string
+  readonly style: RenderLayout
+  readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
+  readonly editedBlockIds?: readonly string[]
+  readonly createdAt: number
+  /** True for the current latest revision. */
+  readonly current: boolean
+  /** Where the revision came from. */
+  readonly source: ArtifactHistorySource
+  /** Whether the authoritative program is still retained. */
+  readonly hasProgram: boolean
+  /** Whether this revision can be restored as a new one. */
+  readonly restorable: boolean
+}
+
+/** Response of one artifact's revision history. */
+export interface ArtifactHistoryResponse {
+  readonly ok: true
+  readonly artifactId: string
+  readonly latestRevision: number
+  readonly revisions: readonly ArtifactHistoryRevision[]
+}
+
+/** Response of one revision's program lookup. */
+export interface ArtifactHistoryProgramResponse {
+  readonly ok: true
+  readonly artifactId: string
+  readonly revisionId: string
+  readonly revision: number
+  readonly program: string
+}
+
 /** Route path for recording a new revision without a model turn. */
 export const ARTIFACT_RESTORE_ROUTE_PATH = '/api/intelligent-ui/artifact-restore'
 

@@ -5,9 +5,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
+  ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH, ARTIFACT_HISTORY_ROUTE_PATH,
   ARTIFACT_ID_PATTERN, ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH,
   MAX_ARTIFACT_EDITS, MAX_ARTIFACT_TITLE_CHARS,
   describeArtifactRestoreProblem, isEditLayout,
+  type ArtifactHistoryProgramResponse, type ArtifactHistoryResponse,
+  type ArtifactHistoryRevision, type ArtifactHistorySource,
   type ArtifactRestoreRequest, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
 import { extractArtifactBlocks } from '../shared/artifact-blocks.ts'
@@ -48,6 +51,8 @@ export interface ArtifactRevisionRecord {
 export interface ArtifactRevisionStore {
   get(revisionId: string): ArtifactRevisionRecord | undefined
   latestFor(artifactId: string): ArtifactRevisionRecord | undefined
+  /** Every recorded revision of one artifact, oldest revision first (detached clones). */
+  listForArtifact(artifactId: string): ArtifactRevisionRecord[]
   record(record: ArtifactRevisionRecord): void
   status(input: { readonly artifactId: string; readonly revisionId: string }): ArtifactRevisionStatus
 }
@@ -136,6 +141,12 @@ export function createArtifactRevisionStore(ctx: { logger?: { warn(message: stri
     latestFor(artifactId) {
       const found = latestRecord(artifactId)
       return found === undefined ? undefined : structuredClone(found)
+    },
+    listForArtifact(artifactId) {
+      return revisions
+        .filter(record => record.artifactId === artifactId)
+        .sort((left, right) => left.revision - right.revision)
+        .map(record => structuredClone(record))
     },
     record(record) {
       if (!validRecord(record)) throw new Error('Invalid artifact revision')
@@ -254,18 +265,119 @@ function readRestoreJson(req: IncomingMessage): Promise<unknown> {
   })
 }
 
+/** Which pipeline created one recorded revision. */
+function historySource(record: ArtifactRevisionRecord): ArtifactHistorySource {
+  if (record.revisionId.startsWith(RESTORE_REVISION_PREFIX)) return 'restore'
+  if ((record.editedBlockIds?.length ?? 0) > 0) return 'edit'
+  return 'structure'
+}
+
+/** Program metadata for one artifact, without touching per-revision LRU order. */
+function programsFor(programs: ArtifactRevisionProgramStore | undefined, artifactId: string): { revisionId: string; createdAt: number }[] {
+  if (programs === undefined) return []
+  try {
+    return programs.list().filter(entry => entry.artifactId === artifactId).map(entry => ({ revisionId: entry.revisionId, createdAt: entry.createdAt }))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Build one artifact's history: recorded revisions plus the inferred initial
+ * revision that only exists in the authoritative program registry.
+ *
+ * The initial revision is inferred only when no revision record claims
+ * revision 1: the earliest program-only entry (not present in the revision
+ * store) represents it, styled from the artifact's earliest revision record.
+ * Newest first; `current`/`restorable`/`hasProgram` are derived from the merged
+ * set without loading any program body.
+ * @param store - revision registry.
+ * @param programs - optional authoritative program store metadata.
+ * @param artifactId - artifact identity.
+ * @returns the metadata-only history response.
+ */
+export function buildArtifactHistory(
+  store: ArtifactRevisionStore,
+  programs: ArtifactRevisionProgramStore | undefined,
+  artifactId: string,
+): ArtifactHistoryResponse {
+  const records = store.listForArtifact(artifactId)
+  const programEntries = programsFor(programs, artifactId)
+  const programIds = new Set(programEntries.map(entry => entry.revisionId))
+  const recordIds = new Set(records.map(record => record.revisionId))
+  const latestRecord = records.length === 0 ? undefined : records[records.length - 1]
+  let initial: ArtifactHistoryRevision | undefined
+  if (!records.some(record => record.revision === 1)) {
+    const candidate = programEntries
+      .filter(entry => !recordIds.has(entry.revisionId))
+      .sort((left, right) => left.createdAt - right.createdAt)[0]
+    if (candidate !== undefined) {
+      const fallback = records[0]
+      initial = {
+        revisionId: candidate.revisionId,
+        revision: 1,
+        style: fallback?.style ?? 'card',
+        ...fallback?.styleId === undefined ? {} : { styleId: fallback.styleId },
+        ...fallback?.temporaryStyle === undefined ? {} : { temporaryStyle: fallback.temporaryStyle },
+        ...fallback?.title === undefined ? {} : { title: fallback.title },
+        createdAt: candidate.createdAt,
+        current: false,
+        source: 'initial',
+        hasProgram: true,
+        restorable: false,
+      }
+    }
+  }
+  const latestRevision = latestRecord?.revision ?? 1
+  const revisions: ArtifactHistoryRevision[] = records.map(record => {
+    const current = record.revision === latestRevision
+    const hasProgram = programIds.has(record.revisionId)
+    return {
+      revisionId: record.revisionId,
+      revision: record.revision,
+      ...record.baseRevisionId === undefined ? {} : { baseRevisionId: record.baseRevisionId },
+      ...record.title === undefined ? {} : { title: record.title },
+      style: record.style,
+      ...record.styleId === undefined ? {} : { styleId: record.styleId },
+      ...record.temporaryStyle === undefined ? {} : { temporaryStyle: record.temporaryStyle },
+      ...record.editedBlockIds === undefined ? {} : { editedBlockIds: [...record.editedBlockIds] },
+      createdAt: record.createdAt,
+      current,
+      source: historySource(record),
+      hasProgram,
+      restorable: hasProgram && !current,
+    }
+  })
+  if (initial !== undefined) {
+    const current = initial.revision === latestRevision
+    revisions.push({ ...initial, current, restorable: initial.hasProgram && !current })
+  }
+  revisions.sort((left, right) => right.revision - left.revision)
+  return { ok: true, artifactId, latestRevision, revisions }
+}
+
 /**
  * Expose the latest-revision probe and the zero-model restore route behind the
  * existing connection authentication; both routes share one disposer.
  */
-/** Optional sink fed with the authoritative program of every recorded restore revision (M4-3). */
-export interface ArtifactRevisionProgramSink {
-  record(input: { readonly artifactId: string; readonly revisionId: string; readonly program: string }): void
+/**
+ * Readable authoritative program store used by history/program routes and as the
+ * restore program sink. Mocks may provide only `lookup`/`list`; `record` is
+ * optional so existing record-only sinks keep compiling.
+ */
+export interface ArtifactRevisionProgramStore {
+  lookup(artifactId: string, revisionId: string): string | undefined
+  list(): readonly {
+    readonly artifactId: string
+    readonly revisionId: string
+    readonly createdAt: number
+  }[]
+  record?(input: { readonly artifactId: string; readonly revisionId: string; readonly program: string }): void
 }
 
 export function registerArtifactRevisionRoutes(ctx: {
   inject?: (dependencies: readonly string[], callback: (scoped: RevisionRouteServices) => void) => unknown
-}, store: ArtifactRevisionStore, programs?: ArtifactRevisionProgramSink): void {
+}, store: ArtifactRevisionStore, programs?: ArtifactRevisionProgramStore): void {
   ctx.inject?.(['webServer', 'connection'], scoped => {
     const { webServer, connection } = scoped
     if (typeof webServer?.register !== 'function' || typeof connection?.requestRejection !== 'function') return
@@ -315,10 +427,31 @@ export function registerArtifactRevisionRoutes(ctx: {
               return
             }
             const request = body as ArtifactRestoreRequest
-            const source = store.get(request.sourceRevisionId)
+            let source = store.get(request.sourceRevisionId)
             if (source === undefined) {
-              sendError(res, 404, 'source_missing', 'The source revision is no longer available in the artifact revision registry.')
-              return
+              // The first render is program-only (no revision record); allow
+              // restoring it when its authoritative program is still retained.
+              const initialProgram = programs?.lookup(request.artifactId, request.sourceRevisionId)
+              const latestFallback = store.latestFor(request.artifactId)
+              if (initialProgram === undefined) {
+                sendError(res, 404, 'source_missing', 'The source revision is no longer available in the artifact revision registry.')
+                return
+              }
+              if (latestFallback === undefined) {
+                sendError(res, 409, 'already_latest', 'The source revision is the latest revision of this artifact.')
+                return
+              }
+              source = {
+                revisionId: request.sourceRevisionId,
+                artifactId: request.artifactId,
+                revision: 1,
+                sessionId: RESTORE_SESSION_ID,
+                style: latestFallback.style,
+                ...latestFallback.styleId === undefined ? {} : { styleId: latestFallback.styleId },
+                ...latestFallback.temporaryStyle === undefined ? {} : { temporaryStyle: latestFallback.temporaryStyle },
+                ...latestFallback.title === undefined ? {} : { title: latestFallback.title },
+                createdAt: 0,
+              }
             }
             if (source.artifactId !== request.artifactId) {
               sendError(res, 400, 'artifact_mismatch', 'The source revision belongs to a different artifact.')
@@ -364,7 +497,7 @@ export function registerArtifactRevisionRoutes(ctx: {
                 ...source.title === undefined ? {} : { title: source.title },
                 createdAt: Date.now(),
               })
-              programs?.record({ artifactId: request.artifactId, revisionId, program: request.program })
+              programs?.record?.({ artifactId: request.artifactId, revisionId, program: request.program })
             } catch {
               sendError(res, 409, 'conflict', 'The revision registry rejected the restored revision; retry the restore.')
               return
@@ -392,9 +525,71 @@ export function registerArtifactRevisionRoutes(ctx: {
           })
         },
       })
+      const disposeHistory = webServer.register({
+        kind: 'exact', path: ARTIFACT_HISTORY_ROUTE_PATH,
+        handler: (req, res) => {
+          const rejection = connection.requestRejection(req)
+          if (rejection !== undefined) {
+            res.writeHead(rejection, { 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          if (req.method !== 'GET') {
+            res.writeHead(405, { allow: 'GET', 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ error: { code: 'method_not_allowed', message: 'Use GET to read an artifact history.' } }))
+            return
+          }
+          const params = new URL(req.url ?? ARTIFACT_HISTORY_ROUTE_PATH, 'http://localhost').searchParams
+          const artifactId = params.get('artifactId')
+          if (artifactId === null || !isIdentity(artifactId)) {
+            sendError(res, 400, 'invalid_input', 'artifactId must be an artifact identity.')
+            return
+          }
+          sendJson(res, 200, buildArtifactHistory(store, programs, artifactId))
+        },
+      })
+      const disposeHistoryProgram = webServer.register({
+        kind: 'exact', path: ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH,
+        handler: (req, res) => {
+          const rejection = connection.requestRejection(req)
+          if (rejection !== undefined) {
+            res.writeHead(rejection, { 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          if (req.method !== 'GET') {
+            res.writeHead(405, { allow: 'GET', 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ error: { code: 'method_not_allowed', message: 'Use GET to read an artifact revision program.' } }))
+            return
+          }
+          const params = new URL(req.url ?? ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH, 'http://localhost').searchParams
+          const artifactId = params.get('artifactId')
+          const revisionId = params.get('revisionId')
+          if (artifactId === null || !isIdentity(artifactId) || revisionId === null || !isIdentity(revisionId)) {
+            sendError(res, 400, 'invalid_input', 'artifactId and revisionId must be artifact identities.')
+            return
+          }
+          const program = programs?.lookup(artifactId, revisionId)
+          if (program === undefined) {
+            sendError(res, 404, 'program_missing', 'The authoritative program for that revision is no longer retained.')
+            return
+          }
+          const record = store.get(revisionId)
+          if (record !== undefined && record.artifactId !== artifactId) {
+            sendError(res, 404, 'program_missing', 'The authoritative program for that revision is no longer retained.')
+            return
+          }
+          const response: ArtifactHistoryProgramResponse = {
+            ok: true, artifactId, revisionId, revision: record?.revision ?? 1, program,
+          }
+          sendJson(res, 200, response)
+        },
+      })
       return () => {
         disposeStatus()
         disposeRestore()
+        disposeHistory()
+        disposeHistoryProgram()
       }
     })
   })

@@ -511,6 +511,19 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-local-revision]'), 1, 'restored card is marked local')
   check((await text('[data-dsh-iui-restore-done]')).includes('4'), true, 'restore reports the new revision number')
   check((await text('[data-dsh-intelligent-ui="card"]:last-of-type')).includes('夏令时与冬令时'), true, 'restored card renders the old program')
+
+  // 20. Per-artifact revision history dialog from the revision badge.
+  await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-history-open][data-history-trigger="badge"]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'history dialog')
+  check(await count('[data-dsh-iui-history-revision]'), 3, 'history lists this artifact revisions')
+  check(await read(`document.querySelector('[data-dsh-iui-history-revision="restore_local1"]')?.getAttribute('data-current')`), 'true', 'history marks the current revision')
+  check((await text('[data-dsh-iui-history]')).includes('初始生成'), true, 'history includes the initial revision')
+  check(await count('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-restore]'), 0, 'history offers no restore for unavailable content')
+  check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
+  check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
+  await shot('harness-history.png')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'history dialog closed')
   await shot('harness-m3-local-revision.png')
   // 20. Branch editing from an old revision: conflict banner offers a branch,
   // and the envelope carries branch:true.

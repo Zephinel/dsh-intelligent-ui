@@ -12,9 +12,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { EventEmitter } from 'node:events'
-import { ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
+import {
+  ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH, ARTIFACT_HISTORY_ROUTE_PATH,
+  ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH,
+} from '../../src/shared/artifact-edit.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH } from '../../src/shared/artifact-structure.ts'
-import { MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { buildArtifactHistory, MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { createArtifactProgramStore } from '../../src/host/artifact-structure.ts'
 import { THEME } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
@@ -44,6 +48,174 @@ const revision = (overrides = {}) => ({
 
 /** One valid result-owned temporary style snapshot for a card revision. */
 const TEMPORARY_STYLE = { schemaVersion: 1, baseLayout: 'card', directives: 'Result-owned compact style.', theme: THEME }
+
+test('listForArtifact returns only one artifact revisions, oldest first and detached', () => {
+  const { store } = mountHome()
+  store.record(revision({ revisionId: 'call-3', revision: 3, createdAt: 3 }))
+  store.record(revision({ revisionId: 'call-2', revision: 2, createdAt: 2 }))
+  store.record(revision({ revisionId: 'call-9', artifactId: 'call-9', baseRevisionId: 'call-9-seed', revision: 2, createdAt: 2 }))
+  const list = store.listForArtifact('call-1')
+  assert.deepEqual(list.map(record => record.revision), [2, 3])
+  list[0].style = 'article'
+  assert.equal(store.listForArtifact('call-1')[0].style, 'card', 'returns detached clones')
+  assert.deepEqual(store.listForArtifact('unknown'), [])
+})
+
+test('the history route lists metadata newest-first with current/restorable/source flags', () => {
+  const records = [
+    revision({ revisionId: 'call-2', revision: 2, createdAt: 2, editedBlockIds: ['b1'] }),
+    revision({ revisionId: 'restore_0123456789abcdef', revision: 3, baseRevisionId: 'call-2', createdAt: 3, editedBlockIds: [] }),
+  ]
+  const programs = [
+    programRecord({ revisionId: 'call-2', program: 'root = Col([Text("two")])', createdAt: 2, lastAccessAt: 2 }),
+    programRecord({ revisionId: 'restore_0123456789abcdef', program: 'root = Col([Text("three")])', createdAt: 3, lastAccessAt: 3 }),
+  ]
+  const m = mountRoutes({ records, revisions: records, programs })
+  const response = readJson(request(m.historyRoute, { url: historyUrl('call-1') }))
+  assert.equal(response.ok, true)
+  assert.equal(response.artifactId, 'call-1')
+  assert.equal(response.latestRevision, 3)
+  assert.deepEqual(response.revisions.map(entry => entry.revision), [3, 2])
+  const [latest, previous] = response.revisions
+  assert.equal(latest.revisionId, 'restore_0123456789abcdef')
+  assert.equal(latest.current, true)
+  assert.equal(latest.restorable, false)
+  assert.equal(latest.source, 'restore')
+  assert.equal(latest.hasProgram, true)
+  assert.equal(previous.revisionId, 'call-2')
+  assert.equal(previous.current, false)
+  assert.equal(previous.restorable, true)
+  assert.equal(previous.source, 'edit')
+  for (const entry of response.revisions) assert.equal(Object.hasOwn(entry, 'program'), false, 'history is metadata-only')
+  assert.equal(JSON.stringify(response).includes('root = Col('), false)
+})
+
+test('the history route merges the program-only initial revision with style fallback', () => {
+  const records = [
+    revision({ revisionId: 'call-2', revision: 2, createdAt: 2, style: 'article', styleId: 'cs_abcdef123456' }),
+    revision({ revisionId: 'call-3', revision: 3, baseRevisionId: 'call-2', createdAt: 3, style: 'article', styleId: 'cs_abcdef123456' }),
+  ]
+  const programs = [
+    programRecord({ revisionId: 'call-1', program: 'root = Col([Title("First")])', createdAt: 1, lastAccessAt: 1 }),
+    programRecord({ revisionId: 'call-2', program: 'root = Col([Title("Second")])', createdAt: 2, lastAccessAt: 2 }),
+    programRecord({ revisionId: 'call-3', program: 'root = Col([Title("Third")])', createdAt: 3, lastAccessAt: 3 }),
+  ]
+  const m = mountRoutes({ revisions: records, programs })
+  const response = readJson(request(m.historyRoute, { url: historyUrl('call-1') }))
+  assert.deepEqual(response.revisions.map(entry => entry.revision), [3, 2, 1])
+  const initial = response.revisions[2]
+  assert.equal(initial.revisionId, 'call-1')
+  assert.equal(initial.source, 'initial')
+  assert.equal(initial.style, 'article', 'initial revision style falls back to the earliest record')
+  assert.equal(initial.styleId, 'cs_abcdef123456')
+  assert.equal(initial.createdAt, 1)
+  assert.equal(initial.current, false)
+  assert.equal(initial.hasProgram, true)
+  assert.equal(initial.restorable, true)
+  // A record whose program is gone is not restorable.
+  assert.equal(response.revisions[1].hasProgram, true)
+  assert.equal(response.latestRevision, 3)
+})
+
+test('the history route handles an initial-only artifact and a completely unknown one', () => {
+  const onlyInitial = mountRoutes({ revisions: [], programs: [programRecord()] })
+  const response = readJson(request(onlyInitial.historyRoute, { url: historyUrl('call-1') }))
+  assert.equal(response.latestRevision, 1)
+  assert.equal(response.revisions.length, 1)
+  assert.equal(response.revisions[0].revision, 1)
+  assert.equal(response.revisions[0].source, 'initial')
+  assert.equal(response.revisions[0].current, true)
+  assert.equal(response.revisions[0].restorable, false)
+  assert.equal(response.revisions[0].hasProgram, true)
+  const empty = mountRoutes({ revisions: [], programs: [] })
+  const none = readJson(request(empty.historyRoute, { url: historyUrl('call-unknown') }))
+  assert.deepEqual(none, { ok: true, artifactId: 'call-unknown', latestRevision: 1, revisions: [] })
+})
+
+test('history isolates artifacts, checks auth/method and validates the artifactId', () => {
+  const records = [
+    revision({ revisionId: 'call-2', revision: 2, createdAt: 2 }),
+    revision({ revisionId: 'other_0123456789abcdef', artifactId: 'call-other', baseRevisionId: 'call-other-seed', revision: 2, createdAt: 5 }),
+  ]
+  const programs = [
+    programRecord({ revisionId: 'call-2', createdAt: 2, lastAccessAt: 2 }),
+    programRecord({ artifactId: 'call-other', revisionId: 'other_0123456789abcdef', createdAt: 5, lastAccessAt: 5 }),
+  ]
+  const m = mountRoutes({ revisions: records, programs })
+  const response = readJson(request(m.historyRoute, { url: historyUrl('call-1') }))
+  assert.deepEqual(response.revisions.map(entry => entry.revisionId), ['call-2'])
+  assert.equal(JSON.stringify(response).includes('call-other'), false)
+  const denied = mountRoutes({ revisions: records, programs, rejection: 403 })
+  assert.equal(request(denied.historyRoute, { url: historyUrl('call-1') }).status, 403)
+  const wrongMethod = request(m.historyRoute, { method: 'POST', url: historyUrl('call-1') })
+  assert.equal(wrongMethod.status, 405)
+  assert.equal(readJson(wrongMethod).error.code, 'method_not_allowed')
+  const invalid = request(m.historyRoute, { url: `${ARTIFACT_HISTORY_ROUTE_PATH}?artifactId=bad%20id` })
+  assert.equal(invalid.status, 400)
+  assert.equal(readJson(invalid).error.code, 'invalid_input')
+})
+
+test('the program route returns retained programs and reports program_missing', () => {
+  const records = [revision({ revisionId: 'call-2', revision: 2, createdAt: 2 })]
+  const programs = [
+    programRecord({ revisionId: 'call-1', program: 'root = Col([Title("Initial")])', createdAt: 1, lastAccessAt: 1 }),
+    programRecord({ revisionId: 'call-2', program: 'root = Col([Title("Second")])', createdAt: 2, lastAccessAt: 2 }),
+  ]
+  const m = mountRoutes({ revisions: records, programs })
+  const initial = readJson(request(m.historyProgramRoute, { url: historyProgramUrl('call-1', 'call-1') }))
+  assert.deepEqual(initial, { ok: true, artifactId: 'call-1', revisionId: 'call-1', revision: 1, program: 'root = Col([Title("Initial")])' })
+  const second = readJson(request(m.historyProgramRoute, { url: historyProgramUrl('call-1', 'call-2') }))
+  assert.equal(second.revision, 2)
+  assert.equal(second.program, 'root = Col([Title("Second")])')
+  const missing = request(m.historyProgramRoute, { url: historyProgramUrl('call-1', 'call-9') })
+  assert.equal(missing.status, 404)
+  assert.equal(readJson(missing).error.code, 'program_missing')
+  const invalid = request(m.historyProgramRoute, { url: `${ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH}?artifactId=call-1` })
+  assert.equal(invalid.status, 400)
+  const wrongMethod = request(m.historyProgramRoute, { method: 'PUT', url: historyProgramUrl('call-1', 'call-1') })
+  assert.equal(wrongMethod.status, 405)
+})
+
+test('restore accepts the program-only initial revision and copies style from the latest record', async () => {
+  const records = [revision({ revisionId: 'call-3', revision: 2, createdAt: 3, style: 'article', styleId: 'cs_abcdef123456' })]
+  const programs = [
+    programRecord({ revisionId: 'call-1', program: 'root = Col([Title("Initial")])', createdAt: 1, lastAccessAt: 1 }),
+    programRecord({ revisionId: 'call-3', program: 'root = Col([Title("Second")])', createdAt: 3, lastAccessAt: 3 }),
+  ]
+  const m = mountRoutes({ revisions: records, programs })
+  const restoredProgram = 'root = Col([Title("Restored initial")])'
+  const response = await postRestore(m.restoreRoute, {
+    body: { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-1', program: restoredProgram },
+  })
+  assert.equal(response.status, 201, response.body)
+  const body = readJson(response)
+  assert.equal(body.ok, true)
+  assert.equal(body.revision.baseRevisionId, 'call-1')
+  assert.equal(body.revision.revision, 3)
+  assert.equal(body.revision.style, 'article', 'initial restore falls back to the latest style')
+  assert.equal(body.revision.styleId, 'cs_abcdef123456')
+  assert.equal(body.revision.program, restoredProgram)
+  const latest = createArtifactRevisionStore().latestFor('call-1')
+  assert.equal(latest.revisionId, body.revision.revisionId)
+  assert.equal(latest.baseRevisionId, 'call-1')
+  assert.equal(latest.style, 'article')
+  assert.equal(createArtifactProgramStore().lookup('call-1', body.revision.revisionId), restoredProgram)
+})
+
+test('restore reports source_missing/program states for initial revisions', async () => {
+  const noHistory = mountRoutes({ revisions: [], programs: [programRecord()] })
+  const alreadyLatest = await postRestore(noHistory.restoreRoute, {
+    body: { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-1', program: 'root = Col([Title("Again")])' },
+  })
+  assert.equal(alreadyLatest.status, 409)
+  assert.equal(readJson(alreadyLatest).error.code, 'already_latest')
+  const missing = mountRoutes({ revisions: [], programs: [] })
+  const missingSource = await postRestore(missing.restoreRoute, {
+    body: { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-1', program: 'root = Col([Title("Again")])' },
+  })
+  assert.equal(missingSource.status, 404)
+  assert.equal(readJson(missingSource).error.code, 'source_missing')
+})
 
 test('records immutably, clones reads and reloads from the artifact file', () => {
   const { store, file } = mountHome()
@@ -157,12 +329,14 @@ test('retains the newest records by creation time, also after restart', () => {
 })
 
 /** Mount the real plugin with independently available routing and auth services. */
-function mountRoutes({ webServer = true, connection = true, rejection, revisions = [] } = {}) {
+function mountRoutes({ webServer = true, connection = true, rejection, revisions = [], programs } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'iui-artifact-routes-'))
   homes.push(home)
   process.env.DSH_HOME = home
   const file = join(home, 'dsh-intelligent-ui-artifacts.json')
   writeFileSync(file, JSON.stringify({ version: 1, revisions }))
+  const programFile = join(home, 'dsh-intelligent-ui-programs.json')
+  if (programs !== undefined) writeFileSync(programFile, JSON.stringify({ version: 1, programs }))
   const routes = []
   const checked = []
   const disposers = []
@@ -191,9 +365,11 @@ function mountRoutes({ webServer = true, connection = true, rejection, revisions
     },
   })
   return {
-    routes, checked, disposers, disposedPaths, home, file,
+    routes, checked, disposers, disposedPaths, home, file, programFile,
     route: routes.find(candidate => candidate.path === ARTIFACT_REVISION_ROUTE_PATH),
     restoreRoute: routes.find(candidate => candidate.path === ARTIFACT_RESTORE_ROUTE_PATH),
+    historyRoute: routes.find(candidate => candidate.path === ARTIFACT_HISTORY_ROUTE_PATH),
+    historyProgramRoute: routes.find(candidate => candidate.path === ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH),
   }
 }
 
@@ -219,6 +395,19 @@ function postRestore(route, { body, raw, headers = { 'content-type': 'applicatio
   route.handler(req, res)
   return result.done
 }
+
+/** One authoritative program registry entry. */
+const programRecord = (overrides = {}) => ({
+  artifactId: 'call-1', revisionId: 'call-1', program: 'root = Col([Title("Initial")])',
+  createdAt: 1, lastAccessAt: 1, ...overrides,
+})
+
+/** Serialize one program module entry list into the store file shape. */
+const programFile = programs => ({ version: 1, programs })
+
+const historyUrl = artifactId => `${ARTIFACT_HISTORY_ROUTE_PATH}?artifactId=${encodeURIComponent(artifactId)}`
+const historyProgramUrl = (artifactId, revisionId) => `${ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH}?artifactId=${encodeURIComponent(artifactId)}&revisionId=${encodeURIComponent(revisionId)}`
+const readJson = result => result.body === undefined ? undefined : JSON.parse(result.body)
 
 /** One valid restore body for the seeded `revision()` source record. */
 const RESTORE_BODY = { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-2', program: 'root = Col([Title("Restored")])' }
@@ -250,7 +439,8 @@ test('one disposer disposes the status and restore routes together', () => {
   for (const dispose of disposers) dispose()
   assert.deepEqual(
     disposedPaths.filter(path => path.startsWith('/api/intelligent-ui/artifact-')).sort(),
-    [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH, ARTIFACT_STRUCTURE_ROUTE_PATH].sort(),
+    [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH, ARTIFACT_STRUCTURE_ROUTE_PATH,
+      ARTIFACT_HISTORY_ROUTE_PATH, ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH].sort(),
   )
 })
 

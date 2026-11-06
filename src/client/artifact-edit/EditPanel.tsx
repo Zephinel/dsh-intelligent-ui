@@ -28,6 +28,7 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
 import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
@@ -43,6 +44,8 @@ export interface EditPanelProps {
   readonly actions: ArtifactEditActions
   /** True while the parent card plays the exit animation before unmounting. */
   readonly closing?: boolean
+  /** Opens the revision history dialog; omitted when no history UI is mounted. */
+  readonly onOpenHistory?: () => void
 }
 
 /** Number of hues in the shared selection palette. */
@@ -567,7 +570,7 @@ function DraftSwitcher({ t, drafts, activeKey, attachedCount, actions }: {
 }
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
-export function EditPanel({ t, session, actions, closing = false }: EditPanelProps): ReactElement {
+export function EditPanel({ t, session, actions, closing = false, onOpenHistory }: EditPanelProps): ReactElement {
   const globalId = useId()
   const previewTitleId = useId()
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
@@ -1277,6 +1280,19 @@ export function EditPanel({ t, session, actions, closing = false }: EditPanelPro
       <div className="dsh-iui-edit-a11y-live" role="status" aria-live="polite" aria-atomic="true" data-dsh-iui-edit-live>{liveMessage}</div>
       <header className="dsh-iui-edit-panel-head">
         <span className="dsh-iui-edit-panel-title">{t('edit.panelTitle')}</span>
+        {onOpenHistory === undefined ? null : (
+          <button
+            type="button"
+            className="dsh-iui-edit-panel-history"
+            data-dsh-iui-history-open
+            data-history-trigger="panel"
+            aria-label={t('edit.historyOpen')}
+            title={t('edit.historyOpen')}
+            onClick={onOpenHistory}
+          >
+            <RemixIcon name="history-line" size={14} />
+          </button>
+        )}
         <span className="dsh-iui-edit-panel-spacer" />
         <button
           type="button"

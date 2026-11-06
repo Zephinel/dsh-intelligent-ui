@@ -9,8 +9,13 @@
  */
 import { useSyncExternalStore } from 'react'
 import {
+  ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH,
+  ARTIFACT_HISTORY_ROUTE_PATH,
   ARTIFACT_RESTORE_ROUTE_PATH,
   MAX_ARTIFACT_PROGRAM_CHARS,
+  type ArtifactHistoryProgramResponse,
+  type ArtifactHistoryResponse,
+  type ArtifactHistoryRevision,
   type ArtifactRevisionMeta,
 } from '../../shared/artifact-edit.ts'
 import type { IntelligentUIProgram, RenderLayout } from '../../shared/intelligent-ui.ts'
@@ -202,6 +207,69 @@ export async function restoreRevision(input: {
       ...temporaryStyle === undefined ? {} : { temporaryStyle },
       createdAt: Date.now(),
     }
+  } catch {
+    return undefined
+  }
+}
+
+/** Validate one untrusted history revision entry. */
+function isHistoryRevision(value: unknown): value is ArtifactHistoryRevision {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return typeof record.revisionId === 'string' && record.revisionId !== ''
+    && typeof record.revision === 'number' && Number.isSafeInteger(record.revision) && record.revision >= 1
+    && typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
+    && typeof record.current === 'boolean'
+    && typeof record.hasProgram === 'boolean'
+    && typeof record.restorable === 'boolean'
+    && (record.source === 'initial' || record.source === 'edit' || record.source === 'structure' || record.source === 'restore')
+    && (record.style === 'card' || record.style === 'article' || record.style === 'free')
+    && (record.title === undefined || typeof record.title === 'string')
+    && (record.styleId === undefined || typeof record.styleId === 'string')
+    && (record.baseRevisionId === undefined || typeof record.baseRevisionId === 'string')
+    && (record.editedBlockIds === undefined || (Array.isArray(record.editedBlockIds) && record.editedBlockIds.every(id => typeof id === 'string')))
+}
+
+/**
+ * Load one artifact's revision history metadata (newest first). Failures
+ * (network, 401, malformed payload) resolve to undefined; callers render their
+ * own error state.
+ * @param artifactId - root artifact identity.
+ * @returns the validated history response, or undefined.
+ */
+export async function fetchArtifactHistory(artifactId: string): Promise<ArtifactHistoryResponse | undefined> {
+  try {
+    const response = await fetch(`${ARTIFACT_HISTORY_ROUTE_PATH}?artifactId=${encodeURIComponent(artifactId)}`)
+    if (!response.ok) return undefined
+    const value: unknown = await response.json()
+    if (value === null || typeof value !== 'object') return undefined
+    const record = value as Record<string, unknown>
+    if (record.ok !== true || typeof record.artifactId !== 'string' || typeof record.latestRevision !== 'number') return undefined
+    if (!Array.isArray(record.revisions) || !record.revisions.every(isHistoryRevision)) return undefined
+    return value as ArtifactHistoryResponse
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Load one historical revision's authoritative program on demand.
+ * Failures resolve to undefined.
+ * @param artifactId - root artifact identity.
+ * @param revisionId - revision whose program is requested.
+ * @returns the validated program response, or undefined.
+ */
+export async function fetchArtifactHistoryProgram(artifactId: string, revisionId: string): Promise<ArtifactHistoryProgramResponse | undefined> {
+  try {
+    const query = `artifactId=${encodeURIComponent(artifactId)}&revisionId=${encodeURIComponent(revisionId)}`
+    const response = await fetch(`${ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH}?${query}`)
+    if (!response.ok) return undefined
+    const value: unknown = await response.json()
+    if (value === null || typeof value !== 'object') return undefined
+    const record = value as Record<string, unknown>
+    if (record.ok !== true || typeof record.artifactId !== 'string' || typeof record.revisionId !== 'string') return undefined
+    if (typeof record.revision !== 'number' || typeof record.program !== 'string' || record.program.trim() === '') return undefined
+    return value as ArtifactHistoryProgramResponse
   } catch {
     return undefined
   }
