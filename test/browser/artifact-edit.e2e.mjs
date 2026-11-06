@@ -228,6 +228,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-panel]')).includes('Artifact 编辑器'), true, 'panel title')
   check(await count('[data-dsh-iui-edit-send-info]'), 1, 'send summary card')
   check((await text('[data-dsh-iui-edit-send-info]')).includes('保持原样'), true, 'summary reports unchanged order')
+  await read(`(() => { const b = document.querySelector('[data-dsh-iui-block="b1"] > .dsh-iui-block-body'); b.style.animationDelay = '-1.2s'; b.style.animationPlayState = 'paused'; })()`)
+  await shot('harness-breath-mid.png')
+  await read(`(() => { const b = document.querySelector('[data-dsh-iui-block="b1"] > .dsh-iui-block-body'); b.style.animationDelay = ''; b.style.animationPlayState = ''; })()`)
   await shot('harness-arrangement-empty.png')
 
   // 3. Opening a popover does not create a request.

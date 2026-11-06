@@ -56,20 +56,24 @@
 }
 
 .dsh-iui-block-editing:not(.dsh-iui-block-selected):not(.dsh-iui-block-active) > .dsh-iui-block-body {
+  border-radius: 12px;
   animation: dsh-iui-block-breathe 2400ms ease-in-out infinite;
 }
 
 @keyframes dsh-iui-block-breathe {
   0%, 100% {
     filter: none;
+    background-color: transparent;
   }
   50% {
-    filter: brightness(0.95);
+    filter: brightness(0.9);
+    background-color: color-mix(in srgb, var(--iui-ink) 5%, transparent);
   }
 }
 
 .dsh-iui-block-editing:hover > .dsh-iui-block-body {
   filter: none;
+  box-shadow: none;
   animation: none;
 }
 
