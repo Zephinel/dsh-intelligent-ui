@@ -619,4 +619,14 @@ GPT 评审后新增/收窄、需 owner 确认：
 - Host：`artifact-structure` 路由新增 `props` 操作；校验节点组件（仅 Divider/Spacer）与属性，经 `replaceNodeContent` 原子应用，复用幂等/CAS/分支/修订记录。测试覆盖根/嵌套目标、preview、幂等与全部拒绝路径。
 - 客户端：popover 在 Divider/Spacer 上显示快捷调整控件（`QuickBlockProps`）；改动写入 `propsPreview` 并重新包裹渲染实现**画布实时预览**；应用时发 `props` 请求，成功后出现「属性调整修订」本地卡片（local revision kind `props`），失败在 popover 内提示；存在未发送的指令/排序/整体说明时拒绝应用并提示先发送或清除。
 - 限制：仅 Divider/Spacer 的上述属性；这两类块不再显示模型指令 textarea（已保存指令仍在请求列表）；属性修订卡与其他本地修订一致，不参与导出；自定义颜色受渲染器 `isSafeCss` 与 Host 保守校验约束。
-- 验证：Node **499/499**；浏览器 9/9；artifact-edit **278 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、错误提示等）；nested 75；CSS 206.3 kB；standalone 3.32 MB + 518.1 kB；pack 44 files 4.24 MB / 10.96 MB；截图 `.tmp-report/harness-quick-props.png`。
+- 验证（系统性修复后）：Node **508/508**；浏览器 9/9；artifact-edit **282 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-selected-block.png`。
+
+## 0.33 系统性修复（2026-11-07，工作树）
+
+- 触发：两个只读 reviewer 对 0.31/0.32 的审查结论“需要修改”（6 条 P1、多条 P2）。按用户要求不做局部补丁，改为按根因重建。
+- **画布布局零侵入**：此前编辑 wrapper 是真实 `div`（根层与嵌套都是），会改变直接子选择器、`iui-flow` 节奏与 flex 行为（实测 Title→Divider 12→28px；根层 Title/Caption/Divider/Spacer/Spacer 全受影响）。现在所有编辑 wrapper 与 body 均为 `display: contents`，`nested-edit.css` 的 28 条直接子选择器补偿从“仅嵌套 path”扩展为全部编辑 wrapper；选择/悬停/选中框/编号徽标/编辑与取消工具/跑马灯/点击与键盘焦点全部移到客户端 `BlockOverlay`：它在 `.dsh-iui-edit-canvas`（position:relative）内按真实内容 rect 测量，用 ResizeObserver + MutationObserver 重测，根层与嵌套共用，不参与布局。选中状态改为“浮动边框 + 阴影”而不是给 body 上背景/圆角（wrapper 不再有盒子）。
+- **单一区块身份**：快捷调整不再借用 `nestedBlocksForProgram` 解析根层；根层按 `block.rootIndex` 对应 CST 根 `Col` 的直接子节点（shared/opaque 兄弟不再让 bN 偏移），嵌套模式沿用面板同源的嵌套映射；`shared`/`opaque`/`scoped` 一律禁用快捷调整。
+- **属性安全**：新增 `describeArtifactBlockPropsSupport`：只有全部属性都是字面量且在当前快捷值域（颜色 token/CSS 颜色；px/%/auto 长度；0.5–12 粗细）时才显示快捷面板；动态绑定或 rem/calc 等超范围值回退到指令编辑器并说明原因，绝不静默丢属性。已保存指令的 Divider/Spacer 同样回退到指令模式。控件改为本地 UI 状态（单位/未输完的数字不再把画布宽度写成 0）；未修改时 Apply 禁用；客户端与 Host 都拒绝 no-op 属性修订；结构路由的 operation digest 现在包含 `props` 与 `toParentNodeId`；同一批操作里重复目标节点直接 `operation_conflict`。
+- **匿名块排序身份**：`targetOrder` 归一化在“statement → 标题+类型 → 唯一标题”之后增加“唯一内容 digest + 组件类型”匹配，最后才按页面顺序兜底（只对字节相同的可互换块生效）；嵌套 `orderByParent` 的 `mapChildIds` 同样先按 digest 匹配，再退回 childIndex。
+- **状态与一致性**：快捷调整的未发送拦截统一用 `hasArtifactEditContent`（补上 `nestedOrderChanged`）；嵌套模式也渲染 `propsPreview`；嵌套面板 kind 复用共享映射（Divider/Spacer/Toc/Title/Caption 不再显示成“内容”）；异步结构/属性失败回写当前 session 而不是请求前快照；快捷控件打开即聚焦、补齐 `edit.propsUnit`、完整 20 个颜色 token、`aria-busy`、busy/失效/无变化文案。
+- **验证**：Node **508/508**（新增 6 条 shared/client quick-adjust+identity 单测、1 条匿名 digest 排序测试、2 条 Host props no-op/digest/批冲突测试）；浏览器 9/9；artifact-edit **282 checks**（布局 parity、嵌套 preview、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB。
