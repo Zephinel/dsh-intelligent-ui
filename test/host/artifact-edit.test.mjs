@@ -40,10 +40,10 @@ const UPDATED_PROGRAM = DST_PROGRAM.replace('选地区，再点月份，看当�
 const ARTICLE = 'root = Col([toc, section])\ntoc = Toc(["Intro"])\nsection = Section("Intro", [Markdown("Body.")])'
 
 const BASE_BLOCKS = extractArtifactBlocks(DST_PROGRAM).blocks
-/** The base page order: b1…b8. */
+/** The base page order: b1…b9. */
 const ORIGINAL_ORDER = BASE_BLOCKS.map(block => block.blockId)
 /** Move the rules table first and the page header into the middle of the page. */
-const TARGET_ORDER = ['b5', 'b2', 'b3', 'b4', 'b1', 'b6', 'b7', 'b8']
+const TARGET_ORDER = ['b5', 'b2', 'b3', 'b4', 'b1', 'b6', 'b7', 'b8', 'b9']
 
 /** One saved block instruction for the fixture's base page. */
 function blockEdit(blockId, instruction = '把这一块的说明文字改得更明确。', selectionOrder = 1) {
@@ -1100,7 +1100,7 @@ test('unsafe nested requests are rejected before rendering and record nothing', 
   assert.equal(existsSync(mixed.file), false)
 })
 
-test('nested edit validation rejects duplicate and chrome node targets', async () => {
+test('nested edit validation rejects duplicate targets and edits a Title node', async () => {
   const duplicate = mount()
   duplicate.send(buildEditRequestText(nestedRequest([nestedEdit('n5', 1), nestedEdit('n5', 2, { blockId: 'b1.2' })])))
   await assert.rejects(
@@ -1108,13 +1108,13 @@ test('nested edit validation rejects duplicate and chrome node targets', async (
     /is selected more than once/,
   )
   assert.equal(existsSync(duplicate.file), false)
-  const chrome = mount()
-  chrome.send(buildEditRequestText(nestedRequest([nestedEdit('n3')])))
-  await assert.rejects(
-    () => chrome.blockTool.execute({ program: nestedFragment('Title("X", "sm")') }, { agent: chrome.agent, callId: 'call-nested-chrome' }),
-    /is page chrome and cannot be edited as a block/,
-  )
-  assert.equal(existsSync(chrome.file), false)
+  // A nested Title is an ordinary editable block now.
+  const title = mount()
+  title.send(buildEditRequestText(nestedRequest([nestedEdit('n3')])))
+  const value = await title.blockTool.execute({ program: nestedFragment('Title("X", "sm")') }, { agent: title.agent, callId: 'call-nested-title' })
+  assert.equal(value.revision, 2)
+  assert.match(value.program, /Title\("X", "sm"\)/)
+  assert.equal(existsSync(title.file), true)
 })
 
 test('a malformed nested fragment fails retryably and keeps the request armed', async () => {
@@ -1180,7 +1180,7 @@ test('invalid orderByParent groups are rejected before rendering and record noth
   const cases = [
     [{ n99: ['n5'] }, /unknown parent/],
     [{ n4: ['n5', 'n6'] }, /must list every editable child exactly once/],
-    [{ n2: ['n3', 'n4'] }, /must not include page chrome/],
+    [{ n2: ['n3'] }, /must list every editable child exactly once/],
     [{ n4: ['n5', 'n6', 'n11'] }, /lists a block from a different parent/],
     [{ root: ['n8', 'n2'] }, /targetOrder and orderByParent\.root cannot disagree/],
   ]
@@ -1256,7 +1256,7 @@ test('edits and additions compose by fragment order and survive an edit that cha
     nestedEdit('n5', 1),
   ], {
     requestId: 'req_add_combo_1',
-    additions: [nestedAddition('n8', 0, 'insert before the row')],
+    additions: [nestedAddition('n8', 1, 'insert before the row')],
   })))
   const value = await m.blockTool.execute({
     // Fragment children: sorted edits first (n5 then n6), then additions in request order.
@@ -1302,7 +1302,7 @@ test('additions reject invalid parents, positions and malformed fragments retrya
   const invalid = [
     { addition: { parentBlockId: 'b1', parentNodeId: 'n99', index: 0, instruction: 'x' }, expected: /not part of the current revision/ },
     { addition: nestedAddition('n5', 0), expected: /cannot receive new blocks|has no writable children slot/ },
-    { addition: nestedAddition('n3', 0), expected: /page chrome and cannot receive a block/ },
+    { addition: nestedAddition('n3', 0), expected: /cannot receive new blocks/ },
     { addition: nestedAddition('n4', 99), expected: /new block position for parent .* must be between 0 and 3/ },
   ]
   for (const [index, entry] of invalid.entries()) {

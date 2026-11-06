@@ -280,7 +280,6 @@ test('invalid structure operations are rejected atomically and record nothing', 
   const cases = [
     [{ ...deleteOp(NESTED_TREE, 'n5'), sourceDigest: 'deadbeefdeadbeef' }, /changed since it was selected/, 400],
     [{ op: 'delete', nodeId: 'n99', sourceDigest: 'deadbeefdeadbeef' }, /unknown block node/, 400],
-    [deleteOp(NESTED_TREE, 'n3'), /page chrome/, 400],
     [deleteOp(NESTED_TREE, 'n1'), /root layout cannot be deleted, duplicated or moved/, 400],
     [{ ...deleteOp(NESTED_TREE, 'n5'), toParentId: 'n8' }, /unknown_field/, 400],
     [duplicateOp(NESTED_TREE, 'n5', 99), /duplicate toIndex/, 400],
@@ -337,7 +336,7 @@ test('a cross-container move route moves a nested block into another root card',
   const m = mount()
   await seed(m)
   const response = await postStructure(m.structureRoute(), {
-    body: structureBody({ operationId: operationId('crossmove'), operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 0)] }),
+    body: structureBody({ operationId: operationId('crossmove'), operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 1)] }),
   })
   assert.equal(response.status, 201, JSON.stringify(response.body))
   const result = response.body.result
@@ -394,8 +393,8 @@ test('cross-container move validation rejects unsafe targets and invalid shapes'
     [crossMoveOp(NESTED_TREE, 'n5', 'n3', 0), /cannot receive blocks/],
     // Same parent cannot be passed as a target.
     [crossMoveOp(NESTED_TREE, 'n5', 'n4', 0), /omit toParentNodeId/],
-    // toIndex must be an editable index in the target (Card has one editable child: Row).
-    [crossMoveOp(NESTED_TREE, 'n5', 'n8', 2), /between 0 and 1/],
+    // toIndex must be an editable index in the target (Card has two editable children: Title, Row).
+    [crossMoveOp(NESTED_TREE, 'n5', 'n8', 3), /between 0 and 2/],
     // toParentNodeId is move-only.
     [{ op: 'duplicate', nodeId: 'n5', sourceDigest: node(NESTED_TREE, 'n5').digest, toIndex: 0, toParentNodeId: 'n8' }, /only valid for move/],
     // Shared shape rejects toParentNodeId on delete before the Host sees it.
@@ -418,7 +417,7 @@ test('cross-container moves are scoped, bounded and atomic in one batch', async 
   const batch = await postStructure(batchMount.structureRoute(), {
     body: structureBody({
       operationId: operationId('cross-batch'),
-      operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 0), deleteOp(NESTED_TREE, 'n11')],
+      operations: [crossMoveOp(NESTED_TREE, 'n5', 'n8', 1), deleteOp(NESTED_TREE, 'n11')],
     }),
   })
   assert.equal(batch.status, 201, JSON.stringify(batch.body))
@@ -541,7 +540,7 @@ test('preview uses the same base/latest/validation error path as apply', async (
   const cases = [
     [{ preview: true, baseRevisionId: 'call-other', operations: [deleteOp(NESTED_TREE, 'n5')] }, 404, 'base_missing', /authoritative program for the base revision/],
     [{ preview: true, operationId: operationId('preview-bad-digest'), operations: [{ ...deleteOp(NESTED_TREE, 'n5'), sourceDigest: 'deadbeefdeadbeef' }] }, 400, 'invalid_input', /changed since it was selected/],
-    [{ preview: true, operations: [deleteOp(NESTED_TREE, 'n3')] }, 400, 'invalid_input', /page chrome/],
+    [{ preview: true, operations: [{ op: 'delete', nodeId: 'n99', sourceDigest: 'deadbeefdeadbeef' }] }, 400, 'invalid_input', /unknown block node/],
     [{ preview: 'yes', operations: [deleteOp(NESTED_TREE, 'n5')] }, 400, 'invalid_input', /invalid_preview/],
   ]
   for (const [overrides, status, code, expected] of cases) {

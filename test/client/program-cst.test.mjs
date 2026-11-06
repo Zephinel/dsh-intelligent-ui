@@ -107,8 +107,7 @@ test('buildArtifactTree maps nested Col/Card children with deterministic ids, pa
   assert.equal(node(NESTED_TREE, 'n2').slotKey, 'children')
   assert.deepEqual(node(NESTED_TREE, 'n2').children, ['n3', 'n4'])
   assert.deepEqual(node(NESTED_TREE, 'n2').childSlots.children, ['n3', 'n4'])
-  assert.equal(node(NESTED_TREE, 'n3').chrome, true)
-  assert.equal(node(NESTED_TREE, 'n3').editable, false)
+  assert.equal(node(NESTED_TREE, 'n3').editable, true)
   assert.equal(node(NESTED_TREE, 'n4').componentType, 'Col')
   assert.equal(node(NESTED_TREE, 'n4').depth, 2)
   assert.equal(node(NESTED_TREE, 'n4').nodePath, 'root/children[0]/children[1]')
@@ -167,7 +166,10 @@ test('replaceNode rejects unsafe replacements, protected nodes and stale identit
   expectFailure(replaceNode(NESTED_PROGRAM, 'n5', 'WrongComponent("x")'), 'parse_error')
   expectFailure(replaceNode(NESTED_PROGRAM, 'n5', 'Text(@Format(mystery, "number", 0), "sm")'), 'unknown_reference')
   expectFailure(replaceNode(NESTED_PROGRAM, 'n1', 'Col([Title("x")])'), 'cannot_edit_root')
-  expectFailure(replaceNode(NESTED_PROGRAM, 'n3', 'Title("moved", "sm")'), 'unsupported_chrome')
+  const scopedTree = buildArtifactTree(SCOPED_PROGRAM)
+  const scopedTemplate = [...scopedTree.nodes.values()].find(entry => entry.scoped)
+  assert.ok(scopedTemplate !== undefined)
+  expectFailure(replaceNode(SCOPED_PROGRAM, scopedTemplate.nodeId, 'Text("x", "sm")', { tree: scopedTree }), 'unsupported_scope')
   expectFailure(replaceNode(NESTED_PROGRAM, 'n99', 'Text("x", "sm")'), 'unknown_node')
   const tampered = structuredClone(NESTED_TREE)
   tampered.nodes.get('n5').digest = 'deadbeef'
@@ -221,8 +223,13 @@ test('removeNode deletes leaves or whole subtrees while unrelated source stays b
     false,
     'the removed container is absent from the rebuilt tree',
   )
+  const title = expectOk(removeNode(NESTED_PROGRAM, 'n3'))
+  assert.match(title.program.split('\n')[1], /Card\(\[Col\(\[Text\("A", "sm"\)/)
   expectFailure(removeNode(NESTED_PROGRAM, 'n1'), 'cannot_edit_root')
-  expectFailure(removeNode(NESTED_PROGRAM, 'n3'), 'unsupported_chrome')
+  const scopedTree = buildArtifactTree(SCOPED_PROGRAM)
+  const scopedTemplate = [...scopedTree.nodes.values()].find(entry => entry.scoped)
+  assert.ok(scopedTemplate !== undefined)
+  expectFailure(removeNode(SCOPED_PROGRAM, scopedTemplate.nodeId, { tree: scopedTree }), 'unsupported_scope')
   expectFailure(removeNode(NESTED_PROGRAM, 'n99'), 'unknown_node')
 })
 
@@ -241,8 +248,9 @@ test('duplicateNode clones inline expressions and named root blocks with unique 
   assert.ok(copy !== undefined)
   assert.equal(copy.componentType, 'Card')
   expectOk(inspectProgramStructure(named.program))
+  const titleCopy = expectOk(duplicateNode(NESTED_PROGRAM, 'n3', 'n4', 'children', 3))
+  assert.match(titleCopy.program.split('\n')[1], /Col\(\[Text\("A", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\), Title\("外层卡片", "sm"\)\]\)/)
   expectFailure(duplicateNode(NESTED_PROGRAM, 'n1', 'n4', 'children', 0), 'cannot_edit_root')
-  expectFailure(duplicateNode(NESTED_PROGRAM, 'n3', 'n4', 'children', 0), 'unsupported_chrome')
   expectFailure(duplicateNode(NESTED_PROGRAM, 'n5', 'n3', 'children', 0), 'incompatible_container')
   expectFailure(duplicateNode(NESTED_PROGRAM, 'n5', 'n4', 'children', 9), 'invalid_index')
   expectFailure(duplicateNode(NESTED_PROGRAM, 'n5', 'n4', 'template', 0), 'unknown_slot')
@@ -373,9 +381,9 @@ test('collectSymbols and inspectProgramStructure expose declarations, references
 /** Container whitelist covering every M4-4 nested container. */
 const ALL_CONTAINERS = ['Col', 'Row', 'Box', 'Grid', 'Card', 'Carousel', 'Section']
 
-test('insertNode inserts inline expressions into Card, Col and root slots with chrome preserved', () => {
-  // Card: the Title chrome child must stay first while the new block goes before the mapped child.
-  const card = expectOk(insertNode(NESTED_PROGRAM, 'n2', 'children', 0, 'Text("new card child", "sm")'))
+test('insertNode inserts inline expressions into Card, Col and root slots', () => {
+  // Card: the Title is an ordinary child; index 1 puts the new block after it.
+  const card = expectOk(insertNode(NESTED_PROGRAM, 'n2', 'children', 1, 'Text("new card child", "sm")'))
   assert.match(card.program.split('\n')[1], /Card\(\[Title\("外层卡片", "sm"\), Text\("new card child", "sm"\), Col\(\[/)
   assert.equal(card.program.split('\n')[2], NESTED_PROGRAM.split('\n')[2], 'the second card statement is byte-identical')
   assert.equal(card.program.split('\n')[3], NESTED_PROGRAM.split('\n')[3])
@@ -384,7 +392,6 @@ test('insertNode inserts inline expressions into Card, Col and root slots with c
   assert.equal(insertedCardNode.componentType, 'Text')
   assert.equal(insertedCardNode.parentNodeId, card.tree.nodes.get(card.tree.rootNodeId).childSlots.children[0])
   assert.ok(card.touched.some(entry => entry.nodeId === 'n2' && entry.op === 'insert'))
-  // The chrome Title lives inside the rewritten slot, but its bytes and position are preserved.
   assert.match(card.program.split('\n')[1], /^outerCard = Card\(\[Title\("外层卡片", "sm"\), Text\("new card child"/)
   assert.equal((card.program.match(/Title\("外层卡片", "sm"\)/g) ?? []).length, 1)
   assert.match(card.edits[0].summary, /Text\("new card child", "sm"\)/)
@@ -465,14 +472,14 @@ test('Section maps its second children argument and stays reorderable/insertable
 })
 
 test('cross-container move moves blocks between sibling containers and preserves source bytes', () => {
-  const moved = expectOk(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 0, { containerTypes: [...DEFAULT_CONTAINER_TYPES] }))
+  const moved = expectOk(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 1, { containerTypes: [...DEFAULT_CONTAINER_TYPES] }))
   const lines = moved.program.split('\n')
   assert.match(lines[1], /Card\(\[Title\("外层卡片", "sm"\), Col\(\[Text\("B", "sm"\), Text\(sharedText, "sm"\)\]\)\]\)/)
   assert.match(lines[2], /secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row\(\[Text\("C", "sm"\), Text\("D", "sm"\)\]\)\], "soft"\)/)
   assert.equal(lines[0], NESTED_PROGRAM.split('\n')[0])
   assert.equal(lines[3], NESTED_PROGRAM.split('\n')[3], 'the helper statement is byte-identical')
-  assert.ok(moved.unchanged.some(entry => entry.nodeId === 'n3'), 'the source chrome title is untouched')
-  // The target chrome Title sits inside the rewritten target slot but keeps its bytes and order.
+  assert.ok(moved.unchanged.some(entry => entry.nodeId === 'n3'), 'the source title is untouched')
+  // The target Title sits inside the rewritten target slot and keeps its bytes and order.
   assert.match(moved.program.split('\n')[2], /^secondCard = Card\(\[Title\("第二张卡片", "sm"\), Text\("A", "sm"\), Row/)
   assert.equal((moved.program.match(/Title\("第二张卡片", "sm"\)/g) ?? []).length, 1)
   const movedText = [...moved.tree.nodes.values()].find(entry => entry.source === 'Text("A", "sm")')
@@ -498,11 +505,10 @@ test('cross-container move rejects unsafe targets and keeps same-parent semantic
   // Target inside the moved node's own subtree.
   expectFailure(moveNode(NESTED_PROGRAM, 'n2', 'n4', 'children', 0), 'move_into_self')
   expectFailure(moveNode(NESTED_PROGRAM, 'n1', 'n4', 'children', 0), 'cannot_edit_root')
-  expectFailure(moveNode(NESTED_PROGRAM, 'n3', 'n4', 'children', 0), 'unsupported_chrome')
   expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n99', 'children', 0), 'unknown_node')
   expectFailure(moveNode(NESTED_PROGRAM, 'n99', 'n4', 'children', 0), 'unknown_node')
   expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n3', 'children', 0), 'incompatible_container')
-  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 2), 'invalid_index')
+  expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 3), 'invalid_index')
   expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', -1), 'invalid_index')
   expectFailure(moveNode(NESTED_PROGRAM, 'n5', 'n8', 'children', 0.5), 'invalid_index')
   // Scoped and shared nodes cannot leave their runtime/definition scope.

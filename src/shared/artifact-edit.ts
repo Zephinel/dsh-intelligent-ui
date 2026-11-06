@@ -58,7 +58,8 @@ export const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9_:.-]{1,200}$/
 
 /** Coarse classification used by the edit panel copy. */
 export const ARTIFACT_BLOCK_KINDS = [
-  'section', 'card', 'table', 'chart', 'interactive', 'drawing', 'media', 'container', 'content',
+  'section', 'card', 'table', 'chart', 'interactive', 'drawing', 'media', 'container',
+  'divider', 'spacer', 'toc', 'heading', 'caption', 'content',
 ] as const
 /** How one root-level block is labelled in the edit panel. */
 export type ArtifactBlockKind = (typeof ARTIFACT_BLOCK_KINDS)[number]

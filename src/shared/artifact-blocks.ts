@@ -3,10 +3,10 @@
  *
  * A block is a direct child of the program's root `Col`: the root layout owns
  * the page rhythm, so its children are exactly the stable, top-level regions a
- * user can point at (title block, cards, tables, charts, sections). Inline
- * chrome (Caption, Divider, Spacer, Toc, a stray Title) is not offered as a
- * block. Titles come from the block's own `Title` component, a Section title,
- * or its first text; nothing depends on screen coordinates.
+ * user can point at (title block, cards, tables, charts, sections, and the
+ * small structural pieces Caption/Divider/Spacer/Toc/Title). Titles come from
+ * the block's own `Title` component, a Section title, a Toc item list, or its
+ * first text; nothing depends on screen coordinates.
  *
  * `wrapProgramForBlockEditing` rewrites the same program's root statement so
  * every block sits inside an internal `BlockSlot` component. The edit view
@@ -20,9 +20,6 @@ import type { ArtifactBlock, ArtifactBlockKind } from './artifact-edit.ts'
 
 /** Component name of the internal edit-mode wrapper (never in the model catalog). */
 export const BLOCK_SLOT_COMPONENT = 'BlockSlot'
-
-/** Root children that are page chrome or spacing rather than editable content. */
-const CHROME_COMPONENTS = new Set(['Caption', 'Divider', 'Spacer', 'Toc', 'Title'])
 
 /** Component names that make a block an interactive module. */
 const INTERACTIVE_COMPONENTS = new Set([
@@ -102,8 +99,15 @@ function blockTitle(node: ElementNode): string | undefined {
   if (title !== undefined && typeof title.props.text === 'string' && title.props.text.trim() !== '') {
     return title.props.text.trim().slice(0, 120)
   }
+  if ((node.typeName === 'Title' || node.typeName === 'Caption') && typeof node.props.text === 'string' && node.props.text.trim() !== '') {
+    return node.props.text.trim().slice(0, 120)
+  }
   if (node.typeName === 'Section' && typeof node.props.title === 'string' && node.props.title.trim() !== '') {
     return node.props.title.trim().slice(0, 120)
+  }
+  if (node.typeName === 'Toc' && Array.isArray(node.props.items)) {
+    const items = node.props.items.filter((item): item is string => typeof item === 'string')
+    if (items.length > 0) return items.slice(0, 3).join(' · ').slice(0, 120)
   }
   if (node.typeName === 'Table' && Array.isArray(node.props.columns)) {
     const columns = node.props.columns.filter((column): column is string => typeof column === 'string')
@@ -120,6 +124,11 @@ function blockTitle(node: ElementNode): string | undefined {
 function blockKind(node: ElementNode): ArtifactBlockKind {
   if (findDescendant(node, INTERACTIVE_COMPONENTS) !== undefined || INTERACTIVE_COMPONENTS.has(node.typeName)) return 'interactive'
   const type = node.typeName
+  if (type === 'Divider') return 'divider'
+  if (type === 'Spacer') return 'spacer'
+  if (type === 'Toc') return 'toc'
+  if (type === 'Title') return 'heading'
+  if (type === 'Caption') return 'caption'
   if (type === 'Section') return 'section'
   if (type === 'Card') return 'card'
   if (type === 'Table') return 'table'
@@ -140,7 +149,7 @@ export interface ArtifactBlockNode {
 export interface ArtifactBlockExtraction {
   /** Root component name; only `Col` is supported. */
   readonly rootType?: string
-  /** Root children in source order, including chrome. */
+  /** Root children in source order; every element child is an editable block. */
   readonly rootChildCount: number
   /** Editable blocks in source order. */
   readonly blocks: readonly ArtifactBlock[]
@@ -174,7 +183,6 @@ export function extractArtifactBlocks(program: string): ArtifactBlockExtraction 
   const blocks: ArtifactBlock[] = []
   const nodes: ArtifactBlockNode[] = []
   children.forEach((node, rootIndex) => {
-    if (CHROME_COMPONENTS.has(node.typeName)) return
     const originalIndex = blocks.length + 1
     const block: ArtifactBlock = {
       blockId: `b${originalIndex}`,
@@ -319,8 +327,8 @@ export function wrapProgramForBlockEditing(
     if (expression === undefined) return undefined
     wrapperByBlockId.set(entry.block.blockId, `${BLOCK_SLOT_COMPONENT}("${entry.block.blockId}", ${entry.block.originalIndex}, [${expression}])`)
   }
-  // Optional arrangement preview: block slots take the target order, chrome keeps
-  // its slot. An invalid/partial order falls back to the page order.
+  // Optional arrangement preview: block slots take the target order. An
+  // invalid/partial order falls back to the page order.
   const validOrder = targetOrder !== undefined
     && targetOrder.length === extraction.blocks.length
     && new Set(targetOrder).size === targetOrder.length
@@ -450,6 +458,14 @@ function matchUpdatedBlocks(base: ArtifactBlockExtraction, updated: ArtifactBloc
     if (mapping.has(block.blockId) || block.title === undefined) continue
     take(block, candidates(block, candidate => candidate.title === block.title))
   }
+  // Pass 4: untitled structural pieces (Divider/Spacer/...): match the remaining
+  // blocks of one component type in page order when their counts agree.
+  for (const type of new Set(base.blocks.filter(block => !mapping.has(block.blockId) && block.title === undefined && block.statementId === undefined).map(block => block.componentType))) {
+    const baseBlocks = base.blocks.filter(block => !mapping.has(block.blockId) && block.title === undefined && block.statementId === undefined && block.componentType === type)
+    const updatedBlocks = updated.blocks.filter(candidate => !used.has(candidate.rootIndex) && candidate.componentType === type)
+    if (baseBlocks.length === 0 || baseBlocks.length !== updatedBlocks.length) continue
+    baseBlocks.forEach((block, index) => take(block, [updatedBlocks[index]?.rootIndex as number].filter(root => root !== undefined)))
+  }
   if (mapping.size !== base.blocks.length) return undefined
   return mapping
 }
@@ -460,8 +476,7 @@ function matchUpdatedBlocks(base: ArtifactBlockExtraction, updated: ArtifactBloc
  *
  * The model only needs to keep each top-level block recognizable (its statement
  * name or title); the Host owns the mechanical reordering so a reorder request
- * cannot silently produce a wrong page structure. Page chrome (non-block root
- * children such as a Caption or Divider) keeps its slot.
+ * cannot silently produce a wrong page structure.
  *
  * @param program - the model's updated complete program.
  * @param targetOrder - target order of the base revision's block ids.

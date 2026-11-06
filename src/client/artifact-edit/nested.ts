@@ -75,7 +75,7 @@ export function nestedBlocksForProgram(program: string): NestedBlockMap | undefi
     let ordinal = 0
     nodeIds.forEach(nodeId => {
       const node = tree.nodes.get(nodeId)
-      if (node === undefined || node.chrome || !node.editable || node.problem !== undefined) return
+      if (node === undefined || !node.editable || node.problem !== undefined) return
       ordinal += 1
       displayOrder += 1
       const blockId = parentDisplayId === undefined ? `b${ordinal}` : `${parentDisplayId}.${ordinal}`

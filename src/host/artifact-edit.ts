@@ -84,7 +84,6 @@ function planNestedEdits(program: string, request: ArtifactEditRequest): { reado
       return { ok: false, message: `block node ${JSON.stringify(nodeId)} is not part of the current revision; ask the user to reload the page and reselect the block.` }
     }
     if (node.depth <= 0) return { ok: false, message: 'the root layout cannot be edited as one block.' }
-    if (node.chrome) return { ok: false, message: `block node ${JSON.stringify(nodeId)} is page chrome and cannot be edited as a block.` }
     if (node.scoped) return { ok: false, message: `block node ${JSON.stringify(nodeId)} is inside an @Each template, which is not editable in this release.` }
     if (node.shared) return { ok: false, message: `block node ${JSON.stringify(nodeId)} belongs to a shared named expression; editing it would change every instance.` }
     if (node.opaque || node.problem !== undefined) {
@@ -117,7 +116,6 @@ function planNestedEdits(program: string, request: ArtifactEditRequest): { reado
     if (parent === undefined) {
       return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is not part of the current revision; ask the user to reload the page and retry.` }
     }
-    if (parent.chrome) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is page chrome and cannot receive a block.` }
     if (parent.scoped) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is inside an @Each template and cannot receive a block in this release.` }
     if (parent.shared) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} belongs to a shared named expression; adding there would change every instance.` }
     if (parent.opaque || parent.problem !== undefined) return { ok: false, message: `new block parent ${JSON.stringify(addition.parentNodeId)} is not structurally editable in this release.` }
@@ -381,7 +379,6 @@ export function describeOrderByParentProblem(baseProgram: string, request: Artif
   for (const [key, order] of Object.entries(groups)) {
     const parent = key === 'root' ? tree.nodes.get(tree.rootNodeId) : tree.nodes.get(key)
     if (parent === undefined) return `orderByParent refers to an unknown parent ${JSON.stringify(key)}.`
-    if (parent.chrome) return `orderByParent parent ${JSON.stringify(key)} is page chrome and has no editable block children.`
     if (parent.scoped) return `orderByParent parent ${JSON.stringify(key)} is inside an @Each template and cannot be reordered in this release.`
     if (parent.shared) return `orderByParent parent ${JSON.stringify(key)} belongs to a shared named expression; reordering it would change every instance.`
     if (parent.opaque || parent.problem !== undefined) return `orderByParent parent ${JSON.stringify(key)} is not structurally reorderable in this release.`
@@ -396,7 +393,6 @@ export function describeOrderByParentProblem(baseProgram: string, request: Artif
       if (child === undefined) return `orderByParent for ${JSON.stringify(key)} refers to an unknown block ${JSON.stringify(nodeId)}.`
       if (seen.has(nodeId)) return `orderByParent for ${JSON.stringify(key)} lists block ${JSON.stringify(nodeId)} more than once.`
       seen.add(nodeId)
-      if (child.chrome) return `orderByParent for ${JSON.stringify(key)} must not include page chrome (${JSON.stringify(nodeId)}).`
       if (!child.editable) return `orderByParent for ${JSON.stringify(key)} includes a block that is not editable (${JSON.stringify(nodeId)}).`
       if (!editable.includes(nodeId)) return `orderByParent for ${JSON.stringify(key)} lists a block from a different parent (${JSON.stringify(nodeId)}).`
     }

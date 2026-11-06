@@ -42,9 +42,9 @@ test('recognizes the sample artifact blocks in document order', () => {
   assert.equal(extraction.unsupported, undefined)
   assert.equal(extraction.rootType, 'Col')
   assert.equal(extraction.rootChildCount, 9)
-  assert.deepEqual(extraction.blocks.map(block => block.blockId), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'])
-  assert.deepEqual(extraction.blocks.map(block => block.originalIndex), [1, 2, 3, 4, 5, 6, 7, 8])
-  assert.deepEqual(extraction.blocks.map(block => block.rootIndex), [0, 1, 2, 3, 4, 5, 6, 7])
+  assert.deepEqual(extraction.blocks.map(block => block.blockId), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'])
+  assert.deepEqual(extraction.blocks.map(block => block.originalIndex), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  assert.deepEqual(extraction.blocks.map(block => block.rootIndex), [0, 1, 2, 3, 4, 5, 6, 7, 8])
   assert.deepEqual(extraction.blocks.map(block => block.title), [
     '夏令时与冬令时',
     '一句话版本',
@@ -54,14 +54,13 @@ test('recognizes the sample artifact blocks in document order', () => {
     '为什么会有这个制度',
     '中国为什么没有夏令时',
     '常见误解 · 实际情况',
+    '规则以 2026 年为准。欧盟议会 2019 年表决支持取消，但成员国未达成一致，至今仍在切换。手机和电脑会自动切换，机械表要手动调。',
   ])
   assert.deepEqual(extraction.blocks.map(block => block.nodePath), [
-    'root[0]', 'root[1]', 'root[2]', 'root[3]', 'root[4]', 'root[5]', 'root[6]', 'root[7]',
+    'root[0]', 'root[1]', 'root[2]', 'root[3]', 'root[4]', 'root[5]', 'root[6]', 'root[7]', 'root[8]',
   ])
-  assert.deepEqual(extraction.blocks.map(block => block.componentType), ['Col', 'Card', 'Card', 'Card', 'Table', 'Card', 'Card', 'Table'])
-  assert.deepEqual(extraction.blocks.map(block => block.kind), ['container', 'card', 'interactive', 'interactive', 'table', 'card', 'card', 'table'])
-  // The trailing footnote Caption is chrome, not a block.
-  assert.equal(extraction.blocks.some(block => block.title === '规则以 2026 年为准'), false)
+  assert.deepEqual(extraction.blocks.map(block => block.componentType), ['Col', 'Card', 'Card', 'Card', 'Table', 'Card', 'Card', 'Table', 'Caption'])
+  assert.deepEqual(extraction.blocks.map(block => block.kind), ['container', 'card', 'interactive', 'interactive', 'table', 'card', 'card', 'table', 'caption'])
 })
 
 test('wrapped program parses with the edit-mode library and keeps the layout', () => {
@@ -69,28 +68,28 @@ test('wrapped program parses with the edit-mode library and keeps the layout', (
   const wrapped = wrapProgramForBlockEditing(DST_PROGRAM, extraction)
   assert.ok(wrapped)
   assert.match(wrapped, /^root = Col\(\[BlockSlot\("b1", 1, \[head\]\)/)
-  assert.match(wrapped, /BlockSlot\("b8", 8, \[mythTable\]\)/)
-  // Non-block chrome stays untouched.
-  assert.match(wrapped, /footnote\]\)/)
+  assert.match(wrapped, /BlockSlot\("b9", 9, \[footnote\]\)/)
   const result = editParser().parse(wrapped)
   assert.deepEqual(result.meta.errors, [])
   const children = result.root.props.children
   assert.equal(children.length, 9)
-  assert.deepEqual(children.slice(0, 8).map(child => child.typeName), Array(8).fill('BlockSlot'))
-  assert.equal(children[8].typeName, 'Caption')
-  assert.deepEqual(children.slice(0, 3).map(child => child.props.blockId), ['b1', 'b2', 'b3'])
+  assert.deepEqual(children.map(child => child.typeName), Array(9).fill('BlockSlot'))
+  assert.deepEqual(children.map(child => child.props.blockId), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'])
 })
 
-test('article roots expose sections, not Toc or the page title', () => {
+test('article roots expose every direct child, including the title and Toc', () => {
   const program = 'root = Col([Title("Page title", "2xl"), Toc(["One", "Two"]), Section("One", [Markdown("First body")]), Section("Two", [Markdown("Second body")])])'
   const extraction = extractArtifactBlocks(program)
   assert.equal(extraction.unsupported, undefined)
-  assert.deepEqual(extraction.blocks.map(block => block.componentType), ['Section', 'Section'])
-  assert.deepEqual(extraction.blocks.map(block => block.title), ['One', 'Two'])
+  assert.deepEqual(extraction.blocks.map(block => block.componentType), ['Title', 'Toc', 'Section', 'Section'])
+  assert.deepEqual(extraction.blocks.map(block => block.kind), ['heading', 'toc', 'section', 'section'])
+  assert.deepEqual(extraction.blocks.map(block => block.title), ['Page title', 'One · Two', 'One', 'Two'])
   const wrapped = wrapProgramForBlockEditing(program, extraction)
   assert.ok(wrapped)
-  assert.match(wrapped, /BlockSlot\("b1", 1, \[Section\("One"/)
-  assert.match(wrapped, /BlockSlot\("b2", 2, \[Section\("Two"/)
+  assert.match(wrapped, /BlockSlot\("b1", 1, \[Title\("Page title"/)
+  assert.match(wrapped, /BlockSlot\("b2", 2, \[Toc/)
+  assert.match(wrapped, /BlockSlot\("b3", 3, \[Section\("One"/)
+  assert.match(wrapped, /BlockSlot\("b4", 4, \[Section\("Two"/)
 })
 
 test('unsupported roots expose a reason instead of blocks', () => {
@@ -98,9 +97,10 @@ test('unsupported roots expose a reason instead of blocks', () => {
   assert.equal(extractArtifactBlocks('').unsupported, 'unparsed')
   const empty = extractArtifactBlocks('root = Col([])')
   assert.equal(empty.unsupported, 'empty_root')
-  const chromeOnly = extractArtifactBlocks('root = Col([Caption("a"), Caption("b")])')
-  assert.equal(chromeOnly.blocks.length, 0)
-  assert.equal(wrapProgramForBlockEditing('root = Col([Caption("a")])', chromeOnly), undefined)
+  const captionOnly = extractArtifactBlocks('root = Col([Caption("a"), Caption("b")])')
+  assert.equal(captionOnly.blocks.length, 2)
+  const singleCaption = extractArtifactBlocks('root = Col([Caption("a")])')
+  assert.ok(wrapProgramForBlockEditing('root = Col([Caption("a")])', singleCaption))
 })
 
 test('opaque root layout falls back instead of producing a broken wrap', () => {
@@ -125,10 +125,10 @@ test('verifies edit targets against the recognized blocks', () => {
   assert.equal(verifyEditTargets(extraction, [{ ...valid[2], originalIndex: 9 }]), 'original_index_mismatch:b3')
   assert.equal(verifyEditTargets(extraction, [{ ...valid[2], componentType: 'Table' }]), 'component_type_mismatch:b3')
   assert.equal(verifyEditTargets(extraction, [{ ...valid[2], title: 'other' }]), 'title_mismatch:b3')
-  assert.equal(verifyEditTargets(extraction, [{ ...valid[2], blockId: 'b9' }]), 'unknown_block:b9')
+  assert.equal(verifyEditTargets(extraction, [{ ...valid[2], blockId: 'b10' }]), 'unknown_block:b10')
 })
 
-test('deterministic reordering moves root children and keeps chrome slots', () => {
+test('deterministic reordering moves every root child', () => {
   const extraction = extractArtifactBlocks(DST_PROGRAM)
   const base = extraction.blocks.map(block => block.blockId)
   const target = ['b5', 'b3', ...base.filter(id => id !== 'b5' && id !== 'b3')]
@@ -137,12 +137,11 @@ test('deterministic reordering moves root children and keeps chrome slots', () =
   const result = editParser().parse(reordered)
   assert.deepEqual(result.meta.errors, [])
   const children = result.root.props.children
-  // Blocks take the block slots in the target order; the trailing Caption stays last.
   assert.equal(children.length, 9)
   assert.equal(children[0].statementId, 'rulesTable')
   assert.equal(children[1].statementId, 'clockCard')
   assert.equal(children[2].statementId, 'head')
-  assert.equal(children[4].statementId, 'monthCard')
+  assert.equal(children[8].statementId, 'footnote')
   assert.equal(children[8].typeName, 'Caption')
   // A model program that kept the same blocks reorders identically.
   const updated = DST_PROGRAM.replace('一句话版本', '一句话概述')

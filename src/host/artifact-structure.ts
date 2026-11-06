@@ -403,7 +403,6 @@ function validateOperations(
       return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} changed since it was selected; reload the page and retry.`)
     }
     if (node.depth <= 0) return batchFailure(400, 'invalid_input', 'the root layout cannot be deleted, duplicated or moved.')
-    if (node.chrome) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is page chrome and cannot be changed structurally.`)
     if (node.scoped) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is inside an @Each template and cannot be changed structurally in this release.`)
     if (node.shared) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} belongs to a shared named expression; changing it would change every instance.`)
     if (node.opaque || node.problem !== undefined) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is not structurally editable in this release.`)
@@ -436,7 +435,6 @@ function validateOperations(
         return batchFailure(400, 'invalid_input', `unknown target parent node ${JSON.stringify(operation.toParentNodeId)}.`)
       }
       if (target.nodeId === node.nodeId) return batchFailure(400, 'invalid_input', 'a block cannot be moved into itself.')
-      if (target.chrome) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is page chrome and cannot receive blocks.`)
       if (target.scoped) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is inside an @Each template and cannot receive blocks in this release.`)
       if (target.shared) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} belongs to a shared named expression; moving there would change every instance.`)
       if (target.opaque || target.problem !== undefined) return batchFailure(400, 'invalid_input', `target parent ${JSON.stringify(operation.toParentNodeId)} is not structurally editable in this release.`)
@@ -575,14 +573,14 @@ function rootBlockForNode(tree: ArtifactTree, node: ArtifactTreeNode): number | 
   return cursor !== undefined && cursor.parentNodeId === tree.rootNodeId ? cursor.childIndex : undefined
 }
 
-/** Root-level block ids of one tree, in page order (chrome excluded). */
+/** Root-level block ids of one tree, in page order. */
 function rootBlockIndex(tree: ArtifactTree): { blockId: string; rootIndex: number }[] {
   const root = tree.nodes.get(tree.rootNodeId)
   const result: { blockId: string; rootIndex: number }[] = []
   let block = 0
   for (const childId of root?.childSlots.children ?? []) {
     const child = tree.nodes.get(childId)
-    if (child === undefined || child.chrome) continue
+    if (child === undefined) continue
     block += 1
     result.push({ blockId: `b${block}`, rootIndex: child.childIndex })
   }

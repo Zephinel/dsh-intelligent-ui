@@ -28,8 +28,6 @@ export const MAX_CST_OPERATIONS = 20
 /** Containers whose children become editable tree nodes by default. */
 export const DEFAULT_CONTAINER_TYPES = ['Col', 'Card'] as const
 
-/** Root children that are page chrome and never editable/structural targets. */
-const CHROME_COMPONENTS = new Set(['Caption', 'Divider', 'Spacer', 'Toc', 'Title'])
 /**
  * Which positional argument of each container holds its children array.
  * Col/Row/Box/Grid/Card/Carousel take children first; Section(title, children,
@@ -53,7 +51,6 @@ export type CstErrorCode =
   | 'unsupported_mapping'
   | 'unknown_node'
   | 'cannot_edit_root'
-  | 'unsupported_chrome'
   | 'unsupported_opaque'
   | 'unsupported_scope'
   | 'shared_named_reference'
@@ -156,7 +153,6 @@ export interface ArtifactTreeNode {
   readonly children: readonly string[]
   readonly childSlots: Readonly<Record<string, readonly string[]>>
   readonly editable: boolean
-  readonly chrome: boolean
   readonly scoped: boolean
   readonly shared: boolean
   readonly opaque: boolean
@@ -174,7 +170,6 @@ export interface ArtifactTreeOutlineEntry {
   readonly title?: string
   readonly childIndex: number
   readonly editable: boolean
-  readonly chrome: boolean
 }
 
 /** Revision-scoped node tree for one program. */
@@ -668,8 +663,15 @@ function nodeTitle(node: ElementNode): string | undefined {
   if (title !== undefined && typeof title.props.text === 'string' && title.props.text.trim() !== '') {
     return title.props.text.trim().slice(0, 120)
   }
+  if ((node.typeName === 'Title' || node.typeName === 'Caption') && typeof node.props.text === 'string' && node.props.text.trim() !== '') {
+    return node.props.text.trim().slice(0, 120)
+  }
   if (node.typeName === 'Section' && typeof node.props.title === 'string' && node.props.title.trim() !== '') {
     return node.props.title.trim().slice(0, 120)
+  }
+  if (node.typeName === 'Toc' && Array.isArray(node.props.items)) {
+    const items = node.props.items.filter((item): item is string => typeof item === 'string')
+    if (items.length > 0) return items.slice(0, 3).join(' · ').slice(0, 120)
   }
   if (node.typeName === 'Table' && Array.isArray(node.props.columns)) {
     const columns = node.props.columns.filter((column): column is string => typeof column === 'string')
@@ -808,7 +810,6 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
     nextId += 1
     const nodeId = `n${nextId}`
     const componentType = input.ast.typeName
-    const chrome = CHROME_COMPONENTS.has(componentType)
     const scoped = input.scope !== undefined
     const sharedRef = input.statementId !== undefined && (referenceCounts.get(input.statementId) ?? 0) > 1
     const shared = input.parentShared || sharedRef
@@ -865,8 +866,7 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       ...slotRange === undefined ? {} : { slotRange },
       children,
       childSlots,
-      editable: !chrome && !scoped && !shared && nodeProblem === undefined,
-      chrome,
+      editable: !scoped && !shared && nodeProblem === undefined,
       scoped,
       shared,
       opaque: nodeProblem !== undefined && nodeProblem.code === 'unsupported_mapping',
@@ -956,7 +956,6 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       children,
       childSlots: {},
       editable: false,
-      chrome: false,
       scoped: false,
       shared: parentInput.parentShared,
       opaque: true,
@@ -1002,7 +1001,6 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
         children: [],
         childSlots: {},
         editable: false,
-        chrome: false,
         scoped: true,
         shared: parentInput.parentShared,
         opaque: false,
@@ -1029,7 +1027,6 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       children: [],
       childSlots: templateId === undefined ? {} : { template: [templateId] },
       editable: false,
-      chrome: false,
       scoped: false,
       shared: parentInput.parentShared,
       opaque: true,
@@ -1076,7 +1073,6 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
         ...node.title === undefined ? {} : { title: node.title },
         childIndex: node.childIndex,
         editable: node.editable,
-        chrome: node.chrome,
       }
     })
   return {
@@ -1220,7 +1216,6 @@ function requireNode(
 
 function denyNode(node: ArtifactTreeNode, rootNodeId: string): CstFailure | undefined {
   if (node.nodeId === rootNodeId) return failure('cannot_edit_root', 'The root Col cannot be replaced, removed, moved or duplicated.')
-  if (node.chrome) return failure('unsupported_chrome', `Node ${node.nodeId} is page chrome and is not a structural block.`)
   if (node.scoped) return failure('unsupported_scope', 'Nodes inside an @Each template run per runtime instance and are not structurally editable.')
   if (node.shared) return failure('shared_named_reference', 'This node lives in a shared named expression; structural edits would change every instance.')
   if (node.opaque || node.problem !== undefined) return failure('unsupported_opaque', `Node ${node.nodeId} is opaque to structure operations.`)
@@ -1253,16 +1248,15 @@ function childSources(tree: ArtifactTree, ids: readonly string[]): string[] {
   return ids.map(id => (tree.nodes.get(id) as ArtifactTreeNode).source)
 }
 
-/** Direct children a user can place blocks between (chrome and opaque nodes excluded). */
+/** Direct children a user can place blocks between (opaque/template nodes excluded). */
 function editableChildIds(tree: ArtifactTree, parent: ArtifactTreeNode): readonly string[] {
   return slotChildIds(parent).filter(nodeId => tree.nodes.get(nodeId)?.editable === true)
 }
 
 /**
- * Map an editable-child insertion index to a full slot index, keeping chrome
- * children at their current positions: index < editableCount inserts before
- * that editable child; index === editableCount appends after the last editable
- * child (before any trailing chrome, or at the end when there is none).
+ * Map an editable-child insertion index to a full slot index: index <
+ * editableCount inserts before that editable child; index === editableCount
+ * appends after the last editable child (or at the end when there is none).
  */
 function editableInsertionIndex(tree: ArtifactTree, parent: ArtifactTreeNode, index: number): number | undefined {
   if (!Number.isInteger(index) || index < 0) return undefined
@@ -1759,8 +1753,9 @@ export function duplicateNode(
 /**
  * Insert one inline expression as a new child of a container slot.
  *
- * The index counts editable children only (chrome children keep their current
- * relative positions), so index 0 inserts before the first editable child,
+ * The index counts editable children only (opaque/template children keep
+ * their current relative positions), so index 0 inserts before the first
+ * editable child,
  * index === editableCount after the last one. The root Col can be the parent.
  * @param program - base program.
  * @param parentNodeId - node id of the destination container (root node id is allowed).
@@ -1788,7 +1783,7 @@ export function insertNode(
  * parent's children slot after the node is removed (a complete reorder).
  * Cross-container moves (the two parents may not be ancestor/descendant) use an
  * editable-children index in the destination slot, like {@link insertNode};
- * chrome children keep their positions. Moving into a container's own
+ * opaque/template children keep their positions. Moving into a container's own
  * descendant or into an ancestor/descendant container is rejected with
  * {@link CstErrorCode} `unsupported_move_nested`/`move_into_self`.
  * @param program - base program.

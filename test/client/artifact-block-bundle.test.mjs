@@ -39,8 +39,8 @@ test('extracts selected block expressions and their frozen dependency closure', 
   assert.deepEqual(bundle.frozenStatements.map(statement => statement.name), ['clockAngle', 'clockSvg', 'clockNote'])
   assert.ok(bundle.frozenStatements.every(statement => statement.source.startsWith(`${statement.name} = `)))
   assert.deepEqual(bundle.stateSources, ['$clock = "冬令时"'])
-  assert.deepEqual(bundle.outline.map(entry => entry.blockId), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'])
-  assert.deepEqual(bundle.outline.map(entry => entry.componentType), ['Col', 'Card', 'Card', 'Card', 'Table', 'Card', 'Card', 'Table'])
+  assert.deepEqual(bundle.outline.map(entry => entry.blockId), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'])
+  assert.deepEqual(bundle.outline.map(entry => entry.componentType), ['Col', 'Card', 'Card', 'Card', 'Table', 'Card', 'Card', 'Table', 'Caption'])
 })
 
 test('resolves transitive statement and state dependencies conservatively', () => {
@@ -57,7 +57,7 @@ test("keeps the caller's block order, resolves inline children and rejects unusa
   assert.deepEqual(reversed.blocks.map(block => block.blockId), ['b5', 'b3'])
   assert.equal(reversed.blocks[0].statementId, 'rulesTable')
   const inline = `root = Col([Title("Heading"), Card([Title("Inline", "sm"), Text("body")])])`
-  const bundle = extractBlockBundle(inline, ['b1'])
+  const bundle = extractBlockBundle(inline, ['b2'])
   assert.ok(bundle !== undefined)
   assert.equal(bundle.blocks[0].statementId, undefined)
   assert.equal(bundle.blocks[0].source, 'Card([Title("Inline", "sm"), Text("body")])')
@@ -83,7 +83,7 @@ test('splices one block expression into its slot and preserves every other root 
   assert.equal(result.program.slice(composedRoot.end).replace(/\n$/, ''), DST_PROGRAM.slice(DST_ROOT.end).replace(/\n$/, ''))
   const extraction = extractArtifactBlocks(result.program)
   assert.equal(extraction.unsupported, undefined)
-  assert.equal(extraction.blocks.length, 8)
+  assert.equal(extraction.blocks.length, 9)
   assert.equal(result.program, spliceBlockBundle(DST_PROGRAM, ['b3'], CLOCK_FRAGMENT).program, 'deterministic')
 })
 
@@ -99,16 +99,17 @@ newAnswer = Card([Title("一句话版本", "sm"), Text("更新后的说明。", 
   assert.equal(composedRoot.children[0], DST_ROOT.children[0])
   assert.equal(composedRoot.children[2], DST_ROOT.children[2])
   assert.match(result.program, /\nnewAnswer = Card\(\[Title\("一句话版本", "sm"\), Text\("更新后的说明。", "sm"\)\]\)\n$/)
-  assert.equal(extractArtifactBlocks(result.program).blocks.length, 8)
+  assert.equal(extractArtifactBlocks(result.program).blocks.length, 9)
 })
 
-test('preserves chrome slots, root arguments and base statements in a small page', () => {
+test('preserves untouched root children, root arguments and base statements in a small page', () => {
   const fragment = `root = Col([Card([Title("A2", "sm")]), Card([Title("B", "sm")])])`
   const result = spliceBlockBundle(SMALL_BASE, ['b1', 'b2'], fragment)
   assert.equal(result.ok, true)
-  assert.match(result.program, /^root = Col\(\[title, Card\(\[Title\("A2", "sm"\)\]\), Caption\("note"\), Card\(\[Title\("B", "sm"\)\]\)\], 2\)\n/)
+  // b1/b2 are rewritten; the Caption note and cardB keep their slots verbatim.
+  assert.match(result.program, /^root = Col\(\[Card\(\[Title\("A2", "sm"\)\]\), Card\(\[Title\("B", "sm"\)\]\), Caption\("note"\), cardB\], 2\)\n/)
   assert.match(result.program, /\ntitle = Title\("Page"\)\ncardA = Card\(\[Title\("A", "sm"\)\]\)\ncardB = Card\(\[Title\("B", "sm"\)\]\)\n$/)
-  assert.equal(extractArtifactBlocks(result.program).blocks.length, 2)
+  assert.equal(extractArtifactBlocks(result.program).blocks.length, 4)
 })
 
 test('a fragment may use base state and define its own helper statement', () => {
@@ -125,7 +126,7 @@ test('rejects a fragment that is not one expression per selected block', () => {
     [['b3', 'b5'], 'root = Col([Card([Title("x")])])', /fragment_block_count_mismatch:expected 2 got 1/],
     [['b3'], 'root = Card([Text("x")])', /fragment_root_not_col/],
     [['b3'], 'root = Col([', /fragment_(parse_error|incomplete)/],
-    [['b3'], 'root = Col([Caption("only chrome")])', /composed_block_count_mismatch:expected 8 got 7/],
+    [['b3'], 'root = Col([])', /fragment_block_count_mismatch:expected 1 got 0/],
     [['b3'], 'root = Col([null])', /fragment_block_count_mismatch/],
   ]) {
     const result = spliceBlockBundle(DST_PROGRAM, blockIds, fragment)

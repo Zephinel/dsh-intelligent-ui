@@ -95,6 +95,11 @@ const TYPE_GLYPHS: Readonly<Record<ArtifactBlockKind, RemixIconName>> = {
   drawing: 'brush-line',
   media: 'image-line',
   container: 'layout-line',
+  divider: 'separator',
+  spacer: 'layout-line',
+  toc: 'file-text-line',
+  heading: 'font-size',
+  caption: 'file-text-line',
   text: 'file-text-line',
 }
 

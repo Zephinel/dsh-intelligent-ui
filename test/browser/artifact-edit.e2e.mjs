@@ -213,8 +213,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // 2. Edit mode: no request list, arrangement always complete, summary empty.
   await click('[data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit view')
-  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 8', 'eight blocks')
-  check(await count('[data-dsh-iui-block]'), 8, 'all top-level blocks recognized')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 9', 'nine blocks')
+  check(await count('[data-dsh-iui-block]'), 9, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
   const editableHint = await read(`(() => {
     const block = document.querySelector('[data-dsh-iui-block="b3"]');
@@ -240,7 +240,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(editableHint.marqueeBackground.includes('conic-gradient'), true, 'the marquee is a rotating conic light')
   check(editableHint.marqueeMask.includes('linear-gradient'), true, 'the light is masked to the rounded block edge')
   check(editableHint.marqueeOpacity > 0.8, true, 'the marquee is visible at rest')
-  check(new Set(editableHint.delays).size, 8, 'the marquee orbits at a staggered phase per block')
+  check(new Set(editableHint.delays).size, 9, 'the marquee orbits at a staggered phase per block')
   const tones = await read(`(() => {
     const first = getComputedStyle(document.querySelector('[data-dsh-iui-block="b1"]'), '::after').backgroundImage;
     const second = getComputedStyle(document.querySelector('[data-dsh-iui-block="b2"]'), '::after').backgroundImage;
@@ -266,8 +266,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await new Promise(resolve => setTimeout(resolve, 120))
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
   check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
-  check(await count('[data-dsh-iui-edit-arrangement-row]'), 8, 'arrangement lists every block')
-  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], 'arrangement starts in page order')
+  check(await count('[data-dsh-iui-edit-arrangement-row]'), 9, 'arrangement lists every block')
+  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'], 'arrangement starts in page order')
   check(await count('[data-dsh-iui-edit-arrangement-row] .dsh-iui-edit-tag'), 0, 'no edited tags yet')
   check(await text('[data-dsh-iui-edit-reset-order]'), '重置顺序', 'reset order control')
   check((await text('[data-dsh-iui-edit-panel]')).includes('区块编排'), true, 'arrangement section title')
@@ -381,7 +381,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // 9. Reset restores page order but keeps edits, numbers and global note.
   await click('[data-dsh-iui-edit-reset-order]')
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b1'`, 'reset order')
-  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], 'reset restores page order')
+  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'], 'reset restores page order')
   check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 2 项修改', 'reset removes the reorder chip part')
   check(await count('[data-dsh-iui-edit-request-row]'), 2, 'reset keeps saved requests')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'reset keeps numbering')
@@ -396,7 +396,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const envelope = await read('window.__serializeChip()')
   check(envelope.includes('"blockId":"b3"'), true, 'envelope carries the b3 edit')
   check(envelope.includes('"blockId":"b5"'), true, 'envelope carries the b5 edit')
-  check(envelope.includes('"targetOrder":["b5","b1","b2","b3","b4","b6","b7","b8"]'), true, 'envelope carries the target order')
+  check(envelope.includes('"targetOrder":["b5","b1","b2","b3","b4","b6","b7","b8","b9"]'), true, 'envelope carries the target order')
   check(envelope.includes('"orderChanged":true'), true, 'envelope flags the reorder')
   check(envelope.includes('保持页面其余内容不变'), true, 'envelope carries the global instruction')
   check(envelope.includes('root = Col('), true, 'envelope carries the original program')
@@ -409,7 +409,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('window.__input().draft'), '', 'draft cleared after send')
 
   // 11. Host-normalized revision: edited content in the target order.
-  const targetOrder = ['b5', 'b2', 'b1', 'b3', 'b4', 'b6', 'b7', 'b8']
+  const targetOrder = ['b5', 'b2', 'b1', 'b3', 'b4', 'b6', 'b7', 'b8', 'b9']
   const baseExtraction = extractArtifactBlocks(DST_PROGRAM)
   const normalized = reorderProgramToTargetOrder(DIGITAL_PROGRAM, targetOrder, baseExtraction)
   assert.ok(normalized, 'fixture reorder computes')
@@ -699,13 +699,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-edit-nested]'), 1, 'nested mode toggle is offered')
   await click('[data-dsh-iui-edit-nested]')
   await wait(`document.querySelectorAll('[data-dsh-iui-block-node]').length >= 8`, 'nested block wrappers')
-  check(await count('[data-dsh-iui-block="b1.1.1"]'), 1, 'nested block has its display id')
-  await click('[data-dsh-iui-block="b1.1.1"] .dsh-iui-block-layer')
+  check(await count('[data-dsh-iui-block="b1.2.1"]'), 1, 'nested block has its display id')
+  await click('[data-dsh-iui-block="b1.2.1"] .dsh-iui-block-layer')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'nested popover')
   await saveInstruction('nested text change')
   check((await text('[data-dsh-iui-edit-request-list]')).includes('nested text change'), true, 'nested request saved')
   const nestedEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
-  check(nestedEnvelope.includes('"blockId":"b1.1.1"'), true, 'envelope carries the nested display id')
+  check(nestedEnvelope.includes('"blockId":"b1.2.1"'), true, 'envelope carries the nested display id')
   check(nestedEnvelope.includes('"nodeId"'), true, 'envelope carries the CST node id')
   check(nestedEnvelope.includes('"sourceDigest"'), true, 'envelope carries the source digest')
   await shot('harness-m4-nested-edit.png')
@@ -717,9 +717,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested arrangement section')
   check((await count('[data-dsh-iui-edit-nested-group]')) >= 1, true, 'nested group with multiple children')
   check(await count('[data-dsh-iui-edit-nested-list]'), await count('[data-dsh-iui-edit-nested-group]'), 'one list per nested parent')
-  const nestedGroup = '[data-dsh-iui-edit-nested-group][data-parent-id="b1.1"]'
+  const nestedGroup = '[data-dsh-iui-edit-nested-group][data-parent-id="b1.2"]'
   check(await count(`${nestedGroup} [data-dsh-iui-edit-nested-row]`), 3, 'multi-child nested group is present')
-  check(await count('[data-dsh-iui-edit-nested-group][data-parent-id="b1"] [data-dsh-iui-edit-nested-row]'), 1, 'single-child nested group is present')
+  check(await count('[data-dsh-iui-edit-nested-group][data-parent-id="b1"] [data-dsh-iui-edit-nested-row]'), 2, 'the card group lists its Title and Col')
   const nestedFirst = await read(`document.querySelector('${nestedGroup} [data-dsh-iui-edit-nested-row]').getAttribute('data-block-id')`)
   const nestedRowsBefore = await read(`[...document.querySelectorAll('${nestedGroup} [data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
   await read(`(() => {
@@ -798,15 +798,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-nested]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested containers arrangement')
   check((await count('[data-dsh-iui-edit-nested-group]')) >= 4, true, 'Box/Grid/Section/Carousel groups appear')
-  check(await count('[data-dsh-iui-block="b1.1.1"]'), 1, 'Box child is selectable')
-  check(await count('[data-dsh-iui-block="b2.1.1"]'), 1, 'Grid child is selectable')
+  check(await count('[data-dsh-iui-block="b1.2.1"]'), 1, 'Box child is selectable')
+  check(await count('[data-dsh-iui-block="b2.2.1"]'), 1, 'Grid child is selectable')
   check(await count('[data-dsh-iui-block="b3.1"]'), 1, 'Section child is selectable')
-  check(await count('[data-dsh-iui-block="b4.1.1"]'), 1, 'Carousel child is selectable')
-  await click('[data-dsh-iui-block="b2.1.1"] .dsh-iui-block-layer')
+  check(await count('[data-dsh-iui-block="b4.2.1"]'), 1, 'Carousel child is selectable')
+  await click('[data-dsh-iui-block="b2.2.1"] .dsh-iui-block-layer')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'grid nested popover')
   await saveInstruction('grid nested change')
   const expandedEnvelope = await read('window.__serializeChipMatching("嵌套容器样例")')
-  check(expandedEnvelope.includes('"blockId":"b2.1.1"'), true, 'container expansion envelope carries the Grid child id')
+  check(expandedEnvelope.includes('"blockId":"b2.2.1"'), true, 'container expansion envelope carries the Grid child id')
 
   // 27. Model addition request and cross-container move request.
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
@@ -840,7 +840,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'move editor')
   await click('[data-dsh-iui-edit-nested]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-move]")', 'move button')
-  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-move]')
+  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.2.1"] [data-dsh-iui-edit-move]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-move-menu]")', 'move menu')
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-move-target')`, 'move menu focus')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-move-target')`), true, 'move menu focuses the first target')
@@ -851,7 +851,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const afterArrow = await read(`document.activeElement.getAttribute('data-target-id')`)
   check(afterArrow !== firstFocused, true, 'arrow keys move focus between targets')
   check(moveTargets.includes('root'), false, 'move menu does not offer the root target')
-  check(moveTargets.includes('b1.1'), false, 'move menu excludes the current parent')
+  check(moveTargets.includes('b1.2'), false, 'move menu excludes the current parent')
   check(moveTargets.includes('b1'), false, 'move menu excludes ancestors')
   check(moveTargets.length > 0, true, 'move menu offers a valid container')
   const moveTarget = moveTargets[0]
@@ -875,7 +875,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-edit-strict]').getAttribute('aria-pressed') === 'true'`, 'strict enabled')
   await click('[data-dsh-iui-edit-nested]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-row]")', 'strict nested rows')
-  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-structure-edit]')
+  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.2.1"] [data-dsh-iui-edit-structure-edit]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'strict popover')
   await saveInstruction('strict protection edit')
   const strictEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
