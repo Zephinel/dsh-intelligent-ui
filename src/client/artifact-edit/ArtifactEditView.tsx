@@ -222,9 +222,6 @@ export function ArtifactEditView({
           >
             {t('edit.drawerOpen', { count: requestCount })}
           </button>
-          <button type="button" className="dsh-iui-edit-button dsh-iui-edit-exit" data-dsh-iui-edit-exit onClick={() => { actions.closeEditor() }}>
-            {t('edit.exit')}
-          </button>
         </div>
         <p className="dsh-iui-edit-banner">{t('edit.banner')}</p>
       </div>

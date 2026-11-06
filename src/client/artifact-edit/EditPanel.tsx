@@ -1214,6 +1214,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           type="button"
           className="dsh-iui-edit-panel-exit dsh-iui-edit-exit"
           data-dsh-iui-edit-exit-panel
+          data-dsh-iui-edit-exit
           aria-label={t('edit.exit')}
           title={t('edit.exit')}
           onClick={() => { closeHover(); actions.closeEditor() }}
