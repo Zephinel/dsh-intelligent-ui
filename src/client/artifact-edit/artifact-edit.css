@@ -2435,7 +2435,8 @@
      pseudo-element inset from both card edges, so it never collides with the
      rounded composer corners. */
   position: relative;
-  padding: 8px 12px 6px;
+  min-height: 40px;
+  padding: 8px 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
