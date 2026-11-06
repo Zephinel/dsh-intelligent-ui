@@ -630,3 +630,11 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **匿名块排序身份**：`targetOrder` 归一化在“statement → 标题+类型 → 唯一标题”之后增加“唯一内容 digest + 组件类型”匹配，最后才按页面顺序兜底（只对字节相同的可互换块生效）；嵌套 `orderByParent` 的 `mapChildIds` 同样先按 digest 匹配，再退回 childIndex。
 - **状态与一致性**：快捷调整的未发送拦截统一用 `hasArtifactEditContent`（补上 `nestedOrderChanged`）；嵌套模式也渲染 `propsPreview`；嵌套面板 kind 复用共享映射（Divider/Spacer/Toc/Title/Caption 不再显示成“内容”）；异步结构/属性失败回写当前 session 而不是请求前快照；快捷控件打开即聚焦、补齐 `edit.propsUnit`、完整 20 个颜色 token、`aria-busy`、busy/失效/无变化文案。
 - **验证**：Node **508/508**（新增 6 条 shared/client quick-adjust+identity 单测、1 条匿名 digest 排序测试、2 条 Host props no-op/digest/批冲突测试）；浏览器 9/9；artifact-edit **282 checks**（布局 parity、嵌套 preview、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB。
+
+## 0.34 大页面预算 + 自绘快捷控件（2026-11-07，工作树）
+
+- 反馈：用户的实际页面「Solid 2.0 导览」有 105 个 CST 节点，`MAX_CST_NODES=60` 让 `nestedBlocksForProgram` 返回不可用——工具栏没有「Nested blocks」，唯一的 Scope 内 `Spacer`（depth 3）看不到；页面里也没有 `Divider`，红框里的线是 `.iui-section` 的 `border-top`。用户要求把长页面修好（方案 A），并把快捷调整里的系统下拉/滑块换成本插件自绘控件。
+- 修复：`MAX_CST_NODES` 60 → **200**（程序字符上限与深度不变）；新增 66 节点 fixture + E2E：3 个根区块、嵌套按钮出现、根 Divider 快捷调整可用、嵌套 Spacer（b3.2）可达并实时预览。客户端单测覆盖 `>60` 节点时 `blockPropsState`/`nestedBlocksForProgram`。
+- 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
+- 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
+- 验证：Node **509/509**；浏览器 9/9；artifact-edit **289 checks**；nested 75；client CSS 206.5 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.97 MB。
