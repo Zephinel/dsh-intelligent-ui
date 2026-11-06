@@ -62,7 +62,7 @@ events but not the full DSH Web integration.
   the runtime `$state` (the selected DST option and its derived note). The B1-5
   scenario then checks the live region announces nested reorders and additions,
   the nested grip references the hidden keyboard hint, and the **Move to…**
-  menu focuses its first target and moves focus with arrow keys. 180 checks;
+  menu focuses its first target and moves focus with arrow keys. 228 checks;
   The last scenarios check the editing width fit: the chat content is narrowed
   while editing and restored on exit, no expand button remains, and the fitted
   width follows a live change of the shell width preference. 228 checks; no real
