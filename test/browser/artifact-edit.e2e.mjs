@@ -179,6 +179,16 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
   check(await read(`document.querySelector('[data-dsh-iui-edit-panel] [data-dsh-iui-edit-draft-switcher]') === null`), true, 'draft switcher is not inside the edit panel')
   check(await read(`!!document.querySelector('[data-composer-card] [data-dsh-iui-edit-draft-switcher]')`), true, 'draft dock lives inside the composer card')
+  const dockGeometry = await read(`(() => {
+    const dock = document.querySelector('[data-dsh-iui-edit-draft-switcher]');
+    const card = document.querySelector('[data-composer-card]');
+    const dr = dock.getBoundingClientRect();
+    const cr = card.getBoundingClientRect();
+    const after = getComputedStyle(dock, '::after');
+    return { insideLeft: dr.left >= cr.left - 0.5, insideRight: dr.right <= cr.right + 0.5, lineLeft: after.left, lineRight: after.right };
+  })()`)
+  check(dockGeometry.insideLeft && dockGeometry.insideRight, true, 'draft dock stays within the composer card')
+  check(dockGeometry.lineLeft === '12px' && dockGeometry.lineRight === '12px', true, 'divider is inset from both card edges')
   await shot('harness-m3-draft-restored.png')
   // Clean the persisted draft, then restart from the pristine harness state.
   await read('sessionStorage.clear()')

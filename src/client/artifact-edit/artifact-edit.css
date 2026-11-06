@@ -2422,13 +2422,15 @@
  * ---------------------------------------------------------------------- */
 
 .dsh-iui-draft-dock {
+  box-sizing: border-box;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  width: min(100%, calc(var(--dsh-chat-content-width, 748px) + 32px));
   max-width: 100%;
   min-width: 0;
+  margin-inline: auto;
   /* Sits inside the composer card, above its text area. The rule is a
      pseudo-element inset from both card edges, so it never collides with the
      rounded composer corners. */
