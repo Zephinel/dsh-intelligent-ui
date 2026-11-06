@@ -138,6 +138,8 @@ export interface ArtifactTreeNode {
   readonly childIndex: number
   readonly componentType: string
   readonly title?: string
+  /** Parsed component props, for deterministic property edits and UI prefill. */
+  readonly props: Readonly<Record<string, unknown>>
   readonly statementId?: string
   /** Slot expression range: what a replace would overwrite (e.g. the `outerCard` ref). */
   readonly range: CstRange
@@ -856,6 +858,7 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       ...input.slotKey === undefined ? {} : { slotKey: input.slotKey },
       childIndex: input.childIndex,
       componentType,
+      props: input.ast.props as Readonly<Record<string, unknown>>,
       ...nodeTitle(input.ast) === undefined ? {} : { title: nodeTitle(input.ast) as string },
       ...input.statementId === undefined ? {} : { statementId: input.statementId },
       range: input.slotRange,
@@ -948,6 +951,7 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       slotKey: 'children',
       childIndex: index,
       componentType,
+      props: element?.props as Readonly<Record<string, unknown>> ?? {},
       range: itemExpr.range,
       source: program.slice(itemExpr.range.start, itemExpr.range.end),
       contentRange: itemExpr.range,
@@ -993,6 +997,7 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
         slotKey: 'template',
         childIndex: 0,
         componentType: templateType,
+        props: templateElement?.props as Readonly<Record<string, unknown>> ?? {},
         range: templateRange,
         source: program.slice(templateRange.start, templateRange.end),
         contentRange: templateRange,
@@ -1019,6 +1024,7 @@ export function buildArtifactTree(program: string, options: CstTreeOptions = {})
       slotKey: 'children',
       childIndex: index,
       componentType: '@Each',
+      props: {},
       range: itemExpr.range,
       source: program.slice(itemExpr.range.start, itemExpr.range.end),
       contentRange: itemExpr.range,
