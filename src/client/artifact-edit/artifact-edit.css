@@ -2426,7 +2426,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 100%;
+  /* Align with the composer card instead of spanning the whole chat column. */
+  width: min(calc(var(--dsh-chat-content-width, 748px) + 32px), calc(100% - 32px));
+  max-width: 100%;
+  margin: 0 auto;
   min-width: 0;
   padding: 6px 10px 7px;
   border: 1px solid var(--dsw-alias-border-l1);
