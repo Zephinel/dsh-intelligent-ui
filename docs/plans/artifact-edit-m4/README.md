@@ -636,5 +636,6 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 反馈：用户的实际页面「Solid 2.0 导览」有 105 个 CST 节点，`MAX_CST_NODES=60` 让 `nestedBlocksForProgram` 返回不可用——工具栏没有「Nested blocks」，唯一的 Scope 内 `Spacer`（depth 3）看不到；页面里也没有 `Divider`，红框里的线是 `.iui-section` 的 `border-top`。用户要求把长页面修好（方案 A），并把快捷调整里的系统下拉/滑块换成本插件自绘控件。
 - 修复：`MAX_CST_NODES` 60 → **200**（程序字符上限与深度不变）；新增 66 节点 fixture + E2E：3 个根区块、嵌套按钮出现、根 Divider 快捷调整可用、嵌套 Spacer（b3.2）可达并实时预览。客户端单测覆盖 `>60` 节点时 `blockPropsState`/`nestedBlocksForProgram`。
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
+- 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移），E2E 断言宽度预览时 popover 的 left/top 不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **289 checks**；nested 75；client CSS 206.5 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.97 MB。
+- 验证：Node **509/509**；浏览器 9/9；artifact-edit **291 checks**；nested 75；client CSS 206.5 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.97 MB。
