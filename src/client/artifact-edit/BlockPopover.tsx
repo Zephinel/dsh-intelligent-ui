@@ -71,6 +71,7 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   const textarea = useRef<HTMLTextAreaElement>(null)
   const textareaId = useId()
   const [placement, setPlacement] = useState<Placement | null>(null)
+  const placedAnchor = useRef<DOMRect | null>(null)
   const [discardConfirm, setDiscardConfirm] = useState(false)
   /** Restore focus to the block only when the close came from the popover. */
   const restoreFocus = useRef(true)
@@ -112,11 +113,11 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   const close = useCallback((): void => { actions.closeBlockEditor() }, [actions])
 
   useLayoutEffect(() => {
-    const place = (): void => {
+    const place = (rectOverride?: DOMRect): void => {
       const anchor = blockElement(blockId)
       const popup = panel.current
       if (anchor === null || popup === null) return
-      const rect = anchor.getBoundingClientRect()
+      const rect = rectOverride ?? anchor.getBoundingClientRect()
       const popupWidth = popup.offsetWidth
       const popupHeight = popup.offsetHeight
       const viewportWidth = window.innerWidth
@@ -138,21 +139,36 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
         VIEWPORT_MARGIN,
         Math.min(preferredTop, viewportHeight - VIEWPORT_MARGIN - measuredHeight),
       )
+      placedAnchor.current = rect
       setPlacement(current => current !== null && current.left === left && current.top === top && current.maxHeight === maxHeight
         ? current
         : { left, top, maxHeight })
     }
+    const onResize = (): void => { place() }
+    const onScroll = (event: Event): void => {
+      // A focus/height change inside the popover scrolls its own content; that
+      // must never move the panel.
+      if (event.target instanceof Node && panel.current?.contains(event.target) === true) return
+      const anchor = blockElement(blockId)
+      if (anchor === null) return
+      const rect = anchor.getBoundingClientRect()
+      const last = placedAnchor.current
+      // Layout-induced scroll anchoring (a block became wider/taller above the
+      // viewport) keeps the anchor in the same viewport spot; only a real user
+      // scroll moves it. Ignore the former so quick-adjust previews stay pinned.
+      if (last !== null && Math.abs(rect.left - last.left) <= 2 && Math.abs(rect.top - last.top) <= 2) return
+      place(rect)
+    }
     place()
     // Deliberately no ResizeObserver on the anchor or panel: quick-adjust
     // previews change the block's width/height (e.g. a Divider shrinking to
-    // 60%), and re-anchoring on that would move the popover — and the slider
-    // track under the pointer — while the user drags. The popover stays put
-    // until the viewport scrolls/resizes or the target block changes.
-    window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true)
+    // 60%, or its unit switching px ↔ %), and re-anchoring on that would move
+    // the popover — and the slider track under the pointer — mid-drag.
+    window.addEventListener('resize', onResize)
+    window.addEventListener('scroll', onScroll, true)
     return () => {
-      window.removeEventListener('resize', place)
-      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('scroll', onScroll, true)
     }
   }, [blockId])
 

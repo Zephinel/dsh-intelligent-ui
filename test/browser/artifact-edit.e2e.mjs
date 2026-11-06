@@ -1152,6 +1152,12 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const popoverAfterPreview = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
   check(Math.abs(popoverAfterPreview.left - popoverBeforePreview.left) <= 0.5, true, 'the popover does not follow the narrowing block')
   check(Math.abs(popoverAfterPreview.top - popoverBeforePreview.top) <= 0.5, true, 'the popover keeps its vertical anchor while previewing')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', 'px')
+  await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('60px')`, 'width unit switched to px')
+  const popoverAfterUnit = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
+  check(Math.abs(popoverAfterUnit.left - popoverBeforePreview.left) <= 0.5, true, 'switching the width unit does not move the popover horizontally')
+  check(Math.abs(popoverAfterUnit.top - popoverBeforePreview.top) <= 0.5, true, 'switching the width unit does not move the popover vertically')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', '%')
   const dividerPreview = await read(`(() => {
     const hr = document.querySelector('[data-dsh-iui-block="b2"] hr');
     const cs = getComputedStyle(hr);
