@@ -1212,10 +1212,17 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* Keyboard focus stays visible but reads as a hairline, not a glow. */
+/* Keyboard focus is shown by the row surface instead of a box around the
+   grip: the rounded outline read like a stray control and was the loudest
+   piece of chrome in the row. */
 .dsh-iui-edit-grip:focus-visible {
-  outline: 1px solid var(--dsw-alias-label-tertiary);
-  outline-offset: 1px;
+  outline: none;
+}
+
+.dsh-iui-edit-arrangement-row:has(.dsh-iui-edit-grip:focus-visible),
+.dsh-iui-edit-nested-row:has(.dsh-iui-edit-grip:focus-visible) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
 }
 
 .dsh-iui-edit-grip:active,

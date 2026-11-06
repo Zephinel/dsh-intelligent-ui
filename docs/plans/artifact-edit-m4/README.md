@@ -687,3 +687,8 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 原因：不是嵌套区块未显示导致；面板里同时存在显式 `<div class="dsh-iui-edit-divider">` 和 `.dsh-iui-edit-global { border-top: 1px }`，两套分隔叠加。
 - 修复：删除 `.dsh-iui-edit-global` 的 `border-top`，保留显式分隔线作为唯一横线；不依赖 nested arrangement 是否存在。
 - 验证：E2E 断言面板只有一个 `.dsh-iui-edit-divider`，且 global 的 `borderTopWidth` 为 0；artifact-edit **317 checks**。
+
+## 0.41 去掉拖拽手柄的焦点外框（2026-11-07，工作树）
+
+- 反馈：编排行 hover 时拖拽手柄外面出现一个圆角边框，是列表里最显眼的 AI slop 视觉。
+- 修复：`.dsh-iui-edit-grip:focus-visible` 不再绘制 outline；键盘聚焦时改为整行使用中性 hover 底色 + 左侧细线（`:has(.dsh-iui-edit-grip:focus-visible)`），保留焦点位置提示但不出现独立控件外框。
