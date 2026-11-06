@@ -387,7 +387,7 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 - Each arrangement row keeps an **always visible** action group (`[data-dsh-iui-edit-structure-actions]`) with edit (`data-dsh-iui-edit-structure-edit`), duplicate, delete and move in one fixed 104px slot; every icon uses the same strong `label-primary` tone, and the edit pencil is one shared lower-left-nib stroke path (canvas overlay, request rows and the action group) instead of the mirrored "✎" character; the hover request card is read-only (no duplicated edit/remove buttons).
 - Structural delete uses a persistent compact two-state confirmation: edit/duplicate/delete/move icons by default; on confirm they are replaced inside `data-dsh-iui-edit-structure-confirm` by quiet Cancel and danger-tinted Delete buttons, with no row tint or large pill. The 3-second auto-revert timer was removed; the confirmation only ends on Cancel, Delete, outside pointerdown, Escape, another structure action, preview opening, busy or unmount. Focus starts on Cancel and returns to the delete icon after cancelling; the live region announces once.
 - The block instruction popover now computes a preferred top and clamps it into `[12, viewportHeight - 12 - measuredHeight]` (left was already clamped), so anchors scrolled out of view can no longer place the textarea offscreen.
-- Verification: 496/496 Node tests (Host 236, Client 239, packaging 21; 236 feature), 9/9 browser suites, `artifact-edit` 236 checks (rounded/inset/overflow geometry, enter/exit animation names, `data-closing`, persistent delete confirmation past 3.6s, Cancel/Delete preview, popover clamps), `nested-edit-renderer` 75, nested CSS contract 28/28 + 5/5. Build: host 812.9 kB, client 3.91 MB (js 3.72/CSS 193.0), pack 43 files 4.02/10.37 MB.
+- Verification: 496/496 Node tests (Host 236, Client 239, packaging 21; 236 feature), 9/9 browser suites, `artifact-edit` 243 checks (rounded/inset/overflow geometry, enter/exit animation names, `data-closing`, persistent delete confirmation past 3.6s, Cancel/Delete preview, popover clamps), `nested-edit-renderer` 75, nested CSS contract 28/28 + 5/5. Build: host 812.9 kB, client 3.91 MB (js 3.72/CSS 193.0), pack 43 files 4.02/10.37 MB.
 - Deployment: client-plugin changes require restarting `dsh-web`; a page refresh is not enough.
 
 ### Icon system: one Remix Icon family
@@ -396,7 +396,7 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 - The previous hand-drawn stroke set (16px-viewBox pencil, trash, duplicate, move, drag grip, refresh, close and type glyphs, plus the `✎` and `✦` characters) is gone, and the DSH primitives sparkle/chevron icons are no longer used for icons.
 - **Exception:** `Icon("…")` inside generated OpenUI programs is still resolved lazily by `src/lib/components/glyph.tsx` through `lucide-react/dynamic.mjs`, because those names are program data written by the model (existing programs use lucide names) rather than plugin chrome; switching them would break older programs.
 - Licensing: Remix Icon License v1.0 (see `licenses/remix-icon-LICENSE` and `NOTICE`).
-- Verification: 496/496 Node tests, 9/9 browser suites, `artifact-edit` 236 checks, `nested-edit-renderer` 75; build host 812.9 kB, client 3.91 MB (js 3.72 / CSS 192.8); pack 44 files 4.03 / 10.41 MB.
+- Verification: 496/496 Node tests, 9/9 browser suites, `artifact-edit` 243 checks, `nested-edit-renderer` 75; build host 812.9 kB, client 3.91 MB (js 3.72 / CSS 192.8); pack 44 files 4.03 / 10.41 MB.
 
 ### Per-artifact revision history (user feedback)
 
@@ -410,3 +410,9 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 - The edit panel is scoped to one artifact, while `Pending edits (N/6)` is a session-scoped draft switcher; keeping it in the panel invited confusion. It now renders in the composer's `conversation.input.overlay` slot (list, session scope) as a draft row at the top of the composer card, above the textarea, so it no longer adds height over the message scroll.
 - `DraftDock.tsx` returns null with no drafts; otherwise it renders one quiet `Pending edits (N/6)` row with horizontal chips, title and revision inline, a surface-step active state with a neutral dot, Discard on hover/focus (Attach stays visible while detached), and the former data hooks.
 - EditPanel no longer renders the draft switcher and starts directly with requests/arrangement; draft caps and batch attachment behaviour are unchanged.
+
+### Edit affordances and selected card (2026-11-06)
+
+- On entering edit mode, unselected blocks breathe with a subtle neutral outline over 2.6s; hover stops the breathing and strengthens the outline.
+- Selection no longer uses a coloured outline: the block body gets a 16px rounded canvas surface and soft lift, while the overlay keeps only a neutral hairline and elevation; keyboard focus uses a neutral ring.
+- The history dialog subtitle renders only for a real title (never the raw artifact id), and the edit panel header has an **Exit editing** button.

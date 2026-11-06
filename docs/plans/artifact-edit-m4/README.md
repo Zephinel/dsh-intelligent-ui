@@ -128,7 +128,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 - Node 测试 **437/437**（Host 206、Client 210、packaging 21；特性文件合计 188）。
 - 浏览器 **9/9**：`artifact-edit` **149 checks**（新增 Box/Grid/Section/Carousel 可选与信封 Grid 子块 id）；`nested-edit-renderer` **75 checks**（7 类容器 / 18 slots、0px 几何、Carousel 滚动/overlay 命中）。
 - renderer：`nested-css-contract` **28/28 direct + 5/5 scoped**；其余 42/42 parse、42/42 render、CSS 50/50、prop 63/63、typography 22/22、i18n 4 不变。
-- 构建（本机实测）：host `lib/index.js` **801.9 kB**、client `lib/client.js` 3.87 MB（js 3.69 MB + css 183.2 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.00 MB / 10.30 MB；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **801.9 kB**、client `lib/client.js` 3.87 MB（js 3.69 MB + css 183.2 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.00 MB / 10.30 MB；`npm run check` exit 0。
 - 真机 ego（隔离实例，参考会话新建「M44 容器验证」）：Box/Grid/Section 正常渲染；打开编辑 →「嵌套区块」→ 识别 b1.1 Box、b2.1 Grid、b3 Section 及其子块；复制 Grid 子块 b2.1.1 → 结构路由本地卡 **Revision 2**，Grid 内容变为 grid one/grid one/grid two，无错误。截图（gitignored）：`.tmp-report/real-gui-m44-containers.png`。
 - 已完成：共享容器白名单 `artifact-containers.ts`（7 类容器，单一来源）、`program-cst` 容器 children 参数映射（Section 第 2 参数）、renderer 自动覆盖 + CSS 补偿 28 direct/5 scoped、`insertNode` 与跨容器 `moveNode` 引擎基础（18 engine tests）、Carousel 几何/overlay 验证。
 - 当时未完成、现已由 §0.7/§0.8 完成：模型新增区块（§0.7 additions 全链路）、跨容器 move UI（§0.7）、结构 diff/确认（§0.8）；其余（Carousel 离屏 anchor 裁剪、权威恢复/旧卡提示）仍为已知限制。
@@ -137,7 +137,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **449/449**（Host 218、Client 210、packaging 21；特性文件合计 200：host artifact-edit 64、host artifact-structure 20、host artifact-revisions 17、client 99）。
 - 浏览器 **9/9**：`artifact-edit` **164 checks**（新增 additions 表单/行/移除与信封 additions，move 菜单候选与跨容器结构请求）；`nested-edit-renderer` 75；renderer `nested-css-contract` **28/28 direct + 5/5 scoped**。
-- 构建（本机实测）：host `lib/index.js` **808.3 kB**、client `lib/client.js` 3.88 MB（js 3.70 MB + css 187.1 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.32 MB；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **808.3 kB**、client `lib/client.js` 3.88 MB（js 3.70 MB + css 187.1 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.32 MB；`npm run check` exit 0。
 - 真机 ego（隔离实例，参考会话「M44 容器验证」R2）：
   1. 打开编辑 →「嵌套区块」→ 在 Box 的组「添加区块」，指令「在 Box 末尾新增一段 Text，内容写 Added block」→ Send；模型调用 `edit_ui_blocks`，**Revision 3** 在 Box 之后新增 Added block，无错误。
   2. 打开 Revision 3 →「嵌套区块」→ 对 Added block 执行「移动到… Grid 容器」→ **无模型回合**，本地结构修订卡 **Revision 4**，Added block 移入 Grid，无错误。
@@ -149,7 +149,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **456/456**（Host 223、Client 212、packaging 21；特性文件合计 207：host artifact-edit 64、host artifact-structure 25、host artifact-revisions 17、client 101）。
 - 浏览器 **9/9**：`artifact-edit` **170 checks**（新增 preview dry-run→200、confirm→apply、模态 `aria-modal`/初始焦点 Cancel、diff add 行、move 的 preview→apply 两段请求）；`nested-edit-renderer` 75；renderer `nested-css-contract` **28/28 direct + 5/5 scoped**。
-- 构建（本机实测）：host `lib/index.js` **808.8 kB**、client `lib/client.js` 3.89 MB（js 3.71 MB + css 191.1 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **808.8 kB**、client `lib/client.js` 3.89 MB（js 3.71 MB + css 191.1 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
 - 真机 ego（隔离实例，参考会话「M44 容器验证」R4）：打开编辑 →「嵌套区块」→ 复制 Box 组 → 模态 diff 显示 `boxCard ... + boxGroup_copy1` 等 add/remove/same 行、summary 为 1 个顶层区块 → 确认 → 本地结构修订卡 **Revision 5**（Box 内容重复为 box one/box two 两次），无错误。截图（gitignored）：`.tmp-report/real-gui-m45-preview-confirm.png`。
 - 已完成：Host dry-run preview（同 apply 校验/原子操作/最终校验，不写 revision/registry/ledger；200 preview 响应、touched ≤120、changedBlockIds 同口径、错误一致、同 operationId 后续 apply 只记一次 revision）；客户端 preview 状态/actions/LCS diff（>400 行降级）/confirm 才 apply；preview→模态确认（duplicate/delete/move）、`aria-modal`/初始焦点 Cancel/focus trap/Esc/backdrop/焦点返回/disabled/reduced-motion；保留旧直接 apply fallback；性能 smoke（7 卡片/49 区块/57 nodes <2s；insertNode+reorder <2s）；视觉守卫仍为几何/排版 E2E（无像素基线）。
 - 限制：无像素级视觉快照基线、无完整 screen-reader/axe 审计；preview loading 无客户端超时（依赖 fetch 失败）；模态背景用遮罩阻止指针但未设 `inert`/`aria-hidden`；**B2-5 的「未选区块内容严格模式（warning→strict）」未做**；既有 M4 限制全部不变（Carousel 离屏 anchor、跨容器 append-only/root target、additions 与 orderByParent 分开发送、每容器 1 addition、无多步 undo/GC、base_missing 仅 inline、本地结构卡限制）。M4-5 完成，B2-5 仍为部分完成。
@@ -158,7 +158,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **461/461**（Host 236、Client 212、packaging 21；特性文件合计 212：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 101）。
 - 浏览器 **9/9**：`artifact-edit` **173 checks**（新增 strict toggle 默认关、信封 `"strict":true` + strict 指令）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` **809.1 kB**、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.6 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **809.1 kB**、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.6 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.35 MB（本机实测）；`npm run check` exit 0。
 - 实现：shared `ArtifactEditRequest.strict?: boolean`（header 投影、strict prose）；客户端工具栏「严格保护 / Strict protection」toggle（`data-dsh-iui-edit-strict`、`aria-pressed`、默认关、submitted/error disabled）、store `setStrictMode` 与 serialize；Host 在保留警告之后、record revision/consume pending 之前检查 strict，未选顶层块改动 → 模型可读错误（`render_ui:`/`edit_ui_blocks:` 前缀、≤3 条 label 摘要、无源码），pending 保留、无 revision/registry/ledger，可用同一请求重试；比较基于 content stage（重排前），合法排序不误报。
 - Host strict 测试 5 条：nested strict 成功、full render 改未选 → strict 错误且无 revision + 同 pending 修正后成功、非 strict 对照记录 warning、order-only 不误报、多块摘要无源码泄露。
 - 范围与限制：只覆盖**识别到的顶层未选区块**（statement name→title+type→unique title、digest，排除 selected/edited ids）；**不检测选中的根区块内部、未被选中的嵌套子节点改动**；`edit_ui_blocks` fragment 合成本身不能改未选顶层块，完整 `render_ui`（`edits: []`）覆盖全部顶层块；`strictOff` 文案当前未使用；严格拒绝路径只有 Host 单测覆盖，**未做真机验证**。
@@ -168,7 +168,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **474/474**（Host 236、Client 225、packaging 21；特性文件合计 225：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 114）。
 - 浏览器 **9/9**：`artifact-edit` **175 checks**（新增 B2-6 场景：DST 卡片点选「夏令时」→ 应用修订生成新卡 → 新卡继承 `$state` 与选中项）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` **809.1 kB**、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.6 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.36 MB（本机实测）；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` **809.1 kB**、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.6 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.36 MB（本机实测）；`npm run check` exit 0。
 - 实现：`OpenUIRenderer` 新增可选 `runtimeState`/`onRuntimeStateChange`（仅传入时转发 `initialState`/`onStateUpdate`，无 prop 行为不变）；新 `src/client/runtime-state.ts` 按 artifactId 保存 revision-scoped 快照 + latest，`recordRuntimeState` 深拷贝 plain JSON（≤64KiB，非法/循环/超大忽略，revisionId 缺失用 callId），`runtimeStateForProgram` 首渲染 undefined、修订优先 baseRevisionId 快照、缺失回退 latest、返回克隆；容量 24 artifacts LRU / 每 artifact 5 revisions（latest 保留）；仅会话内存、不持久化；`IntelligentUICards` 恢复+记录，`ArtifactEditView` 传冻结 base 快照且不写回（编辑画布冻结）；提供 clear/reset helpers。
 - runtime-state 单测 13 条：首渲染 undefined、同修订、base 继承、latest fallback、克隆隔离、非法/超大忽略、callId fallback、容量/淘汰、clear/reset。
 - 真机 ego（隔离实例，参考会话最新 DST Revision 7）：点选「夏令时」→ 编辑 b2 → Send → **Revision 8**；新卡仍选中「夏令时」并显示 summer clockNote，无错误。截图（gitignored）：`.tmp-report/real-gui-b26-state.png`。
@@ -178,7 +178,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **474/474** 不变（Host 236、Client 225、packaging 21；特性 225；本轮无新增 Node 测试）。
 - 浏览器 **9/9**：`artifact-edit` **180 checks**（新增 live region 嵌套重排/添加播报、grip `aria-describedby`、移动菜单首焦点与 ArrowDown 焦点变化）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css **192.1** kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.36 MB（本机实测）；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css **192.1** kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.36 MB（本机实测）；`npm run check` exit 0。
 - 实现：单一 visually-hidden live region（polite/atomic，清空+下一帧+sequence guard）；播报根/嵌套重排、addition 保存/移除、move 选择、preview 开关；隐藏拖拽/菜单 hint 与 `aria-describedby`；移动菜单首焦点/方向键循环/Home/End/Enter/Escape+焦点返回/Tab 关闭；添加表单 aria、嵌套组 `role=group`、`:focus-visible` 焦点环。
 - 临时 Chrome harness 121 checks 覆盖 live region 语义、hint/describedby、group 语义、根/嵌套键盘播报、添加表单 aria、菜单键盘/焦点、空菜单容器焦点、preview 播报。
 - 限制：polite 单槽合并快速重排播报；pointer 仅 drop 播报；Tab 关闭菜单不强制回焦（Escape 会）；隐藏 hint 仍在可访问性树；无真机 screen-reader/axe 审计；无像素基线（B2-10 未做）。B1-5 完成；下一步 B2-8/9/10 真机与视觉基线、发布。
@@ -186,7 +186,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 ## 0.12 B2-8/B2-9/B2-10 真机验证与视觉基线记录（2026-11-05，已提交 d6ec446；三项完成，B2-10 为手动基线）
 
 - 计数不变：Node **474/474**（Host 236、Client 225、packaging 21；特性 225）；浏览器 **9/9**；`artifact-edit` **180 checks**、`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 192.1 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.36 MB（视觉基线目录不进包）。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 192.1 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.36 MB（视觉基线目录不进包）。
 - B2-8 Article 真机：`render_ui` `style=article` → article 卡片生效；根层 3 区块键盘重排（b1/b2 交换）+ b2 指令 → Send → **Revision 2** 仍 article、顺序/内容更新、无错误。截图 `.tmp-report/b28-article-card.png`、`.tmp-report/b28-article-edit.png`（gitignored）。
 - B2-8 free 真机：普通 `render_ui` 只接受 card/article；经 On-demand UI（Composer UI 菜单选 On-demand UI；模型 `style=free` + `temporaryStyle`）生成「B28 Free2 验证」临时样式自由版式卡（Temporary style，Row 两栏）；编辑（1 个根区块，无重排）+ 指令 → **Revision 2** 仍 temporary/free、内容更新、无错误。**限制：free 不能通过普通 render_ui 强制，必须 On-demand UI/授权 free 模板；本会话普通 render_ui 传 free 被 Host 拒绝。** 截图 `.tmp-report/b28-free-card.png`、`.tmp-report/b28-free-edit.png`（gitignored）。
 - B2-9 窄屏/移动端真机：CDP 390×844 @2x mobile，文档无横向溢出（scrollWidth ≤ innerWidth+1），卡片重排（Row 两栏堆叠），点 Edit 出现 `[data-dsh-iui-edit-narrow-notice]` 不进入编辑画布；900×1000 @2x 编辑画布打开、无横向溢出、编排行可见。截图 `.tmp-report/b29-narrow-390.png`、`.tmp-report/b29-wide-900-editor.png`（gitignored）。
@@ -197,7 +197,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **483/483**（Host 236、Client 234、packaging 21；特性文件合计 234：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 123，其中新增 `panel-width` 9 条）。
 - 浏览器 **9/9**：`artifact-edit` **183 checks**（新增自动宽度拟合/恢复与 expand 按钮不存在检查）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.01 MB / 10.36 MB；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.01 MB / 10.36 MB；`npm run check` exit 0。
 - 修复：编辑面板 header 删除展开/收起按钮（glyph/state/expanded class/locale 文案一并删除），仅保留 title + spacer + 窄屏 close；新增 `src/client/artifact-edit/panel-width.ts`（`fitChatContentWidth` 固定点公式 + `applyEditChatContentWidth` DOM 覆盖/恢复），`EditPanel` 单 useEffect 挂载/卸载执行；进入编辑自动收窄主聊天内容宽度（内容右缘距面板左缘 24px），退出恢复用户原宽度，不修改 shell 偏好。
 - 真机 ego（1800×1000，用户手动把 chat content 设为 1600px）：打开编辑后 inline `--dsh-chat-content-width` → **1032px**，expand 按钮数量 0，无横向溢出；退出恢复 **1600px**。截图（gitignored）：`.tmp-report/fix-width-editing.png`、`.tmp-report/fix-width-restored.png`。
 - 限制：base width 在面板挂载时捕获一次（编辑中拖动 shell 手柄不会即时跟随，但关闭恢复原 inline/偏好）；仅 ≥1180px docked 模式生效；未来 shell 变量位置变更需更新集中式 selector 常量；面板 CSS clamp 仍以 748 为 fallback。
@@ -207,7 +207,7 @@ M4-4 按容器能力扩展（Row/Box/Grid/Section/Carousel）
 
 - Node 测试 **484/484**（Host 236、Client 235、packaging 21；特性文件 235：host artifact-edit 69、host artifact-structure 25、host artifact-revisions 17、client 124，其中 `panel-width` 10 条，新增 column-aware 1 条）。
 - 浏览器 **9/9**：`artifact-edit` **186 checks**（新增动态宽度跟随/恢复与 no-expand 检查）；`nested-edit-renderer` 75；renderer `nested-css-contract` 28/28 + 5/5。
-- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 515.8 kB；pack 43 files ≈4.02 MB / 10.36 MB；`npm run check` exit 0。
+- 构建（本机实测）：host `lib/index.js` 809.1 kB、client `lib/client.js` 3.90 MB（js 3.71 MB + css 191.8 kB）、standalone 3.30 MB + 516.4 kB；pack 43 files ≈4.02 MB / 10.36 MB；`npm run check` exit 0。
 - 根因：第一版按 viewport 中心计算，忽略 sidebar/聊天列；CSS 自定义属性 computed 值可能是 `clamp(...)` token，`parseFloat` 失败退回 748 与实际宽度不符。
 - 修复：`fitChatContentWidth` 增加 `columnLeft`/`columnWidth`（`panelLeft = viewport - panelWidth`、`maxContent = 2 * (panelLeft - gap - columnLeft) - columnWidth`，固定点 ≤8 轮；默认 columnLeft=0 保持旧结果）；内容宽度改用隐藏 probe 实测 `--dsh-chat-content-width`；用户偏好读父元素 `--dsh-chat-user-width`；`MutationObserver` 观察父/自身 style 以跟随编辑中的 shell 宽度拖动（`writing` 标志避免反馈循环）；resize/断点/卸载恢复逻辑不变。
 - 真机 ego（最新隔离构建，1800×1000，sidebar 280 / 聊天列 left=280 width=1520）：打开编辑后 inline 内容宽度 **752px**；聊天卡片右缘 1412.5、Exit editing 按钮右缘 1382.5，面板左缘 1440 → **按钮可见、无遮挡**；编辑中把用户宽度偏好设为 1600 仍保持 752 不重叠；退出后 inline 覆盖移除、父元素偏好保留 1600。截图（gitignored）：`.tmp-report/dynamic-width2-editing.png`。
@@ -500,7 +500,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 面板改为圆角浮动卡片（桌面 top64/right12/bottom12、radius16、1px 边框、双层阴影、overflow hidden；窄屏 bottom sheet radius14），进退场 220ms panel-only 动画（桌面右滑/窄屏底滑 + 淡入淡出/轻微 scale，`prefers-reduced-motion` 禁用）；退出延迟 ~220ms 卸载，active 草稿切换立即卸载旧编辑器；浮动面板右侧 12px inset 计入宽度 fit（panelRightInset，1440/748+12→648 等）。
 - 删除确认 unslop：去掉 3 秒自动恢复 timer；持久两态（Cancel/Delete 紧凑按钮，无红底/大红 pill），焦点到 Cancel，外部点击/Escape/其它动作取消，live region 播报一次。
 - Block 指令 popover 位置 clamp 修复：anchor 滚出视口时顶边曾为负导致输入框被裁；现在 top 统一 clamp 到 `[12, vh-12-measuredHeight]`。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；artifact-edit **236 checks**；nested-edit-renderer 75；nested-css-contract 28+5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）、standalone 3.30+515.8；pack 43 files 4.02/10.37 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；artifact-edit **243 checks**；nested-edit-renderer 75；nested-css-contract 28+5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）、standalone 3.30+515.8；pack 43 files 4.02/10.37 MB。
 - 说明：`.tmp-report/harness-polish-delete-confirm.png` 是取消预览后的截图，只证明圆角面板，不包含确认态；部署需重启 `dsh-web`。
 
 ## 0.16 第四轮反馈：结构动作显隐/行位移 + 面板与内容联动动画（2026-11-05，已提交 0232d37）
@@ -509,39 +509,39 @@ GPT 评审后新增/收窄、需 owner 确认：
 - request 列表垃圾桶改为“移除要求”并提示“不删除区块”，与结构删除“删除区块”区分。
 - 面板进出与聊天内容宽度联动：`ChatContentWidthController { open, close, dispose }` + 220ms rAF/cubic-bezier(.22,1,.36,1)，open 收窄/panel 滑入同时开始，close 恢复/panel 滑出同时开始；中途打断从当前值继续；reduced-motion 立即；dispose 恢复原 inline。
 - 追加：编辑工具栏进入/退场 220ms 动画（随 edit view closing）；popover textarea 左右 3px margin 防止 2px focus ring 被 scroll 容器左侧裁切；宽度动画增加隐藏窗口 rAF 暂停时的最终值 fallback。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **236 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **243 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
 
 ## 0.17 14 英寸 Air 遮挡修复：自适应面板宽度（2026-11-05，已提交 c3e1917）
 
 - 现象：1234 CSS px 视口 + sidebar 后聊天列 954px 时，面板 clamp 360 + 内容最小 360 无法同时满足，面板仍遮内容。
 - 修复：新增 `fitChatPanel` 返回 `{ contentWidth, panelWidth, adaptive }`；固定点低于可读阈值时先收窄面板（`--dsh-iui-edit-panel-width`，最小 272），再适配内容；宽屏保持原值，dispose 移除变量；面板宽度 220ms transition 与内容联动。
 - 真机/隔离验证：1234×835 → 内容 320px、面板 281px、gap≈35px；1512×982 → 内容 440px、面板 360px、gap≈27px；无遮挡。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **236 checks**；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **243 checks**；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
 
 ## 0.18 工具栏动画打磨（2026-11-05，已提交 8bbd0e9）
 
 - 反馈：工具栏动画末尾“顿一下”。根因：工具栏 220ms 下移 6px 与卡片同时重排/变宽叠加，两段运动互相干扰。
 - 修复：工具栏改为纯淡入（200ms ease-in）/淡出（180ms ease-in），去掉 transform，仅保留与面板一致的淡入淡出；reduced-motion 仍禁用。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**；CSS 193.8 kB。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**；CSS 193.8 kB。
 
 ## 0.19 动画节奏调慢（2026-11-05，已提交 8132337）
 
 - 反馈：整体进入/退出编辑的动画太快。
 - 调整：面板进出、面板宽度 transition、联动内容宽度动画、延迟卸载统一 **320ms**（同一 `cubic-bezier(.22,1,.36,1)`）；工具栏淡入 240ms / 淡出 220ms；reduced-motion 仍立即生效。
-- 验证：Node **496/496**（动画时长常量断言同步）；浏览器 9/9；artifact-edit **236 checks**；CSS 193.8 kB。
+- 验证：Node **496/496**（动画时长常量断言同步）；浏览器 9/9；artifact-edit **243 checks**；CSS 193.8 kB。
 
 ## 0.20 编排行动作常显 + 图标统一 + 悬停卡只读（2026-11-05，工作树）
 
 - 编排行动作组改为**常显**（不再 hover 才出现），编辑铅笔并入同一 104px 固定槽位，槽位内顺序为 编辑 / 复制 / 删除 / 移动；确认态仍在同一槽位，行内位置不位移。
 - 行内所有图标统一为 `label-primary` 白色调（原 `label-tertiary`），更清晰可见。
 - 悬停请求卡去掉「编辑 / 移除要求」两个按钮（行内已有对应入口），卡片只读；安静删除相关 CSS 一并移除。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**（常显动作组、四个分组图标、分组编辑选择器迁移、悬停卡只读）；CSS 192.8 kB；真机隔离 1512×982 确认四个白色图标同组常显。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（常显动作组、四个分组图标、分组编辑选择器迁移、悬停卡只读）；CSS 192.8 kB；真机隔离 1512×982 确认四个白色图标同组常显。
 
 ## 0.21 编辑铅笔图标统一（2026-11-05，已提交 56b8caa）
 
 - 问题：画布选中浮层的编辑按钮用字符 `✎`（笔尖朝右下），与面板行的 SVG 铅笔（笔尖朝左下）互为镜像。
 - 修复：`block-slot.tsx` 内新增 `PencilGlyph`（与 `EditGlyph` 同一路径），画布浮层改用它；请求行、编排动作组、画布浮层三处铅笔完全一致，打包产物中不再有 `✎`。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**（三处 `d` 路径一致、浮层无文本字符）；CSS 192.8 kB。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（三处 `d` 路径一致、浮层无文本字符）；CSS 192.8 kB。
 
 ## 0.22 图标体系统一为 Remix Icon（2026-11-06，工作树）
 
@@ -549,28 +549,34 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 实现：新增 `src/lib/components/remix-icon.tsx`（从 `remixicon@4.9.1` 抄录 29 个图标的 path，`REMIX_ICON_PATHS` + `<RemixIcon>`；24 viewBox、`fill=currentColor`，无运行时依赖/字体）。替换编辑面板（铅笔/垃圾桶/复制/移动/拖拽/刷新/关闭/类型 8 种 + 新增）、画布浮层、设置页星标、样式选择器对勾与星、composer 作用域/箭头/对勾/样式、导出菜单、文章折叠箭头、链接外链箭头、媒体空图、Carousel 左右箭头；删除 `✎`/`✦` 字符图标与 DSH primitives sparkle/chevron。
 - 例外：OpenUI 程序内容里的 `Icon("…")` 仍由 `glyph.tsx` 用 lucide 动态解析（程序数据，不是 chrome）。
 - 许可：`licenses/remix-icon-LICENSE` + `NOTICE` 增加 Remix Icon（Remix Icon License v1.0）条目；`integration.md` 出货文件数 43 → **44**。
-- 验证：Node **496/496**；浏览器 9/9；`artifact-edit` 236 checks；`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 202.2）、standalone 3.31 MB + 515.8 kB；pack **44 files** 4.03 / 10.39 MB。
+- 验证：Node **496/496**；浏览器 9/9；`artifact-edit` 243 checks；`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 203.4）、standalone 3.31 MB + 516.4 kB；pack **44 files** 4.03 / 10.39 MB。
 
 ## 0.23 输入框跟随编辑宽度（2026-11-06，已提交 c76ecca）
 
 - 反馈：进入编辑后内容收窄，但底部输入框仍保持原宽。
 - 修复：宽度控制器在每帧同时写 `[data-composer-card]` 的 `max-width = 内容宽度 + 32px`（与 shell 的 `--dsh-composer-card-max-width` 公式一致），dispose 时恢复原始 inline max-width；输入框与内容同帧收窄/恢复。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**（composer 跟随 fitted 宽度、退出恢复）；构建/打包不变（client 3.91 MB，pack 44 files 4.03/10.39 MB）。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（composer 跟随 fitted 宽度、退出恢复）；构建/打包不变（client 3.91 MB，pack 44 files 4.03/10.39 MB）。
 
 ## 0.24 按 Artifact 的修订历史（2026-11-06，已提交 d405c9f）
 
 - Host：`listForArtifact()`；`GET artifact-history`（metadata 新→旧；current/source/hasProgram/restorable；program-only 初始修订合并）；`GET artifact-history/program` 按需 program；restore 支持初始修订（style 用 latest 兜底）。
 - Client：`ArtifactHistory.tsx` 元数据对话框（改动区块 chips、无整页预览、不可用态、恢复）；入口 = 卡片历史图标 + Revision 徽标 + 编辑面板 header 历史按钮；恢复复用本地修订管线并刷新。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21）；浏览器 9/9；artifact-edit **236 checks**；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 202.2）；pack 44 files 4.03/10.41 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21）；浏览器 9/9；artifact-edit **243 checks**；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 203.4）；pack 44 files 4.03/10.41 MB。
 
 ## 0.25 草稿条移到输入框上方并 unslop（2026-11-06，已提交 395a272/a3cd1f6/5acdf97/fc9e251）
 
 - 需求：面板是当前 Artifact 的，`Pending edits (N/6)` 是 session 级草稿切换器，放在面板里容易混淆；移到输入框上方。
 - 实现：`DraftDock.tsx` 注册到 `conversation.input.overlay`，成为输入框卡片内部顶部草稿行（不覆盖消息滚动区），无草稿零高度；unslop 为一句话工具条：标题/修订同行、active 用 surface step + 中性点、Discard 仅 hover/focus 显示（detached 时 Attach 常显）；保留全部 data hooks；EditPanel 移除 DraftSwitcher。新增 `PRODUCT.md`。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**（草稿条在 composer 卡片之前、不在 panel 内）；CSS 202.2 kB；真机隔离确认渲染在 composer 上方。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（草稿条在 composer 卡片之前、不在 panel 内）；CSS 203.4 kB；真机隔离确认渲染在 composer 上方。
 
 ## 0.26 修订冲突文案澄清（2026-11-06，已提交 a6ea8b2）
 
 - 反馈：冲突横幅「已有更新版本」不够清楚，用户仍需确认。
 - 文案：标题/正文带当前修订与最新修订编号；新增说明「从此修订新建修订不会覆盖最新修订；只想改最新版请退出并打开最新修订卡片」；按钮「从修订 N 新建修订」「重新检查」「退出编辑」；分支提示带 latest 与 next。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **236 checks**（数字、非覆盖说明断言）；CSS 202.2 kB。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（数字、非覆盖说明断言）；CSS 203.4 kB。
+
+## 0.27 编辑态暗示/选中卡片/历史副标题/面板退出（2026-11-06，已提交 b9d85e6）
+
+- 未选中区块中性呼吸 2.6s；选中改为圆角卡片 + 柔和悬浮阴影，去掉蓝框；键盘焦点中性 ring。
+- 历史对话框不再用 artifactId 当副标题；编辑面板头部新增「退出编辑」。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **243 checks**（呼吸动画、选中卡片、历史无裸 ID、面板退出）；CSS 203.4 kB、standalone 516.4 kB。
