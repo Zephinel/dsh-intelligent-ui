@@ -33,3 +33,16 @@ export const PROPS_DYNAMIC_TITLE = '动态属性样例'
 export const PROPS_DYNAMIC_PROGRAM = `root = Col([rule])
 $accent = "info"
 rule = Divider($accent, "10rem")`
+
+/** A 66-node page: the old 60-node budget hid nested blocks and quick adjust. */
+export const LARGE_PAGE_TITLE = '大页面属性样例'
+const largePageLines = Array.from({ length: 60 }, (_, index) => `t${index + 1} = Text("line ${index + 1}")`)
+export const LARGE_PAGE_PROGRAM = [
+  'root = Col([body, rule, section])',
+  `body = Col([${Array.from({ length: 60 }, (_, index) => `t${index + 1}`).join(', ')}])`,
+  ...largePageLines,
+  'rule = Divider()',
+  'section = Section("内层", [innerTitle, innerSpacer], "inner")',
+  'innerTitle = Title("内层标题", "sm")',
+  'innerSpacer = Spacer(null, 12)',
+].join('\n')

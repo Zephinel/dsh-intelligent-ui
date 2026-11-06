@@ -22,7 +22,7 @@ import librarySpec from '../../vendor/spec.json' with { type: 'json' }
 
 export const MAX_CST_PROGRAM_CHARS = 200_000
 export const MAX_CST_DEPTH = 4
-export const MAX_CST_NODES = 60
+export const MAX_CST_NODES = 200
 export const MAX_CST_OPERATIONS = 20
 
 /** Containers whose children become editable tree nodes by default. */

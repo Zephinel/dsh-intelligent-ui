@@ -9,6 +9,8 @@
 import { useState, type ReactElement } from 'react'
 import { ARTIFACT_BLOCK_COLOR_TOKENS, type ArtifactBlockPropComponent, type ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { Translate } from '../../shared/locales.ts'
+import { QuickSelect } from './QuickSelect.tsx'
+import { QuickSlider } from './QuickSlider.tsx'
 
 /** Theme tokens offered on the Divider colour select (empty = theme default). */
 const COLOR_OPTIONS = ['' as const, ...ARTIFACT_BLOCK_COLOR_TOKENS]
@@ -83,43 +85,76 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
     onChange(bag)
   }
 
-  const lengthRow = (key: 'width' | 'height', label: string, draft: LengthDraft, allowAuto: boolean): ReactElement => (
-    <div className="dsh-iui-edit-props-row" data-dsh-iui-edit-prop={key}>
-      <span className="dsh-iui-edit-props-label">{label}</span>
-      <select
-        className="dsh-iui-edit-props-select"
-        aria-label={`${label} ${t('edit.propsUnit')}`}
-        value={draft.unit}
-        onChange={event => {
-          const nextDraft = { unit: event.target.value as LengthDraft['unit'], value: draft.value }
-          if (key === 'width') setWidth(nextDraft)
-          else setHeight(nextDraft)
-          emit({ [key]: nextDraft })
-        }}
-      >
-        <option value="">{t('edit.propsDefault')}</option>
-        <option value="px">{t('edit.propsPx')}</option>
-        <option value="%">{t('edit.propsPercent')}</option>
-        {allowAuto ? <option value="auto">{t('edit.propsAuto')}</option> : null}
-      </select>
-      <input
-        className="dsh-iui-edit-props-input"
-        type="number"
-        min={0}
-        step={1}
-        inputMode="numeric"
-        aria-label={label}
-        disabled={draft.unit === '' || draft.unit === 'auto'}
-        value={draft.unit === '' || draft.unit === 'auto' ? '' : draft.value}
-        onChange={event => {
-          const nextDraft = { unit: draft.unit, value: event.target.value }
-          if (key === 'width') setWidth(nextDraft)
-          else setHeight(nextDraft)
-          emit({ [key]: nextDraft })
-        }}
-      />
-    </div>
-  )
+  const unitOptions = (allowAuto: boolean) => [
+    { value: '', label: t('edit.propsDefault') },
+    { value: 'px', label: t('edit.propsPx') },
+    { value: '%', label: t('edit.propsPercent') },
+    ...allowAuto ? [{ value: 'auto', label: t('edit.propsAuto') }] : [],
+  ]
+
+  const lengthRow = (key: 'width' | 'height', label: string, draft: LengthDraft, allowAuto: boolean): ReactElement => {
+    const sliderValue = Number(draft.value)
+    const safeSliderValue = Number.isFinite(sliderValue) ? sliderValue : 0
+    const slider = draft.unit === '%'
+      ? { min: 0, max: 100, step: 1, unit: '%' }
+      : draft.unit === 'px'
+        ? { min: 0, max: Math.max(key === 'height' ? 400 : 800, Math.ceil(safeSliderValue / 100) * 100), step: 1, unit: 'px' }
+        : undefined
+    return (
+      <div data-dsh-iui-edit-prop={key}>
+        <div className="dsh-iui-edit-props-row">
+          <span className="dsh-iui-edit-props-label">{label}</span>
+          <QuickSelect
+            value={draft.unit}
+            options={unitOptions(allowAuto)}
+            ariaLabel={`${label} ${t('edit.propsUnit')}`}
+            onChange={unitValue => {
+              const nextDraft = { unit: unitValue as LengthDraft['unit'], value: draft.value }
+              if (key === 'width') setWidth(nextDraft)
+              else setHeight(nextDraft)
+              emit({ [key]: nextDraft })
+            }}
+          />
+          <input
+            className="dsh-iui-edit-props-input"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            aria-label={label}
+            disabled={draft.unit === '' || draft.unit === 'auto'}
+            value={draft.unit === '' || draft.unit === 'auto' ? '' : draft.value}
+            onChange={event => {
+              const nextDraft = { unit: draft.unit, value: event.target.value }
+              if (key === 'width') setWidth(nextDraft)
+              else setHeight(nextDraft)
+              emit({ [key]: nextDraft })
+            }}
+          />
+        </div>
+        {slider === undefined ? null : (
+          <div className="dsh-iui-edit-props-slider">
+            <QuickSlider
+              label={label}
+              ariaLabel={`${label} (${slider.unit})`}
+              value={safeSliderValue}
+              min={slider.min}
+              max={slider.max}
+              step={slider.step}
+              unit={slider.unit}
+              disabled={draft.unit === '' || draft.unit === 'auto'}
+              onChange={nextValue => {
+                const nextDraft = { unit: draft.unit, value: String(nextValue) }
+                if (key === 'width') setWidth(nextDraft)
+                else setHeight(nextDraft)
+                emit({ [key]: nextDraft })
+              }}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="dsh-iui-edit-props" data-dsh-iui-edit-props data-component={componentType}>
@@ -128,12 +163,14 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
         <>
           <div className="dsh-iui-edit-props-row" data-dsh-iui-edit-prop="color">
             <span className="dsh-iui-edit-props-label">{t('edit.propsColor')}</span>
-            <select
-              className="dsh-iui-edit-props-select"
-              aria-label={t('edit.propsColor')}
+            <QuickSelect
               value={customColor ? 'custom' : color ?? ''}
-              onChange={event => {
-                const next = event.target.value
+              options={[
+                ...COLOR_OPTIONS.map(option => ({ value: option, label: option === '' ? t('edit.propsDefault') : option })),
+                { value: 'custom', label: t('edit.propsCustom') },
+              ]}
+              ariaLabel={t('edit.propsColor')}
+              onChange={next => {
                 if (next === 'custom') {
                   const initial = isTokenColor(color) ? '#334155' : color ?? '#334155'
                   setCustomColor(true)
@@ -145,12 +182,7 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
                   emit({ color: next })
                 }
               }}
-            >
-              {COLOR_OPTIONS.map(option => (
-                <option key={option} value={option}>{option === '' ? t('edit.propsDefault') : option}</option>
-              ))}
-              <option value="custom">{t('edit.propsCustom')}</option>
-            </select>
+            />
             {customColor ? (
               <input
                 className="dsh-iui-edit-props-input dsh-iui-edit-props-color"
@@ -166,23 +198,40 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
             ) : null}
           </div>
           {lengthRow('width', t('edit.propsWidth'), width, false)}
-          <div className="dsh-iui-edit-props-row" data-dsh-iui-edit-prop="thickness">
-            <span className="dsh-iui-edit-props-label">{t('edit.propsThickness')}</span>
-            <input
-              className="dsh-iui-edit-props-input"
-              type="number"
-              min={0.5}
-              max={12}
-              step={0.5}
-              inputMode="decimal"
-              aria-label={t('edit.propsThickness')}
-              value={thickness}
-              onChange={event => {
-                setThickness(event.target.value)
-                emit({ thicknessText: event.target.value })
-              }}
-            />
-            <span className="dsh-iui-edit-props-unit">{t('edit.propsPx')}</span>
+          <div data-dsh-iui-edit-prop="thickness">
+            <div className="dsh-iui-edit-props-row">
+              <span className="dsh-iui-edit-props-label">{t('edit.propsThickness')}</span>
+              <input
+                className="dsh-iui-edit-props-input"
+                type="number"
+                min={0.5}
+                max={12}
+                step={0.5}
+                inputMode="decimal"
+                aria-label={t('edit.propsThickness')}
+                value={thickness}
+                onChange={event => {
+                  setThickness(event.target.value)
+                  emit({ thicknessText: event.target.value })
+                }}
+              />
+              <span className="dsh-iui-edit-props-unit">{t('edit.propsPx')}</span>
+            </div>
+            <div className="dsh-iui-edit-props-slider">
+              <QuickSlider
+                label={t('edit.propsThickness')}
+                ariaLabel={t('edit.propsThickness')}
+                value={thickness.trim() === '' ? 1 : Math.min(12, Math.max(0.5, Number(thickness) || 1))}
+                min={0.5}
+                max={12}
+                step={0.5}
+                unit="px"
+                onChange={nextValue => {
+                  setThickness(String(nextValue))
+                  emit({ thicknessText: String(nextValue) })
+                }}
+              />
+            </div>
           </div>
         </>
       ) : (

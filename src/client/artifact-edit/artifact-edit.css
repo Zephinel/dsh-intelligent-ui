@@ -1710,7 +1710,7 @@
 }
 
 .dsh-iui-edit-props-row[data-dsh-iui-edit-prop="color"] .dsh-iui-edit-props-color {
-  grid-column: 2;
+  grid-column: 1 / -1;
 }
 
 .dsh-iui-edit-props-label {
@@ -1719,7 +1719,6 @@
   line-height: 18px;
 }
 
-.dsh-iui-edit-props-select,
 .dsh-iui-edit-props-input {
   box-sizing: border-box;
   width: 100%;
@@ -1732,14 +1731,23 @@
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.dsh-iui-edit-props-input::-webkit-outer-spin-button,
+.dsh-iui-edit-props-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .dsh-iui-edit-props-input:disabled {
   opacity: 0.45;
 }
 
-.dsh-iui-edit-props-select:focus-visible,
-.dsh-iui-edit-props-input:focus-visible {
+.dsh-iui-edit-props-input:focus-visible,
+.dsh-iui-quick-select:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
@@ -1747,6 +1755,188 @@
 .dsh-iui-edit-props-unit {
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
+}
+
+/* Plugin-drawn dropdown. Native <select> popups are OS-painted and clash with
+   the editor's surface language; this trigger + portaled listbox is themed. */
+.dsh-iui-quick-select {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 3px 7px 3px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-iui-quick-select:hover {
+  border-color: var(--dsw-alias-border-l3);
+}
+
+.dsh-iui-quick-select[aria-expanded="true"] {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.dsh-iui-quick-select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-quick-select > svg {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-quick-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-quick-menu {
+  position: fixed;
+  z-index: 1210;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 16%), 0 2px 8px rgb(0 0 0 / 8%);
+  outline: none;
+}
+
+.dsh-iui-quick-menu:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-quick-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dsh-iui-quick-option.is-active {
+  background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
+}
+
+.dsh-iui-quick-option.is-selected {
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 600;
+}
+
+.dsh-iui-quick-option > svg {
+  flex: none;
+}
+
+/* Plugin-drawn slider: 4px track, filled progress and a 14px thumb. */
+.dsh-iui-edit-props-slider {
+  margin: 2px 0 1px 62px;
+}
+
+.dsh-iui-quick-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dsh-iui-quick-slider-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 18px;
+  min-width: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.dsh-iui-quick-slider-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-border-l2) 82%, transparent);
+  transform: translateY(-50%);
+}
+
+.dsh-iui-quick-slider-track:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.dsh-iui-quick-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-primary, var(--dsw-alias-label-primary));
+  transform: translateY(-50%);
+}
+
+.dsh-iui-quick-slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--dsw-alias-state-business-primary, var(--dsw-alias-label-primary));
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  transform: translate(-50%, -50%);
+  transition: transform 90ms ease;
+  pointer-events: none;
+}
+
+.dsh-iui-quick-slider-track.is-dragging .dsh-iui-quick-slider-thumb {
+  transform: translate(-50%, -50%) scale(1.12);
+}
+
+.dsh-iui-quick-slider-value {
+  flex: none;
+  min-width: 40px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dsh-iui-quick-slider.is-disabled,
+.dsh-iui-quick-slider-track[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-quick-slider-thumb {
+    transition: none;
+  }
 }
 
 .dsh-iui-edit-props-error {

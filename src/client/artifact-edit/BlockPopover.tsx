@@ -162,7 +162,7 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
     if (previousBlock.current === blockId) return
     previousBlock.current = blockId
     if (quick) {
-      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props select, .dsh-iui-edit-props input')?.focus({ preventScroll: true })
+      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props .dsh-iui-quick-select, .dsh-iui-edit-props input, .dsh-iui-edit-props [role="slider"]')?.focus({ preventScroll: true })
       return
     }
     textarea.current?.focus({ preventScroll: true })
@@ -186,7 +186,7 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   useEffect(() => {
     if (!quick) return
     const frame = window.requestAnimationFrame(() => {
-      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props select, .dsh-iui-edit-props input')?.focus({ preventScroll: true })
+      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props .dsh-iui-quick-select, .dsh-iui-edit-props input, .dsh-iui-edit-props [role="slider"]')?.focus({ preventScroll: true })
     })
     return () => { window.cancelAnimationFrame(frame) }
   }, [quick, blockId])
@@ -203,12 +203,15 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
       if (!(target instanceof Node)) return
       if (panel.current?.contains(target)) return
       // Block clicks belong to the block wrapper; they select the new target.
-      if (target instanceof Element && target.closest('[data-dsh-iui-block-hit], [data-dsh-iui-block]') !== null) return
+      if (target instanceof Element && target.closest('[data-dsh-iui-block-hit], [data-dsh-iui-block], [data-dsh-iui-quick-menu]') !== null) return
       restoreFocus.current = false
       actions.closeBlockEditor()
     }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      // A portaled QuickSelect menu owns Escape while it is open; its own
+      // handler closes the menu and stops propagation.
+      if (document.querySelector('[data-dsh-iui-quick-menu]') !== null) return
       event.preventDefault()
       event.stopPropagation()
       if (confirmRef.current) {

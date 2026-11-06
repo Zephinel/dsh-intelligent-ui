@@ -1103,24 +1103,50 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.activeElement?.closest('[data-dsh-iui-edit-props]') !== null`), true, 'the first quick-adjust control receives focus')
   check(await count('[data-dsh-iui-edit-instruction]'), 0, 'quick-adjust blocks do not show the model textarea')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled`), true, 'apply stays disabled until a value changes')
-  const setSelectValue = async (selector, value) => read(`(() => {
-    const el = document.querySelector(${JSON.stringify(selector)});
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  })()`)
+  const chooseQuickOption = async (rowSelector, value) => {
+    await read(`document.querySelector(${JSON.stringify(`${rowSelector} [data-dsh-iui-quick-select]`)}).click()`)
+    await wait('!!document.querySelector("[data-dsh-iui-quick-menu]")', 'quick menu open')
+    await read(`(() => {
+      const option = [...document.querySelectorAll('[data-dsh-iui-quick-menu] [data-value]')]
+        .find(el => el.getAttribute('data-value') === ${JSON.stringify(value)});
+      if (option === undefined) throw new Error('quick option missing: ' + ${JSON.stringify(value)});
+      option.click();
+      return true;
+    })()`)
+    await wait('!document.querySelector("[data-dsh-iui-quick-menu]")', 'quick menu closed')
+  }
   const setInputValue = async (selector, value) => read(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
     el.dispatchEvent(new Event('input', { bubbles: true }));
     return true;
   })()`)
-  await setSelectValue('[data-dsh-iui-edit-prop="color"] select', 'info')
+  check(await count('[data-dsh-iui-edit-props] select'), 0, 'quick adjust uses no native select widgets')
+  await read(`document.querySelector('[data-dsh-iui-edit-prop="color"] [data-dsh-iui-quick-select]').click()`)
+  await wait('!!document.querySelector("[data-dsh-iui-quick-menu]")', 'custom colour menu')
+  check(await count('[data-dsh-iui-quick-menu] [role="option"]'), 22, 'the colour menu renders every theme token plus custom')
+  await read(`[...document.querySelectorAll('[data-dsh-iui-quick-menu] [data-value]')].find(el => el.getAttribute('data-value') === 'info').click()`)
+  await wait('!document.querySelector("[data-dsh-iui-quick-menu]")', 'colour menu closed')
   await wait(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled === false`, 'apply enabled after edit')
-  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', '%')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', '%')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '60')
   await setInputValue('[data-dsh-iui-edit-prop="thickness"] input', '2')
   await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('60%')`, 'divider preview width')
+  check(await count('[data-dsh-iui-edit-prop="thickness"] [data-dsh-iui-quick-slider] [role="slider"]'), 1, 'thickness exposes a custom slider')
+  await read(`(() => {
+    const slider = document.querySelector('[data-dsh-iui-edit-prop="thickness"] [role="slider"]');
+    slider.focus();
+    slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    return true;
+  })()`)
+    await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('2.5px')`, 'slider updates the preview immediately')
+  await read(`(() => {
+    const slider = document.querySelector('[data-dsh-iui-edit-prop="thickness"] [role="slider"]');
+    slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    return true;
+  })()`)
+  await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('border-top-width: 2px')`, 'slider settles back')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-prop="thickness"] [role="slider"]').getAttribute('aria-valuenow')`), '2', 'the custom slider reports its value')
   check(await read(`document.querySelector('[data-dsh-iui-edit-view]').getAttribute('data-dsh-iui-edit-props-preview')`), 'b2', 'the canvas reports the previewed block')
   const dividerPreview = await read(`(() => {
     const hr = document.querySelector('[data-dsh-iui-block="b2"] hr');
@@ -1175,9 +1201,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'spacer quick props')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'Spacer blocks show width and height controls')
-  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', 'px')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', 'px')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '12')
-  await setSelectValue('[data-dsh-iui-edit-prop="height"] select', 'auto')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="height"]', 'auto')
   await wait(`document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer')?.getAttribute('style')?.includes('12px')`, 'spacer preview width')
   const spacerPreview = await read(`(() => {
     const spacer = document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer');
@@ -1212,7 +1238,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-request-row]")', 'saved instruction row')
   await clickBlock('b2')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'quick props with pending instruction')
-  await setSelectValue('[data-dsh-iui-edit-prop="color"] select', 'danger')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'danger')
   await click('[data-dsh-iui-edit-props-apply]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props-error]")', 'dirty guard error')
   check((await text('[data-dsh-iui-edit-props-error]')).includes('请先发送'), true, 'a pending instruction is reported before applying properties')
@@ -1231,7 +1257,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await clickBlock('b1.2')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'nested quick props')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Divider', 'nested Divider shows quick adjust')
-  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', '%')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', '%')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '30')
   await wait(`document.querySelector('[data-dsh-iui-block="b1.2"] hr')?.getAttribute('style')?.includes('30%')`, 'nested divider preview')
   check(await read(`document.querySelector('[data-dsh-iui-edit-view]').getAttribute('data-dsh-iui-edit-props-preview')`), 'b1.2', 'the nested canvas reports the previewed block')
@@ -1270,6 +1296,30 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-cancel]')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic editor closed')
+
+  // 35. Pages above the old 60-node budget keep nested blocks and quick adjust.
+  await read('window.__addLargePageCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="large-page-call-1"]\')', 'large page card')
+  await click('[data-dsh-iui-call-id="large-page-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'large page editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 3', 'large page root blocks')
+  check(await count('[data-dsh-iui-edit-nested]'), 1, 'a >60-node page still offers nested editing')
+  await clickBlock('b2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'large page root divider quick props')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Divider', 'root Divider stays quick-adjustable on a large page')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('document.querySelector("[data-dsh-iui-edit-nested]").getAttribute("aria-pressed") === "true"', 'large page nested mode')
+  await wait(`!!document.querySelector('[data-dsh-iui-block-hit="b3.2"]')`, 'large page nested spacer hit')
+  await clickBlock('b3.2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'nested spacer quick props')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'the nested Spacer is reachable on a large page')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="height"]', 'px')
+  await setInputValue('[data-dsh-iui-edit-prop="height"] input', '24')
+  await wait(`document.querySelector('[data-dsh-iui-block="b3.2"] .iui-spacer')?.getAttribute('style')?.includes('24px')`, 'large page spacer preview')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'large page editor closed')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

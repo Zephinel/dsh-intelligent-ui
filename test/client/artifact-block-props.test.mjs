@@ -93,3 +93,25 @@ gap = Spacer(null, 12)`
   assert.equal(blockPropsState(session, 'b1.2').componentType, 'Divider')
   assert.equal(blockPropsState(session, 'b1.3').componentType, 'Spacer')
 })
+
+test('pages above the old 60-node budget still expose nested blocks and quick adjust', () => {
+  const refs = Array.from({ length: 60 }, (_, index) => `t${index + 1}`)
+  const program = [
+    'root = Col([body, rule, section])',
+    `body = Col([${refs.join(', ')}])`,
+    ...refs.map((ref, index) => `${ref} = Text("line ${index + 1}")`),
+    'rule = Divider()',
+    'section = Section("Inner", [innerTitle, innerSpacer], "inner")',
+    'innerTitle = Title("Inner", "sm")',
+    'innerSpacer = Spacer(null, 12)',
+  ].join('\n')
+  const tree = buildArtifactTree(program, { containerTypes: ['Col', 'Row', 'Box', 'Grid', 'Card', 'Section', 'Carousel'] })
+  assert.equal(tree.limitsExceeded, undefined)
+  assert.ok(tree.nodes.size > 60, 'fixture exceeds the old node budget')
+  const session = sessionFor(program)
+  assert.equal(blockPropsState(session, 'b2').componentType, 'Divider')
+  const nested = nestedBlocksForProgram(program)
+  assert.ok(nested !== undefined && nested.hasNested)
+  const spacer = nested.blocks.find(block => block.blockId === 'b3.2')
+  assert.equal(spacer?.componentType, 'Spacer')
+})
