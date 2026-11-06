@@ -692,3 +692,5 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - 反馈：编排行 hover 时拖拽手柄外面出现一个圆角边框，是列表里最显眼的 AI slop 视觉。
 - 修复：`.dsh-iui-edit-grip:focus-visible` 不再绘制 outline；键盘聚焦时改为整行使用中性 hover 底色 + 左侧细线（`:has(.dsh-iui-edit-grip:focus-visible)`），保留焦点位置提示但不出现独立控件外框。
+
+- 修正：0.41 的 `outline: none` 被文件后面共享的 `:focus-visible` 组规则覆盖（该组仍列着 `.dsh-iui-edit-grip`，且加载更晚），所以外框仍在。已把 grip 从共享组里移除，仅保留行级焦点提示。
