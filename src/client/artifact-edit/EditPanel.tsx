@@ -440,7 +440,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
             title={t('edit.locate')}
             onClick={event => { event.stopPropagation(); onLocate() }}
           >
-            <RemixIcon name="cursor-line" size={13} />
+            <RemixIcon name="focus-3-line" size={13} />
           </button>
           <button
             type="button"

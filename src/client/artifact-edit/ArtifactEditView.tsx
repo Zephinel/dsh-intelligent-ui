@@ -17,6 +17,7 @@ import { wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { OpenUIRenderer } from '../../lib/render.tsx'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditViewProps } from './contracts.ts'
 import { BlockOverlay } from './BlockOverlay.tsx'
+import { InfoTip } from './InfoTip.tsx'
 import { BlockPopover } from './BlockPopover.tsx'
 import { EditPanel } from './EditPanel.tsx'
 import { blocksForProgram, probeArtifactRevisionStatus } from './store.ts'
@@ -176,24 +177,31 @@ export function ArtifactEditView({
           <span className="dsh-iui-edit-count">{t('edit.availableBlocks', { count: blockCount })}</span>
           {session.orderChanged ? <span className="dsh-iui-edit-preview" data-dsh-iui-edit-preview>{t('edit.previewOrder')}</span> : null}
           {canNest
-            ? <button
-                type="button"
-                className="dsh-iui-edit-button"
-                data-dsh-iui-edit-nested
-                aria-pressed={session.nestedMode === true}
-                title={session.nestedMode === true ? t('edit.nestedRoot') : t('edit.nestedHint')}
-                onClick={() => { actions.setNestedMode(session.key, session.nestedMode !== true) }}
-              >{session.nestedMode === true ? t('edit.nestedRoot') : t('edit.nestedToggle')}</button>
+            ? (
+              <>
+                <span className="dsh-iui-edit-mode-state" data-dsh-iui-edit-mode-state>
+                  {session.nestedMode === true ? t('edit.modeNested') : t('edit.modeTop')}
+                </span>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-button"
+                  data-dsh-iui-edit-nested
+                  aria-pressed={session.nestedMode === true}
+                  onClick={() => { actions.setNestedMode(session.key, session.nestedMode !== true) }}
+                >{session.nestedMode === true ? t('edit.switchToTop') : t('edit.switchToNested')}</button>
+                <InfoTip label={t('edit.aboutNested')} text={t('edit.nestedHint')} testId="nested" />
+              </>
+            )
             : null}
           <button
             type="button"
             className="dsh-iui-edit-button dsh-iui-edit-strict"
             data-dsh-iui-edit-strict
             aria-pressed={session.strict === true}
-            title={t('edit.strictHint')}
             disabled={session.status === 'submitted' || session.status === 'error'}
             onClick={() => { actions.setStrictMode(session.key, session.strict !== true) }}
-          >{t('edit.strictOn')}</button>
+          >{session.strict === true ? t('edit.strictEnabled') : t('edit.strictDisabled')}</button>
+          <InfoTip label={t('edit.aboutStrict')} text={t('edit.strictHint')} testId="strict" />
           <span className="dsh-iui-edit-toolbar-spacer" />
           <button
             type="button"
@@ -208,7 +216,7 @@ export function ArtifactEditView({
             {t('edit.exit')}
           </button>
         </div>
-        <p className="dsh-iui-edit-banner">{session.nestedMode === true ? t('edit.bannerNested') : t('edit.bannerTop')}</p>
+        <p className="dsh-iui-edit-banner">{t('edit.banner')}</p>
       </div>
 
       {foreignLease ? (

@@ -16,6 +16,53 @@
  * its block, in both schemes.
  */
 
+/* Quiet mode indicator and plugin-drawn info tooltips. */
+.dsh-iui-edit-mode-state {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.dsh-iui-info-tip-trigger {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: help;
+}
+
+.dsh-iui-info-tip-trigger:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-info-tip-trigger:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-tertiary);
+  outline-offset: 1px;
+}
+
+.dsh-iui-info-tooltip {
+  position: fixed;
+  z-index: 1250;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 16%), 0 2px 8px rgb(0 0 0 / 8%);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 17px;
+  pointer-events: none;
+}
+
 /* -------------------------------------------------------------------------
  * Selection palette (shared by the panel, popover and block hover link).
  * ---------------------------------------------------------------------- */
@@ -1318,9 +1365,9 @@
 }
 
 .dsh-iui-edit-arrangement-row:hover .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-arrangement-row:focus-within .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-arrangement-row:has(:focus-visible) .dsh-iui-edit-structure-actions,
 .dsh-iui-edit-nested-row:hover .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row:focus-within .dsh-iui-edit-structure-actions {
+.dsh-iui-edit-nested-row:has(:focus-visible) .dsh-iui-edit-structure-actions {
   opacity: 1;
   pointer-events: auto;
 }

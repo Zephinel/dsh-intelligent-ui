@@ -221,6 +221,17 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 9', 'nine blocks')
   check(await count('[data-dsh-iui-block]'), 9, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
+  await hover('[data-dsh-iui-info-tip="nested"]')
+  await wait('!!document.querySelector("[data-dsh-iui-info-tooltip]")', 'nested info tooltip')
+  check((await text('[data-dsh-iui-info-tooltip]')).includes('嵌套'), true, 'the nested-mode tooltip explains the two levels')
+  await shot('harness-toolbar-tooltip.png')
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await wait('!document.querySelector("[data-dsh-iui-info-tooltip]")', 'nested tooltip closes')
+  await hover('[data-dsh-iui-info-tip="strict"]')
+  await wait('!!document.querySelector("[data-dsh-iui-info-tooltip]")', 'strict info tooltip')
+  check((await text('[data-dsh-iui-info-tooltip]')).includes('未选中'), true, 'the strict-protection tooltip explains the rejection rule')
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await wait('!document.querySelector("[data-dsh-iui-info-tooltip]")', 'strict tooltip closes')
   const editableHint = await read(`(() => {
     const marquees = [...document.querySelectorAll('.dsh-iui-block-marquee')];
     const first = marquees[0];
@@ -706,7 +717,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-nested]')
   await wait(`document.querySelectorAll('[data-dsh-iui-block-node]').length >= 8`, 'nested block wrappers')
   check(await count('[data-dsh-iui-block="b1.2.1"]'), 1, 'nested block has its display id')
-  check((await text('.dsh-iui-edit-banner')).includes('嵌套区块'), true, 'nested mode explains what it is showing')
+  check((await text('[data-dsh-iui-edit-mode-state]')).includes('嵌套'), true, 'the toolbar states the current level')
   await read(`document.querySelector('[data-dsh-iui-edit-nested-row][data-block-id="b1.2.1"]').scrollIntoView({ block: 'center' })`)
   await new Promise(resolve => setTimeout(resolve, 200))
   await hover('[data-dsh-iui-edit-nested-row][data-block-id="b1.2.1"]')
@@ -1359,6 +1370,35 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-cancel]')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'large page editor closed')
+
+  // 36. Legacy page without an authoritative base falls back to instructions.
+  await read('window.__addPropsCard("props-call-3", "旧页面属性样例")')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-3"]\')', 'legacy props card')
+  await click('[data-dsh-iui-call-id="props-call-3"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'legacy blocks')
+  await clickBlock('b2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'legacy quick props')
+  await read(`(() => {
+    window.__savedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        return Promise.resolve(new Response(JSON.stringify({ error: { code: 'base_missing', message: 'missing' } }), { status: 404, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__savedFetch(input, init);
+    };
+    return true;
+  })()`)
+  await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'info')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props-fallback]")', 'legacy fallback note')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('权威版本记录'), true, 'legacy pages explain the missing authoritative base')
+  check(await count('[data-dsh-iui-edit-instruction]'), 1, 'legacy pages fall back to the instruction editor')
+  await read('window.fetch = window.__savedFetch')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor closed')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
