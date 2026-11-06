@@ -542,3 +542,11 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 问题：画布选中浮层的编辑按钮用字符 `✎`（笔尖朝右下），与面板行的 SVG 铅笔（笔尖朝左下）互为镜像。
 - 修复：`block-slot.tsx` 内新增 `PencilGlyph`（与 `EditGlyph` 同一路径），画布浮层改用它；请求行、编排动作组、画布浮层三处铅笔完全一致，打包产物中不再有 `✎`。
 - 验证：Node **488/488**；浏览器 9/9；artifact-edit **220 checks**（三处 `d` 路径一致、浮层无文本字符）；CSS 192.8 kB。
+
+## 0.22 图标体系统一为 Remix Icon（2026-11-06，工作树）
+
+- 需求：插件自身的图标不要手绘，统一使用 Remix Icon（会话内 `remix-icon` MCP 提供的图标名）。
+- 实现：新增 `src/lib/components/remix-icon.tsx`（从 `remixicon@4.9.1` 抄录 29 个图标的 path，`REMIX_ICON_PATHS` + `<RemixIcon>`；24 viewBox、`fill=currentColor`，无运行时依赖/字体）。替换编辑面板（铅笔/垃圾桶/复制/移动/拖拽/刷新/关闭/类型 8 种 + 新增）、画布浮层、设置页星标、样式选择器对勾与星、composer 作用域/箭头/对勾/样式、导出菜单、文章折叠箭头、链接外链箭头、媒体空图、Carousel 左右箭头；删除 `✎`/`✦` 字符图标与 DSH primitives sparkle/chevron。
+- 例外：OpenUI 程序内容里的 `Icon("…")` 仍由 `glyph.tsx` 用 lucide 动态解析（程序数据，不是 chrome）。
+- 许可：`licenses/remix-icon-LICENSE` + `NOTICE` 增加 Remix Icon（Remix Icon License v1.0）条目；`integration.md` 出货文件数 43 → **44**。
+- 验证：Node **488/488**；浏览器 9/9；`artifact-edit` 220 checks；`nested-edit-renderer` 75；构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 192.8）、standalone 3.31 MB + 515.8 kB；pack **44 files** 4.03 / 10.39 MB。

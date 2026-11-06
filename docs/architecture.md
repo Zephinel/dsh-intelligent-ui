@@ -393,3 +393,11 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。
 - 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239）；浏览器 9/9；`artifact-edit` **220 checks**（圆角/inset/overflow 几何、enter/exit 动画名、`data-closing`、删除确认 >3.6s 持久 / Cancel / Delete preview、popover 四边 clamp）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 193.0）；pack 43 files 4.02 / 10.37 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
+
+### 图标系统：统一 Remix Icon
+
+- 插件自身 UI（编辑面板、编排行、画布选中浮层、设置页、样式选择器、composer 芯片、导出菜单、文章/媒体/文本组件控件）的所有图标统一来自 **Remix Icon v4.9.1**，路径数据内联在 `src/lib/components/remix-icon.tsx`（`REMIX_ICON_PATHS` + `<RemixIcon name size className>`，`0 0 24 24` viewBox、`fill=currentColor`）。不新增运行时依赖、不打图标字体，图标随 `currentColor` 继承颜色。
+- 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
+- **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
+- 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
+- 验证：Node 488/488、浏览器 9/9、`artifact-edit` 220 checks、`nested-edit-renderer` 75；构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 192.8）；pack 44 files 4.03 / 10.39 MB。
