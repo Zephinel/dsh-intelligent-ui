@@ -72,7 +72,7 @@
   background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
   /* Fade only: the card resizes to the edit layout at the same moment, so a
      transform would stack two motions and read as a stutter near the end. */
-  animation: dsh-iui-edit-toolbar-in 200ms cubic-bezier(0.4, 0, 1, 1);
+  animation: dsh-iui-edit-toolbar-in 240ms cubic-bezier(0.4, 0, 1, 1);
 }
 
 @keyframes dsh-iui-edit-toolbar-in {
@@ -86,7 +86,7 @@
 }
 
 .dsh-iui-edit-view[data-closing='true'] .dsh-iui-edit-toolbar {
-  animation: dsh-iui-edit-toolbar-out 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: dsh-iui-edit-toolbar-out 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
@@ -235,16 +235,16 @@
   box-shadow: 0 18px 44px rgb(0 0 0 / 22%);
   font: 13px/1.5 var(--dsw-font-family, system-ui);
   overflow: hidden;
-  animation: dsh-iui-edit-panel-in-mobile 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: dsh-iui-edit-panel-in-mobile 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dsh-iui-edit-panel[data-open='true'] {
   display: flex;
 }
 
-/* Exit runs while the card keeps the view mounted (~220ms), then unmounts. */
+/* Exit runs while the card keeps the view mounted (~320ms), then unmounts. */
 .dsh-iui-edit-panel[data-closing='true'] {
-  animation: dsh-iui-edit-panel-out-mobile 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: dsh-iui-edit-panel-out-mobile 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   pointer-events: none;
 }
 
@@ -256,7 +256,7 @@
     bottom: 12px;
     left: auto;
     width: var(--dsh-iui-edit-panel-width, clamp(272px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 16px), 360px));
-    transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
     max-height: none;
     border: 1px solid var(--dsw-alias-border-l1);
     border-radius: 16px;

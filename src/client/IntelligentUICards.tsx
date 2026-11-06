@@ -78,7 +78,7 @@ import {
 } from './artifact-edit/store.ts'
 
 /** Runtime kept mounted after exit so the panel can play its exit animation. */
-const EDITOR_CLOSE_ANIMATION_MS = 220
+const EDITOR_CLOSE_ANIMATION_MS = 320
 
 /** Session-bound, Turn-keyed program source supplied by the plugin's registration. */
 export interface IntelligentUICardsInjected {

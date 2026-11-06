@@ -32,7 +32,7 @@ export const EDIT_PANEL_MAX_WIDTH = 360
 /** Minimum content the adaptive panel-width fallback tries to preserve. */
 export const ADAPTIVE_MIN_CONTENT_WIDTH = 320
 /** Panel and content-width animation duration (must match the CSS panel animation). */
-export const CONTENT_WIDTH_ANIMATION_MS = 220
+export const CONTENT_WIDTH_ANIMATION_MS = 320
 
 /** Control points of the shared panel easing: cubic-bezier(.22, 1, .36, 1). */
 const CONTENT_WIDTH_EASING = [0.22, 1, 0.36, 1] as const

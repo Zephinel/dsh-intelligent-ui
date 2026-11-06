@@ -102,7 +102,7 @@ test('invalid sizes are passed through unchanged', () => {
 })
 
 test('the shared animation easing matches the CSS panel curve', () => {
-  assert.equal(CONTENT_WIDTH_ANIMATION_MS, 220)
+  assert.equal(CONTENT_WIDTH_ANIMATION_MS, 320)
   assert.equal(easeContentWidth(0), 0)
   assert.equal(easeContentWidth(1), 1)
   assert.equal(easeContentWidth(-1), 0)
