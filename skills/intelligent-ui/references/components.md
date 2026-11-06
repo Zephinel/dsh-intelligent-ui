@@ -104,7 +104,7 @@ Shows content in a small panel when the trigger is clicked: a definition, a sour
 Divider(color?: Color, width?: Length, thickness?: number)
 ```
 
-**Notes.** A horizontal rule. No arguments.
+**Notes.** A horizontal rule. `color` takes a theme token or CSS colour, `width` a px/percentage length (centred when narrowed) and `thickness` 0.5–12 px; omit an argument for the theme default.
 
 ### `Spacer`
 
@@ -112,7 +112,7 @@ Divider(color?: Color, width?: Length, thickness?: number)
 Spacer(width?: Length, height?: Length)
 ```
 
-Fills the free space in a Row.
+Fills the free space in a Row. Set `width`/`height` (px, percentage or `auto`) to turn it into a fixed gap instead of a flexible one.
 
 **Notes.** Fills the free space in a Row; put it between items you want pushed apart.
 

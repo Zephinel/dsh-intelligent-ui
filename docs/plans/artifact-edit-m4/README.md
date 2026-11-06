@@ -602,3 +602,21 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 根因：textarea 是 `.dsh-iui-edit-popover-scroll`（`overflow-y: auto`）的最后一个字段，滚动容器只有 `padding-right: 2px`、没有底部内边距；2px ring + 1px offset 需要 3px 空间，超出 padding box 的部分被滚动容器裁掉（左右两侧此前已用 textarea `margin: 0 3px` 解决）。
 - 修复：滚动容器 padding 改为 `0 2px 4px`，把底部 4px 留在裁剪区内，四边 focus ring 完整可见；同时 E2E 增加底部空间与 padding 断言。
 - 验证：Node **496/496**；浏览器 9/9；artifact-edit **260 checks**；CSS 205.0 kB；真机隔离截图（light/dark）确认输入框四边 ring 完整。
+
+## 0.31 结构区块解禁（M4-6，2026-11-07，工作树）
+
+- 反馈：用户指出 Toc 不能编辑，并确认 `Caption`/`Divider`/`Spacer`/Toc/游离 `Title` 都应该支持；编辑粒度按区块，不需要更细。最初只要求“这些也支持”，随后追加 Divider/Spacer 的快捷调整。
+- 方案：把 `Caption`/`Divider`/`Spacer`/`Toc`/根层 `Title` 从页面 chrome 名单移除；根 `Col` 与 7 类嵌套容器的每个直接子节点都成为可编辑区块。新增 `divider`/`spacer`/`toc`/`heading`/`caption` 五种 block kind（中英标签 + Remix 图标），标题扩展为读取 Title/Caption 文本、Toc.items 与首段文本。
+- 保留的安全边界：`@Each`/opaque/共享命名表达式/深度与节点上限仍不可编辑；复制含 Section/Toc anchor 的子树继续拒绝；结构操作、`orderByParent`、新增区块、跨容器移动都按普通区块处理；未命名同类块在目标顺序归一化时按同类页面顺序兜底。
+- 影响面：`extractArtifactBlocks`、CST 节点 flags（移除 chrome）、Host nested/orderByParent/structure 校验、客户端 nested 映射与面板 kind、根层 wrapper 包裹（Title/Caption/Divider/Spacer 现在也有 BlockSlot）；既有 fixture 的区块数从 8 变 9（脚注 Caption 入列），因此同步更新了 51 条 client/host 测试期望。
+- 验证：Node **499/499**（Host 239、Client 239、packaging 21）；浏览器 9/9；artifact-edit **260 checks**（当时）；nested-edit-renderer 75；CSS 205.0 kB。
+
+## 0.32 Divider/Spacer 快捷调整（M4-6，2026-11-07，工作树）
+
+- 需求：Divider 快捷调整颜色/宽度/粗细；Spacer 快捷调整宽度/高度；用户确认走**零模型确定性修订**，取值用主题 token + 灵活尺寸。
+- 组件与 grammar：`Divider(color?, width?, thickness?)`（颜色 token 或 CSS 颜色；宽度 px/%，居中；粗细 0.5–12px）、`Spacer(width?, height?)`（px/%/auto，设值后不再 flex）；同步 `vendor/spec.json`、vendored prompt、生成的 prompt 与 Agent Skill 组件参考。
+- 契约：新增 `src/shared/artifact-block-props.ts`（组件级/形状校验、规范表达式序列化、从 AST prefill）；CST 节点携带解析后的 `props`，并新增 `replaceNodeContent`（改写命名语句定义而不是把引用内联）。
+- Host：`artifact-structure` 路由新增 `props` 操作；校验节点组件（仅 Divider/Spacer）与属性，经 `replaceNodeContent` 原子应用，复用幂等/CAS/分支/修订记录。测试覆盖根/嵌套目标、preview、幂等与全部拒绝路径。
+- 客户端：popover 在 Divider/Spacer 上显示快捷调整控件（`QuickBlockProps`）；改动写入 `propsPreview` 并重新包裹渲染实现**画布实时预览**；应用时发 `props` 请求，成功后出现「属性调整修订」本地卡片（local revision kind `props`），失败在 popover 内提示；存在未发送的指令/排序/整体说明时拒绝应用并提示先发送或清除。
+- 限制：仅 Divider/Spacer 的上述属性；这两类块不再显示模型指令 textarea（已保存指令仍在请求列表）；属性修订卡与其他本地修订一致，不参与导出；自定义颜色受渲染器 `isSafeCss` 与 Host 保守校验约束。
+- 验证：Node **499/499**；浏览器 9/9；artifact-edit **278 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、错误提示等）；nested 75；CSS 206.3 kB；standalone 3.32 MB + 518.1 kB；pack 44 files 4.24 MB / 10.96 MB；截图 `.tmp-report/harness-quick-props.png`。
