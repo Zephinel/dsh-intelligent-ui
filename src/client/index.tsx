@@ -13,6 +13,8 @@
  * and disclosure primitives).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: pull the ui-chat `conversation.chat.turnTail` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -30,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pull the Plugins page `plugins.bundle.config` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+import { InputOrbit } from './InputOrbit.tsx'
 import { IntelligentUICards, type IntelligentUICardsInjected } from './IntelligentUICards.tsx'
 import { ExportAction, type ExportActionInjected } from './ExportAction.tsx'
 import { RenderUiRow } from './RenderUiRow.tsx'
@@ -101,6 +104,18 @@ export function apply(ctx: ClientContext): void {
   // Both dictionaries go in one registration so every slot below can translate
   // through the `t` seat. A later locale switch re-renders the mounted outlets.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'intelligent-ui: dictionaries')
+  // One document-level layer gives every plugin input the same orbit focus cue.
+  ctx.effect(() => {
+    const host = document.createElement('div')
+    host.className = 'dsh-iui-input-orbit-host'
+    document.body.append(host)
+    const root = createRoot(host)
+    root.render(createElement(InputOrbit))
+    return () => {
+      root.unmount()
+      host.remove()
+    }
+  }, 'intelligent-ui: input orbit')
   // Artifact block editing: the edit request is one composer reference chip, so
   // an ordinary Send serializes it into the structured model-facing envelope.
   // The same envelope collapses back into one chip in the sent message.

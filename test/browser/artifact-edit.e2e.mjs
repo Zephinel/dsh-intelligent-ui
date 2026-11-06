@@ -221,6 +221,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 9', 'nine blocks')
   check(await count('[data-dsh-iui-block]'), 9, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
+  await read(`document.querySelector('[data-dsh-iui-edit-global]').focus()`)
+  await wait('!!document.querySelector("[data-dsh-iui-input-orbit]")', 'input focus orbit')
+  check(await read(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`), true, 'the orbit sits five pixels outside the field')
+  await shot('harness-input-orbit.png')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-global]')).outlineStyle`), 'none', 'the field focus outline is replaced by the orbit')
+  await read(`document.querySelector('[data-dsh-iui-edit-global]').blur()`)
+  await wait('!document.querySelector("[data-dsh-iui-input-orbit]")', 'input focus orbit clears')
   check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-panel')).borderTopWidth`), '0px', 'the floating edit panel has no outer border')
   check(await count('.dsh-iui-edit-divider'), 1, 'the panel uses one explicit separator before the global instruction')
   check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-global')).borderTopWidth`), '0px', 'the global section does not paint a second separator')
@@ -1105,15 +1112,17 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
       bottomRoom: scroll.getBoundingClientRect().bottom - ta.getBoundingClientRect().bottom,
       scrollPaddingBottom: scrollCs.paddingBottom,
       marginLeft: cs.marginLeft,
-      outline: cs.outlineWidth,
+      outlineStyle: cs.outlineStyle,
+      outlineWidth: cs.outlineWidth,
       focused: document.activeElement === ta,
     };
   })()`)
-  check(focusRoom.room >= 3, true, 'textarea leaves room for its focus ring on the left')
-  check(focusRoom.bottomRoom >= 3, true, 'textarea leaves room for its focus ring at the bottom')
-  check(parseFloat(focusRoom.scrollPaddingBottom) >= 3, true, 'the popover scroll box reserves the bottom ring space')
+  check(focusRoom.room >= 3, true, 'textarea leaves room for its focus orbit on the left')
+  check(focusRoom.bottomRoom >= 3, true, 'textarea leaves room for its focus orbit at the bottom')
+  check(parseFloat(focusRoom.scrollPaddingBottom) >= 3, true, 'the popover scroll box reserves the bottom orbit space')
   check(focusRoom.marginLeft, '3px', 'textarea reserves a 3px focus-ring margin')
-  check(focusRoom.outline, '2px', 'focused textarea exposes the 2px focus ring')
+  check(focusRoom.outlineStyle, 'none', 'the textarea focus outline is replaced by the orbit')
+  check(await count('[data-dsh-iui-input-orbit]'), 1, 'the focused textarea shows the orbit cue')
   check(focusRoom.focused, true, 'textarea is focused for the focus-ring check')
   await click('[data-dsh-iui-edit-cancel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-popover]")', 'focus ring popover closed')

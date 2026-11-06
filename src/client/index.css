@@ -1662,3 +1662,79 @@
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
+
+/* -------------------------------------------------------------------------
+ * Input focus orbit
+ *
+ * Every text field, textarea, select and field-like trigger in the extension
+ * takes the same traveling-light focus cue instead of a rectangular focus
+ * outline or a colored border. InputOrbit renders the ring at document level,
+ * because inputs live in cards, editors, popovers, settings and model-composed
+ * artifacts.
+ * ---------------------------------------------------------------------- */
+
+@property --dsh-iui-input-orbit-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.dsh-iui-input-orbit-host {
+  display: contents;
+  pointer-events: none;
+}
+
+.dsh-iui-input-orbit-target:focus,
+.dsh-iui-input-orbit-target:focus-visible {
+  outline: none !important;
+}
+
+/* The rendered component inputs used to paint a focus border + halo; let the
+   orbit be the only focus highlight. */
+.dsh-iui-host .iui-input.dsh-iui-input-orbit-target:focus,
+.dsh-iui-host .iui-input.dsh-iui-input-orbit-target:focus-visible {
+  border-color: var(--iui-border-strong);
+  box-shadow: none;
+}
+
+/* The block editor's quick "add block" field did the same. */
+.dsh-iui-edit-add-textarea.dsh-iui-input-orbit-target:focus-visible {
+  border-color: var(--dsw-alias-border-l2);
+  box-shadow: none;
+}
+
+.dsh-iui-input-orbit {
+  --dsh-iui-input-orbit-tone: color-mix(in srgb, var(--dsw-alias-state-business-primary) 68%, white);
+  position: fixed;
+  z-index: 3100;
+  box-sizing: border-box;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--dsh-iui-input-orbit-angle),
+    transparent 0deg 150deg,
+    transparent 220deg,
+    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 0%, transparent) 240deg,
+    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 50%, transparent) 300deg,
+    var(--dsh-iui-input-orbit-tone) 334deg 340deg,
+    transparent 358deg 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 38%, transparent));
+  opacity: 0.9;
+  pointer-events: none;
+  animation: dsh-iui-input-orbit 2600ms linear infinite;
+}
+
+@keyframes dsh-iui-input-orbit {
+  to { --dsh-iui-input-orbit-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-input-orbit {
+    animation: none;
+    opacity: 0.65;
+  }
+}
