@@ -2429,12 +2429,25 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  /* Sits inside the composer card, above its text area. */
+  /* Sits inside the composer card, above its text area. The rule is a
+     pseudo-element inset from both card edges, so it never collides with the
+     rounded composer corners. */
+  position: relative;
   padding: 8px 12px 6px;
   border: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
   border-radius: 0;
   background: transparent;
+}
+
+.dsh-iui-draft-dock::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 1px;
+  background: var(--dsw-alias-border-l1);
+  pointer-events: none;
 }
 
 [data-composer-overlay]:has(.dsh-iui-draft-dock) {
