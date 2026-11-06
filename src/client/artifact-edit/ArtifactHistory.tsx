@@ -178,7 +178,7 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, blocks, onCl
   }
 
   const revisions = history?.revisions ?? []
-  const artifactTitle = revisions.find(revision => revision.title !== undefined && revision.title.trim() !== '')?.title ?? artifactId
+  const artifactTitle = revisions.find(revision => revision.title !== undefined && revision.title.trim() !== '')?.title?.trim()
   const current = revisions.find(revision => revision.current)?.revision
 
   return createPortal(
@@ -198,7 +198,7 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, blocks, onCl
         <div className="dsh-iui-history-head">
           <div className="dsh-iui-history-headings">
             <h2 id={titleId} className="dsh-iui-history-title">{t('edit.history')}</h2>
-            <p className="dsh-iui-history-subtitle" title={artifactTitle}>{artifactTitle}</p>
+            {artifactTitle === undefined || artifactTitle === '' ? null : <p className="dsh-iui-history-subtitle" title={artifactTitle}>{artifactTitle}</p>}
             {current === undefined ? null : <p className="dsh-iui-history-caption">{t('edit.historyLatest', { n: current })}</p>}
           </div>
           <button

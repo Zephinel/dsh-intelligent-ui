@@ -215,6 +215,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit view')
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 8', 'eight blocks')
   check(await count('[data-dsh-iui-block]'), 8, 'all top-level blocks recognized')
+  check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')).animationName.includes('dsh-iui-block-breathe')`), true, 'editable blocks breathe before selection')
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
   check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
   check(await count('[data-dsh-iui-edit-arrangement-row]'), 8, 'arrangement lists every block')
@@ -245,6 +247,24 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('document.querySelector("[data-dsh-iui-edit-request-row]").getAttribute("data-block-id")'), 'b3', 'request row binds b3')
   check((await text('[data-dsh-iui-edit-request-row]')).includes('把模拟时钟改为数字时钟'), true, 'request row shows instruction')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
+  const selectedVisual = await read(`(() => {
+    const block = document.querySelector('[data-dsh-iui-block="b3"]');
+    const layer = block.querySelector('.dsh-iui-block-layer');
+    const body = block.querySelector('.dsh-iui-block-body');
+    return { border: parseFloat(getComputedStyle(layer).borderTopWidth), shadow: getComputedStyle(layer).boxShadow, radius: parseFloat(getComputedStyle(body).borderTopLeftRadius), bodyBg: getComputedStyle(body).backgroundColor };
+  })()`)
+  check(selectedVisual.border, 0, 'selected block has no coloured outline')
+  check(selectedVisual.shadow !== 'none', true, 'selected block casts a floating shadow')
+  check(selectedVisual.radius >= 12, true, 'selected block gets a rounded card body')
+  check(selectedVisual.bodyBg !== 'rgba(0, 0, 0, 0)', true, 'selected block has a card surface')
+  console.log('SELECTED DEBUG', JSON.stringify(selectedVisual), await read(`(() => {
+    const b = document.querySelector('[data-dsh-iui-block="b3"]');
+    const l = b.querySelector('.dsh-iui-block-layer');
+    const body = b.querySelector('.dsh-iui-block-body');
+    const card = b.querySelector('.iui-card');
+    return { layerBorder: getComputedStyle(l).border, layerShadow: getComputedStyle(l).boxShadow, layerOutline: getComputedStyle(l).outline, bodyBorder: getComputedStyle(body).border, bodyOutline: getComputedStyle(body).outline, bodyClass: body.className, cardBorder: card ? getComputedStyle(card).border : null };
+  })()`))
+  await shot('harness-selected-block.png')
   const pencilPaths = await read(`(() => {
     const overlay = document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool svg path')?.getAttribute('d') ?? null;
     const row = document.querySelector('[data-dsh-iui-edit-structure-edit] svg path')?.getAttribute('d') ?? null;
@@ -556,6 +576,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision]'), 3, 'history lists this artifact revisions')
   check(await read(`document.querySelector('[data-dsh-iui-history-revision="restore_local1"]')?.getAttribute('data-current')`), 'true', 'history marks the current revision')
   check((await text('[data-dsh-iui-history]')).includes('初始生成'), true, 'history includes the initial revision')
+  check((await text('[data-dsh-iui-history-subtitle]')).includes('call_'), false, 'history does not expose the raw artifact id as a subtitle')
   check(await count('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-restore]'), 0, 'history offers no restore for unavailable content')
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
@@ -993,6 +1014,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`!!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'closing toolbar editor')
   check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-toolbar')).animationName.includes('dsh-iui-edit-toolbar-out')`), true, 'edit toolbar fades/slides out with the editor')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'toolbar editor closed')
+  // The panel itself can exit editing, not only the toolbar.
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'panel exit editor')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'panel exit closes the editor')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
