@@ -793,6 +793,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const fittedWidth = await read(`parseFloat(window.__shellWidthEl.style.getPropertyValue('--dsh-chat-content-width'))`)
   check(fittedWidth >= 680 && fittedWidth <= 780, true, 'editing narrows the chat content width to a non-overlapping value')
   check(await read(`window.__widthSamples.some(w => w > 720 && w < 890)`), true, 'content width animates through intermediate values while the panel enters')
+  const composerMax = await read(`parseFloat(getComputedStyle(document.querySelector('[data-composer-card]')).maxWidth)`)
+  check(composerMax, fittedWidth + 32, 'composer width follows the fitted content width (+32px)')
   check(await count('[data-dsh-iui-edit-expand]'), 0, 'expand button has been removed')
   await read('window.__widthSamples = []')
   await click('[data-dsh-iui-edit-exit]')
@@ -802,6 +804,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'auto width editor closed')
   await wait('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width") === "900px"', 'chat width restored')
   check(await read('window.__shellWidthEl.style.getPropertyValue("--dsh-chat-content-width")'), '900px', 'closing the editor restores the user width')
+  check(await read(`parseFloat(getComputedStyle(document.querySelector('[data-composer-card]')).maxWidth)`), 748, 'composer max-width is restored with the content width')
   await read(`window.__shellWidthEl.remove()`)
 
   // 31. The fitted width follows the shell width preference while editing.

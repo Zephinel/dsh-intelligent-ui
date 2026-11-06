@@ -139,6 +139,7 @@ test('the controller animates content between the base and fitted widths', () =>
     const element = {
       style: elementStyle,
       parentElement: { style: parentStyle },
+      querySelector: () => null,
       getBoundingClientRect: () => ({ left: 0, width: 1440, top: 0, height: 0 }),
     }
     const win = {

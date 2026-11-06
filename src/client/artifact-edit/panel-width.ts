@@ -24,6 +24,10 @@ export const CHAT_CONTENT_WIDTH_VAR = '--dsh-chat-content-width'
 export const DEFAULT_CHAT_CONTENT_WIDTH = 748
 /** Floating desktop panel's inset from the viewport's right edge (matches CSS). */
 export const EDIT_PANEL_RIGHT_INSET = 12
+/** Composer card selector; its width tracks the chat content width. */
+export const COMPOSER_CARD_SELECTOR = '[data-composer-card]'
+/** Composer card is `content + 32px` wider in the shell CSS. */
+export const COMPOSER_CARD_EXTRA_WIDTH = 32
 /** CSS variable the controller writes to override the docked panel width. */
 export const EDIT_PANEL_WIDTH_VAR = '--dsh-iui-edit-panel-width'
 /** Panel width range used by the docked layout (matches CSS). */
@@ -277,6 +281,8 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
   const savedPriority = element.style.getPropertyPriority(CHAT_CONTENT_WIDTH_VAR)
   const savedPanelWidth = doc.documentElement.style.getPropertyValue(EDIT_PANEL_WIDTH_VAR)
   const savedPanelWidthPriority = doc.documentElement.style.getPropertyPriority(EDIT_PANEL_WIDTH_VAR)
+  const composer = element.querySelector<HTMLElement>(COMPOSER_CARD_SELECTOR) ?? doc.querySelector<HTMLElement>(COMPOSER_CARD_SELECTOR)
+  const savedComposerMaxWidth = composer?.style.getPropertyValue('max-width') ?? ''
   const mountWidth = preferredContentWidth(win, doc, element)
   const reduceMotion = (): boolean => win.matchMedia('(prefers-reduced-motion: reduce)').matches
   let current = mountWidth
@@ -294,6 +300,10 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
     lastInline = `${Math.round(width * 100) / 100}px`
     writing = true
     element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, lastInline)
+    // The composer is `content + 32px` in the shell CSS, but keep it explicit so
+    // the input bar tracks the edit-mode width even if the shell changes that
+    // formula (or renders the composer outside the content subtree).
+    if (composer !== null) composer.style.setProperty('max-width', `${Math.round(width * 100) / 100 + COMPOSER_CARD_EXTRA_WIDTH}px`)
     // MutationObserver callbacks run after this synchronous write, so clear the
     // self-write guard in a microtask the observer can see first.
     void Promise.resolve().then(() => { writing = false })
@@ -318,6 +328,10 @@ export function applyEditChatContentWidth(win: Window = window, doc: Document = 
     lastInline = savedValue
     if (savedValue === '') element.style.removeProperty(CHAT_CONTENT_WIDTH_VAR)
     else element.style.setProperty(CHAT_CONTENT_WIDTH_VAR, savedValue, savedPriority)
+    if (composer !== null) {
+      if (savedComposerMaxWidth === '') composer.style.removeProperty('max-width')
+      else composer.style.setProperty('max-width', savedComposerMaxWidth)
+    }
     void Promise.resolve().then(() => { writing = false })
   }
 
