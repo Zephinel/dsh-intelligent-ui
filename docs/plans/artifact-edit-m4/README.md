@@ -665,7 +665,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 工具栏：控件改为复合按钮组「状态 | 动作 + chevron | ⓘ」，看起来像按钮而不是输入框：层级组显示 `顶层/嵌套` + 动作「显示嵌套区块 / 回到顶层区块」；严格保护组显示状态圆点 + 标签 + 开/关。信息图标放进控件组内部，使用自定义 tooltip；banner 改为静态提示。不再使用原生 title tooltip。
 - 新增 `InfoTip` 组件：信息图标 + portaled 自定义 tooltip（surface/边框/阴影主题化，hover/focus/click 打开，Escape/滚动/resize 处理，aria-describedby）。两个控件各带一个说明 tooltip；E2E 覆盖 tooltip 文本与关闭。
 - 动作按钮：显示条件从 `:focus-within` 改为 `:has(:focus-visible)`，所以鼠标点击行主体/定位后即使焦点留在行内，指针离开后动作按钮也会隐藏；键盘 focus 仍会显示。
-- 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`，恢复 `focus-3-line`，并在 E2E 断言 path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
+- 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`；根据反馈最终改用 `map-pin-line`（`focus-3-line` 与移动图标太像），E2E 断言定位按钮的 SVG path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
 - 旧页面 base_missing：新增 E2E mock（404 `base_missing`）验证快捷面板切换为指令编辑器并显示“权威版本记录之前”的说明；恢复 fetch 后退出。
 - 验证：Node **510/510**；浏览器 9/9；artifact-edit **313 checks**；nested 75。
 
