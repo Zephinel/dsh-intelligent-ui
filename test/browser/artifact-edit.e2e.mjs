@@ -1060,9 +1060,19 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     const ta = document.querySelector('[data-dsh-iui-edit-instruction]');
     const scroll = document.querySelector('.dsh-iui-edit-popover-scroll');
     const cs = getComputedStyle(ta);
-    return { room: ta.getBoundingClientRect().left - scroll.getBoundingClientRect().left, marginLeft: cs.marginLeft, outline: cs.outlineWidth, focused: document.activeElement === ta };
+    const scrollCs = getComputedStyle(scroll);
+    return {
+      room: ta.getBoundingClientRect().left - scroll.getBoundingClientRect().left,
+      bottomRoom: scroll.getBoundingClientRect().bottom - ta.getBoundingClientRect().bottom,
+      scrollPaddingBottom: scrollCs.paddingBottom,
+      marginLeft: cs.marginLeft,
+      outline: cs.outlineWidth,
+      focused: document.activeElement === ta,
+    };
   })()`)
   check(focusRoom.room >= 3, true, 'textarea leaves room for its focus ring on the left')
+  check(focusRoom.bottomRoom >= 3, true, 'textarea leaves room for its focus ring at the bottom')
+  check(parseFloat(focusRoom.scrollPaddingBottom) >= 3, true, 'the popover scroll box reserves the bottom ring space')
   check(focusRoom.marginLeft, '3px', 'textarea reserves a 3px focus-ring margin')
   check(focusRoom.outline, '2px', 'focused textarea exposes the 2px focus ring')
   check(focusRoom.focused, true, 'textarea is focused for the focus-ring check')

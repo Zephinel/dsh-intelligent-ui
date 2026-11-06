@@ -1611,7 +1611,10 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: 2px;
+  /* Side padding lets the textarea's focus ring breathe; the bottom padding is
+     inside the scroll padding box, so the ring's bottom edge is not clipped by
+     `overflow-y: auto` when the textarea is the last field. */
+  padding: 0 2px 4px;
 }
 
 .dsh-iui-edit-popover-meta {
