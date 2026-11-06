@@ -619,7 +619,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - Host：`artifact-structure` 路由新增 `props` 操作；校验节点组件（仅 Divider/Spacer）与属性，经 `replaceNodeContent` 原子应用，复用幂等/CAS/分支/修订记录。测试覆盖根/嵌套目标、preview、幂等与全部拒绝路径。
 - 客户端：popover 在 Divider/Spacer 上显示快捷调整控件（`QuickBlockProps`）；改动写入 `propsPreview` 并重新包裹渲染实现**画布实时预览**；应用时发 `props` 请求，成功后出现「属性调整修订」本地卡片（local revision kind `props`），失败在 popover 内提示；存在未发送的指令/排序/整体说明时拒绝应用并提示先发送或清除。
 - 限制：仅 Divider/Spacer 的上述属性；这两类块不再显示模型指令 textarea（已保存指令仍在请求列表）；属性修订卡与其他本地修订一致，不参与导出；自定义颜色受渲染器 `isSafeCss` 与 Host 保守校验约束。
-- 验证（系统性修复后）：Node **508/508**；浏览器 9/9；artifact-edit **282 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-selected-block.png`。
+- 验证（系统性修复后）：Node **508/508**；浏览器 9/9；artifact-edit **282 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
 
 ## 0.33 系统性修复（2026-11-07，工作树）
 
@@ -638,4 +638,13 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **293 checks**；nested 75；client CSS 206.5 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.97 MB。
+- 验证：Node **509/509**；浏览器 9/9；artifact-edit **300 checks**；nested 75；client CSS 208.5 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.25 MB / 10.98 MB。
+
+## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
+
+- 反馈：列表行和画布的区块难以对应；希望 hover 联动；编辑某个区块时聚焦（其余压暗）；Save 指令后不应保留大选中框；跑马灯在结束编辑后恢复；并确认动画不叫“跑马灯”。
+- 实现：`ArtifactEditView` 提升 `hoveredBlockId`，`EditPanel` 行与 `BlockOverlay` 双向同步 hover；画布给根层常显页面顺序号、嵌套块 hover 时显示，行内显示同一序号；行尾新增「定位」按钮（保留点击行主体定位 + 900ms 脉冲）。
+- 编辑聚焦：打开任一区块编辑器时，`BlockOverlay` 给非相关区块画 scrim（同祖先链的区块不压暗），当前块保留编辑框；Save/Cancel 关闭后 scrim 消失。
+- pending 状态：`selection` 数据保持不变，但 Save 后不再绘制大选中框/工具；改为「圆点 + 请求序号」的 pending 标记；pending 根层的 orbit glow 降速（5.2s）、变淡（0.3）；无 pending 的根层恢复普通 orbit glow。确定性 Apply/结构操作仍记录修订并退出编辑（1A）。
+- 术语：`marquee` 改为 `orbit glow`（CSS 类 `dsh-iui-block-orbit`，保留 `dsh-iui-block-marquee` 兼容别名；`--dsh-iui-orbit-angle`/`@keyframes dsh-iui-block-orbit`），文档统一称「轨道光晕 / orbit glow」。
+- 验证：Node **509/509**；浏览器 9/9；artifact-edit **300 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
