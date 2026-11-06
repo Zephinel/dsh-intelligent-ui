@@ -619,7 +619,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - Host：`artifact-structure` 路由新增 `props` 操作；校验节点组件（仅 Divider/Spacer）与属性，经 `replaceNodeContent` 原子应用，复用幂等/CAS/分支/修订记录。测试覆盖根/嵌套目标、preview、幂等与全部拒绝路径。
 - 客户端：popover 在 Divider/Spacer 上显示快捷调整控件（`QuickBlockProps`）；改动写入 `propsPreview` 并重新包裹渲染实现**画布实时预览**；应用时发 `props` 请求，成功后出现「属性调整修订」本地卡片（local revision kind `props`），失败在 popover 内提示；存在未发送的指令/排序/整体说明时拒绝应用并提示先发送或清除。
 - 限制：仅 Divider/Spacer 的上述属性；这两类块不再显示模型指令 textarea（已保存指令仍在请求列表）；属性修订卡与其他本地修订一致，不参与导出；自定义颜色受渲染器 `isSafeCss` 与 Host 保守校验约束。
-- 验证（系统性修复后）：Node **508/508**；浏览器 9/9；artifact-edit **282 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
+- 验证（系统性修复后）：Node **508/508**；浏览器 9/9；artifact-edit **282 checks**（快捷面板、画布预览、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.24 MB / 10.96 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
 
 ## 0.33 系统性修复（2026-11-07，工作树）
 
@@ -629,7 +629,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - **属性安全**：新增 `describeArtifactBlockPropsSupport`：只有全部属性都是字面量且在当前快捷值域（颜色 token/CSS 颜色；px/%/auto 长度；0.5–12 粗细）时才显示快捷面板；动态绑定或 rem/calc 等超范围值回退到指令编辑器并说明原因，绝不静默丢属性。已保存指令的 Divider/Spacer 同样回退到指令模式。控件改为本地 UI 状态（单位/未输完的数字不再把画布宽度写成 0）；未修改时 Apply 禁用；客户端与 Host 都拒绝 no-op 属性修订；结构路由的 operation digest 现在包含 `props` 与 `toParentNodeId`；同一批操作里重复目标节点直接 `operation_conflict`。
 - **匿名块排序身份**：`targetOrder` 归一化在“statement → 标题+类型 → 唯一标题”之后增加“唯一内容 digest + 组件类型”匹配，最后才按页面顺序兜底（只对字节相同的可互换块生效）；嵌套 `orderByParent` 的 `mapChildIds` 同样先按 digest 匹配，再退回 childIndex。
 - **状态与一致性**：快捷调整的未发送拦截统一用 `hasArtifactEditContent`（补上 `nestedOrderChanged`）；嵌套模式也渲染 `propsPreview`；嵌套面板 kind 复用共享映射（Divider/Spacer/Toc/Title/Caption 不再显示成“内容”）；异步结构/属性失败回写当前 session 而不是请求前快照；快捷控件打开即聚焦、补齐 `edit.propsUnit`、完整 20 个颜色 token、`aria-busy`、busy/失效/无变化文案。
-- **验证**：Node **508/508**（新增 6 条 shared/client quick-adjust+identity 单测、1 条匿名 digest 排序测试、2 条 Host props no-op/digest/批冲突测试）；浏览器 9/9；artifact-edit **282 checks**（布局 parity、嵌套 preview、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.24 MB / 10.96 MB。
+- **验证**：Node **508/508**（新增 6 条 shared/client quick-adjust+identity 单测、1 条匿名 digest 排序测试、2 条 Host props no-op/digest/批冲突测试）；浏览器 9/9；artifact-edit **282 checks**（布局 parity、嵌套 preview、dirty 拦截、动态回退、apply 禁用/焦点）；nested 75；client CSS 203.0 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.24 MB / 10.96 MB。
 
 ## 0.34 大页面预算 + 自绘快捷控件（2026-11-07，工作树）
 
@@ -638,7 +638,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75；client CSS 211.3 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.25 MB / 10.99 MB。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **313 checks**；nested 75；client CSS 211.8 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.25 MB / 10.99 MB。
 
 ## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
 
@@ -647,7 +647,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 编辑聚焦：打开任一区块编辑器时，`BlockOverlay` 给非相关区块画 scrim（同祖先链的区块不压暗），当前块保留编辑框；Save/Cancel 关闭后 scrim 消失。
 - pending 状态：`selection` 数据保持不变，但 Save 后不再绘制大选中框/工具；改为「圆点 + 请求序号」的 pending 标记；pending 根层的 orbit glow 降速（5.2s）、变淡（0.3）；无 pending 的根层恢复普通 orbit glow。确定性 Apply/结构操作仍记录修订并退出编辑（1A）。
 - 术语：`marquee` 改为 `orbit glow`（CSS 类 `dsh-iui-block-orbit`，保留 `dsh-iui-block-marquee` 兼容别名；`--dsh-iui-orbit-angle`/`@keyframes dsh-iui-block-orbit`），文档统一称「轨道光晕 / orbit glow」。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **313 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
 
 ## 0.36 编排行 unslop、Locate 图标、模式说明与嵌套映射（2026-11-07，工作树）
 
@@ -657,7 +657,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 工具栏文案：按钮改为「显示嵌套区块 / 仅顶层区块」；banner 分模式说明顶层 vs 嵌套；严格保护提示说明会拒绝未选中顶层区块的改动且请求保持待处理。
 - 嵌套映射：嵌套行 hover ↔ 画布嵌套块双向高亮；嵌套块 hover 时显示 `1.2.1` 形式的页面地址；嵌套行 Locate 按钮与行主体点击都能定位并触发 flash；E2E 覆盖。
 - base_missing：旧卡片（本机 registry 只有 15 条程序，该 Solid 2.0 导览程序不在其中）无法做确定性写入；客户端捕获后把快捷面板切换为指令编辑并显示解释（可改用模型编辑或重新渲染页面）。未实现“把当前页面注册为权威 base”的 adopt 路由。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **313 checks**；nested 75。
 
 ## 0.37 工具栏模式说明、自定义 tooltip、动作按钮与定位图标修正（2026-11-07，工作树）
 
@@ -667,4 +667,10 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 动作按钮：显示条件从 `:focus-within` 改为 `:has(:focus-visible)`，所以鼠标点击行主体/定位后即使焦点留在行内，指针离开后动作按钮也会隐藏；键盘 focus 仍会显示。
 - 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`，恢复 `focus-3-line`，并在 E2E 断言 path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
 - 旧页面 base_missing：新增 E2E mock（404 `base_missing`）验证快捷面板切换为指令编辑器并显示“权威版本记录之前”的说明；恢复 fetch 后退出。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **313 checks**；nested 75。
+
+## 0.38 统一「退出编辑」按钮（2026-11-07，工作树）
+
+- 反馈：卡片头部的「退出编辑」是蓝色描边/蓝色文字的 pressed 样式，和工具栏、编辑面板头部的退出按钮不一致。
+- 修复：给卡片头部退出按钮、编辑视图工具栏退出/窄屏退出、面板头部退出统一加 `.dsh-iui-edit-exit`；共享同一套中性描边按钮样式（26px 高、10px 横内边距、layer-1 背景、border-l2 边框、label-primary 文字、悬停 interactive-hover、focus ring）。移除卡片头部 `aria-pressed=true` 的蓝色覆盖；`aria-pressed` 语义保留，只影响状态播报，不影响视觉。
+- 验证：E2E 断言至少 3 个退出按钮共享 `.dsh-iui-edit-exit`，且卡片头部退出按钮边框不再是 business-primary 蓝色；Node/浏览器全量回归。
