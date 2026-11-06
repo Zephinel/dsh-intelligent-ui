@@ -638,7 +638,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **311 checks**；nested 75；client CSS 210.0 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.25 MB / 10.99 MB。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75；client CSS 211.3 kB；standalone 3.32 MB + 512.2 kB；pack 44 files 4.25 MB / 10.99 MB。
 
 ## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
 
@@ -647,7 +647,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 编辑聚焦：打开任一区块编辑器时，`BlockOverlay` 给非相关区块画 scrim（同祖先链的区块不压暗），当前块保留编辑框；Save/Cancel 关闭后 scrim 消失。
 - pending 状态：`selection` 数据保持不变，但 Save 后不再绘制大选中框/工具；改为「圆点 + 请求序号」的 pending 标记；pending 根层的 orbit glow 降速（5.2s）、变淡（0.3）；无 pending 的根层恢复普通 orbit glow。确定性 Apply/结构操作仍记录修订并退出编辑（1A）。
 - 术语：`marquee` 改为 `orbit glow`（CSS 类 `dsh-iui-block-orbit`，保留 `dsh-iui-block-marquee` 兼容别名；`--dsh-iui-orbit-angle`/`@keyframes dsh-iui-block-orbit`），文档统一称「轨道光晕 / orbit glow」。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **311 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
 
 ## 0.36 编排行 unslop、Locate 图标、模式说明与嵌套映射（2026-11-07，工作树）
 
@@ -657,14 +657,14 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 工具栏文案：按钮改为「显示嵌套区块 / 仅顶层区块」；banner 分模式说明顶层 vs 嵌套；严格保护提示说明会拒绝未选中顶层区块的改动且请求保持待处理。
 - 嵌套映射：嵌套行 hover ↔ 画布嵌套块双向高亮；嵌套块 hover 时显示 `1.2.1` 形式的页面地址；嵌套行 Locate 按钮与行主体点击都能定位并触发 flash；E2E 覆盖。
 - base_missing：旧卡片（本机 registry 只有 15 条程序，该 Solid 2.0 导览程序不在其中）无法做确定性写入；客户端捕获后把快捷面板切换为指令编辑并显示解释（可改用模型编辑或重新渲染页面）。未实现“把当前页面注册为权威 base”的 adopt 路由。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
 
 ## 0.37 工具栏模式说明、自定义 tooltip、动作按钮与定位图标修正（2026-11-07，工作树）
 
 - 反馈：顶部“显示嵌套区块 / 仅顶层”按钮与下方状态 banner 一个说动作一个说状态，中间产生奇怪的 Gap；严格保护没有说明；定位图标在 Remix 里确实存在；点击行主体定位后鼠标离开面板，动作按钮仍然显示。
-- 工具栏：增加 `当前：顶层 / 当前：嵌套` 状态文字；按钮改为动作文案「显示嵌套区块 / 回到顶层区块」；banner 改为静态“编辑模式：点击区块……”；严格保护按钮显示开关状态（严格保护 · 开/关）。不再使用原生 title tooltip。
+- 工具栏：控件改为复合按钮组「状态 | 动作 + chevron | ⓘ」，看起来像按钮而不是输入框：层级组显示 `顶层/嵌套` + 动作「显示嵌套区块 / 回到顶层区块」；严格保护组显示状态圆点 + 标签 + 开/关。信息图标放进控件组内部，使用自定义 tooltip；banner 改为静态提示。不再使用原生 title tooltip。
 - 新增 `InfoTip` 组件：信息图标 + portaled 自定义 tooltip（surface/边框/阴影主题化，hover/focus/click 打开，Escape/滚动/resize 处理，aria-describedby）。两个控件各带一个说明 tooltip；E2E 覆盖 tooltip 文本与关闭。
 - 动作按钮：显示条件从 `:focus-within` 改为 `:has(:focus-visible)`，所以鼠标点击行主体/定位后即使焦点留在行内，指针离开后动作按钮也会隐藏；键盘 focus 仍会显示。
-- 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`，恢复 `focus-3-line`，并在 E2E 断言 path 非空。
+- 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`，恢复 `focus-3-line`，并在 E2E 断言 path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
 - 旧页面 base_missing：新增 E2E mock（404 `base_missing`）验证快捷面板切换为指令编辑器并显示“权威版本记录之前”的说明；恢复 fetch 后退出。
-- 验证：Node **509/509**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **311 checks**；nested 75。
