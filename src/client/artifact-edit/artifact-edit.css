@@ -16,6 +16,82 @@
  * its block, in both schemes.
  */
 
+/* Compound toolbar controls: state | action | info, one button-like group. */
+.dsh-iui-edit-control-group {
+  display: inline-flex;
+  flex: none;
+  align-items: stretch;
+  height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.dsh-iui-edit-control-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-control-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-control-main:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-control-main:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.dsh-iui-edit-control-main:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-edit-control-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-border-l3);
+}
+
+.dsh-iui-edit-control-dot[data-on='true'] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.dsh-iui-edit-control-value {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.dsh-iui-edit-control-group .dsh-iui-info-tip-trigger {
+  width: 26px;
+  height: auto;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0;
+}
+
 /* Quiet mode indicator and plugin-drawn info tooltips. */
 .dsh-iui-edit-mode-state {
   flex: none;

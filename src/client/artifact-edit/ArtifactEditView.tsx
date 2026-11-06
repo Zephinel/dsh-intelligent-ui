@@ -16,6 +16,7 @@ import { BlockSlotContext, BlockSlotPathContext, type BlockSlotContextValue } fr
 import { wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { OpenUIRenderer } from '../../lib/render.tsx'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditViewProps } from './contracts.ts'
+import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import { BlockOverlay } from './BlockOverlay.tsx'
 import { InfoTip } from './InfoTip.tsx'
 import { BlockPopover } from './BlockPopover.tsx'
@@ -178,30 +179,39 @@ export function ArtifactEditView({
           {session.orderChanged ? <span className="dsh-iui-edit-preview" data-dsh-iui-edit-preview>{t('edit.previewOrder')}</span> : null}
           {canNest
             ? (
-              <>
-                <span className="dsh-iui-edit-mode-state" data-dsh-iui-edit-mode-state>
-                  {session.nestedMode === true ? t('edit.modeNested') : t('edit.modeTop')}
+              <span className="dsh-iui-edit-control-group" data-dsh-iui-edit-level-control>
+                <span className="dsh-iui-edit-control-state" data-dsh-iui-edit-mode-state>
+                  {session.nestedMode === true ? t('edit.modeNestedShort') : t('edit.modeTopShort')}
                 </span>
                 <button
                   type="button"
-                  className="dsh-iui-edit-button"
+                  className="dsh-iui-edit-control-main"
                   data-dsh-iui-edit-nested
                   aria-pressed={session.nestedMode === true}
                   onClick={() => { actions.setNestedMode(session.key, session.nestedMode !== true) }}
-                >{session.nestedMode === true ? t('edit.switchToTop') : t('edit.switchToNested')}</button>
+                >
+                  <span>{session.nestedMode === true ? t('edit.switchToTop') : t('edit.switchToNested')}</span>
+                  <RemixIcon name={session.nestedMode === true ? 'arrow-up-s-line' : 'arrow-down-s-line'} size={12} />
+                </button>
                 <InfoTip label={t('edit.aboutNested')} text={t('edit.nestedHint')} testId="nested" />
-              </>
+              </span>
             )
             : null}
-          <button
-            type="button"
-            className="dsh-iui-edit-button dsh-iui-edit-strict"
-            data-dsh-iui-edit-strict
-            aria-pressed={session.strict === true}
-            disabled={session.status === 'submitted' || session.status === 'error'}
-            onClick={() => { actions.setStrictMode(session.key, session.strict !== true) }}
-          >{session.strict === true ? t('edit.strictEnabled') : t('edit.strictDisabled')}</button>
-          <InfoTip label={t('edit.aboutStrict')} text={t('edit.strictHint')} testId="strict" />
+          <span className="dsh-iui-edit-control-group" data-dsh-iui-edit-strict-control>
+            <button
+              type="button"
+              className="dsh-iui-edit-control-main"
+              data-dsh-iui-edit-strict
+              aria-pressed={session.strict === true}
+              disabled={session.status === 'submitted' || session.status === 'error'}
+              onClick={() => { actions.setStrictMode(session.key, session.strict !== true) }}
+            >
+              <span className="dsh-iui-edit-control-dot" data-on={session.strict === true ? 'true' : undefined} aria-hidden="true" />
+              <span>{t('edit.strictOn')}</span>
+              <span className="dsh-iui-edit-control-value">{session.strict === true ? t('edit.on') : t('edit.off')}</span>
+            </button>
+            <InfoTip label={t('edit.aboutStrict')} text={t('edit.strictHint')} testId="strict" />
+          </span>
           <span className="dsh-iui-edit-toolbar-spacer" />
           <button
             type="button"

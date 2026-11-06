@@ -224,6 +224,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await hover('[data-dsh-iui-info-tip="nested"]')
   await wait('!!document.querySelector("[data-dsh-iui-info-tooltip]")', 'nested info tooltip')
   check((await text('[data-dsh-iui-info-tooltip]')).includes('嵌套'), true, 'the nested-mode tooltip explains the two levels')
+  await new Promise(resolve => setTimeout(resolve, 420))
   await shot('harness-toolbar-tooltip.png')
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
   await wait('!document.querySelector("[data-dsh-iui-info-tooltip]")', 'nested tooltip closes')
