@@ -636,7 +636,6 @@
   min-height: 0;
   max-height: 62vh;
   max-height: 62dvh;
-  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -666,7 +665,6 @@
     width: var(--dsh-iui-edit-panel-width, clamp(272px, calc((100vw - var(--dsh-chat-content-width, 748px)) / 2 + 16px), 360px));
     transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
     max-height: none;
-    border: 1px solid var(--dsw-alias-border-l1);
     border-radius: 16px;
     box-shadow: 0 18px 48px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 8%);
     animation-name: dsh-iui-edit-panel-in-desktop;

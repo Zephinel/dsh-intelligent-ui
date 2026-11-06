@@ -221,6 +221,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 9', 'nine blocks')
   check(await count('[data-dsh-iui-block]'), 9, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-panel')).borderTopWidth`), '0px', 'the floating edit panel has no outer border')
   check(await count('.dsh-iui-edit-divider'), 1, 'the panel uses one explicit separator before the global instruction')
   check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-global')).borderTopWidth`), '0px', 'the global section does not paint a second separator')
   check(await count('.dsh-iui-edit-exit'), 2, 'card and panel headers share the exit style')
