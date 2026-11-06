@@ -5,6 +5,7 @@
  */
 import type { CSSProperties } from 'react'
 import type { Translate } from '../../shared/locales.ts'
+import type { ArtifactBlockPropComponent, ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import type { RenderLayout } from '../../shared/intelligent-ui.ts'
 import type { StyleSnapshot } from '../../shared/style-templates.ts'
@@ -135,12 +136,28 @@ export interface ArtifactEditSession {
   readonly structurePreview?: ArtifactStructurePreviewState
   /** Pending model-generated additions, one per target container in v1. */
   readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[]
+  /** Canvas-only property preview for one quick-adjustable block (Divider/Spacer). */
+  readonly propsPreview?: ArtifactBlockPropsPreview
+  /** Property adjustment request in flight. */
+  readonly propsBusy?: boolean
+  /** Last property adjustment failure, shown in the quick-adjust popover. */
+  readonly propsError?: string
   /** Structural operation request in flight; row actions are disabled meanwhile. */
   readonly structureBusy?: boolean
   /** Last structural operation failure, shown inline in the arrangement panel. */
   readonly structureError?: string
   /** Most recent removal, offered as an inline undo in the panel. */
   readonly removable?: { readonly blockId: string; readonly order: number; readonly instruction: string; readonly title?: string }
+}
+
+/** Canvas-only preview of one quick-adjustable block's pending properties. */
+export interface ArtifactBlockPropsPreview {
+  readonly blockId: string
+  readonly nodeId: string
+  readonly componentType: ArtifactBlockPropComponent
+  readonly props: ArtifactBlockProps
+  /** Base program with the block's definition rewritten for preview rendering. */
+  readonly program: string
 }
 
 /** Actions the edit view invokes; all state transitions stay in the store. */
@@ -155,6 +172,12 @@ export interface ArtifactEditActions {
   saveBlockInstruction(blockId: string, text: string): void
   /** Remove the saved request but keep the block selected. */
   clearBlockInstruction(blockId: string): void
+  /** Preview a Divider/Spacer property bag on the canvas without recording it. */
+  previewBlockProps(blockId: string, props: ArtifactBlockProps): void
+  /** Drop the canvas-only property preview. */
+  clearBlockPropsPreview(): void
+  /** Apply one Divider/Spacer property bag through the deterministic Host route. */
+  applyBlockProps(blockId: string, props: ArtifactBlockProps): void
   /** Remove the block from this edit session (deselect). */
   removeSelection(blockId: string): void
   /** Undo the latest removal. */

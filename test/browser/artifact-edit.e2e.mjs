@@ -17,6 +17,7 @@ import { build } from 'esbuild'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 import { DST_PROGRAM } from './fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM } from './fixtures/nested-artifact.ts'
+import { PROPS_PROGRAM_APPLIED } from './fixtures/props-artifact.ts'
 import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
 
 const root = new URL('../../', import.meta.url).pathname
@@ -1088,6 +1089,105 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'panel exit editor')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'panel exit closes the editor')
+
+  // 30. Divider/Spacer quick adjust: canvas preview + deterministic property revision.
+  await read('window.__addPropsCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-1"]\')', 'props card')
+  await click('[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'props editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'four prop blocks')
+  await click('[data-dsh-iui-block="b2"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'quick props panel')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Divider', 'Divider blocks show the quick-adjust panel')
+  check(await count('[data-dsh-iui-edit-instruction]'), 0, 'quick-adjust blocks do not show the model textarea')
+  const setSelectValue = async (selector, value) => read(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`)
+  const setInputValue = async (selector, value) => read(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`)
+  await setSelectValue('[data-dsh-iui-edit-prop="color"] select', 'info')
+  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', '%')
+  await setInputValue('[data-dsh-iui-edit-prop="width"] input', '60')
+  await setInputValue('[data-dsh-iui-edit-prop="thickness"] input', '2')
+  await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('60%')`, 'divider preview width')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-view]').getAttribute('data-dsh-iui-edit-props-preview')`), 'b2', 'the canvas reports the previewed block')
+  const dividerPreview = await read(`(() => {
+    const hr = document.querySelector('[data-dsh-iui-block="b2"] hr');
+    const cs = getComputedStyle(hr);
+    return { border: cs.borderTopWidth, style: hr.getAttribute('style') ?? '' };
+  })()`)
+  check(dividerPreview.border, '2px', 'the canvas preview paints the new divider thickness')
+  check(dividerPreview.style.includes('var(--iui-info)'), true, 'the canvas preview keeps the theme token colour')
+  await read(`(() => {
+    window.__propCalls = [];
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__propCalls.push(body);
+        const revision = window.__propCalls.length + 1;
+        const result = {
+          artifactId: 'props-call-1',
+          revisionId: 'struct_props_' + revision,
+          baseRevisionId: body.baseRevisionId,
+          revision,
+          operationId: body.operationId,
+          program: ${JSON.stringify(PROPS_PROGRAM_APPLIED)},
+          title: '属性调整样例',
+          style: 'card',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return original(input, init);
+    };
+    return true;
+  })()`)
+  const localBefore = await count('[data-dsh-iui-local-revision]')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBefore + 1}`, 'property revision card')
+  check((await read(`[...document.querySelectorAll('[data-dsh-iui-local-revision]')].at(-1).textContent`)).includes('属性调整修订'), true, 'the local card is labelled as a property revision')
+  const propCalls = await read('window.__propCalls')
+  check(propCalls.length, 1, 'one deterministic property request was sent')
+  check(propCalls[0].operations[0].op, 'props', 'the request carries a props operation')
+  check(typeof propCalls[0].operations[0].nodeId, 'string', 'the request carries the CST node id')
+  check(propCalls[0].operations[0].props.color, 'info', 'the request carries the chosen colour')
+  check(propCalls[0].operations[0].props.width, '60%', 'the request carries the width')
+  check(propCalls[0].operations[0].props.thickness, 2, 'the request carries the thickness')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after applying properties')
+
+  // Spacer width/height through the same quick-adjust panel.
+  await click('[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'spacer editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'spacer blocks')
+  await click('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'spacer quick props')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'Spacer blocks show width and height controls')
+  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', 'px')
+  await setInputValue('[data-dsh-iui-edit-prop="width"] input', '12')
+  await setSelectValue('[data-dsh-iui-edit-prop="height"] select', 'auto')
+  await wait(`document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer')?.getAttribute('style')?.includes('12px')`, 'spacer preview width')
+  const spacerPreview = await read(`(() => {
+    const spacer = document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer');
+    return { width: getComputedStyle(spacer).width, style: spacer.getAttribute('style') ?? '' };
+  })()`)
+  check(spacerPreview.width, '12px', 'the canvas preview paints the new spacer width')
+  check(spacerPreview.style.includes('auto'), true, 'the canvas preview keeps the auto height')
+  const localBeforeSpacer = await count('[data-dsh-iui-local-revision]')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeSpacer + 1}`, 'second property revision card')
+  const propCallsAfter = await read('window.__propCalls')
+  check(propCallsAfter.length, 2, 'the spacer request was sent too')
+  check(propCallsAfter[1].operations[0].props.width, 12, 'the spacer request carries the px width')
+  check(propCallsAfter[1].operations[0].props.height, 'auto', 'the spacer request carries the auto height')
+  await shot('harness-quick-props.png')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

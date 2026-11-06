@@ -24,7 +24,7 @@ import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-template
 /** One locally recorded revision restored or structurally derived without a model turn. */
 export interface LocalArtifactRevision {
   /** How the revision was produced; absent in older restore records. */
-  readonly kind?: 'restore' | 'structure'
+  readonly kind?: 'restore' | 'structure' | 'props'
   readonly artifactId: string
   readonly sourceRevisionId: string
   readonly revisionId: string
@@ -154,6 +154,7 @@ export function localRevisionProgram(revision: LocalArtifactRevision): Intellige
     revision: revision.revision,
     localRevision: true,
     ...revision.kind === 'structure' ? { localRevisionKind: 'structure' as const } : {},
+    ...revision.kind === 'props' ? { localRevisionKind: 'props' as const } : {},
     running: false,
   }
 }

@@ -52,6 +52,9 @@ import {
   moveArtifactNestedBlock,
   moveArtifactNestedBlockBy,
   moveArtifactBlockTo,
+  applyArtifactBlockProps,
+  clearArtifactBlockPropsPreview,
+  previewArtifactBlockProps,
   cancelArtifactStructurePreview,
   confirmArtifactStructurePreview,
   previewArtifactStructure,
@@ -329,6 +332,9 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     updateBlockDraft: (blockId, text) => { updateArtifactBlockDraft(editKey, blockId, text) },
     saveBlockInstruction: (blockId, text) => { saveArtifactBlockInstruction(editKey, blockId, text) },
     clearBlockInstruction: blockId => { clearArtifactBlockInstruction(editKey, blockId) },
+    previewBlockProps: (blockId, props) => { previewArtifactBlockProps(editKey, blockId, props) },
+    clearBlockPropsPreview: () => { clearArtifactBlockPropsPreview(editKey) },
+    applyBlockProps: (blockId, props) => { void applyArtifactBlockProps(editKey, blockId, props, turnNumber) },
     removeSelection: blockId => { removeArtifactSelection(editKey, blockId) },
     undoRemove: () => { undoArtifactRemove(editKey) },
     moveBlock: (blockId, toIndex) => { moveArtifactBlock(editKey, blockId, toIndex) },
@@ -465,7 +471,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               >{t('edit.attachDraft')}</button>
             : null}
           {program.localRevision === true
-            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t(program.localRevisionKind === 'structure' ? 'edit.structureRevision' : 'edit.localRevision')}</span>
+            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t(program.localRevisionKind === 'structure' ? 'edit.structureRevision' : program.localRevisionKind === 'props' ? 'edit.propsRevision' : 'edit.localRevision')}</span>
             : null}
           {restoreState === 'available'
             ? <button

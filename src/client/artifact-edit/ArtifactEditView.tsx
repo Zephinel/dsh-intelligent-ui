@@ -100,12 +100,19 @@ export function ArtifactEditView({
   // the edit canvas only, while the stored revision and the exported card keep
   // their real order until the user sends the request.
   const program = useMemo(() => {
-    if (!session.orderChanged) return session.wrappedProgram ?? session.program
+    const preview = session.propsPreview?.program
+    if (preview === undefined && !session.orderChanged) return session.wrappedProgram ?? session.program
+    // The preview program keeps every root child in place, so the base
+    // extraction/ids still address the same blocks when rewrapping.
     const extraction = blocksForProgram(session.program)
-    return wrapProgramForBlockEditing(session.program, extraction, session.targetOrder)
+    return wrapProgramForBlockEditing(
+      preview ?? session.program,
+      extraction,
+      session.orderChanged ? session.targetOrder : undefined,
+    )
       ?? session.wrappedProgram
       ?? session.program
-  }, [session.program, session.wrappedProgram, session.orderChanged, session.targetOrder])
+  }, [session.program, session.wrappedProgram, session.orderChanged, session.targetOrder, session.propsPreview])
 
   // One stable context value per session patch; the block wrapper reads it
   // during render, so selection changes must produce a new object.
@@ -159,7 +166,7 @@ export function ArtifactEditView({
   }
 
   return (
-    <div className="dsh-iui-edit-view" data-dsh-iui-edit-view data-dsh-iui-edit-scheme={scheme} data-closing={closing ? 'true' : undefined}>
+    <div className="dsh-iui-edit-view" data-dsh-iui-edit-view data-dsh-iui-edit-scheme={scheme} data-dsh-iui-edit-props-preview={session.propsPreview?.blockId} data-closing={closing ? 'true' : undefined}>
       <div className="dsh-iui-edit-toolbar">
         <div className="dsh-iui-edit-toolbar-row">
           <span className="dsh-iui-edit-toolbar-title">{t('edit.title')}</span>

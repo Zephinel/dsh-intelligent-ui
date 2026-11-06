@@ -15,6 +15,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
+import { QuickBlockProps } from './QuickBlockProps.tsx'
+import { blockPropsState } from './store.ts'
+import type { ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { Translate } from '../../shared/locales.ts'
 
 /** Props of the block instruction popover. */
@@ -78,6 +81,14 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
 
   const block = session.blocks.find(candidate => candidate.blockId === blockId)
   const entry = session.selection.find(candidate => candidate.blockId === blockId)
+  // Divider/Spacer use deterministic quick-adjust fields instead of a model
+  // instruction: the Host rewrites that one definition and records a revision.
+  const quickState = block !== undefined && (block.componentType === 'Divider' || block.componentType === 'Spacer')
+    ? blockPropsState(session, blockId)
+    : undefined
+  const quick = quickState !== undefined
+  const [propsDraft, setPropsDraft] = useState<ArtifactBlockProps>({})
+  const propsDraftRef = useRef<ArtifactBlockProps>({})
   const order = entry?.order ?? 1
   const savedInstruction = entry?.instruction.trim() ?? ''
   const kindLabel = blockKindLabel(block?.kind ?? 'content', t)
@@ -139,6 +150,18 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
     previousBlock.current = blockId
     textarea.current?.focus({ preventScroll: true })
   }, [blockId])
+
+  useEffect(() => {
+    if (quickState === undefined) return
+    propsDraftRef.current = quickState.props
+    setPropsDraft(quickState.props)
+    // Keyed by node identity: preview updates republish the session but keep
+    // the same base program, so the draft is not reset while the user drags.
+  }, [quickState?.nodeId, blockId])
+
+  useEffect(() => () => {
+    if (quick) actions.clearBlockPropsPreview()
+  }, [actions, quick])
 
   // Focus bookkeeping: closing from the popover returns focus to the block.
   useEffect(() => () => {
@@ -219,28 +242,50 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
           </div>
         </dl>
 
-        <label className="dsh-iui-edit-popover-label" htmlFor={textareaId}>{t('edit.instruction')}</label>
-        <textarea
-          ref={textarea}
-          id={textareaId}
-          className="dsh-iui-edit-textarea"
-          data-dsh-iui-edit-instruction
-          rows={4}
-          maxLength={2000}
-          autoFocus
-          value={session.activeDraft}
-          placeholder={t('edit.instructionPlaceholder')}
-          onChange={event => { actions.updateBlockDraft(blockId, event.target.value) }}
-        />
-        {savedInstruction === '' ? null : (
-          <button
-            type="button"
-            className="dsh-iui-edit-link dsh-iui-edit-popover-clear"
-            data-dsh-iui-edit-clear
-            onClick={() => { setDiscardConfirm(false); actions.clearBlockInstruction(blockId) }}
-          >
-            {t('edit.clear')}
-          </button>
+        {quick && quickState !== undefined ? (
+          <>
+            <span className="dsh-iui-edit-popover-label">{t('edit.propsTitle')}</span>
+            <QuickBlockProps
+              t={t}
+              componentType={quickState.componentType}
+              props={propsDraft}
+              onChange={update => {
+                const next = update(propsDraftRef.current)
+                propsDraftRef.current = next
+                setPropsDraft(next)
+                actions.previewBlockProps(blockId, next)
+              }}
+            />
+            {session.propsError === undefined ? null : (
+              <p className="dsh-iui-edit-props-error" role="alert" data-dsh-iui-edit-props-error>{session.propsError}</p>
+            )}
+          </>
+        ) : (
+          <>
+            <label className="dsh-iui-edit-popover-label" htmlFor={textareaId}>{t('edit.instruction')}</label>
+            <textarea
+              ref={textarea}
+              id={textareaId}
+              className="dsh-iui-edit-textarea"
+              data-dsh-iui-edit-instruction
+              rows={4}
+              maxLength={2000}
+              autoFocus
+              value={session.activeDraft}
+              placeholder={t('edit.instructionPlaceholder')}
+              onChange={event => { actions.updateBlockDraft(blockId, event.target.value) }}
+            />
+            {savedInstruction === '' ? null : (
+              <button
+                type="button"
+                className="dsh-iui-edit-link dsh-iui-edit-popover-clear"
+                data-dsh-iui-edit-clear
+                onClick={() => { setDiscardConfirm(false); actions.clearBlockInstruction(blockId) }}
+              >
+                {t('edit.clear')}
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -265,14 +310,27 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
         ) : (
           <div className="dsh-iui-edit-popover-actions">
             <button type="button" className="dsh-iui-edit-button" data-dsh-iui-edit-cancel onClick={requestClose}>{t('edit.cancel')}</button>
-            <button
-              type="button"
-              className="dsh-iui-edit-button dsh-iui-edit-button-primary"
-              data-dsh-iui-edit-save
-              onClick={() => { actions.saveBlockInstruction(blockId, session.activeDraft) }}
-            >
-              {t('edit.save')}
-            </button>
+            {quick ? (
+              <button
+                type="button"
+                className="dsh-iui-edit-button dsh-iui-edit-button-primary"
+                data-dsh-iui-edit-save
+                data-dsh-iui-edit-props-apply
+                disabled={session.propsBusy === true || session.structureBusy === true}
+                onClick={() => { actions.applyBlockProps(blockId, propsDraft) }}
+              >
+                {session.propsBusy === true || session.structureBusy === true ? t('edit.propsBusy') : t('edit.propsApply')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="dsh-iui-edit-button dsh-iui-edit-button-primary"
+                data-dsh-iui-edit-save
+                onClick={() => { actions.saveBlockInstruction(blockId, session.activeDraft) }}
+              >
+                {t('edit.save')}
+              </button>
+            )}
           </div>
         )}
       </div>

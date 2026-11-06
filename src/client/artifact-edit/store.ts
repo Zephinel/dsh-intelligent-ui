@@ -36,6 +36,14 @@ import {
   type ArtifactEditRequest,
 } from '../../shared/artifact-edit.ts'
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
+import { buildArtifactTree, replaceNodeContent } from '../../shared/program-cst.ts'
+import {
+  artifactBlockPropsFromNode,
+  describeArtifactBlockPropsProblem,
+  isArtifactBlockPropComponent,
+  serializeArtifactBlockProps,
+  type ArtifactBlockProps,
+} from '../../shared/artifact-block-props.ts'
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
@@ -43,7 +51,7 @@ import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
-import type { ArtifactEditSession, ArtifactStructurePreviewLine, OpenEditorResult } from './contracts.ts'
+import type { ArtifactBlockPropsPreview, ArtifactEditSession, ArtifactStructurePreviewLine, OpenEditorResult } from './contracts.ts'
 
 /** Composer integration the store talks to; registered by the chip module. */
 export interface ArtifactComposerBridge {
@@ -875,6 +883,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       activeDirty: false,
       drawerOpen: false,
       error: undefined,
+      propsPreview: undefined,
+      propsError: undefined,
+      propsBusy: false,
     }))
     if (existing.status === 'conflict') {
       patch(key, session => ({ ...session, status: 'checking', error: undefined }))
@@ -949,6 +960,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     strict: false,
     structureBusy: false,
     structureError: undefined,
+    propsPreview: undefined,
+    propsError: undefined,
+    propsBusy: false,
     status: 'checking',
     editing: true,
     activeBlockId: undefined,
@@ -977,7 +991,7 @@ export function closeArtifactEditor(key: string): void {
     sessions.delete(key)
     removeReference(key)
   } else {
-    sessions.set(key, { ...session, editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false })
+    sessions.set(key, { ...session, editing: false, activeBlockId: undefined, activeDraft: '', activeDirty: false, drawerOpen: false, propsPreview: undefined, propsError: undefined })
   }
   publish()
   scheduleChipSync(session.sessionId, true)
@@ -1008,6 +1022,8 @@ export function openArtifactBlockEditor(key: string, blockId: string): void {
       activeBlockId: blockId,
       activeDraft: instructionFor(session, blockId),
       activeDirty: false,
+      propsPreview: session.propsPreview?.blockId === blockId ? session.propsPreview : undefined,
+      propsError: undefined,
     }
   })
 }
@@ -1019,6 +1035,8 @@ export function closeArtifactBlockEditor(key: string): void {
     activeBlockId: undefined,
     activeDraft: '',
     activeDirty: false,
+    propsPreview: undefined,
+    propsError: undefined,
   })
 }
 
@@ -1519,12 +1537,148 @@ export function cancelArtifactStructurePreview(key: string): void {
   publish()
 }
 
+/** One structural block whose properties the quick adjust controls can rewrite. */
+export interface BlockPropsState {
+  readonly blockId: string
+  readonly nodeId: string
+  readonly sourceDigest: string
+  readonly componentType: 'Divider' | 'Spacer'
+  readonly props: ArtifactBlockProps
+}
+
+/**
+ * Resolve the CST identity and current properties of one quick-adjustable block.
+ * Root-level blocks use the same nested display map the canvas uses, so the id
+ * scheme is identical in both editing modes.
+ * @param session - edit session snapshot.
+ * @param blockId - display block id.
+ * @returns the node identity plus parsed props, or undefined when the block is
+ *   missing, not a Divider/Spacer, or the program cannot be parsed.
+ */
+export function blockPropsState(session: ArtifactEditSession, blockId: string): BlockPropsState | undefined {
+  const map = nestedBlocksForProgram(session.program)
+  const block = map?.blocks.find(candidate => candidate.blockId === blockId)
+  if (block?.nodeId === undefined || block.sourceDigest === undefined) return undefined
+  const tree = buildArtifactTree(session.program, { containerTypes: [...NESTED_CONTAINER_TYPES] })
+  const node = tree.nodes.get(block.nodeId)
+  if (node === undefined || !isArtifactBlockPropComponent(node.componentType)) return undefined
+  return {
+    blockId,
+    nodeId: node.nodeId,
+    sourceDigest: node.digest,
+    componentType: node.componentType,
+    props: artifactBlockPropsFromNode(node.componentType, node.props),
+  }
+}
+
+/**
+ * Preview a property bag on the canvas without recording anything. The view
+ * rewraps the rewritten program for the edit-mode renderer.
+ * @param key - edit-session key.
+ * @param blockId - display block id.
+ * @param props - the pending property bag.
+ */
+export function previewArtifactBlockProps(key: string, blockId: string, props: ArtifactBlockProps): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || session.propsBusy === true) return
+  const target = blockPropsState(session, blockId)
+  if (target === undefined) {
+    sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  const problem = describeArtifactBlockPropsProblem(target.componentType, props)
+  if (problem !== undefined) {
+    sessions.set(key, { ...session, propsPreview: undefined, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  const replaced = replaceNodeContent(session.program, target.nodeId, serializeArtifactBlockProps(target.componentType, props), {
+    containerTypes: [...NESTED_CONTAINER_TYPES],
+  })
+  if (replaced.ok === false) {
+    sessions.set(key, { ...session, propsPreview: undefined, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  const preview: ArtifactBlockPropsPreview = {
+    blockId,
+    nodeId: target.nodeId,
+    componentType: target.componentType,
+    props,
+    program: replaced.program,
+  }
+  sessions.set(key, { ...session, propsPreview: preview, propsError: undefined })
+  publish()
+}
+
+/** Drop the canvas-only property preview (cancel, close, switch target). */
+export function clearArtifactBlockPropsPreview(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.propsPreview === undefined) return
+  sessions.set(key, { ...session, propsPreview: undefined, propsError: undefined })
+  publish()
+}
+
+/**
+ * Apply one Divider/Spacer property bag through the deterministic Host route.
+ * Pending block instructions or reordering must be sent or cleared first, since
+ * this route records a revision of its own and the canvas closes afterwards.
+ * @param key - edit-session key.
+ * @param blockId - display block id.
+ * @param props - the property bag to persist.
+ * @param turn - latest loaded Turn, used to place the local revision card.
+ */
+export async function applyArtifactBlockProps(key: string, blockId: string, props: ArtifactBlockProps, turn?: number): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || session.propsBusy === true) return
+  if (session.selection.length > 0 || session.orderChanged || session.globalInstruction.trim() !== '' || (session.additions?.length ?? 0) > 0) {
+    sessions.set(key, { ...session, propsError: translate('edit.propsDirty') })
+    publish()
+    return
+  }
+  const target = blockPropsState(session, blockId)
+  if (target === undefined) {
+    sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  const problem = describeArtifactBlockPropsProblem(target.componentType, props)
+  if (problem !== undefined) {
+    sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  sessions.set(key, { ...session, propsPreview: undefined, propsError: undefined, propsBusy: true })
+  publish()
+  try {
+    await submitStructureOperation(key, {
+      op: 'props',
+      nodeId: target.nodeId,
+      sourceDigest: target.sourceDigest,
+      props,
+    }, turn, 'edit.propsFailed', 'props')
+  } finally {
+    const current = sessions.get(key)
+    if (current !== undefined && current.status !== 'submitted' && current.propsBusy === true) {
+      sessions.set(key, { ...current, propsBusy: false })
+      publish()
+    }
+  }
+}
+
 /** Submit one structural operation and turn the result into a local revision card. */
+/** One deterministic operation the structure route accepts. */
+type DeterministicOperation =
+  | { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string }
+  | { op: 'props'; nodeId: string; sourceDigest: string; props: ArtifactBlockProps }
+
 async function submitStructureOperation(
   key: string,
-  operation: { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string },
+  operation: DeterministicOperation,
   turn: number | undefined,
   failureKey: string,
+  surface: 'structure' | 'props' = 'structure',
 ): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
@@ -1557,9 +1711,9 @@ async function submitStructureOperation(
         }
       } catch { /* fall through to the generic message */ }
       const message = code === 'base_missing' || code === 'artifact_missing'
-        ? translate('edit.structureBaseMissing')
-        : translate('edit.structureFailed')
-      sessions.set(key, { ...session, structureBusy: false, structureError: message })
+        ? translate(surface === 'props' ? 'edit.propsBaseMissing' : 'edit.structureBaseMissing')
+        : translate(failureKey)
+      sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: message } : { structureError: message } })
       publish()
       return
     }
@@ -1568,7 +1722,7 @@ async function submitStructureOperation(
       const result = (value as { result?: unknown }).result
       if (isArtifactStructureResult(result)) {
         addLocalRevision(session.sessionId, {
-          kind: 'structure',
+          kind: operation.op === 'props' ? 'props' : 'structure',
           artifactId: result.artifactId,
           sourceRevisionId: result.baseRevisionId,
           revisionId: result.revisionId,
@@ -1585,10 +1739,10 @@ async function submitStructureOperation(
         return
       }
     }
-    sessions.set(key, { ...session, structureBusy: false, structureError: translate(failureKey) })
+    sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: translate(failureKey) } : { structureError: translate(failureKey) } })
     publish()
   } catch {
-    sessions.set(key, { ...session, structureBusy: false, structureError: translate(failureKey) })
+    sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: translate(failureKey) } : { structureError: translate(failureKey) } })
     publish()
   }
 }
@@ -1755,6 +1909,9 @@ function markSubmitted(key: string): void {
     status: 'submitted',
     submittedAt: Date.now(),
     submitFailed: false,
+    propsPreview: undefined,
+    propsError: undefined,
+    propsBusy: false,
     branch: false,
     editing: false,
     attached: false,

@@ -17,6 +17,7 @@ import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DST_PROGRAM, DST_TITLE } from '../fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM, NESTED_TITLE } from '../fixtures/nested-artifact.ts'
 import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/nested-containers.ts'
+import { PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
 import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 
@@ -228,6 +229,15 @@ w.__addNestedContainersCard = (callId: string = 'nested-containers-call-1', titl
     root: {
       kind: 'tool-result', callId, name: 'render_ui', isError: false,
       call: { name: 'render_ui', argsRaw: JSON.stringify({ program: NESTED_CONTAINERS_PROGRAM, title, style: 'card' }) },
+    },
+  }]
+  update()
+}
+w.__addPropsCard = (callId: string = 'props-call-1', title: string = PROPS_TITLE) => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program: PROPS_PROGRAM, title, style: 'card' }) },
     },
   }]
   update()
