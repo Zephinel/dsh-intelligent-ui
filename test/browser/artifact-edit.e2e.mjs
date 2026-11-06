@@ -216,7 +216,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 8', 'eight blocks')
   check(await count('[data-dsh-iui-block]'), 8, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
-  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')).animationName.includes('dsh-iui-block-breathe')`), true, 'editable blocks breathe before selection')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] > .dsh-iui-block-body')).animationName.includes('dsh-iui-block-breathe')`), true, 'the block body itself breathes before selection')
   check(await read(`parseFloat(getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')).borderTopWidth)`), 0, 'editable hint has no dashed border')
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
   check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
