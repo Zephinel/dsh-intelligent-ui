@@ -596,7 +596,6 @@
 .dsh-iui-edit-nested-row.is-hover-linked,
 .dsh-iui-edit-request-row.is-hover-linked {
   background: var(--dsw-alias-interactive-bg-hover);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
 }
 
 /* Page-order index shown in the arrangement/nested rows. */
@@ -1222,7 +1221,6 @@
 .dsh-iui-edit-arrangement-row:has(.dsh-iui-edit-grip:focus-visible),
 .dsh-iui-edit-nested-row:has(.dsh-iui-edit-grip:focus-visible) {
   background: var(--dsw-alias-interactive-bg-hover);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
 }
 
 .dsh-iui-edit-grip:active,

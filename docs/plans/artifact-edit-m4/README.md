@@ -638,7 +638,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**；nested 75；client CSS 211.9 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.25 MB / 10.99 MB。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**；nested 75；client CSS 211.8 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.25 MB / 10.99 MB。
 
 ## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
 
@@ -694,3 +694,9 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 修复：`.dsh-iui-edit-grip:focus-visible` 不再绘制 outline；键盘聚焦时改为整行使用中性 hover 底色 + 左侧细线（`:has(.dsh-iui-edit-grip:focus-visible)`），保留焦点位置提示但不出现独立控件外框。
 
 - 修正：0.41 的 `outline: none` 被文件后面共享的 `:focus-visible` 组规则覆盖（该组仍列着 `.dsh-iui-edit-grip`，且加载更晚），所以外框仍在。已把 grip 从共享组里移除，仅保留行级焦点提示。
+
+## 0.42 真正定位并去掉行 hover 的左侧细线（2026-11-07，工作树）
+
+- 用 ego-browser 打开真实 GUI 复核：截图里红框（拖拽点左侧的圆角竖线）不是 grip 的 focus outline，而是 `.is-hover-linked` 行上的 `box-shadow: inset 1px 0 0`——只偏移 X、无扩散，因此只在行左缘出现一条被圆角裁切的竖线，上下右都看不到。
+- 修复：从 `.dsh-iui-edit-arrangement-row/.dsh-iui-edit-nested-row/.dsh-iui-edit-request-row.is-hover-linked` 和 grip 键盘焦点行样式中删除 inset 左侧线，只保留中性背景高亮。ego 复核当前 bundle 的 CSS 已无该 box-shadow。
+- 之前的 grip focus outline 修复保留（它确实是另一个会出现的框）。
