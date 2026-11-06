@@ -219,6 +219,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('document.querySelector("[data-dsh-iui-edit-request-row]").getAttribute("data-block-id")'), 'b3', 'request row binds b3')
   check((await text('[data-dsh-iui-edit-request-row]')).includes('把模拟时钟改为数字时钟'), true, 'request row shows instruction')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
+  const pencilPaths = await read(`(() => {
+    const overlay = document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool svg path')?.getAttribute('d') ?? null;
+    const row = document.querySelector('[data-dsh-iui-edit-structure-edit] svg path')?.getAttribute('d') ?? null;
+    const requestRow = document.querySelector('[data-dsh-iui-edit-request-edit] svg path')?.getAttribute('d') ?? null;
+    return { overlay, row, requestRow, text: document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool')?.textContent ?? '' };
+  })()`)
+  check(pencilPaths.overlay, pencilPaths.row, 'block overlay edit glyph matches the arrangement row pencil')
+  check(pencilPaths.requestRow, pencilPaths.row, 'request row edit glyph matches the arrangement row pencil')
+  check(pencilPaths.text, '', 'block overlay edit uses an SVG glyph, not a text character')
   check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-badge')?.textContent ?? null`), '1', 'arrangement badge number 1')
   check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-tag')?.textContent ?? null`), '已编辑', 'arrangement edited tag')
   check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 1 项修改', 'chip shows one edit')

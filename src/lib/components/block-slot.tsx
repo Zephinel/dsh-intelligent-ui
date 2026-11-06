@@ -25,6 +25,23 @@ import { children, cx } from "./style";
 import "./artifact-edit.css";
 import "./nested-edit.css";
 
+/**
+ * Pencil glyph shared by the block overlay action and the edit panel rows.
+ *
+ * Drawn as a stroke path whose nib points to the lower-left, so every edit
+ * affordance in the editor uses the same icon (the panel rows and this overlay
+ * previously mixed a lower-left SVG pencil with the "✎" character, whose nib
+ * points the other way).
+ */
+function PencilGlyph(): ReactElement {
+  return (
+    <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M3 13l.8-2.6 7-7a1.2 1.2 0 0 1 1.7 1.7l-7 7Z" />
+      <path d="M9.5 4.3l2.2 2.2" />
+    </svg>
+  );
+}
+
 /** One block's live selection state inside the edit view. */
 export interface BlockSlotSelection {
   /** 1-based selection order; also the badge number and colour index. */
@@ -146,7 +163,7 @@ export const BlockSlot = defineComponent({
       event.preventDefault();
       activate();
     };
-    const tool = (label: string, action: () => void, content: string): ReactElement => (
+    const tool = (label: string, action: () => void, content: ReactElement | string): ReactElement => (
       <button
         type="button"
         className="dsh-iui-block-tool"
@@ -181,7 +198,7 @@ export const BlockSlot = defineComponent({
           <>
             <span className="dsh-iui-block-badge" aria-hidden="true">{selection.order}</span>
             <span className="dsh-iui-block-tools" role="group" aria-label={context.labels.selected}>
-              {tool(context.labels.edit, () => context.onEdit(blockId), "✎")}
+              {tool(context.labels.edit, () => context.onEdit(blockId), <PencilGlyph />)}
               {tool(context.labels.deselect, () => context.onDeselect(blockId), "×")}
             </span>
           </>
