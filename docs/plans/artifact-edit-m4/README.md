@@ -580,3 +580,18 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 未选中区块改为**容器自身**的无边框亮度呼吸（2.4s，brightness 0.95）；overlay 只做点击捕获，无描边/背景/halo，不会额外叠层或与间距重叠；选中改为圆角卡片 + 柔和悬浮阴影，去掉蓝框；键盘焦点中性 ring。
 - 历史对话框不再用 artifactId 当副标题；styleId/未知 blockId 都改为本地化文案；编辑面板头部新增「退出编辑」。
 - 验证：Node **496/496**；浏览器 9/9；artifact-edit **246 checks**（容器呼吸动画、overlay 无描边、选中卡片、历史无裸 ID、面板退出）；CSS 203.1 kB、standalone 516.0 kB。
+
+## 0.28 编辑态提示改为逐块描边动画（2026-11-06，工作树）
+
+- 反馈：整块亮度「呼吸」不明显，像是在内容上做明暗变化，不能清楚表达“区块可编辑”；加编辑图标也被认为丑，要求只用动画暗示。
+- 方案：去掉呼吸。进入编辑模式后，每个可编辑区块按阅读顺序**顺时针描出一圈 1px 细线边框**（单块约 700ms，逐块错开 45ms），绘制完成后淡出；之后以 **9 秒**为周期重复轻描一次（单块描边约 0.7s，其余时间静止）。hover 时显示静止描边，`focus-visible` 时加强；选中或指令弹窗打开的区块仍使用圆角卡片 + 柔和悬浮。描边画在 block wrapper 的 `::after` 上，由四条 `background` 渐变组成（`inset: -3px`），不是 border、不新增 DOM、不改变内容亮度与布局，也不会外扩重叠间距；嵌套 wrapper 为 `display: contents`，不参与该提示（只作用于根层区块）。
+- reduced motion：禁用描边动画，保留 opacity 0.1 的静止描边作为非动画替代；暗色主题沿用同一批 ink token。
+- 论证依据：NN/g 的动效原则（短暂、有目的、传达状态；持续装饰性运动有害）与产品 register 的 150–250ms 状态反馈约束；因此提示由“进入编辑模式”这个状态变化触发，并用低频重复代替常驻呼吸。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **255 checks**（描边动画名与无限循环、四条 hairline 背景、逐块 delay、无 body 呼吸、hover 静止描边、reduced-motion 回退、零描边 overlay、选中卡片等）；CSS 204.6 kB；standalone 517.6 kB；pack 44 files 4.23 MB / 10.93 MB。截图：`.tmp-report/harness-block-trace.png`（暂停在中途的逐块描边）、`.tmp-verify/trace/trace.gif`（进入编辑模式后约 1.8s 的描边过程 + 静止状态循环预览）。
+
+## 0.29 编辑态提示改为每块淡色光晕跑马灯（2026-11-07，工作树，取代 §0.28）
+
+- 反馈（真机截图）：§0.28 的逐块描边在圆角处被裁切 —— 四条直线背景渐变会被 `border-radius` 裁掉四个角，看起来像断开的边框；用户明确要求去掉边框，改成类似「跑马灯 / 光晕」：一团淡淡的光沿着看不见的区块边缘绕一圈，每隔几秒重复，只针对最外层可编辑区块，不针对区块内部子元素（编辑粒度只到区块）。颜色要活泼但不抢眼，用淡蓝、淡绿、淡红一类淡色。
+- 方案：删除 §0.28 的全部描边（含 hover 静止描边）。每个**根层** block wrapper 用 `::after` 绘制 1.5px 圆角环：`conic-gradient(from var(--dsh-iui-marquee-angle), …)` 形成带渐隐拖尾的光头，`mask: content-box/border-box exclude` 裁成圆角边环，`drop-shadow` 提供柔和光晕；`@property` 注册角度、2.6s linear 无限循环。每个区块按 `--iui-edit-stagger` 错开相位（140ms），并按 `--iui-edit-tone-N` 六色淡彩轮换（蓝/紫/绿/黄/粉/青，与选中编号色系一致但更浅；light/dark 各一套色值）。hover 时 opacity 0.9→1；选中/指令弹窗打开时不绘制；`prefers-reduced-motion` 停止绕行、保留静止光斑。
+- 约束：只作用于根层 wrapper（`:not([data-dsh-iui-block-path])`），嵌套子元素不参与；圆角环由 mask 内缩得到，不是 border；`inset: -2px` 只进入区块间隙，不与相邻区块重叠；不新增 DOM、不改变内容亮度/布局。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **258 checks**（动画名/无限循环、conic-gradient、圆角 mask、逐块相位、不同淡色、hover 变亮、reduced-motion 静止、零描边 overlay、选中卡片等）；构建 host 812.9 kB、client 3.94 MB（js 3.74 / CSS 205.0）、standalone 3.32 MB + 518.1 kB；pack 44 files 4.23 MB / 10.93 MB。截图/GIF：`.tmp-report/edit-affordance-marquee-dark.png`、`.tmp-report/edit-affordance-marquee-light.png`、`.tmp-report/edit-affordance-marquee-dark.gif`、`.tmp-report/edit-affordance-marquee-light.gif`；`.tmp-report/harness-block-marquee.png` 为 E2E 暂停帧。
