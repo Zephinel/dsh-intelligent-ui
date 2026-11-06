@@ -25,6 +25,7 @@ const base = {
   sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: true, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null,
 } satisfies IntelligentUIModeView
 const seats = new Map<string, { definition: any; Component: any }>()
+const listSeats = new Map<string, Array<{ definition: any; Component: any }>>()
 const w = window as any
 
 /** One recorded render_ui call for the sample artifact. */
@@ -382,7 +383,12 @@ apply({
     inject: (_name: string, fn: () => void) => fn(),
     register: (definition: any, Component: any) => {
       const key = definition.key === undefined ? definition.name : `${definition.name}:${definition.key}`
-      seats.set(key, { definition, Component })
+      const entry = { definition, Component }
+      seats.set(key, entry)
+      const listKey = definition.id === undefined ? String(definition.name) : `${definition.name}:${definition.id}`
+      const list = listSeats.get(listKey) ?? []
+      list.push(entry)
+      listSeats.set(listKey, list)
     },
   },
   inject: (deps: string[], callback: (scope: unknown) => void) => {
@@ -391,6 +397,25 @@ apply({
     }
   },
 } as never)
+
+/** Render every registered seat for one list slot (e.g. the composer overlay). */
+function SeatList({ name }: { name: string }): ReactElement {
+  const entries = [...listSeats.values()].flat().filter(entry => entry.definition.name === name)
+  const t = translate(w.__lang === 'zh' ? zh : en)
+  return <>
+    {entries.map(({ definition, Component }, index) => {
+      const injected = definition.inject?.(SESSION) ?? {}
+      return createElement(Component, {
+        key: `${String(definition.id ?? 'seat')}:${index}`,
+        ...injected, t,
+        useProjection: () => view,
+        useInput: () => input,
+        inputActions,
+        ...injected.keyedHooks ? { usePrograms: () => injected.keyedHooks.programs('1').getSnapshot() } : {},
+      })
+    })}
+  </>
+}
 
 /** Render the turn-tail card seat with its real injected face. */
 function Seat({ name, ...props }: { name: string; [key: string]: any }): ReactElement {
@@ -430,8 +455,8 @@ function Harness(): ReactElement {
   update = () => refresh(value => value + 1)
   return <>
     <main key={w.__renderKey}><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
-    <Seat name="conversation.input.dock" />
     <div data-composer-card>
+      <div data-composer-overlay><SeatList name="conversation.input.overlay" /></div>
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>
         {(input.occurrences as unknown as Occurrence[]).map(occurrence => (

@@ -178,7 +178,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-request-list]')).includes('persist-me across reload'), true, 'reloaded draft shows its saved request')
   check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
   check(await read(`document.querySelector('[data-dsh-iui-edit-panel] [data-dsh-iui-edit-draft-switcher]') === null`), true, 'draft switcher is not inside the edit panel')
-  check(await read(`!!(document.querySelector('[data-dsh-iui-edit-draft-switcher]')?.compareDocumentPosition(document.querySelector('[data-composer-card]')) & Node.DOCUMENT_POSITION_FOLLOWING)`), true, 'draft dock sits above the composer card')
+  check(await read(`!!document.querySelector('[data-composer-card] [data-dsh-iui-edit-draft-switcher]')`), true, 'draft dock lives inside the composer card')
   await shot('harness-m3-draft-restored.png')
   // Clean the persisted draft, then restart from the pristine harness state.
   await read('sessionStorage.clear()')

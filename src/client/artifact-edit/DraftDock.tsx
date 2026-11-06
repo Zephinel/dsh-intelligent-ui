@@ -8,6 +8,7 @@
  * keep working; the dock renders nothing while the chat has no pending drafts.
  */
 import { useMemo, type ReactNode } from 'react'
+import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -41,7 +42,7 @@ function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
  * @param props - session identity seat from the dock slot and the locale seat.
  * @returns the compact draft strip, or null when the chat has no pending drafts.
  */
-export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversation.input.dock'> & InjectFace<DraftDockInjected> & { readonly t?: Translate }): ReactNode {
+export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversation.input.overlay'> & InjectFace<DraftDockInjected> & { readonly t?: Translate }): ReactNode {
   const editStore = useArtifactEditStore()
   const drafts = useMemo(() => {
     const list: ArtifactEditSession[] = []
@@ -118,7 +119,7 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
                   title={t('edit.discardDraft')}
                   onClick={() => { discardDraft(draft.key) }}
                 >
-                  {t('edit.discardDraft')}
+                  <RemixIcon name="delete-bin-line" size={13} />
                 </button>
               </span>
             </li>

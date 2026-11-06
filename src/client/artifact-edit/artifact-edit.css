@@ -2417,55 +2417,63 @@
 }
 
 /* -------------------------------------------------------------------------
- * Pending-edit draft dock: a compact strip above the composer card.
- * Reuses the draft row hooks/classes from the former panel section, but lays
- * them out horizontally inside a bordered composer-width strip.
+ * Pending-edit draft dock: a quiet instrument strip above the composer card.
+ * No outer card, no enclosed chip cards; one line of drafts, actions on demand.
  * ---------------------------------------------------------------------- */
 
 .dsh-iui-draft-dock {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* Align with the composer card instead of spanning the whole chat column. */
-  width: min(calc(var(--dsh-chat-content-width, 748px) + 32px), calc(100% - 32px));
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
   min-width: 0;
-  padding: 6px 10px 7px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-1);
+  /* Sits inside the composer card, above its text area. */
+  padding: 8px 12px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-composer-overlay]:has(.dsh-iui-draft-dock) {
+  position: relative;
+  height: auto;
 }
 
 .dsh-iui-draft-dock-head {
-  display: flex;
+  display: inline-flex;
   flex: none;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .dsh-iui-draft-dock-title {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  font-weight: 500;
   line-height: 16px;
+  white-space: nowrap;
 }
 
 .dsh-iui-draft-dock-count {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10.5px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
   line-height: 15px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .dsh-iui-draft-dock .dsh-iui-draft-dock-list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 1px 1px 2px;
+  padding: 1px 0 2px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   border-top: 0;
@@ -2476,9 +2484,10 @@
   flex: none;
   max-width: min(340px, 78vw);
   min-width: 0;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid transparent;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-row:hover {
@@ -2486,46 +2495,110 @@
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-row.is-active {
-  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, var(--dsw-alias-border-l2));
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent);
+  border-color: var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: none;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-open {
   gap: 5px;
-  padding: 3px 2px 3px 7px;
+  padding: 2px 3px 2px 6px;
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-meta {
+  white-space: nowrap;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-dot {
   width: 5px;
   height: 5px;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row.is-active .dsh-iui-edit-draft-dot {
+  background: var(--dsw-alias-label-primary);
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-title {
   max-width: 150px;
+  color: var(--dsw-alias-label-primary);
   font-size: 11.5px;
+  font-weight: 500;
   line-height: 16px;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-meta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-tag {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 9.5px;
   line-height: 14px;
 }
 
-.dsh-iui-draft-dock .dsh-iui-edit-draft-tag {
-  padding: 0 4px;
-  font-size: 9px;
-  line-height: 14px;
+.dsh-iui-draft-dock .dsh-iui-edit-draft-tag.is-conflict {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-tag.is-failed {
+  color: var(--dsw-alias-state-warn-primary);
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-actions {
   gap: 1px;
-  padding-right: 3px;
+  padding-right: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row:hover .dsh-iui-edit-draft-actions,
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row:focus-within .dsh-iui-edit-draft-actions,
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row[data-attached='false'] .dsh-iui-edit-draft-actions {
+  opacity: 1;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-action {
+  display: inline-grid;
+  place-items: center;
   height: 20px;
-  padding: 0 5px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 10px;
   line-height: 20px;
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-action:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-action-danger:hover {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-draft-dock .dsh-iui-edit-draft-action:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-draft-dock .dsh-iui-edit-draft-row,
+  .dsh-iui-draft-dock .dsh-iui-edit-draft-actions {
+    transition: none;
+  }
 }
