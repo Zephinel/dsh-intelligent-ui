@@ -197,7 +197,7 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef,
             data-pending={pending ? 'true' : undefined}
           >
             {dimmed ? <span className="dsh-iui-block-scrim" aria-hidden="true" /> : null}
-            {rootLevel && !isActive ? (
+            {rootLevel && !isActive && !focused ? (
               <span className={`dsh-iui-block-orbit dsh-iui-block-marquee${pending ? ' is-pending' : ''}`} aria-hidden="true" />
             ) : null}
             {hovered && !isActive ? <span className="dsh-iui-block-hover-frame" aria-hidden="true" /> : null}

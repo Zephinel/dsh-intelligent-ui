@@ -292,6 +292,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover opened')
   await wait(`document.querySelectorAll('.dsh-iui-block-scrim').length === 8`, 'focus scrim outside the edited block')
+  check(await count('.dsh-iui-block-orbit'), 0, 'editing a block hides every other orbit glow')
   check(await count('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-frame.is-active'), 1, 'the edited block keeps the focus frame')
   check(await count('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-scrim'), 0, 'the edited block is not dimmed')
   await shot('harness-focus-mode.png')
