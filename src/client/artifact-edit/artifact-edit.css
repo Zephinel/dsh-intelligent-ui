@@ -469,12 +469,14 @@
   outline-offset: 1px;
 }
 
-/* Orbit glow: a comet of light travels around the root block's invisible edge. */
+/* Orbit glow: a comet of light travels around the root block's invisible edge.
+   It deliberately sits a little outside the block so the light has breathing
+   room instead of hugging the content. */
 .dsh-iui-block-orbit {
   position: absolute;
-  inset: -3px;
+  inset: -6px;
   padding: 1.5px;
-  border-radius: 15px;
+  border-radius: 18px;
   background: conic-gradient(
     from var(--dsh-iui-orbit-angle),
     transparent 0deg 150deg,

@@ -700,3 +700,8 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 用 ego-browser 打开真实 GUI 复核：截图里红框（拖拽点左侧的圆角竖线）不是 grip 的 focus outline，而是 `.is-hover-linked` 行上的 `box-shadow: inset 1px 0 0`——只偏移 X、无扩散，因此只在行左缘出现一条被圆角裁切的竖线，上下右都看不到。
 - 修复：从 `.dsh-iui-edit-arrangement-row/.dsh-iui-edit-nested-row/.dsh-iui-edit-request-row.is-hover-linked` 和 grip 键盘焦点行样式中删除 inset 左侧线，只保留中性背景高亮。ego 复核当前 bundle 的 CSS 已无该 box-shadow。
 - 之前的 grip focus outline 改动与问题无关，已回滚；只保留行 hover 左缘细线的删除。
+
+## 0.43 轨道光晕外扩（2026-11-07，工作树）
+
+- 反馈：轨道光晕太贴合区块。
+- 修复：`.dsh-iui-block-orbit` 的 `inset` 从 -3px 调到 -6px，圆角从 15px 调到 18px，保留 1.5px 环宽、动画和 pending 降速；光晕与内容之间留出呼吸空间。
