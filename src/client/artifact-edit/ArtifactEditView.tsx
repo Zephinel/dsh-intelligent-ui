@@ -220,8 +220,9 @@ export function ArtifactEditView({
 
       {conflict && session.branch !== true ? (
         <div className="dsh-iui-edit-conflict" role="alert" data-dsh-iui-edit-conflict>
-          <p className="dsh-iui-edit-conflict-title">{t('edit.conflictTitle')}</p>
-          <p className="dsh-iui-edit-conflict-body">{t('edit.conflictBody')}</p>
+          <p className="dsh-iui-edit-conflict-title">{t('edit.conflictTitle', { n: session.baseRevision })}</p>
+          <p className="dsh-iui-edit-conflict-body">{t('edit.conflictBody', { n: session.baseRevision, latest: session.latestRevision ?? '—' })}</p>
+          <p className="dsh-iui-edit-conflict-hint">{t('edit.conflictBranchHint', { n: session.baseRevision, latest: session.latestRevision ?? '—' })}</p>
           <div className="dsh-iui-edit-conflict-actions">
             <button
               type="button"
@@ -229,7 +230,7 @@ export function ArtifactEditView({
               data-dsh-iui-edit-branch
               onClick={() => { actions.enableBranch(session.key) }}
             >
-              {t('edit.branchAction')}
+              {t('edit.branchAction', { n: session.baseRevision })}
             </button>
             <button type="button" className="dsh-iui-edit-button" data-dsh-iui-edit-retry onClick={() => { actions.retryCheck() }}>
               {t('edit.retry')}
@@ -245,7 +246,7 @@ export function ArtifactEditView({
         <div className="dsh-iui-edit-branch-note" role="status" data-dsh-iui-edit-branch-note>
           <p className="dsh-iui-edit-conflict-title">{t('edit.branchBannerTitle', { n: session.baseRevision })}</p>
           <p className="dsh-iui-edit-conflict-body">
-            {t('edit.branchBannerBody', { latest: session.latestRevision ?? '—' })}
+            {t('edit.branchBannerBody', { latest: session.latestRevision ?? '—', next: (session.latestRevision ?? session.baseRevision) + 1 })}
           </p>
         </div>
       ) : null}

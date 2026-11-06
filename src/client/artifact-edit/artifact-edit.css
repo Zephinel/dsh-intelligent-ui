@@ -164,6 +164,13 @@
   line-height: 18px;
 }
 
+.dsh-iui-edit-conflict-hint {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  line-height: 17px;
+}
+
 .dsh-iui-edit-conflict-actions {
   display: flex;
   flex-wrap: wrap;
