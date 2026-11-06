@@ -1896,7 +1896,8 @@
   flex-direction: column;
   gap: 5px;
   padding-top: 10px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  /* The explicit .dsh-iui-edit-divider above already provides the rule; adding
+     a border-top here painted a second, 1px-apart line. */
 }
 
 .dsh-iui-edit-global-label {

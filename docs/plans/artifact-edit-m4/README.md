@@ -638,7 +638,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **315 checks**；nested 75；client CSS 211.8 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.25 MB / 10.99 MB。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**；nested 75；client CSS 211.8 kB；standalone 3.32 MB + 512.4 kB；pack 44 files 4.25 MB / 10.99 MB。
 
 ## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
 
@@ -647,7 +647,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 编辑聚焦：打开任一区块编辑器时，`BlockOverlay` 给非相关区块画 scrim（同祖先链的区块不压暗），当前块保留编辑框；Save/Cancel 关闭后 scrim 消失。
 - pending 状态：`selection` 数据保持不变，但 Save 后不再绘制大选中框/工具；改为「圆点 + 请求序号」的 pending 标记；pending 根层的 orbit glow 降速（5.2s）、变淡（0.3）；无 pending 的根层恢复普通 orbit glow。确定性 Apply/结构操作仍记录修订并退出编辑（1A）。
 - 术语：`marquee` 改为 `orbit glow`（CSS 类 `dsh-iui-block-orbit`，保留 `dsh-iui-block-marquee` 兼容别名；`--dsh-iui-orbit-angle`/`@keyframes dsh-iui-block-orbit`），文档统一称「轨道光晕 / orbit glow」。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **315 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
 
 ## 0.36 编排行 unslop、Locate 图标、模式说明与嵌套映射（2026-11-07，工作树）
 
@@ -657,7 +657,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 工具栏文案：按钮改为「显示嵌套区块 / 仅顶层区块」；banner 分模式说明顶层 vs 嵌套；严格保护提示说明会拒绝未选中顶层区块的改动且请求保持待处理。
 - 嵌套映射：嵌套行 hover ↔ 画布嵌套块双向高亮；嵌套块 hover 时显示 `1.2.1` 形式的页面地址；嵌套行 Locate 按钮与行主体点击都能定位并触发 flash；E2E 覆盖。
 - base_missing：旧卡片（本机 registry 只有 15 条程序，该 Solid 2.0 导览程序不在其中）无法做确定性写入；客户端捕获后把快捷面板切换为指令编辑并显示解释（可改用模型编辑或重新渲染页面）。未实现“把当前页面注册为权威 base”的 adopt 路由。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **315 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**；nested 75。
 
 ## 0.37 工具栏模式说明、自定义 tooltip、动作按钮与定位图标修正（2026-11-07，工作树）
 
@@ -667,7 +667,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 动作按钮：显示条件从 `:focus-within` 改为 `:has(:focus-visible)`，所以鼠标点击行主体/定位后即使焦点留在行内，指针离开后动作按钮也会隐藏；键盘 focus 仍会显示。
 - 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`；根据反馈最终改用 `map-pin-line`（`focus-3-line` 与移动图标太像），E2E 断言定位按钮的 SVG path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
 - 旧页面 base_missing：新增 E2E mock（404 `base_missing`）验证快捷面板切换为指令编辑器并显示“权威版本记录之前”的说明；恢复 fetch 后退出。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **315 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **317 checks**；nested 75。
 
 ## 0.38 统一「退出编辑」按钮（2026-11-07，工作树）
 
@@ -679,4 +679,11 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - 反馈：卡片头部和编辑面板头部都已有退出编辑，工具栏红框里第三个「退出编辑」是重复入口。
 - 修复：移除工具栏按钮；保留卡片头部与面板头部两个入口，继续共用 `.dsh-iui-edit-exit` 中性样式。面板退出按钮额外保留 `data-dsh-iui-edit-exit` 兼容旧流程/测试选择器；工具栏现在只承载层级、严格保护、抽屉和提示。
-- 验证：E2E 断言 `.dsh-iui-edit-exit` 数量为 2，编辑视图内不再有工具栏退出按钮；artifact-edit **315 checks**。
+- 验证：E2E 断言 `.dsh-iui-edit-exit` 数量为 2，编辑视图内不再有工具栏退出按钮；artifact-edit **317 checks**。
+
+## 0.40 修复面板重复分割线（2026-11-07，工作树）
+
+- 截图：Block arrangement 与 Global instruction 之间出现两条相距很近的横线。
+- 原因：不是嵌套区块未显示导致；面板里同时存在显式 `<div class="dsh-iui-edit-divider">` 和 `.dsh-iui-edit-global { border-top: 1px }`，两套分隔叠加。
+- 修复：删除 `.dsh-iui-edit-global` 的 `border-top`，保留显式分隔线作为唯一横线；不依赖 nested arrangement 是否存在。
+- 验证：E2E 断言面板只有一个 `.dsh-iui-edit-divider`，且 global 的 `borderTopWidth` 为 0；artifact-edit **317 checks**。
