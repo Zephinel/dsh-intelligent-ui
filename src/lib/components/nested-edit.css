@@ -1,78 +1,68 @@
 /**
- * Nested edit-mode block wrappers (M4).
+ * Layout compensation for edit-mode block wrappers (root and nested).
  *
- * The nested renderer inserts one `BlockSlot` around every direct child of an
- * allowlisted container (`Col`, `Row`, `Card`). Those wrappers must not change
- * layout, so both the wrapper and its body render with `display: contents`.
+ * Edit wrappers are layout-transparent (`display: contents`), so flex/grid/flow
+ * layout sees the real child directly. The wrapper still sits in the DOM, which
+ * hides the real child from the library's direct-child selectors (`> *`,
+ * `:first-child`, `:has(> …)`, `.iui-flow` rhythm, card title styling, row/grid
+ * child rules). Every such rule that can apply under an allowlisted container
+ * is re-pointed through
+ * `.dsh-iui-block-editing > .dsh-iui-block-body` here.
  *
- * `display: contents` removes the box, but it also hides the real child from the
- * library's direct-child selectors (`> *`, `:first-child`, `:has(> …)`,
- * `.iui-flow` rhythm, card title styling, row/grid child rules). Every such
- * rule that can apply inside an allowlisted container is re-pointed through
- * `[data-dsh-iui-block-path] > .dsh-iui-block-body` here. Keep this file in sync
- * with `components.css`; `test/renderer/nested-css-contract-check.mjs` scans for
- * uncompensated direct-child selectors.
- *
- * Root-level production wrappers (no `data-dsh-iui-block-path`) are untouched by
- * every rule below, so the existing block-editing rendering keeps its exact DOM
- * and geometry.
+ * The same rule set serves root-level wrappers (children of the root `Col`) and
+ * nested wrappers; path-aware nested wrappers also carry the editing class so
+ * the nested renderer keeps layout parity when mounted without block chrome.
+ * Keep this file in sync with `components.css`;
+ * `test/renderer/nested-css-contract-check.mjs` scans for uncompensated
+ * direct-child selectors.
  */
-
-/* -------------------------------------------------------------------------
- * Layout-transparent wrapper + body.
- * ---------------------------------------------------------------------- */
-
-.dsh-iui-block[data-dsh-iui-block-path],
-.dsh-iui-block[data-dsh-iui-block-path] > .dsh-iui-block-body {
-  display: contents;
-}
 
 /* -------------------------------------------------------------------------
  * Row children (`.iui-row > *`, badges/buttons, image rows).
  * ---------------------------------------------------------------------- */
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > * {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > * {
   min-width: 0;
 }
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-badge {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-badge {
   align-self: center;
   flex: none;
 }
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-button {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-button {
   align-self: center;
 }
 
-.iui-row[style*="align-items"] > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-badge, .iui-button),
-.iui-col[style*="align-items"] > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-badge, .iui-button) {
+.iui-row[style*="align-items"] > .dsh-iui-block-editing > .dsh-iui-block-body > :is(.iui-badge, .iui-button),
+.iui-col[style*="align-items"] > .dsh-iui-block-editing > .dsh-iui-block-body > :is(.iui-badge, .iui-button) {
   align-self: auto;
 }
 
-.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-image),
-.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box > .iui-image),
-.iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable .iui-image) {
+.iui-row:has(> .dsh-iui-block-editing > .dsh-iui-block-body > .iui-image),
+.iui-row:has(> .dsh-iui-block-editing > .dsh-iui-block-body > .iui-box > .iui-image),
+.iui-row:has(> .dsh-iui-block-editing > .dsh-iui-block-body > .iui-pressable .iui-image) {
   align-items: flex-start;
   gap: var(--iui-space-group-lg);
 }
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-image, .iui-box:has(> .iui-image), .iui-pressable:has(.iui-image)):not([style*="width"]) {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > :is(.iui-image, .iui-box:has(> .iui-image), .iui-pressable:has(.iui-image)):not([style*="width"]) {
   flex: none;
   width: clamp(120px, 33%, 200px);
 }
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box:has(> .iui-image) > .iui-image,
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable:has(.iui-image) .iui-image,
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-image {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-box:has(> .iui-image) > .iui-image,
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-pressable:has(.iui-image) .iui-image,
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-image {
   aspect-ratio: 4 / 3;
 }
 
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-box:has(> .iui-image),
-.iui-row > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable:has(.iui-image) {
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-box:has(> .iui-image),
+.iui-row > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-pressable:has(.iui-image) {
   overflow: clip;
 }
 
-.iui-form > .iui-row:last-child:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-button) {
+.iui-form > .iui-row:last-child:has(> .dsh-iui-block-editing > .dsh-iui-block-body > .iui-button) {
   margin-top: calc(var(--iui-action-gap) - var(--iui-field-gap));
 }
 
@@ -80,15 +70,15 @@
  * Card title / caption presentation (`> :first-child` rules).
  * ---------------------------------------------------------------------- */
 
-.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child,
-.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > .iui-row:first-child > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child {
+.iui-card > .dsh-iui-block-editing:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child,
+.iui-card > .dsh-iui-block-editing:first-child > .dsh-iui-block-body > .iui-row:first-child > .dsh-iui-block-editing:first-child > .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child {
   font-size: 14px;
   line-height: 20px;
   font-weight: 560;
 }
 
-.iui-card > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-caption:first-child,
-.iui-card > [data-dsh-iui-block-path]:first-child > .dsh-iui-block-body > .iui-row:first-child > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-caption:first-child {
+.iui-card > .dsh-iui-block-editing:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > .iui-caption:first-child,
+.iui-card > .dsh-iui-block-editing:first-child > .dsh-iui-block-body > .iui-row:first-child > .dsh-iui-block-editing:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > .iui-caption:first-child {
   margin-top: 2px;
   color: var(--iui-content-muted);
   font-size: 13px;
@@ -104,37 +94,37 @@
  * that ordering, so a flowing card keeps the 8px title→caption gap.
  * ---------------------------------------------------------------------- */
 
-.iui-flow > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+.iui-flow > .dsh-iui-block-editing + .dsh-iui-block-editing > .dsh-iui-block-body > :first-child {
   margin-top: var(--iui-space-section);
 }
 
-:is(.iui-flow .iui-flow, .iui-card.iui-flow) > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+:is(.iui-flow .iui-flow, .iui-card.iui-flow) > .dsh-iui-block-editing + .dsh-iui-block-editing > .dsh-iui-block-body > :first-child {
   margin-top: var(--iui-space-group);
 }
 
-.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :first-child {
+.iui-flow > .dsh-iui-block-editing:has(> .dsh-iui-block-body > .iui-title:first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > :first-child {
   margin-top: var(--iui-space-group);
 }
 
-.iui-flow > [data-dsh-iui-block-path] + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-text:first-child {
+.iui-flow > .dsh-iui-block-editing + .dsh-iui-block-editing > .dsh-iui-block-body > .iui-text:first-child {
   margin-top: var(--iui-space-group);
 }
 
-.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
+.iui-flow > .dsh-iui-block-editing:has(> .dsh-iui-block-body > .iui-title:first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
   margin-top: var(--iui-space-inner);
 }
 
-.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-title:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-row:has(> [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-badge) {
+.iui-flow > .dsh-iui-block-editing:has(> .dsh-iui-block-body > .iui-title:first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > .iui-row:has(> .dsh-iui-block-editing > .dsh-iui-block-body > .iui-badge) {
   margin-top: var(--iui-space-inner);
 }
 
-.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > .iui-caption:first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-title:first-child {
+.iui-flow > .dsh-iui-block-editing:has(> .dsh-iui-block-body > .iui-caption:first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > .iui-title:first-child {
   margin-top: var(--iui-space-tight);
 }
 
 /* Same specificity as the card-caption compensation above, later in the sheet:
    a flowing card's title→text/caption gap is the library's inner rhythm (8px). */
-.iui-card.iui-flow > [data-dsh-iui-block-path]:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + [data-dsh-iui-block-path] > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
+.iui-card.iui-flow > .dsh-iui-block-editing:has(> .dsh-iui-block-body > :is(.iui-title-sm, .iui-title-md):first-child) + .dsh-iui-block-editing > .dsh-iui-block-body > :is(.iui-text, .iui-caption) {
   margin-top: var(--iui-space-inner);
 }
 
@@ -150,47 +140,47 @@
  * covered by the row/flow compensations above.
  * ---------------------------------------------------------------------- */
 
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > * {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > * {
   min-width: 0;
 }
 
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-card,
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-pressable {
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-card,
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-pressable {
   height: 100%;
 }
 
 /* The structural title/body cap inside a grid cell or carousel item applies to
    the flow container that is now one wrapper deeper. */
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-lg,
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-lg {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-lg,
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-lg {
   font-size: 18px;
   line-height: 24px;
   letter-spacing: -0.3px;
 }
 
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-xl,
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-xl {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-xl,
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-xl {
   font-size: 22px;
   line-height: 28px;
   letter-spacing: -0.4px;
 }
 
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-2xl,
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-2xl {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-2xl,
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-2xl {
   font-size: 26px;
   line-height: 32px;
   letter-spacing: -0.5px;
 }
 
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-3xl,
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-title-3xl {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-3xl,
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-title-3xl {
   font-size: 30px;
   line-height: 36px;
   letter-spacing: -0.6px;
 }
 
-.iui-grid > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg),
-.iui-carousel-item > [data-dsh-iui-block-path] > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) {
+.iui-grid > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg),
+.iui-carousel-item > .dsh-iui-block-editing > .dsh-iui-block-body > .iui-flow .iui-text:not(.iui-text-xs, .iui-text-sm, .iui-text-lg) {
   font-size: 15px;
   line-height: 22px;
 }

@@ -40,9 +40,11 @@ import { buildArtifactTree, replaceNodeContent } from '../../shared/program-cst.
 import {
   artifactBlockPropsFromNode,
   describeArtifactBlockPropsProblem,
+  describeArtifactBlockPropsSupport,
   isArtifactBlockPropComponent,
   serializeArtifactBlockProps,
   type ArtifactBlockProps,
+  type ArtifactBlockPropsSupport,
 } from '../../shared/artifact-block-props.ts'
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
@@ -1544,30 +1546,59 @@ export interface BlockPropsState {
   readonly sourceDigest: string
   readonly componentType: 'Divider' | 'Spacer'
   readonly props: ArtifactBlockProps
+  /** Whether the current props are fully expressible in the quick-adjust UI. */
+  readonly support: ArtifactBlockPropsSupport
 }
 
 /**
- * Resolve the CST identity and current properties of one quick-adjustable block.
- * Root-level blocks use the same nested display map the canvas uses, so the id
- * scheme is identical in both editing modes.
+ * Resolve the CST node behind one display block id using the same block table
+ * the canvas uses for the current mode:
+ *
+ * - top level: `block.rootIndex` addresses the root `Col` child directly, so
+ *   shared/opaque siblings cannot shift the identity (unlike the nested map);
+ * - nested mode: the nested display map is authoritative for both the canvas
+ *   and the panel, so its node id is used unchanged.
+ *
+ * @param session - edit session snapshot.
+ * @param tree - CST tree of the session program.
+ * @param blockId - display block id.
+ * @returns the CST node, or undefined when unavailable.
+ */
+function blockNodeForId(session: ArtifactEditSession, tree: ReturnType<typeof buildArtifactTree>, blockId: string) {
+  if (session.nestedMode === true) {
+    const nested = nestedBlocksForProgram(session.program)
+    const block = nested?.blocks.find(candidate => candidate.blockId === blockId)
+    return block?.nodeId === undefined ? undefined : tree.nodes.get(block.nodeId)
+  }
+  const block = session.blocks.find(candidate => candidate.blockId === blockId)
+  if (block === undefined) return undefined
+  for (const node of tree.nodes.values()) {
+    if (node.parentNodeId === tree.rootNodeId && node.childIndex === block.rootIndex) return node
+  }
+  return undefined
+}
+
+/**
+ * Resolve the CST identity, current properties and quick-adjust support of one
+ * Divider/Spacer block.
  * @param session - edit session snapshot.
  * @param blockId - display block id.
- * @returns the node identity plus parsed props, or undefined when the block is
- *   missing, not a Divider/Spacer, or the program cannot be parsed.
+ * @returns the target, or undefined when the block is not a quick-adjustable
+ *   Divider/Spacer, is shared/opaque/scoped, or the program cannot be parsed.
  */
 export function blockPropsState(session: ArtifactEditSession, blockId: string): BlockPropsState | undefined {
-  const map = nestedBlocksForProgram(session.program)
-  const block = map?.blocks.find(candidate => candidate.blockId === blockId)
-  if (block?.nodeId === undefined || block.sourceDigest === undefined) return undefined
   const tree = buildArtifactTree(session.program, { containerTypes: [...NESTED_CONTAINER_TYPES] })
-  const node = tree.nodes.get(block.nodeId)
-  if (node === undefined || !isArtifactBlockPropComponent(node.componentType)) return undefined
+  if (tree.problems.length > 0) return undefined
+  const node = blockNodeForId(session, tree, blockId)
+  if (node === undefined || !node.editable || node.shared || node.opaque || node.scoped) return undefined
+  if (!isArtifactBlockPropComponent(node.componentType)) return undefined
   return {
     blockId,
     nodeId: node.nodeId,
     sourceDigest: node.digest,
     componentType: node.componentType,
     props: artifactBlockPropsFromNode(node.componentType, node.props),
+    support: describeArtifactBlockPropsSupport(node.componentType, node.props),
   }
 }
 
@@ -1582,8 +1613,8 @@ export function previewArtifactBlockProps(key: string, blockId: string, props: A
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted' || session.propsBusy === true) return
   const target = blockPropsState(session, blockId)
-  if (target === undefined) {
-    sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
+  if (target === undefined || !target.support.ok) {
+    sessions.set(key, { ...session, propsPreview: undefined, propsError: translate('edit.propsFailed') })
     publish()
     return
   }
@@ -1632,13 +1663,13 @@ export function clearArtifactBlockPropsPreview(key: string): void {
 export async function applyArtifactBlockProps(key: string, blockId: string, props: ArtifactBlockProps, turn?: number): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted' || session.propsBusy === true) return
-  if (session.selection.length > 0 || session.orderChanged || session.globalInstruction.trim() !== '' || (session.additions?.length ?? 0) > 0) {
+  if (hasArtifactEditContent(session)) {
     sessions.set(key, { ...session, propsError: translate('edit.propsDirty') })
     publish()
     return
   }
   const target = blockPropsState(session, blockId)
-  if (target === undefined) {
+  if (target === undefined || !target.support.ok) {
     sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
     publish()
     return
@@ -1646,6 +1677,11 @@ export async function applyArtifactBlockProps(key: string, blockId: string, prop
   const problem = describeArtifactBlockPropsProblem(target.componentType, props)
   if (problem !== undefined) {
     sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
+    publish()
+    return
+  }
+  if (serializeArtifactBlockProps(target.componentType, target.props) === serializeArtifactBlockProps(target.componentType, props)) {
+    sessions.set(key, { ...session, propsPreview: undefined, propsError: translate('edit.propsNoChange') })
     publish()
     return
   }
@@ -1682,6 +1718,18 @@ async function submitStructureOperation(
 ): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
+  // Async failures must patch the *current* session, never the snapshot taken
+  // before the request: the draft may have been closed or replaced meanwhile.
+  const fail = (message: string): void => {
+    const current = sessions.get(key)
+    if (current === undefined) return
+    sessions.set(key, {
+      ...current,
+      structureBusy: false,
+      ...surface === 'props' ? { propsError: message } : { structureError: message },
+    })
+    publish()
+  }
   sessions.set(key, { ...session, structureBusy: true, structureError: undefined })
   publish()
   try {
@@ -1712,9 +1760,12 @@ async function submitStructureOperation(
       } catch { /* fall through to the generic message */ }
       const message = code === 'base_missing' || code === 'artifact_missing'
         ? translate(surface === 'props' ? 'edit.propsBaseMissing' : 'edit.structureBaseMissing')
-        : translate(failureKey)
-      sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: message } : { structureError: message } })
-      publish()
+        : surface === 'props' && code === 'base_not_latest'
+          ? translate('edit.propsStale')
+          : surface === 'props' && code === 'no_change'
+            ? translate('edit.propsNoChange')
+            : translate(failureKey)
+      fail(message)
       return
     }
     const value: unknown = await response.json()
@@ -1739,11 +1790,9 @@ async function submitStructureOperation(
         return
       }
     }
-    sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: translate(failureKey) } : { structureError: translate(failureKey) } })
-    publish()
+    fail(translate(failureKey))
   } catch {
-    sessions.set(key, { ...session, structureBusy: false, ...surface === 'props' ? { propsError: translate(failureKey) } : { structureError: translate(failureKey) } })
-    publish()
+    fail(translate(failureKey))
   }
 }
 

@@ -428,13 +428,24 @@ function mapChildIds(
         const candidate = currentTree.nodes.get(nodeId)
         return candidate !== undefined && candidate.title === baseChild.title && candidate.componentType === baseChild.componentType
       })
-    const byIndex = byStatement !== undefined || byTitle !== undefined
+    // Content digest is the identity of an untitled/unnamed child; only a
+    // unique match counts, because identical duplicates are interchangeable.
+    const byDigest = byStatement !== undefined || byTitle !== undefined
+      ? undefined
+      : (() => {
+        const matches = candidates.filter(nodeId => {
+          const candidate = currentTree.nodes.get(nodeId)
+          return candidate !== undefined && candidate.componentType === baseChild.componentType && candidate.digest === baseChild.digest
+        })
+        return matches.length === 1 ? matches[0] : undefined
+      })()
+    const byIndex = byStatement !== undefined || byTitle !== undefined || byDigest !== undefined
       ? undefined
       : candidates.find(nodeId => {
         const candidate = currentTree.nodes.get(nodeId)
         return candidate !== undefined && candidate.childIndex === baseChild.childIndex && candidate.componentType === baseChild.componentType
       })
-    return byStatement ?? byTitle ?? byIndex
+    return byStatement ?? byTitle ?? byDigest ?? byIndex
   }
   for (const baseChildId of baseChildren) {
     const target = resolve(baseChildId)

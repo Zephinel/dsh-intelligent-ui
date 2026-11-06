@@ -36,8 +36,15 @@ const PROP_KEYS: Readonly<Record<ArtifactBlockPropComponent, readonly (keyof Art
 /** Every key any quick-adjustable component accepts. */
 export const ARTIFACT_BLOCK_PROP_KEYS = ['color', 'width', 'thickness', 'height'] as const
 
+/** Theme tokens the renderer resolves for a divider colour, in menu order. */
+export const ARTIFACT_BLOCK_COLOR_TOKENS = [
+  'ink', 'muted', 'faint', 'canvas', 'on-ink', 'surface', 'surface-strong', 'border',
+  'info', 'success', 'warning', 'danger', 'purple', 'pink',
+  'chart1', 'chart2', 'chart3', 'chart4', 'chart5', 'chart6',
+] as const
+
 /** Theme tokens the renderer resolves for a divider colour. */
-const COLOR_TOKENS = new Set([
+const COLOR_TOKENS: ReadonlySet<string> = new Set([
   'ink', 'muted', 'faint', 'canvas', 'on-ink', 'surface', 'surface-strong', 'border',
   'info', 'success', 'warning', 'danger', 'purple', 'pink',
   'chart1', 'chart2', 'chart3', 'chart4', 'chart5', 'chart6',
@@ -148,4 +155,37 @@ export function artifactBlockPropsFromNode(componentType: string, sourceProps: R
     if (typeof value === 'string' || typeof value === 'number') result[key] = value
   }
   return result
+}
+
+/** Why the deterministic property editor cannot safely rewrite one node. */
+export type ArtifactBlockPropsSupportProblem = 'dynamic' | 'unsupported_value'
+
+/** Whether a node's current props are fully expressible in the quick-adjust UI. */
+export type ArtifactBlockPropsSupport =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: ArtifactBlockPropsSupportProblem }
+
+/**
+ * Decide whether the deterministic quick-adjust editor can safely rewrite this
+ * node. A node whose props contain state references, expressions or values
+ * outside the editor's domain must stay on the instruction path: serializing
+ * the whole expression from a partial bag would silently drop bindings.
+ * @param componentType - Divider or Spacer.
+ * @param sourceProps - parsed CST props of the node.
+ * @returns ok, or the reason the editor must fall back to a model instruction.
+ */
+export function describeArtifactBlockPropsSupport(
+  componentType: string,
+  sourceProps: Readonly<Record<string, unknown>>,
+): ArtifactBlockPropsSupport {
+  if (!isArtifactBlockPropComponent(componentType)) return { ok: false, reason: 'unsupported_value' }
+  for (const key of PROP_KEYS[componentType]) {
+    const value = sourceProps[key]
+    // `null` is the positional placeholder for "use the theme default".
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string' && typeof value !== 'number') return { ok: false, reason: 'dynamic' }
+    const problem = describeArtifactBlockPropsProblem(componentType, { [key]: value })
+    if (problem !== undefined) return { ok: false, reason: 'unsupported_value' }
+  }
+  return { ok: true }
 }

@@ -773,3 +773,51 @@ test('props overrides are idempotent and reject unusable targets or values', asy
   }
 })
 
+
+test('a property bag that changes nothing is rejected without recording a revision', async () => {
+  const m = mount()
+  await seed(m, PROPS_PROGRAM)
+  const first = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('props-noop-first'), operations: [propsOp(PROPS_TREE, 'n3', { color: 'muted' })] }),
+  })
+  assert.equal(first.status, 201, JSON.stringify(first.body))
+  const tree = buildArtifactTree(first.body.result.program, { containerTypes: ['Col', 'Row', 'Card'] })
+  const same = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: first.body.result.revisionId,
+      operationId: operationId('props-noop-second'),
+      operations: [propsOp(tree, 'n3', { color: 'muted' })],
+    }),
+  })
+  assert.equal(same.status, 400, JSON.stringify(same.body))
+  assert.equal(same.body.error.code, 'no_change')
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1, 'no second revision is recorded')
+})
+
+test('the operation digest binds the property bag and rejects one node twice', async () => {
+  const m = mount()
+  await seed(m, PROPS_PROGRAM)
+  const operationIdValue = operationId('props-digest')
+  const first = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationIdValue, operations: [propsOp(PROPS_TREE, 'n3', { color: 'muted' })] }),
+  })
+  assert.equal(first.status, 201, JSON.stringify(first.body))
+  const different = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationIdValue, operations: [propsOp(PROPS_TREE, 'n3', { color: 'danger' })] }),
+  })
+  assert.equal(different.status, 409, JSON.stringify(different.body))
+  assert.equal(different.body.error.code, 'operation_replayed')
+
+  const duplicate = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: first.body.result.revisionId,
+      operationId: operationId('props-double-target'),
+      operations: [
+        propsOp(buildArtifactTree(first.body.result.program, { containerTypes: ['Col', 'Row', 'Card'] }), 'n3', { color: 'danger' }),
+        propsOp(buildArtifactTree(first.body.result.program, { containerTypes: ['Col', 'Row', 'Card'] }), 'n3', { thickness: 3 }),
+      ],
+    }),
+  })
+  assert.equal(duplicate.status, 400, JSON.stringify(duplicate.body))
+  assert.equal(duplicate.body.error.code, 'operation_conflict')
+})

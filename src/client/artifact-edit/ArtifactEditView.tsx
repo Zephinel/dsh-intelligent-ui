@@ -11,11 +11,12 @@
  * outside this component: the DSH card mounts the view where its renderer used
  * to be, so entering and leaving edit mode keeps one card and one body.
  */
-import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { BlockSlotContext, BlockSlotPathContext, type BlockSlotContextValue } from '../../lib/components/block-slot.tsx'
 import { wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { OpenUIRenderer } from '../../lib/render.tsx'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditViewProps } from './contracts.ts'
+import { BlockOverlay } from './BlockOverlay.tsx'
 import { BlockPopover } from './BlockPopover.tsx'
 import { EditPanel } from './EditPanel.tsx'
 import { blocksForProgram, probeArtifactRevisionStatus } from './store.ts'
@@ -42,6 +43,7 @@ export function ArtifactEditView({
   closing = false,
   onOpenHistory,
 }: ArtifactEditViewClosingProps): ReactElement {
+  const canvasRef = useRef<HTMLDivElement | null>(null)
   const [tooNarrow, setTooNarrow] = useState<boolean>(
     typeof window === 'undefined' ? false : !isEditViewportWideEnough(window.innerWidth),
   )
@@ -263,12 +265,12 @@ export function ArtifactEditView({
         ? <p className="dsh-iui-edit-checking" role="alert">{session.error}</p>
         : null}
 
-      <div className="dsh-iui-edit-canvas" aria-busy={checking ? true : undefined}>
+      <div ref={canvasRef} className="dsh-iui-edit-canvas" aria-busy={checking ? true : undefined}>
         <BlockSlotContext.Provider value={slots}>
           {session.nestedMode === true && nestedPathContext !== undefined ? (
             <BlockSlotPathContext.Provider value={nestedPathContext}>
               <OpenUIRenderer
-                program={session.program}
+                program={session.propsPreview?.program ?? session.program}
                 title={session.title}
                 scopeId={session.baseRevisionId}
                 nestedBlockSlots
@@ -293,6 +295,7 @@ export function ArtifactEditView({
             />
           )}
         </BlockSlotContext.Provider>
+        <BlockOverlay t={t} session={session} actions={actions} scheme={scheme} canvasRef={canvasRef} />
       </div>
       <p className="dsh-iui-edit-frozen">{t('edit.frozenHint')}</p>
 

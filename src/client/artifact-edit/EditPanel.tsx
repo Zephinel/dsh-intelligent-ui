@@ -35,6 +35,7 @@ import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { RemixIcon, type RemixIconName } from '../../lib/components/remix-icon.tsx'
 import { applyEditChatContentWidth, type ChatContentWidthController } from './panel-width.ts'
+import { blockAnchorElement } from './block-geometry.ts'
 
 /** Props of the edit panel; the card supplies both the snapshot and actions. */
 export interface EditPanelProps {
@@ -60,9 +61,9 @@ const DRAG_THRESHOLD = 4
 /** Distance kept from the viewport edge. */
 const CARD_MARGIN = 8
 
-/** Query one block wrapper inside the mounted edit canvas. */
+/** Query the edit-canvas overlay element for one block id. */
 function blockElement(blockId: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-dsh-iui-block="${blockId}"]`)
+  return blockAnchorElement(blockId)
 }
 
 /** Query the arrangement row that anchors one request card. */

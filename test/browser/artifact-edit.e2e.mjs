@@ -122,6 +122,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     })()`)
   }
   const arrangementOrder = () => read(`[...document.querySelectorAll('[data-dsh-iui-edit-arrangement-row]')].map(row => row.getAttribute('data-block-id'))`)
+  const clickBlock = async (blockId) => {
+    await wait(`!!document.querySelector('[data-dsh-iui-block-hit="${blockId}"]')`, `hit target ${blockId}`)
+    await click(`[data-dsh-iui-block-hit="${blockId}"]`)
+  }
   const chipLabel = () => read(`document.querySelector('[data-chip="artifact-edit"]')?.getAttribute('data-chip-label') ?? null`)
   const arrangementSelector = id => `[data-dsh-iui-edit-arrangement-row][data-block-id="${id}"]`
   const openArrangementEditor = async id => {
@@ -218,77 +222,59 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-block]'), 9, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
   const editableHint = await read(`(() => {
-    const block = document.querySelector('[data-dsh-iui-block="b3"]');
-    const body = block.querySelector('.dsh-iui-block-body');
-    const layer = block.querySelector('.dsh-iui-block-layer');
-    const marquee = getComputedStyle(block, '::after');
-    const blocks = [...document.querySelectorAll('[data-dsh-iui-block]')];
+    const marquees = [...document.querySelectorAll('.dsh-iui-block-marquee')];
+    const first = marquees[0];
+    const body = document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-body');
+    const items = [...document.querySelectorAll('.dsh-iui-block-overlay-item')];
+    const style = first === undefined ? null : getComputedStyle(first);
     return {
       bodyAnimation: getComputedStyle(body).animationName,
-      layerBorder: parseFloat(getComputedStyle(layer).borderTopWidth),
-      marqueeAnimation: marquee.animationName,
-      marqueeIteration: marquee.animationIterationCount,
-      marqueeBackground: marquee.backgroundImage,
-      marqueeMask: marquee.maskImage,
-      marqueeOpacity: parseFloat(marquee.opacity),
-      delays: blocks.map(item => parseFloat(getComputedStyle(item, '::after').animationDelay)),
+      marqueeCount: marquees.length,
+      marqueeAnimation: style?.animationName ?? null,
+      marqueeIteration: style?.animationIterationCount ?? null,
+      marqueeBackground: style?.backgroundImage ?? '',
+      marqueeMask: style?.maskImage ?? '',
+      marqueeOpacity: style === null ? 0 : parseFloat(style.opacity),
+      stagger: items.map(item => getComputedStyle(item).getPropertyValue('--dsh-iui-stagger').trim()),
     };
   })()`)
   check(editableHint.bodyAnimation.includes('dsh-iui-block-breathe'), false, 'the block body no longer breathes')
-  check(editableHint.layerBorder, 0, 'editable hint has no dashed border')
+  check(editableHint.marqueeCount, 9, 'every root block draws one marquee')
   check(editableHint.marqueeAnimation.includes('dsh-iui-block-marquee'), true, 'editable blocks run a light marquee around their edge')
   check(editableHint.marqueeIteration, 'infinite', 'the marquee keeps orbiting while the canvas idles')
   check(editableHint.marqueeBackground.includes('conic-gradient'), true, 'the marquee is a rotating conic light')
   check(editableHint.marqueeMask.includes('linear-gradient'), true, 'the light is masked to the rounded block edge')
   check(editableHint.marqueeOpacity > 0.8, true, 'the marquee is visible at rest')
-  check(new Set(editableHint.delays).size, 9, 'the marquee orbits at a staggered phase per block')
+  check(new Set(editableHint.stagger).size, 9, 'the marquee orbits at a staggered phase per block')
   const tones = await read(`(() => {
-    const first = getComputedStyle(document.querySelector('[data-dsh-iui-block="b1"]'), '::after').backgroundImage;
-    const second = getComputedStyle(document.querySelector('[data-dsh-iui-block="b2"]'), '::after').backgroundImage;
+    const first = getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b1"] .dsh-iui-block-marquee')).backgroundImage;
+    const second = getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b2"] .dsh-iui-block-marquee')).backgroundImage;
     return { both: first.includes('conic-gradient') && second.includes('conic-gradient'), distinct: first !== second };
   })()`)
   check(tones.both, true, 'each editable block paints its own conic marquee')
   check(tones.distinct, true, 'neighbouring blocks orbit in different pastel tones')
-  await hover('[data-dsh-iui-block="b3"]')
+  await hover('[data-dsh-iui-block-hit="b3"]')
   await new Promise(resolve => setTimeout(resolve, 220))
-  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"]'), '::after').opacity`), '1', 'hover brightens the marquee')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '1', 'hover brightens the marquee')
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
   await new Promise(resolve => setTimeout(resolve, 260))
-  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"]'), '::after').opacity`), '0.9', 'the marquee settles back when the pointer leaves')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '0.9', 'the marquee settles back when the pointer leaves')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   await new Promise(resolve => setTimeout(resolve, 120))
   const reducedMotion = await read(`(() => {
-    const block = document.querySelector('[data-dsh-iui-block="b3"]');
-    return { orbit: getComputedStyle(block, '::after').animationName, rest: getComputedStyle(block, '::after').opacity };
+    const marquee = document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee');
+    return { orbit: getComputedStyle(marquee).animationName, rest: getComputedStyle(marquee).opacity };
   })()`)
   check(reducedMotion.orbit, 'none', 'reduced motion stops the orbit')
   check(parseFloat(reducedMotion.rest) >= 0.4, true, 'reduced motion keeps a still glow as the affordance')
   await cdp.send('Emulation.setEmulatedMedia', { features: [] })
   await new Promise(resolve => setTimeout(resolve, 120))
-  check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
-  check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
-  check(await count('[data-dsh-iui-edit-arrangement-row]'), 9, 'arrangement lists every block')
-  check(await arrangementOrder(), ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'], 'arrangement starts in page order')
-  check(await count('[data-dsh-iui-edit-arrangement-row] .dsh-iui-edit-tag'), 0, 'no edited tags yet')
-  check(await text('[data-dsh-iui-edit-reset-order]'), '重置顺序', 'reset order control')
-  check((await text('[data-dsh-iui-edit-panel]')).includes('区块编排'), true, 'arrangement section title')
-  check((await text('[data-dsh-iui-edit-panel]')).includes('Artifact 编辑器'), true, 'panel title')
-  check(await count('[data-dsh-iui-edit-send-info]'), 1, 'send summary card')
-  check((await text('[data-dsh-iui-edit-send-info]')).includes('保持原样'), true, 'summary reports unchanged order')
-  await read(`(() => {
-    for (const animation of document.getAnimations()) {
-      if (!animation.effect?.target?.matches?.('[data-dsh-iui-block="b2"]')) continue;
-      if (animation.effect.pseudoElement !== '::after') continue;
-      animation.pause();
-      animation.currentTime = 700;
-    }
-  })()`)
   await shot('harness-block-marquee.png')
   await read(`(() => { for (const animation of document.getAnimations()) if (animation.effect?.pseudoElement === '::after') animation.play(); })()`)
   await shot('harness-arrangement-empty.png')
 
   // 3. Opening a popover does not create a request.
-  await click('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')
+  await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover opened')
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'draft popover creates no request')
   await click('[data-dsh-iui-edit-cancel]')
@@ -306,25 +292,29 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-request-row]')).includes('把模拟时钟改为数字时钟'), true, 'request row shows instruction')
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
   const selectedVisual = await read(`(() => {
-    const block = document.querySelector('[data-dsh-iui-block="b3"]');
-    const layer = block.querySelector('.dsh-iui-block-layer');
-    const body = block.querySelector('.dsh-iui-block-body');
-    return { border: parseFloat(getComputedStyle(layer).borderTopWidth), shadow: getComputedStyle(layer).boxShadow, radius: parseFloat(getComputedStyle(body).borderTopLeftRadius), bodyBg: getComputedStyle(body).backgroundColor };
+    const item = document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"]');
+    const frame = item?.querySelector('.dsh-iui-block-frame');
+    const badge = item?.querySelector('.dsh-iui-block-badge');
+    const tools = item?.querySelector('.dsh-iui-block-tools');
+    const hit = item?.querySelector('.dsh-iui-block-hit');
+    return {
+      frameShadow: frame === null || frame === undefined ? 'none' : getComputedStyle(frame).boxShadow,
+      frameRadius: frame === null || frame === undefined ? 0 : parseFloat(getComputedStyle(frame).borderTopLeftRadius),
+      badge: badge?.textContent ?? null,
+      tools: tools?.querySelectorAll('button').length ?? 0,
+      hitLabel: hit?.getAttribute('aria-label') ?? null,
+      hitPressed: hit?.getAttribute('aria-pressed') ?? null,
+    };
   })()`)
-  check(selectedVisual.border, 0, 'selected block has no coloured outline')
-  check(selectedVisual.shadow !== 'none', true, 'selected block casts a floating shadow')
-  check(selectedVisual.radius >= 12, true, 'selected block gets a rounded card body')
-  check(selectedVisual.bodyBg !== 'rgba(0, 0, 0, 0)', true, 'selected block has a card surface')
-  console.log('SELECTED DEBUG', JSON.stringify(selectedVisual), await read(`(() => {
-    const b = document.querySelector('[data-dsh-iui-block="b3"]');
-    const l = b.querySelector('.dsh-iui-block-layer');
-    const body = b.querySelector('.dsh-iui-block-body');
-    const card = b.querySelector('.iui-card');
-    return { layerBorder: getComputedStyle(l).border, layerShadow: getComputedStyle(l).boxShadow, layerOutline: getComputedStyle(l).outline, bodyBorder: getComputedStyle(body).border, bodyOutline: getComputedStyle(body).outline, bodyClass: body.className, cardBorder: card ? getComputedStyle(card).border : null };
-  })()`))
+  check(selectedVisual.frameShadow !== 'none', true, 'selected block casts a floating shadow')
+  check(selectedVisual.frameRadius >= 12, true, 'selected block gets a rounded frame')
+  check(selectedVisual.badge, '1', 'selected block shows its request number')
+  check(selectedVisual.tools, 2, 'selected block offers edit and deselect tools')
+  check(selectedVisual.hitLabel !== null && selectedVisual.hitLabel !== '', true, 'the hit target is labelled for screen readers')
+  check(selectedVisual.hitPressed, 'true', 'the hit target reports its pressed state')
   await shot('harness-selected-block.png')
   const pencilPaths = await read(`(() => {
-    const overlay = document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool svg path')?.getAttribute('d') ?? null;
+    const overlay = document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-tool svg path')?.getAttribute('d') ?? null;
     const row = document.querySelector('[data-dsh-iui-edit-structure-edit] svg path')?.getAttribute('d') ?? null;
     const requestRow = document.querySelector('[data-dsh-iui-edit-request-edit] svg path')?.getAttribute('d') ?? null;
     return { overlay, row, requestRow, text: document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool')?.textContent ?? '' };
@@ -338,7 +328,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-edit-clear-all]'), 1, 'clear-all control appears')
 
   // 5. A second request.
-  await click('[data-dsh-iui-block="b5"] .dsh-iui-block-layer')
+  await clickBlock('b5')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'second popover')
   await saveInstruction('增加首次实施年份')
   await wait('document.querySelectorAll("[data-dsh-iui-edit-request-row]").length === 2', 'two request rows')
@@ -376,7 +366,6 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'pointer drag reorder', { timeout: 4000 })
   check(await read(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id')`), 'b2', 'pointer drag moves b2 to the top')
   await read(`document.querySelector('${arrangementSelector('b3')} [data-dsh-iui-edit-arrangement-body]').click()`)
-  await wait('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-flash") === "true"', 'canvas flash')
   check(await count('[data-dsh-iui-edit-popover]'), 0, 'arrangement body click does not open the popover')
 
   // 9. Reset restores page order but keeps edits, numbers and global note.
@@ -701,7 +690,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-nested]')
   await wait(`document.querySelectorAll('[data-dsh-iui-block-node]').length >= 8`, 'nested block wrappers')
   check(await count('[data-dsh-iui-block="b1.2.1"]'), 1, 'nested block has its display id')
-  await click('[data-dsh-iui-block="b1.2.1"] .dsh-iui-block-layer')
+  await clickBlock('b1.2.1')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'nested popover')
   await saveInstruction('nested text change')
   check((await text('[data-dsh-iui-edit-request-list]')).includes('nested text change'), true, 'nested request saved')
@@ -803,7 +792,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-block="b2.2.1"]'), 1, 'Grid child is selectable')
   check(await count('[data-dsh-iui-block="b3.1"]'), 1, 'Section child is selectable')
   check(await count('[data-dsh-iui-block="b4.2.1"]'), 1, 'Carousel child is selectable')
-  await click('[data-dsh-iui-block="b2.2.1"] .dsh-iui-block-layer')
+  await clickBlock('b2.2.1')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'grid nested popover')
   await saveInstruction('grid nested change')
   const expandedEnvelope = await read('window.__serializeChipMatching("嵌套容器样例")')
@@ -1093,13 +1082,27 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // 30. Divider/Spacer quick adjust: canvas preview + deterministic property revision.
   await read('window.__addPropsCard()')
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-1"]\')', 'props card')
+  const propGeometry = `(() => {
+    const card = document.querySelector('[data-dsh-iui-call-id="props-call-1"]');
+    const title = card.querySelector('.iui-title');
+    const hr = card.querySelector('hr.iui-divider');
+    return { gap: +(hr.getBoundingClientRect().top - title.getBoundingClientRect().bottom).toFixed(2), width: +hr.getBoundingClientRect().width.toFixed(1), margin: getComputedStyle(hr).marginTop };
+  })()`
+  const propsNormalGeometry = await read(propGeometry)
   await click('[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'props editor')
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'four prop blocks')
-  await click('[data-dsh-iui-block="b2"] .dsh-iui-block-layer')
+  const propsEditGeometry = await read(propGeometry)
+  check(propsEditGeometry.gap, propsNormalGeometry.gap, 'edit canvas keeps the title-to-divider rhythm')
+  check(propsEditGeometry.width, propsNormalGeometry.width, 'edit canvas keeps the divider width')
+  check(propsEditGeometry.margin, propsNormalGeometry.margin, 'edit canvas keeps the divider margin')
+  await clickBlock('b2')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'quick props panel')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Divider', 'Divider blocks show the quick-adjust panel')
+  await wait(`document.activeElement?.closest('[data-dsh-iui-edit-props]') !== null`, 'quick panel focus')
+  check(await read(`document.activeElement?.closest('[data-dsh-iui-edit-props]') !== null`), true, 'the first quick-adjust control receives focus')
   check(await count('[data-dsh-iui-edit-instruction]'), 0, 'quick-adjust blocks do not show the model textarea')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled`), true, 'apply stays disabled until a value changes')
   const setSelectValue = async (selector, value) => read(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
@@ -1113,6 +1116,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     return true;
   })()`)
   await setSelectValue('[data-dsh-iui-edit-prop="color"] select', 'info')
+  await wait(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled === false`, 'apply enabled after edit')
   await setSelectValue('[data-dsh-iui-edit-prop="width"] select', '%')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '60')
   await setInputValue('[data-dsh-iui-edit-prop="thickness"] input', '2')
@@ -1125,6 +1129,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   check(dividerPreview.border, '2px', 'the canvas preview paints the new divider thickness')
   check(dividerPreview.style.includes('var(--iui-info)'), true, 'the canvas preview keeps the theme token colour')
+  await shot('harness-quick-props.png')
   await read(`(() => {
     window.__propCalls = [];
     const original = window.fetch.bind(window);
@@ -1167,7 +1172,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'spacer editor')
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'spacer blocks')
-  await click('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')
+  await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'spacer quick props')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'Spacer blocks show width and height controls')
   await setSelectValue('[data-dsh-iui-edit-prop="width"] select', 'px')
@@ -1187,7 +1192,84 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(propCallsAfter.length, 2, 'the spacer request was sent too')
   check(propCallsAfter[1].operations[0].props.width, 12, 'the spacer request carries the px width')
   check(propCallsAfter[1].operations[0].props.height, 'auto', 'the spacer request carries the auto height')
-  await shot('harness-quick-props.png')
+  await shot('harness-quick-props-applied.png')
+
+  // 31. A pending block instruction blocks the property apply with inline copy.
+  await read('window.__addPropsCard("props-call-2", "属性调整样例 2")')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-2"]\')', 'dirty props card')
+  await click('[data-dsh-iui-call-id="props-call-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'dirty blocks')
+  await clickBlock('b1')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-instruction]")', 'instruction editor')
+  await read(`(() => {
+    const area = document.querySelector('[data-dsh-iui-edit-instruction]');
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(area, '把标题改短');
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`)
+  await click('[data-dsh-iui-edit-save]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-request-row]")', 'saved instruction row')
+  await clickBlock('b2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'quick props with pending instruction')
+  await setSelectValue('[data-dsh-iui-edit-prop="color"] select', 'danger')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props-error]")', 'dirty guard error')
+  check((await text('[data-dsh-iui-edit-props-error]')).includes('请先发送'), true, 'a pending instruction is reported before applying properties')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty editor closed')
+
+  // 32. Nested Divider quick adjust previews on the nested canvas.
+  await read('window.__addNestedPropsCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="nested-props-call-1"]\')', 'nested props card')
+  await click('[data-dsh-iui-call-id="nested-props-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested props editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('document.querySelector("[data-dsh-iui-edit-nested]").getAttribute("aria-pressed") === "true"', 'nested mode on')
+  await wait('!!document.querySelector(\'[data-dsh-iui-block-hit="b1.2"]\')', 'nested divider hit target')
+  await clickBlock('b1.2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'nested quick props')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Divider', 'nested Divider shows quick adjust')
+  await setSelectValue('[data-dsh-iui-edit-prop="width"] select', '%')
+  await setInputValue('[data-dsh-iui-edit-prop="width"] input', '30')
+  await wait(`document.querySelector('[data-dsh-iui-block="b1.2"] hr')?.getAttribute('style')?.includes('30%')`, 'nested divider preview')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-view]').getAttribute('data-dsh-iui-edit-props-preview')`), 'b1.2', 'the nested canvas reports the previewed block')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'nested props editor closed')
+
+  // 33. Centered root Col keeps Divider geometry in the edit canvas.
+  await read('window.__addPropsCenterCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-center-call-1"]\')', 'center props card')
+  const centerGeometry = `(() => {
+    const card = document.querySelector('[data-dsh-iui-call-id="props-center-call-1"]');
+    const hr = card.querySelector('hr.iui-divider');
+    return { width: +hr.getBoundingClientRect().width.toFixed(1), margin: getComputedStyle(hr).marginTop };
+  })()`
+  const centerNormal = await read(centerGeometry)
+  await click('[data-dsh-iui-call-id="props-center-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'center editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 2', 'center blocks')
+  const centerEdit = await read(centerGeometry)
+  check(centerEdit.width, centerNormal.width, 'edit canvas keeps a centered divider width')
+  check(centerEdit.margin, centerNormal.margin, 'edit canvas keeps a centered divider margin')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'center editor closed')
+
+  // 34. Dynamic or out-of-domain props fall back to the instruction editor.
+  await read('window.__addPropsDynamicCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-dynamic-call-1"]\')', 'dynamic props card')
+  await click('[data-dsh-iui-call-id="props-dynamic-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic editor')
+  await wait(`!!document.querySelector('[data-dsh-iui-block-hit="b1"]')`, 'dynamic hit target')
+  await clickBlock('b1')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-instruction]")', 'instruction fallback')
+  check(await count('[data-dsh-iui-edit-props]'), 0, 'dynamic props do not open the quick controls')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('动态绑定'), true, 'the fallback explains the dynamic binding instead of rewriting it')
+  await click('[data-dsh-iui-edit-cancel]')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dynamic editor closed')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

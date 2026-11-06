@@ -1,15 +1,17 @@
 /**
  * Quick property controls for the two structural blocks that do not need a
  * model turn: a Divider (colour, width, thickness) and a Spacer (width,
- * height). The parent popover owns the draft property bag and the apply
- * action; this component only renders the inputs and reports changes.
+ * height). The parent popover owns the committed property bag and the apply
+ * action; this component keeps the transient input state (unit selections and
+ * partially typed numbers) local so a middle edit never rewrites the bag with
+ * a half-valid value.
  */
-import type { ReactElement } from 'react'
-import type { ArtifactBlockPropComponent, ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
+import { useState, type ReactElement } from 'react'
+import { ARTIFACT_BLOCK_COLOR_TOKENS, type ArtifactBlockPropComponent, type ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { Translate } from '../../shared/locales.ts'
 
-/** Theme tokens offered on the Divider colour select. */
-const COLOR_OPTIONS = ['', 'ink', 'muted', 'faint', 'border', 'info', 'success', 'warning', 'danger'] as const
+/** Theme tokens offered on the Divider colour select (empty = theme default). */
+const COLOR_OPTIONS = ['' as const, ...ARTIFACT_BLOCK_COLOR_TOKENS]
 
 /** One length field split into a number and a unit selection. */
 interface LengthDraft {
@@ -22,46 +24,63 @@ function lengthDraft(value: number | string | undefined): LengthDraft {
   if (typeof value === 'number') return { unit: 'px', value: String(value) }
   if (value === 'auto') return { unit: 'auto', value: '' }
   if (value.endsWith('%')) return { unit: '%', value: value.slice(0, -1) }
-  return { unit: 'px', value: value.endsWith('px') ? value.slice(0, -2) : value }
+  if (value.endsWith('px')) return { unit: 'px', value: value.slice(0, -2) }
+  return { unit: '', value: '' }
 }
 
 function lengthValue(draft: LengthDraft): number | string | undefined {
-  if (draft.unit === '') return undefined
-  if (draft.unit === 'auto') return 'auto'
+  if (draft.unit === '' || draft.unit === 'auto') return draft.unit === 'auto' ? 'auto' : undefined
+  if (draft.value.trim() === '') return undefined
   const number = Number(draft.value)
-  if (!Number.isFinite(number) || draft.value.trim() === '') return draft.unit === 'px' ? 0 : '0%'
+  if (!Number.isFinite(number)) return undefined
   return draft.unit === 'px' ? number : `${number}%`
 }
 
 /** A colour either names a theme token or is a custom CSS colour. */
 function isTokenColor(value: string | undefined): boolean {
-  return value === undefined || (COLOR_OPTIONS as readonly string[]).includes(value) || value === ''
+  return value === undefined || value === '' || (ARTIFACT_BLOCK_COLOR_TOKENS as readonly string[]).includes(value)
 }
 
 interface QuickBlockPropsProps {
   readonly t: Translate
   readonly componentType: ArtifactBlockPropComponent
+  /** Props at mount; local state owns the in-progress edits. */
   readonly props: ArtifactBlockProps
-  /** Apply one functional change to the latest draft (never a stale snapshot). */
-  readonly onChange: (update: (current: ArtifactBlockProps) => ArtifactBlockProps) => void
+  /** Apply one complete property bag to the popover draft/preview. */
+  readonly onChange: (props: ArtifactBlockProps) => void
 }
 
 /**
  * Render the quick-adjust fields for one Divider/Spacer block.
- * @param props - locale, component type, current draft and change callback.
+ * @param props - locale, component type, initial properties and change callback.
  * @returns the controls, grouped as compact labelled rows.
  */
 export function QuickBlockProps({ t, componentType, props, onChange }: QuickBlockPropsProps): ReactElement {
-  const color = props.color ?? ''
-  const customColor = !isTokenColor(props.color) ? props.color ?? '' : ''
-  const width = lengthDraft(props.width)
-  const height = lengthDraft(props.height)
+  const [color, setColor] = useState<string | undefined>(props.color)
+  const [customColor, setCustomColor] = useState<boolean>(!isTokenColor(props.color))
+  const [width, setWidth] = useState<LengthDraft>(lengthDraft(props.width))
+  const [height, setHeight] = useState<LengthDraft>(lengthDraft(props.height))
+  const [thickness, setThickness] = useState<string>(props.thickness === undefined ? '' : String(props.thickness))
 
-  const setLengthUnit = (key: 'width' | 'height', unit: LengthDraft['unit']): void => {
-    onChange(current => ({ ...current, [key]: lengthValue({ unit, value: lengthDraft(current[key]).value }) }))
-  }
-  const setLengthValue = (key: 'width' | 'height', value: string): void => {
-    onChange(current => ({ ...current, [key]: lengthValue({ unit: lengthDraft(current[key]).unit, value }) }))
+  const emit = (next: {
+    color?: string
+    customColor?: boolean
+    width?: LengthDraft
+    height?: LengthDraft
+    thicknessText?: string
+  }): void => {
+    const nextColor = next.color !== undefined ? next.color : color
+    const nextWidth = next.width ?? width
+    const nextHeight = next.height ?? height
+    const nextThickness = next.thicknessText ?? thickness
+    const parsedThickness = nextThickness.trim() === '' ? undefined : Number(nextThickness)
+    const bag: ArtifactBlockProps = {
+      ...nextColor === undefined || nextColor === '' ? {} : { color: nextColor },
+      ...lengthValue(nextWidth) === undefined ? {} : { width: lengthValue(nextWidth) },
+      ...componentType === 'Spacer' && lengthValue(nextHeight) !== undefined ? { height: lengthValue(nextHeight) } : {},
+      ...componentType === 'Divider' && parsedThickness !== undefined && Number.isFinite(parsedThickness) ? { thickness: parsedThickness } : {},
+    }
+    onChange(bag)
   }
 
   const lengthRow = (key: 'width' | 'height', label: string, draft: LengthDraft, allowAuto: boolean): ReactElement => (
@@ -71,7 +90,12 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
         className="dsh-iui-edit-props-select"
         aria-label={`${label} ${t('edit.propsUnit')}`}
         value={draft.unit}
-        onChange={event => setLengthUnit(key, event.target.value as LengthDraft['unit'])}
+        onChange={event => {
+          const nextDraft = { unit: event.target.value as LengthDraft['unit'], value: draft.value }
+          if (key === 'width') setWidth(nextDraft)
+          else setHeight(nextDraft)
+          emit({ [key]: nextDraft })
+        }}
       >
         <option value="">{t('edit.propsDefault')}</option>
         <option value="px">{t('edit.propsPx')}</option>
@@ -87,7 +111,12 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
         aria-label={label}
         disabled={draft.unit === '' || draft.unit === 'auto'}
         value={draft.unit === '' || draft.unit === 'auto' ? '' : draft.value}
-        onChange={event => setLengthValue(key, event.target.value)}
+        onChange={event => {
+          const nextDraft = { unit: draft.unit, value: event.target.value }
+          if (key === 'width') setWidth(nextDraft)
+          else setHeight(nextDraft)
+          emit({ [key]: nextDraft })
+        }}
       />
     </div>
   )
@@ -102,13 +131,18 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
             <select
               className="dsh-iui-edit-props-select"
               aria-label={t('edit.propsColor')}
-              value={customColor === '' ? color : 'custom'}
+              value={customColor ? 'custom' : color ?? ''}
               onChange={event => {
                 const next = event.target.value
                 if (next === 'custom') {
-                  onChange(current => ({ ...current, color: customColor === '' ? '#334155' : customColor }))
+                  const initial = isTokenColor(color) ? '#334155' : color ?? '#334155'
+                  setCustomColor(true)
+                  setColor(initial)
+                  emit({ color: initial, customColor: true })
                 } else {
-                  onChange(current => ({ ...current, color: next === '' ? undefined : next }))
+                  setCustomColor(false)
+                  setColor(next === '' ? undefined : next)
+                  emit({ color: next })
                 }
               }}
             >
@@ -117,16 +151,19 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
               ))}
               <option value="custom">{t('edit.propsCustom')}</option>
             </select>
-            {customColor === '' ? null : (
+            {customColor ? (
               <input
                 className="dsh-iui-edit-props-input dsh-iui-edit-props-color"
                 type="text"
                 aria-label={t('edit.propsColor')}
                 placeholder="#334155"
-                value={customColor}
-                onChange={event => onChange(current => ({ ...current, color: event.target.value }))}
+                value={color ?? ''}
+                onChange={event => {
+                  setColor(event.target.value)
+                  emit({ color: event.target.value })
+                }}
               />
-            )}
+            ) : null}
           </div>
           {lengthRow('width', t('edit.propsWidth'), width, false)}
           <div className="dsh-iui-edit-props-row" data-dsh-iui-edit-prop="thickness">
@@ -139,10 +176,10 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
               step={0.5}
               inputMode="decimal"
               aria-label={t('edit.propsThickness')}
-              value={props.thickness === undefined ? '' : String(props.thickness)}
+              value={thickness}
               onChange={event => {
-                const next = event.target.value.trim() === '' ? undefined : Number(event.target.value)
-                onChange(current => ({ ...current, thickness: next !== undefined && Number.isFinite(next) ? next : undefined }))
+                setThickness(event.target.value)
+                emit({ thicknessText: event.target.value })
               }}
             />
             <span className="dsh-iui-edit-props-unit">{t('edit.propsPx')}</span>

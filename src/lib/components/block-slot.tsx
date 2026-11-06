@@ -4,25 +4,25 @@
  * Internal edit-mode wrapper for one root-level Artifact block.
  *
  * `wrapProgramForBlockEditing` rewrites the root `Col` so each editable block
- * sits inside this component. In normal rendering the context is absent and the
- * wrapper is layout-transparent. In edit mode it adds a selection overlay, a
- * numbered badge and per-block actions; the overlay captures pointer events so
- * clicking any part of the block selects it instead of operating its controls
- * (the read-only behaviour the edit mode promises).
+ * sits inside this component. The wrapper is a layout-transparent identity
+ * carrier (`display: contents`): it adds no box, so the edit canvas keeps the
+ * page's layout. Selection chrome (hit targets, frame, badge, tools, marquee)
+ * is painted by the client's geometry overlay from measured content rectangles,
+ * not by this wrapper.
  *
- * It also carries an optional nested `path` (M4 spike): a path-aware wrapper
- * provides `BlockSlotPathContext` to its descendants so container renderers can
- * derive stable child paths, and exposes the path as an attribute for overlay
- * anchoring. Without `path` every behaviour above stays byte-identical.
+ * It also carries an optional nested `path` (M4): a path-aware wrapper provides
+ * `BlockSlotPathContext` to its descendants so container renderers can derive
+ * stable child paths, and exposes the path as an attribute for the overlay. The
+ * nested renderer can be mounted without block chrome, so path wrappers are
+ * layout-transparent even without a `BlockSlotContext`.
  *
  * This component is registered only in the edit-mode library, never in the
  * model-facing catalog.
  */
 import { defineComponent } from "@openuidev/react-lang";
-import { createContext, useContext, useRef, type CSSProperties, type KeyboardEvent, type ReactElement } from "react";
+import { createContext, useContext, type ReactElement } from "react";
 import { z } from "zod/v4";
 import { children, cx } from "./style";
-import { RemixIcon } from "./remix-icon.tsx";
 import "./artifact-edit.css";
 import "./nested-edit.css";
 
@@ -106,7 +106,6 @@ export const BlockSlot = defineComponent({
   component: function BlockSlotView({ props, renderNode }) {
     const context = useContext(BlockSlotContext);
     const pathContext = useContext(BlockSlotPathContext);
-    const host = useRef<HTMLDivElement>(null);
     // Nested wrappers resolve their display identity from the client resolver.
     const identity = props.path === undefined ? undefined : pathContext?.resolve?.(props.path);
     const blockId = identity?.blockId ?? props.blockId;
@@ -124,7 +123,10 @@ export const BlockSlot = defineComponent({
     if (context === null) {
       return (
         <div
-          className="dsh-iui-block"
+          // Path-aware wrappers are nested edit-mode slots (the nested renderer
+          // can be mounted without the client's block chrome); they share the
+          // layout-transparency and CSS compensation of editing wrappers.
+          className={cx("dsh-iui-block", props.path === undefined ? undefined : "dsh-iui-block-editing")}
           data-dsh-iui-block={blockId}
           data-dsh-iui-block-index={blockIndex}
           data-dsh-iui-block-path={props.path}
@@ -137,64 +139,23 @@ export const BlockSlot = defineComponent({
     const editing = true;
     const selection = context.selection(blockId);
     const active = context.isActive(blockId);
-    const colorIndex = selection === undefined ? undefined : ((selection.order - 1) % COLOR_COUNT) + 1;
-    // Each slot gets its own pastel marquee tone (the same six hue families as
-    // the selection badges) and one stagger step in reading order.
-    const slotIndex = Math.max(0, blockIndex - 1);
-    const toneIndex = (slotIndex % COLOR_COUNT) + 1;
-    const style = {
-      "--iui-edit-stagger": String(slotIndex),
-      "--iui-edit-tone": `var(--iui-edit-tone-${toneIndex})`,
-      ...colorIndex === undefined ? {} : { "--iui-edit-block-color": `var(--iui-edit-color-${colorIndex})` },
-    } as CSSProperties;
-    const activate = (): void => {
-      context.onSelect(blockId);
-    };
-    const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      activate();
-    };
-    const tool = (label: string, action: () => void, content: ReactElement | string): ReactElement => (
-      <button
-        type="button"
-        className="dsh-iui-block-tool"
-        title={label}
-        aria-label={label}
-        onClick={(event) => { event.stopPropagation(); action(); }}
-      >
-        {content}
-      </button>
-    );
+    // Edit-mode wrappers exist only to carry block identity and keep nested
+    // path plumbing; they are layout-transparent (`display: contents`) so the
+    // edit canvas has exactly the page's layout. Selection chrome, hit testing,
+    // badges and tools are painted by the client's geometry overlay.
+    void editing;
     return (
       <div
-        ref={host}
         className={cx("dsh-iui-block", "dsh-iui-block-editing", selection !== undefined && "dsh-iui-block-selected", active && "dsh-iui-block-active")}
-        style={style}
         data-dsh-iui-block={blockId}
         data-dsh-iui-block-index={blockIndex}
         data-dsh-iui-block-path={props.path}
         data-dsh-iui-block-node={props.path === undefined ? undefined : nodeId}
         data-dsh-iui-block-order={selection?.order}
         data-dsh-iui-block-selected={selection === undefined ? undefined : "true"}
-        role={editing ? "button" : undefined}
-        tabIndex={editing ? 0 : undefined}
-        aria-label={editing ? context.labels.select : undefined}
-        aria-pressed={selection === undefined ? undefined : true}
-        onClick={editing ? (event) => { event.stopPropagation(); activate(); } : undefined}
-        onKeyDown={editing ? onKeyDown : undefined}
+        data-dsh-iui-block-active={active ? "true" : undefined}
       >
         <div className="dsh-iui-block-body">{renderedChildren}</div>
-        <span className="dsh-iui-block-layer" aria-hidden="true" />
-        {selection === undefined ? null : (
-          <>
-            <span className="dsh-iui-block-badge" aria-hidden="true">{selection.order}</span>
-            <span className="dsh-iui-block-tools" role="group" aria-label={context.labels.selected}>
-              {tool(context.labels.edit, () => context.onEdit(blockId), <RemixIcon name="edit-line" size={13} />)}
-              {tool(context.labels.deselect, () => context.onDeselect(blockId), <RemixIcon name="close-line" size={12} />)}
-            </span>
-          </>
-        )}
       </div>
     );
   },

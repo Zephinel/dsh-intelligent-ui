@@ -4,9 +4,10 @@
  * Covers the toolbar and banners that replace the card body header, the edit
  * panel (docked rail on desktop, bottom sheet below 1180px) with its saved
  * request rows, drag-arrangement list, hover request card, global instruction
- * and send summary, plus the anchored block popover. The block wrapper's own
- * overlay/badge styles live in `src/lib/components/artifact-edit.css`; this
- * sheet adds the cross-surface hover and locate-flash effects.
+ * and send summary, plus the anchored block popover. Block wrappers are
+ * layout-transparent; the canvas geometry overlay (hit targets, frames,
+ * badges, tools and the pastel marquee) is styled here and positioned by
+ * `BlockOverlay.tsx`.
  *
  * Surfaces, borders, type and focus ride the DSH semantic theme aliases
  * (`--dsw-alias-*`), so light/dark follow the shell. The six-hue selection
@@ -190,7 +191,15 @@
 }
 
 .dsh-iui-edit-canvas {
+  position: relative;
   min-width: 0;
+}
+
+/* The rendered page is read-only in edit mode; every interaction goes through
+   the geometry overlay above it. This also removes the browser from operating
+   controls inside a block when the user meant to select the block. */
+.dsh-iui-edit-canvas .dsh-iui-host {
+  pointer-events: none;
 }
 
 .dsh-iui-edit-frozen {
@@ -200,22 +209,182 @@
   line-height: 18px;
 }
 
-/* Panel row hover mirrors the block's own edit overlay without a pointer. */
-.dsh-iui-edit-view .dsh-iui-block-editing:not(.dsh-iui-block-selected)[data-dsh-iui-block-hover='true'] .dsh-iui-block-layer {
-  border-color: color-mix(in srgb, var(--iui-accent, var(--dsw-alias-brand-primary)) 45%, transparent);
-  background: color-mix(in srgb, var(--iui-accent, var(--dsw-alias-brand-primary)) 4%, transparent);
-}
-
 /* Locate flash: an arrangement row body marks its block in the canvas. */
-.dsh-iui-edit-view .dsh-iui-block[data-dsh-iui-block-flash='true'] .dsh-iui-block-layer {
-  border-color: var(--iui-edit-block-color, var(--iui-accent, var(--dsw-alias-brand-primary)));
+.dsh-iui-edit-view .dsh-iui-block-hit[data-dsh-iui-block-flash='true'] {
   animation: dsh-iui-edit-block-flash 900ms ease-out both;
 }
 
 @keyframes dsh-iui-edit-block-flash {
-  0% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent, var(--dsw-alias-brand-primary))) 45%, transparent); }
-  40% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent, var(--dsw-alias-brand-primary))) 10%, transparent); }
-  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--iui-edit-block-color, var(--iui-accent, var(--dsw-alias-brand-primary))) 22%, transparent); }
+  0% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsh-iui-edit-color-1) 45%, transparent); }
+  40% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--dsh-iui-edit-color-1) 10%, transparent); }
+  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsh-iui-edit-color-1) 22%, transparent); }
+}
+
+/* -------------------------------------------------------------------------
+ * Canvas block overlay (geometry-driven selection chrome).
+ * ---------------------------------------------------------------------- */
+
+@property --dsh-iui-marquee-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.dsh-iui-block-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dsh-iui-block-overlay-item {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Transparent hit target: selects the block and owns keyboard focus. */
+.dsh-iui-block-hit {
+  position: absolute;
+  inset: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.dsh-iui-block-hit:hover {
+  background: color-mix(in srgb, var(--dsh-iui-edit-color-1) 3%, transparent);
+}
+
+.dsh-iui-block-hit:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsh-iui-edit-color-1));
+  outline-offset: 2px;
+}
+
+/* Selected/active frame: a quiet lift instead of a coloured card outline. */
+.dsh-iui-block-frame {
+  position: absolute;
+  inset: -3px;
+  border-radius: 16px;
+  pointer-events: none;
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 12%),
+    0 2px 8px rgb(0 0 0 / 7%),
+    inset 0 0 0 1px var(--dsw-alias-border-l2);
+}
+
+.dsh-iui-block-frame.is-active {
+  border-radius: 14px;
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 10%),
+    0 2px 6px rgb(0 0 0 / 6%),
+    inset 0 0 0 1px var(--dsw-alias-border-l1);
+}
+
+/* Numbered badge: the selection order, matching the request panel copy. */
+.dsh-iui-block-badge {
+  position: absolute;
+  top: -12px;
+  left: -8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 2px solid var(--dsw-alias-bg-layer-1);
+  border-radius: 999px;
+  background: var(--dsh-iui-hit-color, var(--dsh-iui-edit-color-1));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+
+/* Per-block actions: edit and deselect. */
+.dsh-iui-block-tools {
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  z-index: 3;
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  pointer-events: auto;
+}
+
+.dsh-iui-block-tool {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsh-iui-hit-color, var(--dsh-iui-edit-color-1));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dsh-iui-block-tool:hover {
+  background: color-mix(in srgb, var(--dsh-iui-hit-color, var(--dsh-iui-edit-color-1)) 12%, transparent);
+}
+
+.dsh-iui-block-tool:focus-visible {
+  outline: 2px solid var(--dsh-iui-hit-color, var(--dsh-iui-edit-color-1));
+  outline-offset: 1px;
+}
+
+/* Pastel marquee: a comet orbits the root block's invisible edge. */
+.dsh-iui-block-marquee {
+  position: absolute;
+  inset: -3px;
+  padding: 1.5px;
+  border-radius: 15px;
+  background: conic-gradient(
+    from var(--dsh-iui-marquee-angle),
+    transparent 0deg 150deg,
+    transparent 220deg,
+    color-mix(in srgb, var(--dsh-iui-tone) 0%, transparent) 240deg,
+    color-mix(in srgb, var(--dsh-iui-tone) 50%, transparent) 300deg,
+    var(--dsh-iui-tone) 334deg 340deg,
+    transparent 358deg 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--dsh-iui-tone) 40%, transparent));
+  opacity: 0.9;
+  pointer-events: none;
+  animation: dsh-iui-block-marquee 2600ms linear infinite;
+  animation-delay: calc(var(--dsh-iui-stagger, 0) * 140ms);
+}
+
+.dsh-iui-block-overlay-item:hover .dsh-iui-block-marquee {
+  opacity: 1;
+}
+
+@keyframes dsh-iui-block-marquee {
+  to { --dsh-iui-marquee-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-block-marquee {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
 /* -------------------------------------------------------------------------

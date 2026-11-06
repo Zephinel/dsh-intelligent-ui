@@ -8,6 +8,7 @@
 import { buildArtifactTree, type ArtifactTreeNode } from '../../shared/program-cst.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
+import { artifactBlockKind } from '../../shared/artifact-blocks.ts'
 
 /** Containers whose direct children are offered as nested blocks in M4-1. */
 export const NESTED_CONTAINERS = NESTED_CONTAINER_TYPES
@@ -41,17 +42,9 @@ const MEDIA = new Set(['Image', 'SearchImage', 'YouTube'])
 const CHART = new Set(['Chart', 'Map', 'MapView'])
 const CONTAINER = new Set(['Col', 'Row', 'Box', 'Grid', 'Carousel', 'Card', 'Section', 'Popover'])
 
-/** Coarse display kind for panel copy. */
+/** Coarse display kind for panel copy; shares the root block mapping. */
 function kindOf(componentType: string): ArtifactBlockKind {
-  if (componentType === 'Card') return 'card'
-  if (componentType === 'Section') return 'section'
-  if (componentType === 'Table') return 'table'
-  if (CHART.has(componentType)) return 'chart'
-  if (INTERACTIVE.has(componentType)) return 'interactive'
-  if (DRAWING.has(componentType)) return 'drawing'
-  if (MEDIA.has(componentType)) return 'media'
-  if (CONTAINER.has(componentType)) return 'container'
-  return 'content'
+  return artifactBlockKind(componentType)
 }
 
 /**

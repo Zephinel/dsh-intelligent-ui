@@ -164,3 +164,18 @@ test('preservation report names changed unselected blocks only', () => {
   // A dropped block is reported.
   assert.match(artifactEditWarnings(DST_PROGRAM, DST_PROGRAM.replace(/\nmythTable = .*/, ''), []).join('\n'), /Unselected block/)
 })
+
+test('anonymous structural blocks keep identity by content when the model reorders', () => {
+  const base = `root = Col([Divider("danger"), Divider("info")])`
+  const extraction = extractArtifactBlocks(base)
+  assert.deepEqual(extraction.blocks.map(block => block.componentType), ['Divider', 'Divider'])
+  // The envelope asks the model to reorder; mapping by page order would then
+  // invert this swap a second time. Content digest is the real identity.
+  const updated = `root = Col([Divider("info"), Divider("danger")])`
+  const reordered = reorderProgramToTargetOrder(updated, ['b2', 'b1'], extraction)
+  assert.ok(reordered)
+  assert.ok(reordered.indexOf('"info"') < reordered.indexOf('"danger"'), 'target order wins over the model page order')
+  // Byte-identical duplicates are interchangeable: page order may be kept.
+  const twins = `root = Col([Divider(), Divider()])`
+  assert.ok(reorderProgramToTargetOrder(twins, ['b2', 'b1'], extractArtifactBlocks(twins)))
+})

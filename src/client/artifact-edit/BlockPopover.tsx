@@ -16,8 +16,9 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
 import { QuickBlockProps } from './QuickBlockProps.tsx'
+import { blockAnchorElement } from './block-geometry.ts'
 import { blockPropsState } from './store.ts'
-import type { ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
+import { serializeArtifactBlockProps, type ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { Translate } from '../../shared/locales.ts'
 
 /** Props of the block instruction popover. */
@@ -41,9 +42,9 @@ interface Placement {
   readonly maxHeight: number
 }
 
-/** Query the block wrapper that owns one block id. */
+/** Query the overlay hit element that owns one block id. */
 function blockElement(blockId: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-dsh-iui-block="${blockId}"]`)
+  return blockAnchorElement(blockId)
 }
 
 /** Style of the popover before its first measurement; transparent but focusable. */
@@ -86,11 +87,23 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   const quickState = block !== undefined && (block.componentType === 'Divider' || block.componentType === 'Spacer')
     ? blockPropsState(session, blockId)
     : undefined
-  const quick = quickState !== undefined
   const [propsDraft, setPropsDraft] = useState<ArtifactBlockProps>({})
   const propsDraftRef = useRef<ArtifactBlockProps>({})
+  const propsTouched = useRef(false)
   const order = entry?.order ?? 1
   const savedInstruction = entry?.instruction.trim() ?? ''
+  // The deterministic editor is only safe when the current props are fully
+  // literal and inside its domain, and when the block has no saved instruction
+  // that would otherwise block the apply. Otherwise fall back to the model
+  // instruction path so no binding is silently dropped.
+  const quick = quickState !== undefined && quickState.support.ok && savedInstruction === ''
+  const quickFallback = quickState !== undefined && !quick
+    ? (savedInstruction === ''
+        ? t(quickState.support.ok ? 'edit.propsFallbackValue' : quickState.support.reason === 'dynamic' ? 'edit.propsFallbackDynamic' : 'edit.propsFallbackValue')
+        : t('edit.propsFallbackInstruction'))
+    : undefined
+  const propsDirty = quick && quickState !== undefined
+    && serializeArtifactBlockProps(quickState.componentType, quickState.props) !== serializeArtifactBlockProps(quickState.componentType, propsDraft)
   const kindLabel = blockKindLabel(block?.kind ?? 'content', t)
   const nameText = block?.title ?? kindLabel
   const originalIndex = block?.originalIndex ?? order
@@ -148,11 +161,16 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
     setDiscardConfirm(false)
     if (previousBlock.current === blockId) return
     previousBlock.current = blockId
+    if (quick) {
+      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props select, .dsh-iui-edit-props input')?.focus({ preventScroll: true })
+      return
+    }
     textarea.current?.focus({ preventScroll: true })
-  }, [blockId])
+  }, [blockId, quick])
 
   useEffect(() => {
     if (quickState === undefined) return
+    propsTouched.current = false
     propsDraftRef.current = quickState.props
     setPropsDraft(quickState.props)
     // Keyed by node identity: preview updates republish the session but keep
@@ -162,6 +180,16 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   useEffect(() => () => {
     if (quick) actions.clearBlockPropsPreview()
   }, [actions, quick])
+
+  // The plain instruction editor autofocuses its textarea; the quick panel has
+  // no textarea, so move focus to its first control on open.
+  useEffect(() => {
+    if (!quick) return
+    const frame = window.requestAnimationFrame(() => {
+      panel.current?.querySelector<HTMLElement>('.dsh-iui-edit-props select, .dsh-iui-edit-props input')?.focus({ preventScroll: true })
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [quick, blockId])
 
   // Focus bookkeeping: closing from the popover returns focus to the block.
   useEffect(() => () => {
@@ -175,7 +203,7 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
       if (!(target instanceof Node)) return
       if (panel.current?.contains(target)) return
       // Block clicks belong to the block wrapper; they select the new target.
-      if (target instanceof Element && target.closest('[data-dsh-iui-block]') !== null) return
+      if (target instanceof Element && target.closest('[data-dsh-iui-block-hit], [data-dsh-iui-block]') !== null) return
       restoreFocus.current = false
       actions.closeBlockEditor()
     }
@@ -242,15 +270,19 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
           </div>
         </dl>
 
+        {quickFallback === undefined ? null : (
+          <p className="dsh-iui-edit-props-fallback" data-dsh-iui-edit-props-fallback>{quickFallback}</p>
+        )}
         {quick && quickState !== undefined ? (
           <>
             <span className="dsh-iui-edit-popover-label">{t('edit.propsTitle')}</span>
             <QuickBlockProps
+              key={`${quickState.blockId}:${quickState.nodeId}`}
               t={t}
               componentType={quickState.componentType}
-              props={propsDraft}
-              onChange={update => {
-                const next = update(propsDraftRef.current)
+              props={propsTouched.current ? propsDraft : quickState.props}
+              onChange={next => {
+                propsTouched.current = true
                 propsDraftRef.current = next
                 setPropsDraft(next)
                 actions.previewBlockProps(blockId, next)
@@ -316,7 +348,9 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
                 className="dsh-iui-edit-button dsh-iui-edit-button-primary"
                 data-dsh-iui-edit-save
                 data-dsh-iui-edit-props-apply
-                disabled={session.propsBusy === true || session.structureBusy === true}
+                disabled={!propsDirty || session.propsBusy === true || session.structureBusy === true}
+                aria-busy={session.propsBusy === true || session.structureBusy === true ? true : undefined}
+                title={propsDirty ? undefined : t('edit.propsNoChange')}
                 onClick={() => { actions.applyBlockProps(blockId, propsDraft) }}
               >
                 {session.propsBusy === true || session.structureBusy === true ? t('edit.propsBusy') : t('edit.propsApply')}

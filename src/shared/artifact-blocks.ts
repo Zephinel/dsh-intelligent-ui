@@ -121,22 +121,26 @@ function blockTitle(node: ElementNode): string | undefined {
 }
 
 /** Coarse block kind; interactivity wins because it changes the read-only warning. */
+/** Map one component type to its block kind (no descendant inspection). */
+export function artifactBlockKind(componentType: string): ArtifactBlockKind {
+  if (componentType === 'Divider') return 'divider'
+  if (componentType === 'Spacer') return 'spacer'
+  if (componentType === 'Toc') return 'toc'
+  if (componentType === 'Title') return 'heading'
+  if (componentType === 'Caption') return 'caption'
+  if (componentType === 'Section') return 'section'
+  if (componentType === 'Card') return 'card'
+  if (componentType === 'Table') return 'table'
+  if (CHART_COMPONENTS.has(componentType)) return 'chart'
+  if (DRAWING_COMPONENTS.has(componentType)) return 'drawing'
+  if (MEDIA_COMPONENTS.has(componentType)) return 'media'
+  if (CONTAINER_COMPONENTS.has(componentType)) return 'container'
+  return 'content'
+}
+
 function blockKind(node: ElementNode): ArtifactBlockKind {
   if (findDescendant(node, INTERACTIVE_COMPONENTS) !== undefined || INTERACTIVE_COMPONENTS.has(node.typeName)) return 'interactive'
-  const type = node.typeName
-  if (type === 'Divider') return 'divider'
-  if (type === 'Spacer') return 'spacer'
-  if (type === 'Toc') return 'toc'
-  if (type === 'Title') return 'heading'
-  if (type === 'Caption') return 'caption'
-  if (type === 'Section') return 'section'
-  if (type === 'Card') return 'card'
-  if (type === 'Table') return 'table'
-  if (CHART_COMPONENTS.has(type)) return 'chart'
-  if (DRAWING_COMPONENTS.has(type)) return 'drawing'
-  if (MEDIA_COMPONENTS.has(type)) return 'media'
-  if (CONTAINER_COMPONENTS.has(type)) return 'container'
-  return 'content'
+  return artifactBlockKind(node.typeName)
 }
 
 /** One recognized block together with the AST node it addresses. */
@@ -458,8 +462,26 @@ function matchUpdatedBlocks(base: ArtifactBlockExtraction, updated: ArtifactBloc
     if (mapping.has(block.blockId) || block.title === undefined) continue
     take(block, candidates(block, candidate => candidate.title === block.title))
   }
-  // Pass 4: untitled structural pieces (Divider/Spacer/...): match the remaining
-  // blocks of one component type in page order when their counts agree.
+  // Pass 3.5: untitled structural pieces keep their identity in their body.
+  // When the model honored the target order, a page-order fallback would map
+  // them back-to-front; a unique (componentType, content digest) pair is the
+  // real identity. Byte-identical duplicates are interchangeable and fall
+  // through to page order below.
+  for (const entry of base.nodes) {
+    const block = entry.block
+    if (mapping.has(block.blockId) || block.statementId !== undefined || block.title !== undefined) continue
+    const digest = nodeDigest(entry.node)
+    const matches = updated.nodes.filter(candidate =>
+      !used.has(candidate.block.rootIndex)
+      && candidate.block.componentType === block.componentType
+      && candidate.block.statementId === undefined
+      && candidate.block.title === undefined
+      && nodeDigest(candidate.node) === digest,
+    )
+    take(block, matches.map(candidate => candidate.block.rootIndex))
+  }
+  // Pass 4: remaining untitled structural pieces (identical duplicates):
+  // match by page order; swapping identical bodies is semantically a no-op.
   for (const type of new Set(base.blocks.filter(block => !mapping.has(block.blockId) && block.title === undefined && block.statementId === undefined).map(block => block.componentType))) {
     const baseBlocks = base.blocks.filter(block => !mapping.has(block.blockId) && block.title === undefined && block.statementId === undefined && block.componentType === type)
     const updatedBlocks = updated.blocks.filter(candidate => !used.has(candidate.rootIndex) && candidate.componentType === type)

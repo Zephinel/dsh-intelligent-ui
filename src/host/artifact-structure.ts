@@ -35,6 +35,7 @@ import {
   type ArtifactTreeNode,
 } from '../shared/program-cst.ts'
 import {
+  artifactBlockPropsFromNode,
   describeArtifactBlockPropsProblem,
   isArtifactBlockPropComponent,
   serializeArtifactBlockProps,
@@ -404,6 +405,7 @@ function validateOperations(
   }
   const resolved: ArtifactTreeNode[] = []
   const propTargets = new Set<string>()
+  const batchTargets = new Set<string>()
   for (const operation of operations) {
     const node = tree.nodes.get(operation.nodeId)
     if (node === undefined) return batchFailure(400, 'invalid_input', `unknown block node ${JSON.stringify(operation.nodeId)}.`)
@@ -414,6 +416,10 @@ function validateOperations(
     if (node.scoped) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is inside an @Each template and cannot be changed structurally in this release.`)
     if (node.shared) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} belongs to a shared named expression; changing it would change every instance.`)
     if (node.opaque || node.problem !== undefined) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is not structurally editable in this release.`)
+    if (batchTargets.has(node.nodeId)) {
+      return batchFailure(400, 'operation_conflict', `block node ${JSON.stringify(operation.nodeId)} appears more than once in one batch.`)
+    }
+    batchTargets.add(node.nodeId)
     if (operation.op === 'props') {
       if (!isArtifactBlockPropComponent(node.componentType)) {
         return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is ${node.componentType}, which has no quick-adjustable properties.`)
@@ -551,7 +557,15 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
       if (problem !== undefined) {
         return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} has unusable properties (${problem}).`)
       }
-      result = replaceNodeContent(program, currentNode.nodeId, serializeArtifactBlockProps(componentType, props), { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
+      const wanted = serializeArtifactBlockProps(componentType, props)
+      if (serializeArtifactBlockProps(componentType, artifactBlockPropsFromNode(componentType, currentNode.props)) === wanted
+        && artifactBlockPropsFromNode(componentType, currentNode.props) !== undefined) {
+        return batchFailure(400, 'no_change', `block node ${JSON.stringify(operation.nodeId)} already has these properties; nothing to record.`)
+      }
+      result = replaceNodeContent(program, currentNode.nodeId, wanted, { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
+      if (result.ok === true && result.touched.length === 0) {
+        return batchFailure(400, 'no_change', `block node ${JSON.stringify(operation.nodeId)} already has these properties; nothing to record.`)
+      }
     } else if (operation.op === 'delete') {
       result = removeNode(program, currentNode.nodeId, { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
     } else if (operation.op === 'duplicate') {
@@ -725,6 +739,15 @@ function structureRequestDigest(request: ArtifactStructureRequest): string {
       nodeId: operation.nodeId,
       sourceDigest: operation.sourceDigest.toLowerCase(),
       ...operation.toIndex === undefined ? {} : { toIndex: operation.toIndex },
+      ...operation.toParentNodeId === undefined ? {} : { toParentNodeId: operation.toParentNodeId },
+      ...operation.props === undefined ? {} : {
+        props: {
+          color: operation.props.color ?? null,
+          height: operation.props.height ?? null,
+          thickness: operation.props.thickness ?? null,
+          width: operation.props.width ?? null,
+        },
+      },
     })),
   }
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
