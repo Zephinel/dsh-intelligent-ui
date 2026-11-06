@@ -22,6 +22,7 @@ import {
   type StylePreference,
 } from '../shared/intelligent-ui.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
+import { RemixIcon, type RemixIconName } from '../lib/components/remix-icon.tsx'
 import { MenuDivider, MenuItem } from './Menu.tsx'
 import { StylePanel } from './StylePanel.tsx'
 import type { StyleCatalog } from './styles.ts'
@@ -84,38 +85,27 @@ const SCOPES: Readonly<Record<SessionEnable, ScopeMeta>> = {
     menu: 'scope.off.menu',
     description: 'scope.off.description',
     aria: 'scope.off.aria',
-    path: 'M8 1.8v6.4M3.9 4.4a6 6 0 1 0 8.2 0',
+    icon: 'shut-down-line',
   },
   on: {
     trigger: 'scope.session.label',
     menu: 'scope.session.menu',
     description: 'scope.session.description',
     aria: 'scope.session.aria',
-    path: 'M8 7.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2ZM2.8 14c.5-2.1 2.5-3.6 5.2-3.6S12.7 11.9 13.2 14',
+    icon: 'user-line',
   },
   inherit: {
     trigger: 'scope.inherit.label',
     menu: 'scope.inherit.menu',
     description: 'scope.inherit.description',
     aria: 'scope.inherit.aria',
-    path: 'M8 14.2c3 0 5.4-2.7 5.4-6.2S11 1.8 8 1.8 2.6 4.5 2.6 8s2.4 6.2 5.4 6.2ZM2.8 8h10.4M8 1.8c1.6 1.7 2.4 3.8 2.4 6.2S9.6 12.5 8 14.2M8 1.8C6.4 3.5 5.6 5.6 5.6 8s.8 4.5 2.4 6.2',
+    icon: 'global-line',
   },
 }
 
 /** One inline scope glyph; the menu renders it at 16px, the chip at 14px. */
 function ScopeIcon({ scope }: { scope: SessionEnable }): ReactNode {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-      <path
-        d={SCOPES[scope].path}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
+  return <RemixIcon name={SCOPES[scope].icon} size={14} />
 }
 
 /** One row in the custom scope menu. */
@@ -133,39 +123,22 @@ interface ScopeMenuItem {
 
 /** Inline chevron, so the trigger does not depend on a shell icon skin. */
 function ChevronIcon(): ReactNode {
-  return (
-    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" className="dsh-iui-chevron-svg">
-      <path d="M2.5 4.25 6 7.75l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <RemixIcon name="arrow-down-s-line" size={12} className="dsh-iui-chevron-svg" />
 }
 
 /** Selected-row check. */
 function CheckIcon(): ReactNode {
-  return (
-    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-      <path d="m2.3 6.2 2.4 2.4 5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <RemixIcon name="check-line" size={12} />
 }
 
 /** Right-pointing chevron for a drill-in row. */
 function DrillIcon(): ReactNode {
-  return (
-    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-      <path d="m4.25 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <RemixIcon name="arrow-right-s-line" size={12} />
 }
 
 /** Style glyph for the drill-in row. */
 function StyleIcon(): ReactNode {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-      <path d="M3 4.5h10M3 8h7M3 11.5h4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="13" cy="11.5" r="1.4" fill="currentColor" />
-    </svg>
-  )
+  return <RemixIcon name="font-size" size={14} />
 }
 
 

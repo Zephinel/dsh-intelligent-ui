@@ -9,6 +9,7 @@
  * session. When the Host serves no settings namespace (or the document is
  * read-only), the controls stay disabled and the page says why.
  */
+import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the settings client `configForms` service and its wire types.
@@ -230,10 +231,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
     <section ref={sectionRef} className="dsh-iui-settings" aria-labelledby={`${idPrefix}-title`}>
       <div className="dsh-iui-settings-hero">
         <span className="dsh-iui-settings-mark" aria-hidden="true">
-          <svg viewBox="0 0 20 20" width="18" height="18">
-            <path d="M10 2.6 11.5 7l4.4 1.5-4.4 1.5L10 14.4 8.5 10 4.1 8.5 8.5 7 10 2.6Z" fill="currentColor" />
-            <circle cx="15.4" cy="4.6" r="1.15" fill="currentColor" opacity=".65" />
-          </svg>
+          <RemixIcon name="sparkling-fill" size={18} />
         </span>
         <div className="dsh-iui-settings-intro">
           <h2 id={`${idPrefix}-title`} className="dsh-iui-settings-title">{t('settings.title')}</h2>

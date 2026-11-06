@@ -1,7 +1,7 @@
 "use client";
 
 import { defineComponent } from "@openuidev/react-lang";
-import { ImageIcon } from "lucide-react";
+import { RemixIcon } from "./remix-icon.tsx";
 import { useEffect, useState } from "react";
 import { z } from "zod/v4";
 import { Glyph } from "./glyph";
@@ -215,7 +215,7 @@ function Photo(props: PhotoProps) {
           onError={() => setFailed((list) => [...list, current])}
         />
       ) : settled ? (
-        <ImageIcon aria-hidden className="iui-image-empty" strokeWidth={1.5} />
+        <RemixIcon name="image-line" size={24} className="iui-image-empty" />
       ) : null}
     </div>
   );

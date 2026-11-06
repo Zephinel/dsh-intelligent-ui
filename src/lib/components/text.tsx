@@ -1,7 +1,7 @@
 "use client";
 
 import { defineComponent } from "@openuidev/react-lang";
-import { ArrowUpRight } from "lucide-react";
+import { RemixIcon } from "./remix-icon.tsx";
 import { Fragment } from "react";
 import { z } from "zod/v4";
 import { Glyph } from "./glyph";
@@ -114,7 +114,7 @@ export const Link = defineComponent({
     return (
       <a className="iui-link" href={href} target="_blank" rel="noopener noreferrer">
         {str(props.text) || new URL(href).hostname}
-        <ArrowUpRight aria-hidden className="iui-link-arrow" />
+        <RemixIcon name="arrow-right-up-line" size={14} className="iui-link-arrow" />
       </a>
     );
   },

@@ -1,4 +1,5 @@
 /** Session-scoped composer overlay. Only the arming tab shows the transient intent. */
+import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import { useEffect, useState, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -63,7 +64,7 @@ export function OnDemandHint({
   return (
     <div className="dsh-iui-on-demand-hint" data-dsh-iui-on-demand-hint data-status={status} role="region" aria-label={t('onDemand.label')} aria-live={generating ? 'polite' : undefined}>
       <div className="dsh-iui-on-demand-heading">
-        <span aria-hidden="true">✦</span>
+        <span aria-hidden="true" className="dsh-iui-icon"><RemixIcon name="sparkling-fill" size={14} /></span>
         <strong>{t('onDemand.label')}</strong>
         <span className="dsh-iui-on-demand-copy">{terminal
           ? t(status === 'interrupted' ? 'onDemand.interruptedHint' : 'onDemand.failedHint')

@@ -1,4 +1,5 @@
 /** Built-in and saved-template choices shared by settings and the composer. */
+import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { ANSWER_STYLES, isAnswerStyle, type AnswerStyle, type StylePreference } from '../shared/intelligent-ui.ts'
 import { isCustomStyleId, type StyleTemplate } from '../shared/style-templates.ts'
@@ -106,9 +107,7 @@ export function StylePicker({
   }
   const check = (
     <span className="dsh-iui-style-check" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false">
-        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM17.4571 9.45711L11 15.9142L6.79289 11.7071L8.20711 10.2929L11 13.0858L16.0429 8.04289L17.4571 9.45711Z"></path>
-      </svg>
+      <RemixIcon name="checkbox-circle-fill" size={18} />
     </span>
   )
 
@@ -152,7 +151,7 @@ export function StylePicker({
             aria-label={t(style === 'auto' ? 'style.auto.label' : `style.${style}.preview`)}
           >
             {style === 'auto' ? (
-              <span className="dsh-iui-preview-art dsh-iui-preview-art-auto" aria-hidden="true">✦</span>
+              <span className="dsh-iui-preview-art dsh-iui-preview-art-auto" aria-hidden="true"><RemixIcon name="sparkling-fill" size={16} /></span>
             ) : style === 'card' ? <CardPreview /> : <ArticlePreview />}
             <span className="dsh-iui-preview-caption">
               <span className="dsh-iui-preview-title">{t(STYLE_META[style].label)}</span>
@@ -200,7 +199,7 @@ export function StylePicker({
       {missing ? <p className="dsh-iui-style-note" role="status">{t('style.missing.note')}</p> : null}
       {onDemand === undefined ? null : (
         <button type="button" className="dsh-iui-on-demand-entry" data-dsh-iui-on-demand-entry disabled={disabled || arming} onClick={armOnDemand}>
-          <span aria-hidden="true">✦</span>
+          <span aria-hidden="true" className="dsh-iui-icon"><RemixIcon name="sparkling-fill" size={14} /></span>
           <span><strong>{t('onDemand.label')}</strong><span>{t('onDemand.entryHint')}</span></span>
         </button>
       )}

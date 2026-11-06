@@ -13,7 +13,7 @@
  * the card itself (header, revision badge, collapse) stays in place.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
-import { IconChevronDownOutlineRegular, IconSparkleRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -429,11 +429,11 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           aria-controls={bodyId}
           onClick={() => { if (!editing) setCollapsed(value => !value) }}
         >
-          <span className="dsh-iui-icon" aria-hidden="true"><IconSparkleRegular size={14} /></span>
+          <span className="dsh-iui-icon" aria-hidden="true"><RemixIcon name="sparkling-fill" size={14} /></span>
           <span className="dsh-iui-title" data-dsh-iui-title>{title}</span>
           {program.temporaryStyle && <span className="dsh-iui-temporary-badge" title={program.temporaryStyle.suggestedName}>{t('onDemand.badge')}</span>}
           {program.running && <span className="dsh-iui-state">{t('state.rendering')}</span>}
-          <span className="dsh-iui-chevron" aria-hidden="true"><IconChevronDownOutlineRegular size={14} /></span>
+          <span className="dsh-iui-chevron" aria-hidden="true"><RemixIcon name="arrow-down-s-line" size={14} /></span>
         </button>
         <div className="dsh-iui-head-actions">
           {showDraftBadge

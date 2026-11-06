@@ -9,7 +9,8 @@
  * call arguments, and is clipped to a single line.
  */
 import type { ReactElement } from 'react'
-import { DisclosureRow, IconSparkleRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DisclosureRow } from '@deepseek-ai/dsh-client-ui-primitives'
+import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
@@ -83,7 +84,7 @@ export function RenderUiRow({ t = fallbackT, ...props }: RenderUiRowProps): Reac
     <div data-dsh-iui-toolview data-state={state}>
       <DisclosureRow
         title={t('card.title')}
-        icon={<IconSparkleRegular size={14} />}
+        icon={<RemixIcon name="sparkling-fill" size={14} />}
         open={false}
         expandable={false}
         previewChevron={false}

@@ -32,6 +32,7 @@ import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } fr
 import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
+import { RemixIcon, type RemixIconName } from '../../lib/components/remix-icon.tsx'
 import { hasArtifactEditContent, useArtifactEditStore } from './store.ts'
 import { applyEditChatContentWidth, type ChatContentWidthController } from './panel-width.ts'
 
@@ -73,117 +74,71 @@ function scrollBehavior(): ScrollBehavior {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
 }
 
-/** Shared stroke icon wrapper; keeps the panel free of extra runtime imports. */
-function Glyph({ children, size = 15, className }: {
-  readonly children: ReactElement | ReactElement[]
+/** One panel icon; the shared Remix set keeps every action visually consistent. */
+function Glyph({ name, size = 15, className }: {
+  readonly name: RemixIconName
   readonly size?: number
   readonly className?: string
 }): ReactElement {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {children}
-    </svg>
-  )
+  return <RemixIcon name={name} size={size} className={className} />
+}
+
+/** Block-kind icon used by the arrangement rows and the hover card. */
+const TYPE_GLYPHS: Readonly<Record<ArtifactBlockKind, RemixIconName>> = {
+  table: 'table-line',
+  chart: 'bar-chart-line',
+  interactive: 'cursor-line',
+  card: 'window-line',
+  section: 'separator',
+  drawing: 'brush-line',
+  media: 'image-line',
+  container: 'layout-line',
+  text: 'file-text-line',
 }
 
 /** Small per-kind block glyph, matching the design's list icons. */
 function TypeGlyph({ kind }: { readonly kind: ArtifactBlockKind }): ReactElement {
-  switch (kind) {
-    case 'table':
-      return <Glyph><rect x="2.5" y="3" width="11" height="10" rx="1" /><path d="M2.5 6.5h11M6.5 6.5V13" /></Glyph>
-    case 'chart':
-      return <Glyph><path d="M2.5 13V3M2.5 13h11" /><path d="M5.5 10.5V8M8 10.5V5.5M10.5 10.5V7" /></Glyph>
-    case 'interactive':
-      return <Glyph><path d="M8 2.5v11M2.5 8h11" /><circle cx="8" cy="8" r="2.1" /></Glyph>
-    case 'card':
-      return <Glyph><rect x="2.5" y="3" width="11" height="10" rx="1.6" /><path d="M5 6h6M5 8.5h6M5 11h3.5" /></Glyph>
-    case 'section':
-      return <Glyph><path d="M3 4h10M3 8h10M3 12h6" /></Glyph>
-    case 'drawing':
-      return <Glyph><path d="M3 13l1.4-3.8 6.4-6.4a1.3 1.3 0 0 1 1.8 1.8L6.2 11Z" /><path d="M9.6 4l2.4 2.4" /></Glyph>
-    case 'media':
-      return <Glyph><rect x="2.5" y="3.5" width="11" height="9" rx="1.2" /><circle cx="6" cy="7" r="1.2" /><path d="M3.5 12l3-3 2 2 2-2.5 2 3.5" /></Glyph>
-    case 'container':
-      return <Glyph><rect x="2.5" y="2.5" width="11" height="11" rx="1.2" strokeDasharray="2.5 2" /><path d="M5.5 8h5" /></Glyph>
-    default:
-      return <Glyph><path d="M4 2.5h5.5L12.5 5.5V13.5H4Z" /><path d="M6 7h4.5M6 9.5h4.5M6 12h3" /></Glyph>
-  }
+  return <Glyph name={TYPE_GLYPHS[kind] ?? 'file-text-line'} />
 }
 
 /** Six-dot drag handle. */
 function GripGlyph(): ReactElement {
-  return (
-    <Glyph size={14}>
-      <circle cx="6" cy="4" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="4" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="6" cy="8" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="8" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="6" cy="12" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="12" r="0.9" fill="currentColor" stroke="none" />
-    </Glyph>
-  )
+  return <Glyph name="draggable" size={14} />
 }
 
 /** Reset-order glyph. */
 function ResetGlyph(): ReactElement {
-  return <Glyph size={13}><path d="M3.5 8a4.5 4.5 0 1 0 1.3-3.2" /><path d="M3 2.5v3h3" /></Glyph>
+  return <Glyph name="refresh-line" size={13} />
 }
 
 /** Close glyph for the narrow drawer control. */
 function CloseGlyph(): ReactElement {
-  return <Glyph size={13}><path d="M4 4l8 8M12 4l-8 8" /></Glyph>
+  return <Glyph name="close-line" size={13} />
 }
 
 /** Pencil glyph for edit actions. */
 function EditGlyph(): ReactElement {
-  return <Glyph size={14}><path d="M3 13l.8-2.6 7-7a1.2 1.2 0 0 1 1.7 1.7l-7 7Z" /><path d="M9.5 4.3l2.2 2.2" /></Glyph>
+  return <Glyph name="edit-line" size={14} />
 }
 
 /** Trash glyph for request deletion. */
 function TrashGlyph(): ReactElement {
-  return (
-    <Glyph size={13}>
-      <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8h5.8l.6-8" />
-      <path d="M6.5 7v3.5M9.5 7v3.5" />
-    </Glyph>
-  )
+  return <Glyph name="delete-bin-line" size={13} />
 }
 
 /** Overlapping-cards glyph for structural duplicate. */
 function DuplicateGlyph(): ReactElement {
-  return (
-    <Glyph size={13}>
-      <rect x="2.5" y="5" width="8.5" height="8.5" rx="1.5" />
-      <path d="M5.5 5V3.5A1.5 1.5 0 0 1 7 2h5a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 10h-1.5" />
-    </Glyph>
-  )
+  return <Glyph name="file-copy-line" size={13} />
 }
 
 /** Plus glyph for the add-block action. */
 function PlusGlyph(): ReactElement {
-  return <Glyph size={12}><path d="M8 3v10M3 8h10" /></Glyph>
+  return <Glyph name="add-line" size={12} />
 }
 
 /** Arrow-into-frame glyph for the move-to action. */
 function MoveGlyph(): ReactElement {
-  return (
-    <Glyph size={13}>
-      <path d="M2.5 3.5v9h9" />
-      <path d="M5 8h6.5M9 5.5 11.5 8 9 10.5" />
-    </Glyph>
-  )
+  return <Glyph name="drag-move-line" size={13} />
 }
 
 /** Position of the anchored request card in viewport coordinates. */

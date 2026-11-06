@@ -1,7 +1,7 @@
 "use client";
 
 import { defineComponent } from "@openuidev/react-lang";
-import { ChevronDown } from "lucide-react";
+import { RemixIcon } from "./remix-icon.tsx";
 import { createContext, useContext, useId, useState } from "react";
 import { z } from "zod/v4";
 import { children, cx } from "./style";
@@ -45,7 +45,7 @@ export const Section = defineComponent({
             onClick={() => setOpen((value) => !value)}
           >
             <span className="iui-section-title">{props.title}</span>
-            <ChevronDown className={cx("iui-section-chevron", open && "is-open")} size={16} aria-hidden />
+            <RemixIcon name="arrow-down-s-line" size={16} className={cx("iui-section-chevron", open && "is-open")} />
           </button>
         </h2>
         <div id={bodyId} className="iui-section-body iui-col iui-flow" hidden={!open}>

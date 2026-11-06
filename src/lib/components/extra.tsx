@@ -7,7 +7,7 @@ import katex from "katex";
 // library only adds the small `.iui-math` tweaks in components.css. Importing it
 // again here would duplicate ~1.5 MB of data-URL fonts into this plugin bundle
 // and re-declare the same global `.katex` / KaTeX_* font faces.
-import { Check, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { RemixIcon } from "./remix-icon.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
@@ -63,12 +63,12 @@ export const Carousel = defineComponent({
         </div>
         {!edges.start && (
           <button type="button" className="iui-carousel-nav is-prev" aria-label={t("carousel.previous")} onClick={() => page(-1)}>
-            <ChevronLeft size={18} />
+            <RemixIcon name="arrow-left-s-line" size={18} />
           </button>
         )}
         {!edges.end && (
           <button type="button" className="iui-carousel-nav is-next" aria-label={t("carousel.next")} onClick={() => page(1)}>
-            <ChevronRight size={18} />
+            <RemixIcon name="arrow-right-s-line" size={18} />
           </button>
         )}
       </div>
@@ -152,7 +152,7 @@ export const Code = defineComponent({
         <div className="iui-codeblock-head">
           <span>{str(props.language) || t("code.languageFallback")}</span>
           <button type="button" onClick={copy} aria-label={t("code.copyAria")}>
-            {copied ? <Check size={14} /> : <Copy size={14} />}
+            {copied ? <RemixIcon name="check-line" size={14} /> : <RemixIcon name="file-copy-line" size={14} />}
             {copied ? t("code.copied") : t("code.copy")}
           </button>
         </div>

@@ -33,6 +33,13 @@ lucide-react (icons)
   ISC License.
   Full text: licenses/lucide-react-LICENSE.
 
+Remix Icon (icons)
+  https://github.com/Remix-Design/RemixIcon
+  Remix Icon License v1.0, Copyright (c) 2017-2026 Remix Design.
+  Adapted: path data transcribed (unmodified geometry) into
+  src/lib/components/remix-icon.tsx, which renders the plugin's own chrome icons.
+  Full text: licenses/remix-icon-LICENSE.
+
 KaTeX
   https://github.com/KaTeX/KaTeX
   MIT License.
