@@ -386,7 +386,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 
 ### 面板动画、删除确认与 popover 裁切（第三/四轮用户反馈修复）
 
-- 编辑面板改为圆角浮动卡片：桌面 `top:64px / right:12px / bottom:12px`、`border-radius:16px`、1px 边框与双层阴影、`overflow:hidden`；窄屏 bottom sheet 使用 14px 圆角。进出动画只作用于面板，220ms `cubic-bezier(.22,1,.36,1)`：桌面从右滑入/滑出并淡入淡出 + 轻微 scale，窄屏从底部滑入/滑出；`prefers-reduced-motion: reduce` 时禁用。退出时编辑器延迟约 220ms 卸载（`data-closing="true"`），切换 active 草稿时旧编辑器立即卸载、不播放退出动画。
+- 编辑面板改为圆角浮动卡片：桌面 `top:64px / right:12px / bottom:12px`、`border-radius:16px`、1px 边框与双层阴影、`overflow:hidden`；窄屏 bottom sheet 使用 14px 圆角。进出动画只作用于面板，320ms `cubic-bezier(.22,1,.36,1)`：桌面从右滑入/滑出并淡入淡出 + 轻微 scale，窄屏从底部滑入/滑出；`prefers-reduced-motion: reduce` 时禁用。退出时编辑器延迟约 320ms 卸载（`data-closing="true"`），切换 active 草稿时旧编辑器立即卸载、不播放退出动画。
 - 浮动面板增加 12px 右侧 inset，宽度拟合新增 `panelRightInset`（默认 0；DOM helper 传 12），因内容居中会在两侧各计入 inset：1440/748 + inset12 → 648，1300/900 → 508，1500/900 → 708；无 inset 的旧默认结果不变。退出卸载时恢复用户原来的 inline 宽度。
 - 结构性删除改为持久的紧凑两态确认：默认 duplicate/delete/move 图标；确认时替换为 `data-dsh-iui-edit-structure-confirm` 内的安静 Cancel 与 danger-tinted Delete 两个按钮，无行红底/大红 pill；**移除 3 秒自动恢复 timer**，确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消后回到 Delete 图标；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。
