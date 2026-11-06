@@ -1706,6 +1706,41 @@ export function replaceNode(program: string, nodeId: string, sourceExpr: string,
 }
 
 /**
+ * Replace the definition/body of one node while keeping its slot reference.
+ *
+ * For a named child (`rule = Divider()`) this rewrites the statement body and
+ * leaves the root reference (`[..., rule, ...]`) byte-identical; for an inline
+ * child it behaves exactly like {@link replaceNode}. Use it for deterministic
+ * property edits so a named block does not get inlined into its parent.
+ * @param program - base program.
+ * @param nodeId - revision-scoped node id from the base tree.
+ * @param sourceExpr - replacement expression of the supported subset.
+ * @param options - base tree binding and tree options.
+ * @returns the edited program, rebuilt tree and byte-preservation report, or a failure.
+ */
+export function replaceNodeContent(program: string, nodeId: string, sourceExpr: string, options: CstOperationOptions = {}): CstOperationResult {
+  return runSingle(program, options, tree => {
+    const resolved = requireNode(program, tree, nodeId, options)
+    if (resolved.ok === false) return resolved
+    const node = resolved.node
+    const denied = denyNode(node, tree.rootNodeId)
+    if (denied !== undefined) return denied
+    const trimmed = sourceExpr.trim()
+    if (trimmed === '') return failure('invalid_source', 'The replacement source is empty.')
+    const expr = scanExpression(trimmed, { start: 0, end: trimmed.length })
+    if (isOpaque(expr) || !fullySupported(expr)) return failure('invalid_source', 'The replacement source is outside the supported expression subset.')
+    if (node.contentSource.trim() === trimmed) return { ok: true, prepared: { edits: [], explicitTouched: [] } }
+    return {
+      ok: true,
+      prepared: {
+        edits: [{ start: node.contentRange.start, end: node.contentRange.end, text: trimmed, op: 'replace' }],
+        explicitTouched: [],
+      },
+    }
+  })
+}
+
+/**
  * Reorder every child of one container slot.
  * @param program - base program.
  * @param parentNodeId - node id of the container.

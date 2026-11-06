@@ -30,9 +30,16 @@ import {
   inspectProgramStructure,
   moveNode,
   removeNode,
+  replaceNodeContent,
   type ArtifactTree,
   type ArtifactTreeNode,
 } from '../shared/program-cst.ts'
+import {
+  describeArtifactBlockPropsProblem,
+  isArtifactBlockPropComponent,
+  serializeArtifactBlockProps,
+  type ArtifactBlockProps,
+} from '../shared/artifact-block-props.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.ts'
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
 import type { ArtifactRevisionRecord, ArtifactRevisionStore } from './artifact-revisions.ts'
@@ -396,6 +403,7 @@ function validateOperations(
     return batchFailure(400, 'invalid_input', `the page is too large or nested too deeply for structure operations (${tree.limitsExceeded}).`)
   }
   const resolved: ArtifactTreeNode[] = []
+  const propTargets = new Set<string>()
   for (const operation of operations) {
     const node = tree.nodes.get(operation.nodeId)
     if (node === undefined) return batchFailure(400, 'invalid_input', `unknown block node ${JSON.stringify(operation.nodeId)}.`)
@@ -406,6 +414,21 @@ function validateOperations(
     if (node.scoped) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is inside an @Each template and cannot be changed structurally in this release.`)
     if (node.shared) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} belongs to a shared named expression; changing it would change every instance.`)
     if (node.opaque || node.problem !== undefined) return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is not structurally editable in this release.`)
+    if (operation.op === 'props') {
+      if (!isArtifactBlockPropComponent(node.componentType)) {
+        return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is ${node.componentType}, which has no quick-adjustable properties.`)
+      }
+      if (propTargets.has(node.nodeId)) {
+        return batchFailure(400, 'operation_conflict', `block node ${JSON.stringify(operation.nodeId)} is adjusted more than once in one batch.`)
+      }
+      propTargets.add(node.nodeId)
+      const problem = describeArtifactBlockPropsProblem(node.componentType, operation.props)
+      if (problem !== undefined) {
+        return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} has unusable properties (${problem}).`)
+      }
+      resolved.push(node)
+      continue
+    }
     const parent = node.parentNodeId === undefined ? undefined : tree.nodes.get(node.parentNodeId)
     if (parent === undefined) return batchFailure(400, 'invalid_input', 'the block has no parent container to change.')
     if (parent.shared) return batchFailure(400, 'invalid_input', 'the parent container belongs to a shared named expression; changing it would change every instance.')
@@ -518,7 +541,18 @@ export function applyStructureBatch(baseProgram: string, operations: readonly Ar
     const parent = parentId === undefined ? undefined : tree.nodes.get(parentId)
     if (parent === undefined) return batchFailure(400, 'invalid_input', 'the block has no current parent container.')
     let result
-    if (operation.op === 'delete') {
+    if (operation.op === 'props') {
+      const componentType = currentNode.componentType
+      if (!isArtifactBlockPropComponent(componentType)) {
+        return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} is not quick-adjustable.`)
+      }
+      const props = (operation.props ?? {}) as ArtifactBlockProps
+      const problem = describeArtifactBlockPropsProblem(componentType, props)
+      if (problem !== undefined) {
+        return batchFailure(400, 'invalid_input', `block node ${JSON.stringify(operation.nodeId)} has unusable properties (${problem}).`)
+      }
+      result = replaceNodeContent(program, currentNode.nodeId, serializeArtifactBlockProps(componentType, props), { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
+    } else if (operation.op === 'delete') {
       result = removeNode(program, currentNode.nodeId, { containerTypes: [...STRUCTURE_CONTAINER_TYPES] })
     } else if (operation.op === 'duplicate') {
       const index = insertionIndex(tree, parent, operation.toIndex as number)

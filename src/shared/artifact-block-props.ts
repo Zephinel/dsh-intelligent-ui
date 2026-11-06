@@ -33,6 +33,9 @@ const PROP_KEYS: Readonly<Record<ArtifactBlockPropComponent, readonly (keyof Art
   Spacer: ['width', 'height'],
 }
 
+/** Every key any quick-adjustable component accepts. */
+export const ARTIFACT_BLOCK_PROP_KEYS = ['color', 'width', 'thickness', 'height'] as const
+
 /** Theme tokens the renderer resolves for a divider colour. */
 const COLOR_TOKENS = new Set([
   'ink', 'muted', 'faint', 'canvas', 'on-ink', 'surface', 'surface-strong', 'border',
@@ -62,6 +65,31 @@ function lengthProblem(value: unknown, allowAuto: boolean): string | undefined {
   if (/^\d+(?:\.\d+)?$/.test(text)) return 'invalid_length'
   if (!allowAuto && text.toLowerCase() === 'auto') return 'invalid_length'
   return LENGTH_TEXT.test(text) ? undefined : 'invalid_length'
+}
+
+/**
+ * Describe why a property bag is malformed without knowing the component yet
+ * (used by the untrusted request schema). Component-specific rules run later.
+ * @param props - untrusted property bag.
+ * @returns a stable machine-readable problem code, or undefined when valid.
+ */
+export function describeArtifactBlockPropsShapeProblem(props: unknown): string | undefined {
+  if (props === null || typeof props !== 'object' || Array.isArray(props)) return 'invalid_props'
+  const record = props as Record<string, unknown>
+  if (Object.keys(record).some(key => !(ARTIFACT_BLOCK_PROP_KEYS as readonly string[]).includes(key))) return 'unknown_prop'
+  for (const key of Object.keys(record)) {
+    const value = record[key]
+    if (key === 'color') {
+      const problem = colorProblem(value)
+      if (problem !== undefined) return problem
+    } else if (key === 'thickness') {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.5 || value > 12) return 'invalid_thickness'
+    } else {
+      const problem = lengthProblem(value, true)
+      if (problem !== undefined) return problem
+    }
+  }
+  return undefined
 }
 
 /**

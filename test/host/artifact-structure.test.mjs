@@ -674,3 +674,102 @@ test('the operation ledger is durable and bounded', () => {
   assert.equal(store.get('call-1', 'op_ledger_1'), undefined, 'oldest ledger entry is evicted')
   assert.equal(store.get('call-1', 'op_ledger_3').revisionId, 'struct_3')
 })
+
+// ---------------------------------------------------------------------------
+// Deterministic property overrides (Divider / Spacer quick adjust)
+// ---------------------------------------------------------------------------
+
+/** A page whose root children are the quick-adjustable structural blocks. */
+const PROPS_PROGRAM = `root = Col([heading, rule, gap, card])
+heading = Title("Page")
+rule = Divider()
+gap = Spacer(null, 24)
+card = Card([Text("body")])`
+const PROPS_TREE = buildArtifactTree(PROPS_PROGRAM, { containerTypes: ['Col', 'Row', 'Card'] })
+const propsOp = (tree, nodeId, props) => ({ op: 'props', nodeId, sourceDigest: node(tree, nodeId).digest, props })
+
+test('props overrides rewrite only the Divider/Spacer expression and record a revision', async () => {
+  const m = mount()
+  await seed(m, PROPS_PROGRAM)
+  const divider = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('props-divider'), operations: [propsOp(PROPS_TREE, 'n3', { color: 'info', width: '60%', thickness: 2 })] }),
+  })
+  assert.equal(divider.status, 201, JSON.stringify(divider.body))
+  assert.equal(isArtifactStructureResult(divider.body.result), true)
+  assert.match(divider.body.result.program, /\nrule = Divider\("info", "60%", 2\)\n/)
+  assert.equal(divider.body.result.revision, 2)
+  assert.deepEqual(createArtifactRevisionStore().latestFor('call-original').editedBlockIds, ['b2'])
+  assert.equal(createArtifactProgramStore().lookup('call-original', divider.body.result.revisionId), divider.body.result.program)
+  // Every other line is byte-identical (line 2 is the changed Divider definition).
+  assert.equal(divider.body.result.program.split('\n')[0], PROPS_PROGRAM.split('\n')[0])
+  assert.equal(divider.body.result.program.split('\n')[1], PROPS_PROGRAM.split('\n')[1])
+  assert.equal(divider.body.result.program.split('\n')[3], PROPS_PROGRAM.split('\n')[3])
+  assert.equal(divider.body.result.program.split('\n')[4], PROPS_PROGRAM.split('\n')[4])
+
+  const spacer = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: divider.body.result.revisionId,
+      operationId: operationId('props-spacer'),
+      operations: [propsOp(PROPS_TREE, 'n4', { width: 12, height: 'auto' })],
+    }),
+  })
+  assert.equal(spacer.status, 201, JSON.stringify(spacer.body))
+  assert.match(spacer.body.result.program, /\ngap = Spacer\(12, "auto"\)\n/)
+  assert.equal(spacer.body.result.revision, 3)
+  assert.deepEqual(createArtifactRevisionStore().latestFor('call-original').editedBlockIds, ['b3'])
+})
+
+test('props overrides work on a nested Divider and preview writes nothing', async () => {
+  const program = `root = Col([card])\ncard = Card([Title("T", "sm"), Divider(), Text("body")])`
+  const tree = buildArtifactTree(program, { containerTypes: ['Col', 'Row', 'Card'] })
+  const divider = [...tree.nodes.values()].find(entry => entry.componentType === 'Divider')
+  assert.ok(divider !== undefined)
+  const m = mount()
+  await seed(m, program)
+  const preview = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('props-preview'), preview: true, operations: [propsOp(tree, divider.nodeId, { thickness: 3 })] }),
+  })
+  assert.equal(preview.status, 200, JSON.stringify(preview.body))
+  assert.equal(isArtifactStructurePreview(preview.body), true)
+  assert.match(preview.body.preview.program, /Divider\(null, null, 3\)/)
+  assert.deepEqual(preview.body.preview.changedBlockIds, ['b1'])
+  assert.equal(existsSync(m.file), false, 'a preview records no revision')
+  const applied = await postStructure(m.structureRoute(), {
+    body: structureBody({ operationId: operationId('props-nested'), operations: [propsOp(tree, divider.nodeId, { thickness: 3 })] }),
+  })
+  assert.equal(applied.status, 201, JSON.stringify(applied.body))
+  assert.match(applied.body.result.program, /Card\(\[Title\("T", "sm"\), Divider\(null, null, 3\), Text\("body"\)\]\)/)
+  assert.deepEqual(createArtifactRevisionStore().latestFor('call-original').editedBlockIds, ['b1'])
+})
+
+test('props overrides are idempotent and reject unusable targets or values', async () => {
+  const m = mount()
+  await seed(m, PROPS_PROGRAM)
+  const body = structureBody({ operationId: operationId('props-replay'), operations: [propsOp(PROPS_TREE, 'n3', { color: 'muted' })] })
+  const first = await postStructure(m.structureRoute(), { body })
+  assert.equal(first.status, 201)
+  const replay = await postStructure(m.structureRoute(), { body })
+  assert.equal(replay.status, 200)
+  assert.deepEqual(replay.body, first.body)
+  assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
+  const currentProgram = first.body.result.program
+  const currentTree = buildArtifactTree(currentProgram, { containerTypes: ['Col', 'Row', 'Card'] })
+  const currentOp = (nodeId, props) => ({ op: 'props', nodeId, sourceDigest: node(currentTree, nodeId).digest, props })
+  const cases = [
+    [currentOp('n6', { color: 'info' }), /has no quick-adjustable properties/],
+    [currentOp('n3', { color: 'not-a-color!' }), /invalid_color/],
+    [currentOp('n3', { thickness: 99 }), /invalid_thickness/],
+    [currentOp('n3', { height: 12 }), /unknown_prop/],
+    [{ op: 'props', nodeId: 'n3', sourceDigest: node(currentTree, 'n3').digest }, /invalid_props|unusable properties/],
+    [{ ...currentOp('n3', { width: '50%' }), toIndex: 1 }, /unexpected_to_index/],
+    [currentOp('n3', { width: 'auto' }), /invalid_length/],
+  ]
+  for (const [operation, expected] of cases) {
+    const response = await postStructure(m.structureRoute(), {
+      body: structureBody({ baseRevisionId: first.body.result.revisionId, operationId: operationId('props-bad'), operations: [operation] }),
+    })
+    assert.equal(response.status, 400, JSON.stringify(response.body))
+    assert.match(response.body.error.message, expected)
+  }
+})
+

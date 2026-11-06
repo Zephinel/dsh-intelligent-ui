@@ -13,6 +13,7 @@ import {
 } from './artifact-edit.ts'
 import type { RenderLayout } from './intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from './style-templates.ts'
+import { describeArtifactBlockPropsShapeProblem, type ArtifactBlockProps } from './artifact-block-props.ts'
 
 /** Route path for one deterministic structure operation batch. */
 export const ARTIFACT_STRUCTURE_ROUTE_PATH = '/api/intelligent-ui/artifact-structure'
@@ -20,8 +21,8 @@ export const ARTIFACT_STRUCTURE_ROUTE_PATH = '/api/intelligent-ui/artifact-struc
 /** Maximum operations accepted in one batch. */
 export const MAX_ARTIFACT_STRUCTURE_OPERATIONS = 20
 
-/** Operation kinds available in M4-3 v1. */
-export const ARTIFACT_STRUCTURE_OPS = ['delete', 'duplicate', 'move'] as const
+/** Operation kinds: structural edits plus deterministic property overrides. */
+export const ARTIFACT_STRUCTURE_OPS = ['delete', 'duplicate', 'move', 'props'] as const
 
 /** One structural operation against a revision-scoped node. */
 export interface ArtifactStructureOperation {
@@ -34,6 +35,8 @@ export interface ArtifactStructureOperation {
   readonly toIndex?: number
   /** Target container node id for a cross-container move; absent means the current parent. */
   readonly toParentNodeId?: string
+  /** Property bag for a `props` operation on Divider/Spacer. */
+  readonly props?: ArtifactBlockProps
 }
 
 /** Body of one structure request; the Host never accepts a client program. */
@@ -81,10 +84,16 @@ function isBoundedText(value: unknown, min: number, max: number): value is strin
 /** Describe why one structural operation is malformed, or undefined. */
 export function describeStructureOperationProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
-  if (Object.keys(value).some(key => !['op', 'nodeId', 'sourceDigest', 'toIndex', 'toParentNodeId'].includes(key))) return 'unknown_field'
+  if (Object.keys(value).some(key => !['op', 'nodeId', 'sourceDigest', 'toIndex', 'toParentNodeId', 'props'].includes(key))) return 'unknown_field'
   if (typeof value.op !== 'string' || !(ARTIFACT_STRUCTURE_OPS as readonly string[]).includes(value.op)) return 'invalid_op'
   if (typeof value.nodeId !== 'string' || !NODE_ID_PATTERN.test(value.nodeId)) return 'invalid_node_id'
   if (typeof value.sourceDigest !== 'string' || !DIGEST_PATTERN.test(value.sourceDigest)) return 'invalid_source_digest'
+  if (value.op === 'props') {
+    if ('toIndex' in value || 'toParentNodeId' in value) return 'unexpected_to_index'
+    if (!('props' in value)) return 'invalid_props'
+    return describeArtifactBlockPropsShapeProblem(value.props)
+  }
+  if ('props' in value) return 'unexpected_props'
   if (value.op === 'delete') {
     if ('toIndex' in value || 'toParentNodeId' in value) return 'unexpected_to_index'
     return undefined
