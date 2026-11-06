@@ -34,8 +34,8 @@ Grid(children: Node[], columns?: number, minChildWidth?: number, gap?: number) �
 Card(children: Node[], variant?: "outline" | "soft", padding?: number, gap?: number) — Panel with a border; soft is a filled panel for summaries.
 Carousel(children: Node[], itemWidth?: number, gap?: number) — Horizontal row that scrolls and snaps, each child an item itemWidth px wide (default 240): photos, cards, options, days.
 Popover(trigger: string | Node[], content: string | Node[]) — Shows content in a small panel when the trigger is clicked: a definition, a source, details behind an Icon("info", "sm").
-Divider()
-Spacer() — Fills the free space in a Row.
+Divider(color?: Color, width?: Length, thickness?: number)
+Spacer(width?: Length, height?: Length) — Fills the free space in a Row; width/height make it a fixed gap instead.
 Section(title: string, children: Node[], anchor?: string) — Collapsible article section; starts open. Optional anchor is the Toc target; falls back to the title.
 Toc(items: string[], anchors?: string[]) — Compact table of contents linking to Section anchors. Items are labels; optional parallel anchors decouple labels from targets.
 - gap and padding count 4px steps. Length is px or a CSS length like "50%". Radius is "sm", "md", "lg", "xl", "full" or px.

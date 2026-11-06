@@ -46,7 +46,7 @@ Row(children: Node[], gap?: number, align?: "start" | "center" | "end" | "stretc
 
 Horizontal layout; items are vertically centered.
 
-**Notes.** Horizontal flex row; set `wrap` for badge rows that may not fit. Use `Spacer()` to push items apart.
+**Notes.** Horizontal flex row; set `wrap` for badge rows that may not fit. Use `Spacer(width?: Length, height?: Length)` to push items apart.
 
 ### `Box`
 
@@ -101,7 +101,7 @@ Shows content in a small panel when the trigger is clicked: a definition, a sour
 ### `Divider`
 
 ```
-Divider()
+Divider(color?: Color, width?: Length, thickness?: number)
 ```
 
 **Notes.** A horizontal rule. No arguments.
@@ -109,7 +109,7 @@ Divider()
 ### `Spacer`
 
 ```
-Spacer()
+Spacer(width?: Length, height?: Length)
 ```
 
 Fills the free space in a Row.

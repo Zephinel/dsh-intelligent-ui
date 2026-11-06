@@ -30,12 +30,12 @@
       "description": "Shows content in a small panel when the trigger is clicked: a definition, a source, details behind an Icon(\"info\", \"sm\")."
     },
     "Divider": {
-      "signature": "Divider()",
-      "description": ""
+      "signature": "Divider(color?: Color, width?: Length, thickness?: number)",
+      "description": "Horizontal rule; color, width and thickness are optional overrides."
     },
     "Spacer": {
-      "signature": "Spacer()",
-      "description": "Fills the free space in a Row."
+      "signature": "Spacer(width?: Length, height?: Length)",
+      "description": "Fills the free space in a Row; width/height make it a fixed gap instead."
     },
     "Title": {
       "signature": "Title(text: string, size?: \"sm\" | \"md\" | \"lg\" | \"xl\" | \"2xl\" | \"3xl\", color?: Color)",
@@ -1060,14 +1060,41 @@
       },
       "Divider": {
         "type": "object",
-        "properties": {},
-        "additionalProperties": false
+        "properties": {
+          "color": {
+            "type": "string"
+          },
+          "width": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "thickness": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Horizontal rule; color, width and thickness are optional overrides."
       },
       "Spacer": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "width": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "height": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
         "additionalProperties": false,
-        "description": "Fills the free space in a Row."
+        "description": "Fills the free space in a Row; width/height make it a fixed gap instead."
       },
       "Title": {
         "type": "object",

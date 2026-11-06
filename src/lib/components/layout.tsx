@@ -3,7 +3,7 @@
 import { defineComponent, FormNameContext } from "@openuidev/react-lang";
 import { useId, type CSSProperties } from "react";
 import { z } from "zod/v4";
-import { bg, children, color, onColor, cx, length, radius, radiusSchema, size, space } from "./style";
+import { bg, children, color, fg, onColor, cx, length, radius, radiusSchema, size, space } from "./style";
 
 const align = z.enum(["start", "center", "end", "stretch"]);
 const justify = z.enum(["start", "center", "end", "between"]);
@@ -141,16 +141,49 @@ export const Card = defineComponent({
 
 export const Divider = defineComponent({
   name: "Divider",
-  props: z.object({}),
-  description: "",
-  component: () => <hr className="iui-divider" />,
+  props: z.object({
+    color: color.optional(),
+    width: length.optional(),
+    thickness: z.number().optional(),
+  }),
+  description: "Horizontal rule; color, width and thickness are optional overrides.",
+  component: ({ props }) => {
+    const width = size(props.width);
+    const thickness = typeof props.thickness === "number" && Number.isFinite(props.thickness)
+      ? `${Math.min(12, Math.max(0.5, props.thickness))}px`
+      : undefined;
+    return (
+      <hr
+        className="iui-divider"
+        style={{
+          borderTopColor: fg(props.color),
+          borderTopWidth: thickness,
+          width,
+          // A narrowed rule stays centered in its column.
+          marginLeft: width === undefined ? undefined : "auto",
+          marginRight: width === undefined ? undefined : "auto",
+        }}
+      />
+    );
+  },
 });
 
 export const Spacer = defineComponent({
   name: "Spacer",
-  props: z.object({}),
-  description: "Fills the free space in a Row.",
-  component: () => <div className="iui-spacer" aria-hidden />,
+  props: z.object({ width: length.optional(), height: length.optional() }),
+  description: "Fills the free space in a Row; width/height make it a fixed gap instead.",
+  component: ({ props }) => {
+    const width = size(props.width);
+    const height = size(props.height);
+    const fixed = width !== undefined || height !== undefined;
+    return (
+      <div
+        className="iui-spacer"
+        aria-hidden
+        style={{ width, height, flex: fixed ? "0 0 auto" : undefined }}
+      />
+    );
+  },
 });
 
 export const Form = defineComponent({
