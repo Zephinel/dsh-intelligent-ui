@@ -579,4 +579,4 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - 未选中区块改为**容器自身**的无边框亮度呼吸（2.4s，brightness 0.95）；overlay 只做点击捕获，无描边/背景/halo，不会额外叠层或与间距重叠；选中改为圆角卡片 + 柔和悬浮阴影，去掉蓝框；键盘焦点中性 ring。
 - 历史对话框不再用 artifactId 当副标题；styleId/未知 blockId 都改为本地化文案；编辑面板头部新增「退出编辑」。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **246 checks**（容器呼吸动画、overlay 无描边、选中卡片、历史无裸 ID、面板退出）；CSS 202.9 kB、standalone 516.0 kB。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **246 checks**（容器呼吸动画、overlay 无描边、选中卡片、历史无裸 ID、面板退出）；CSS 203.1 kB、standalone 516.0 kB。
