@@ -595,3 +595,10 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 方案：删除 §0.28 的全部描边（含 hover 静止描边）。每个**根层** block wrapper 用 `::after` 绘制 1.5px 圆角环：`conic-gradient(from var(--dsh-iui-marquee-angle), …)` 形成带渐隐拖尾的光头，`mask: content-box/border-box exclude` 裁成圆角边环，`drop-shadow` 提供柔和光晕；`@property` 注册角度、2.6s linear 无限循环。每个区块按 `--iui-edit-stagger` 错开相位（140ms），并按 `--iui-edit-tone-N` 六色淡彩轮换（蓝/紫/绿/黄/粉/青，与选中编号色系一致但更浅；light/dark 各一套色值）。hover 时 opacity 0.9→1；选中/指令弹窗打开时不绘制；`prefers-reduced-motion` 停止绕行、保留静止光斑。
 - 约束：只作用于根层 wrapper（`:not([data-dsh-iui-block-path])`），嵌套子元素不参与；圆角环由 mask 内缩得到，不是 border；`inset: -2px` 只进入区块间隙，不与相邻区块重叠；不新增 DOM、不改变内容亮度/布局。
 - 验证：Node **496/496**；浏览器 9/9；artifact-edit **258 checks**（动画名/无限循环、conic-gradient、圆角 mask、逐块相位、不同淡色、hover 变亮、reduced-motion 静止、零描边 overlay、选中卡片等）；构建 host 812.9 kB、client 3.94 MB（js 3.74 / CSS 205.0）、standalone 3.32 MB + 518.1 kB；pack 44 files 4.23 MB / 10.93 MB。截图/GIF：`.tmp-report/edit-affordance-marquee-dark.png`、`.tmp-report/edit-affordance-marquee-light.png`、`.tmp-report/edit-affordance-marquee-dark.gif`、`.tmp-report/edit-affordance-marquee-light.gif`；`.tmp-report/harness-block-marquee.png` 为 E2E 暂停帧。
+
+## 0.30 Block popover 输入框底部 focus ring 被裁（2026-11-07，工作树）
+
+- 反馈（真机截图）：区块指令 popover 的 textarea 获得焦点时，蓝色 focus ring 的底边被裁掉。
+- 根因：textarea 是 `.dsh-iui-edit-popover-scroll`（`overflow-y: auto`）的最后一个字段，滚动容器只有 `padding-right: 2px`、没有底部内边距；2px ring + 1px offset 需要 3px 空间，超出 padding box 的部分被滚动容器裁掉（左右两侧此前已用 textarea `margin: 0 3px` 解决）。
+- 修复：滚动容器 padding 改为 `0 2px 4px`，把底部 4px 留在裁剪区内，四边 focus ring 完整可见；同时 E2E 增加底部空间与 padding 断言。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **260 checks**；CSS 205.0 kB；真机隔离截图（light/dark）确认输入框四边 ring 完整。

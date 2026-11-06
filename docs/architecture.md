@@ -390,7 +390,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 浮动面板增加 12px 右侧 inset，宽度拟合新增 `panelRightInset`（默认 0；DOM helper 传 12），因内容居中会在两侧各计入 inset：1440/748 + inset12 → 648，1300/900 → 508，1500/900 → 708；无 inset 的旧默认结果不变。退出卸载时恢复用户原来的 inline 宽度。
 - 编排行右侧是一个**常显**的动作组 `[data-dsh-iui-edit-structure-actions]`，把编辑（`data-dsh-iui-edit-structure-edit`）、复制、删除、移动四个图标放在同一个 104px 固定槽位里，所有图标同一白色调（`label-primary`）；编辑铅笔统一为**笔尖朝左下**的同一个描边路径（画布选中浮层、请求行、编排组共用，取代原先字符 `✎` 的镜像笔形）；悬停请求卡只读，不再重复提供编辑/删除。
 - 结构性删除改为持久的紧凑两态确认：默认 edit/duplicate/delete/move 图标；确认时替换为 `data-dsh-iui-edit-structure-confirm` 内的安静 Cancel 与 danger-tinted Delete 两个按钮，无行红底/大红 pill；**移除 3 秒自动恢复 timer**，确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消后回到 Delete 图标；live region 播报一次。
-- Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。
+- Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时 2px focus ring 的底边不会被滚动容器裁掉（左右各 3px 由 textarea 外边距提供）。
 - 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；`artifact-edit` **246 checks**（圆角/inset/overflow 几何、enter/exit 动画名、`data-closing`、删除确认 >3.6s 持久 / Cancel / Delete preview、popover 四边 clamp）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）；pack 43 files 4.02 / 10.37 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
