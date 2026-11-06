@@ -2435,8 +2435,11 @@
      pseudo-element inset from both card edges, so it never collides with the
      rounded composer corners. */
   position: relative;
-  min-height: 40px;
-  padding: 8px 12px;
+  /* Fill the band from the card's top edge to the divider: cancel the card's
+     8px top padding and center the row with symmetric 12px padding. */
+  min-height: 48px;
+  margin-top: -8px;
+  padding: 12px;
   border: 0;
   border-radius: 0;
   background: transparent;

@@ -189,6 +189,20 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   check(dockGeometry.insideLeft && dockGeometry.insideRight, true, 'draft dock stays within the composer card')
   check(dockGeometry.lineLeft === '12px' && dockGeometry.lineRight === '12px', true, 'divider is inset from both card edges')
+  const dockCenter = await read(`(() => {
+    const card = document.querySelector('[data-composer-card]');
+    const dock = document.querySelector('[data-dsh-iui-edit-draft-switcher]');
+    const row = dock.querySelector('[data-dsh-iui-edit-draft-row]');
+    const head = dock.querySelector('.dsh-iui-draft-dock-head');
+    const cr = card.getBoundingClientRect();
+    const dr = dock.getBoundingClientRect();
+    const rr = row.getBoundingClientRect();
+    const hr = head.getBoundingClientRect();
+    const contentCenter = (rr.top + rr.bottom + hr.top + hr.bottom) / 4;
+    const bandCenter = (cr.top + dr.bottom) / 2;
+    return { contentCenter, bandCenter, diff: Math.abs(contentCenter - bandCenter) };
+  })()`)
+  check(dockCenter.diff <= 1.5, true, 'draft row is vertically centered in the card-top band')
   await shot('harness-m3-draft-restored.png')
   // Clean the persisted draft, then restart from the pristine harness state.
   await read('sessionStorage.clear()')
@@ -416,6 +430,14 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'first card popover')
   await saveInstruction('第一张卡片：改成数字时钟')
   check(await count('[data-dsh-iui-edit-draft-row]'), 1, 'draft switcher lists one draft')
+  console.log('DOCK CENTER', await read(`(() => {
+    const dock = document.querySelector('[data-dsh-iui-edit-draft-switcher]');
+    const head = dock.querySelector('.dsh-iui-draft-dock-head');
+    const row = dock.querySelector('[data-dsh-iui-edit-draft-row]');
+    const r = el => el.getBoundingClientRect().toJSON();
+    const cs = getComputedStyle(dock);
+    return JSON.stringify({ dock: r(dock), head: r(head), row: r(row), padding: cs.padding, align: cs.alignItems, height: cs.height, lineHeight: cs.lineHeight });
+  })()`))
   await shot('harness-draft-dock.png')
   check(await count('[data-chip="artifact-edit"]'), 1, 'first draft has one chip')
   await click('[data-dsh-iui-edit-exit]')
