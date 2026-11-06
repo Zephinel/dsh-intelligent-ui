@@ -1211,16 +1211,10 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* Keyboard focus is shown by the row surface instead of a box around the
-   grip: the rounded outline read like a stray control and was the loudest
-   piece of chrome in the row. */
+/* Keyboard focus stays visible but reads as a hairline, not a glow. */
 .dsh-iui-edit-grip:focus-visible {
-  outline: none;
-}
-
-.dsh-iui-edit-arrangement-row:has(.dsh-iui-edit-grip:focus-visible),
-.dsh-iui-edit-nested-row:has(.dsh-iui-edit-grip:focus-visible) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  outline: 1px solid var(--dsw-alias-label-tertiary);
+  outline-offset: 1px;
 }
 
 .dsh-iui-edit-grip:active,
@@ -2416,6 +2410,7 @@
 .dsh-iui-edit-section-action:focus-visible,
 .dsh-iui-edit-request-open:focus-visible,
 .dsh-iui-edit-icon-button:focus-visible,
+.dsh-iui-edit-grip:focus-visible,
 .dsh-iui-edit-arrangement-body:focus-visible,
 .dsh-iui-edit-draft-open:focus-visible,
 .dsh-iui-edit-draft-action:focus-visible,
