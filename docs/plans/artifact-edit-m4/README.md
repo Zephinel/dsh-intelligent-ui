@@ -509,11 +509,17 @@ GPT 评审后新增/收窄、需 owner 确认：
 - request 列表垃圾桶改为“移除要求”并提示“不删除区块”，与结构删除“删除区块”区分。
 - 面板进出与聊天内容宽度联动：`ChatContentWidthController { open, close, dispose }` + 220ms rAF/cubic-bezier(.22,1,.36,1)，open 收窄/panel 滑入同时开始，close 恢复/panel 滑出同时开始；中途打断从当前值继续；reduced-motion 立即；dispose 恢复原 inline。
 - 追加：编辑工具栏进入/退场 220ms 动画（随 edit view closing）；popover textarea 左右 3px margin 防止 2px focus ring 被 scroll 容器左侧裁切；宽度动画增加隐藏窗口 rAF 暂停时的最终值 fallback。
-- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **213 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.9 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **213 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
 
 ## 0.17 14 英寸 Air 遮挡修复：自适应面板宽度（2026-11-05，已提交 c3e1917）
 
 - 现象：1234 CSS px 视口 + sidebar 后聊天列 954px 时，面板 clamp 360 + 内容最小 360 无法同时满足，面板仍遮内容。
 - 修复：新增 `fitChatPanel` 返回 `{ contentWidth, panelWidth, adaptive }`；固定点低于可读阈值时先收窄面板（`--dsh-iui-edit-panel-width`，最小 272），再适配内容；宽屏保持原值，dispose 移除变量；面板宽度 220ms transition 与内容联动。
 - 真机/隔离验证：1234×835 → 内容 320px、面板 281px、gap≈35px；1512×982 → 内容 440px、面板 360px、gap≈27px；无遮挡。
-- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **213 checks**；CSS 193.9 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **213 checks**；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
+
+## 0.18 工具栏动画打磨（2026-11-05，已提交 8bbd0e9）
+
+- 反馈：工具栏动画末尾“顿一下”。根因：工具栏 220ms 下移 6px 与卡片同时重排/变宽叠加，两段运动互相干扰。
+- 修复：工具栏改为纯淡入（200ms ease-in）/淡出（180ms ease-in），去掉 transform，仅保留与面板一致的淡入淡出；reduced-motion 仍禁用。
+- 验证：Node **488/488**；浏览器 9/9；artifact-edit **213 checks**；CSS 193.8 kB。
