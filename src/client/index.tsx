@@ -43,6 +43,7 @@ import { styleCatalog } from './styles.ts'
 import { styleActions } from './style-actions.ts'
 import { programsForMessage, type ExportChatSnapshot } from './export-data.ts'
 import { registerArtifactEditChip } from './artifact-edit/composer.ts'
+import { DraftDock, type DraftDockInjected } from './artifact-edit/DraftDock.tsx'
 import { ArtifactEditSummary, artifactEditSummaryRule } from './artifact-edit/user-text.tsx'
 import { ARTIFACT_EDIT_SUMMARY, BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
 import {
@@ -197,6 +198,16 @@ export function apply(ctx: ClientContext): void {
       }
     },
   }, ToggleControl))
+  // Session-wide pending-edit drafts live above the composer card, next to the
+  // other dock strips; the right-side edit panel is per artifact and no longer
+  // carries the chat-wide switcher.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'intelligent-ui-drafts',
+    order: 30,
+    locale: NS,
+    inject: (sessionId: SessionId): DraftDockInjected => ({ sessionId }),
+  }, DraftDock))
   ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
     name: 'conversation.input.overlay',
     id: 'intelligent-ui-on-demand',

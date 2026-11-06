@@ -430,6 +430,7 @@ function Harness(): ReactElement {
   update = () => refresh(value => value + 1)
   return <>
     <main key={w.__renderKey}><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
+    <Seat name="conversation.input.dock" />
     <div data-composer-card>
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>

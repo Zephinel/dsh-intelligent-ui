@@ -176,7 +176,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'restored draft editor')
   check((await text('[data-dsh-iui-edit-request-list]')).includes('persist-me across reload'), true, 'reloaded draft shows its saved request')
-  check((await text('[data-dsh-iui-edit-panel]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
+  check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-panel] [data-dsh-iui-edit-draft-switcher]') === null`), true, 'draft switcher is not inside the edit panel')
+  check(await read(`!!(document.querySelector('[data-dsh-iui-edit-draft-switcher]')?.compareDocumentPosition(document.querySelector('[data-composer-card]')) & Node.DOCUMENT_POSITION_FOLLOWING)`), true, 'draft dock sits above the composer card')
   await shot('harness-m3-draft-restored.png')
   // Clean the persisted draft, then restart from the pristine harness state.
   await read('sessionStorage.clear()')
@@ -404,6 +406,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'first card popover')
   await saveInstruction('第一张卡片：改成数字时钟')
   check(await count('[data-dsh-iui-edit-draft-row]'), 1, 'draft switcher lists one draft')
+  await shot('harness-draft-dock.png')
   check(await count('[data-chip="artifact-edit"]'), 1, 'first draft has one chip')
   await click('[data-dsh-iui-edit-exit]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'first card edit closed')
