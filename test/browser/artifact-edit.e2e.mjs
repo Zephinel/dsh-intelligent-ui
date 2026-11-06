@@ -1128,6 +1128,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read(`[...document.querySelectorAll('[data-dsh-iui-quick-menu] [data-value]')].find(el => el.getAttribute('data-value') === 'info').click()`)
   await wait('!document.querySelector("[data-dsh-iui-quick-menu]")', 'colour menu closed')
   await wait(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled === false`, 'apply enabled after edit')
+  const popoverBeforePreview = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
   await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', '%')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '60')
   await setInputValue('[data-dsh-iui-edit-prop="thickness"] input', '2')
@@ -1148,6 +1149,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('border-top-width: 2px')`, 'slider settles back')
   check(await read(`document.querySelector('[data-dsh-iui-edit-prop="thickness"] [role="slider"]').getAttribute('aria-valuenow')`), '2', 'the custom slider reports its value')
   check(await read(`document.querySelector('[data-dsh-iui-edit-view]').getAttribute('data-dsh-iui-edit-props-preview')`), 'b2', 'the canvas reports the previewed block')
+  const popoverAfterPreview = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
+  check(Math.abs(popoverAfterPreview.left - popoverBeforePreview.left) <= 0.5, true, 'the popover does not follow the narrowing block')
+  check(Math.abs(popoverAfterPreview.top - popoverBeforePreview.top) <= 0.5, true, 'the popover keeps its vertical anchor while previewing')
   const dividerPreview = await read(`(() => {
     const hr = document.querySelector('[data-dsh-iui-block="b2"] hr');
     const cs = getComputedStyle(hr);

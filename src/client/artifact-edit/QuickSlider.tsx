@@ -38,6 +38,10 @@ function snap(value: number, min: number, max: number, step: number): number {
 export function QuickSlider({ label, ariaLabel, value, min, max, step, unit, disabled = false, onChange }: QuickSliderProps): ReactElement {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
+  // Drag is relative to the value at pointer-down: clicking the track does not
+  // teleport the thumb to the click point (which made one small nudge feel like
+  // a huge jump), and moving the pointer keeps the same delta.
+  const dragStart = useRef<{ value: number; x: number } | null>(null)
   const safeValue = Number.isFinite(value) ? value : min
   const ratio = max === min ? 0 : Math.min(1, Math.max(0, (safeValue - min) / (max - min)))
   const percent = ratio * 100
@@ -49,17 +53,18 @@ export function QuickSlider({ label, ariaLabel, value, min, max, step, unit, dis
 
   const fromPointer = (clientX: number): void => {
     const track = trackRef.current
-    if (track === null) return
+    const start = dragStart.current
+    if (track === null || start === null) return
     const rect = track.getBoundingClientRect()
     if (rect.width <= 0) return
-    const nextRatio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    report(min + nextRatio * (max - min))
+    const delta = (clientX - start.x) / rect.width * (max - min)
+    report(start.value + delta)
   }
 
   useEffect(() => {
     if (!dragging) return
     const onMove = (event: globalThis.PointerEvent): void => { fromPointer(event.clientX) }
-    const onUp = (): void => { setDragging(false) }
+    const onUp = (): void => { dragStart.current = null; setDragging(false) }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
@@ -74,8 +79,8 @@ export function QuickSlider({ label, ariaLabel, value, min, max, step, unit, dis
     if (disabled) return
     event.preventDefault()
     event.currentTarget.focus({ preventScroll: true })
+    dragStart.current = { value: safeValue, x: event.clientX }
     setDragging(true)
-    fromPointer(event.clientX)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {

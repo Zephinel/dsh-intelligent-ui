@@ -143,14 +143,14 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
         : { left, top, maxHeight })
     }
     place()
-    const observer = new ResizeObserver(place)
-    if (panel.current !== null) observer.observe(panel.current)
-    const anchor = blockElement(blockId)
-    if (anchor !== null) observer.observe(anchor)
+    // Deliberately no ResizeObserver on the anchor or panel: quick-adjust
+    // previews change the block's width/height (e.g. a Divider shrinking to
+    // 60%), and re-anchoring on that would move the popover — and the slider
+    // track under the pointer — while the user drags. The popover stays put
+    // until the viewport scrolls/resizes or the target block changes.
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     return () => {
-      observer.disconnect()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
