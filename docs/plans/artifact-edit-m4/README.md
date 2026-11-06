@@ -500,7 +500,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 面板改为圆角浮动卡片（桌面 top64/right12/bottom12、radius16、1px 边框、双层阴影、overflow hidden；窄屏 bottom sheet radius14），进退场 220ms panel-only 动画（桌面右滑/窄屏底滑 + 淡入淡出/轻微 scale，`prefers-reduced-motion` 禁用）；退出延迟 ~220ms 卸载，active 草稿切换立即卸载旧编辑器；浮动面板右侧 12px inset 计入宽度 fit（panelRightInset，1440/748+12→648 等）。
 - 删除确认 unslop：去掉 3 秒自动恢复 timer；持久两态（Cancel/Delete 紧凑按钮，无红底/大红 pill），焦点到 Cancel，外部点击/Escape/其它动作取消，live region 播报一次。
 - Block 指令 popover 位置 clamp 修复：anchor 滚出视口时顶边曾为负导致输入框被裁；现在 top 统一 clamp 到 `[12, vh-12-measuredHeight]`。
-- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239）；浏览器 9/9；artifact-edit **217 checks**；nested-edit-renderer 75；nested-css-contract 28+5。构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 193.0）、standalone 3.30+515.8；pack 43 files 4.02/10.37 MB。
+- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239）；浏览器 9/9；artifact-edit **220 checks**；nested-edit-renderer 75；nested-css-contract 28+5。构建 host 809.1 kB、client 3.91 MB（js 3.72 / css 193.0）、standalone 3.30+515.8；pack 43 files 4.02/10.37 MB。
 - 说明：`.tmp-report/harness-polish-delete-confirm.png` 是取消预览后的截图，只证明圆角面板，不包含确认态；部署需重启 `dsh-web`。
 
 ## 0.16 第四轮反馈：结构动作显隐/行位移 + 面板与内容联动动画（2026-11-05，已提交 0232d37）
@@ -509,30 +509,36 @@ GPT 评审后新增/收窄、需 owner 确认：
 - request 列表垃圾桶改为“移除要求”并提示“不删除区块”，与结构删除“删除区块”区分。
 - 面板进出与聊天内容宽度联动：`ChatContentWidthController { open, close, dispose }` + 220ms rAF/cubic-bezier(.22,1,.36,1)，open 收窄/panel 滑入同时开始，close 恢复/panel 滑出同时开始；中途打断从当前值继续；reduced-motion 立即；dispose 恢复原 inline。
 - 追加：编辑工具栏进入/退场 220ms 动画（随 edit view closing）；popover textarea 左右 3px margin 防止 2px focus ring 被 scroll 容器左侧裁切；宽度动画增加隐藏窗口 rAF 暂停时的最终值 fallback。
-- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **217 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 13）；浏览器 9/9；artifact-edit **220 checks**（708/1008 稳定宽度、开关中间帧宽度严格介于 base/fitted、data-closing 期间同步、CDP hover 三态坐标/opacity、结构删除 confirm）；nested 75；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
 
 ## 0.17 14 英寸 Air 遮挡修复：自适应面板宽度（2026-11-05，已提交 c3e1917）
 
 - 现象：1234 CSS px 视口 + sidebar 后聊天列 954px 时，面板 clamp 360 + 内容最小 360 无法同时满足，面板仍遮内容。
 - 修复：新增 `fitChatPanel` 返回 `{ contentWidth, panelWidth, adaptive }`；固定点低于可读阈值时先收窄面板（`--dsh-iui-edit-panel-width`，最小 272），再适配内容；宽屏保持原值，dispose 移除变量；面板宽度 220ms transition 与内容联动。
 - 真机/隔离验证：1234×835 → 内容 320px、面板 281px、gap≈35px；1512×982 → 内容 440px、面板 360px、gap≈27px；无遮挡。
-- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **217 checks**；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
+- 验证：Node **488/488**（Host 228、Client 239、packaging 21；特性 239；panel-width 14）；浏览器 9/9；artifact-edit **220 checks**；CSS 193.8 kB；pack 43 files 4.02/10.37 MB。
 
 ## 0.18 工具栏动画打磨（2026-11-05，已提交 8bbd0e9）
 
 - 反馈：工具栏动画末尾“顿一下”。根因：工具栏 220ms 下移 6px 与卡片同时重排/变宽叠加，两段运动互相干扰。
 - 修复：工具栏改为纯淡入（200ms ease-in）/淡出（180ms ease-in），去掉 transform，仅保留与面板一致的淡入淡出；reduced-motion 仍禁用。
-- 验证：Node **488/488**；浏览器 9/9；artifact-edit **217 checks**；CSS 193.8 kB。
+- 验证：Node **488/488**；浏览器 9/9；artifact-edit **220 checks**；CSS 193.8 kB。
 
 ## 0.19 动画节奏调慢（2026-11-05，已提交 8132337）
 
 - 反馈：整体进入/退出编辑的动画太快。
 - 调整：面板进出、面板宽度 transition、联动内容宽度动画、延迟卸载统一 **320ms**（同一 `cubic-bezier(.22,1,.36,1)`）；工具栏淡入 240ms / 淡出 220ms；reduced-motion 仍立即生效。
-- 验证：Node **488/488**（动画时长常量断言同步）；浏览器 9/9；artifact-edit **217 checks**；CSS 193.8 kB。
+- 验证：Node **488/488**（动画时长常量断言同步）；浏览器 9/9；artifact-edit **220 checks**；CSS 193.8 kB。
 
 ## 0.20 编排行动作常显 + 图标统一 + 悬停卡只读（2026-11-05，工作树）
 
 - 编排行动作组改为**常显**（不再 hover 才出现），编辑铅笔并入同一 104px 固定槽位，槽位内顺序为 编辑 / 复制 / 删除 / 移动；确认态仍在同一槽位，行内位置不位移。
 - 行内所有图标统一为 `label-primary` 白色调（原 `label-tertiary`），更清晰可见。
 - 悬停请求卡去掉「编辑 / 移除要求」两个按钮（行内已有对应入口），卡片只读；安静删除相关 CSS 一并移除。
-- 验证：Node **488/488**；浏览器 9/9；artifact-edit **217 checks**（常显动作组、四个分组图标、分组编辑选择器迁移、悬停卡只读）；CSS 192.8 kB；真机隔离 1512×982 确认四个白色图标同组常显。
+- 验证：Node **488/488**；浏览器 9/9；artifact-edit **220 checks**（常显动作组、四个分组图标、分组编辑选择器迁移、悬停卡只读）；CSS 192.8 kB；真机隔离 1512×982 确认四个白色图标同组常显。
+
+## 0.21 编辑铅笔图标统一（2026-11-05，已提交 56b8caa）
+
+- 问题：画布选中浮层的编辑按钮用字符 `✎`（笔尖朝右下），与面板行的 SVG 铅笔（笔尖朝左下）互为镜像。
+- 修复：`block-slot.tsx` 内新增 `PencilGlyph`（与 `EditGlyph` 同一路径），画布浮层改用它；请求行、编排动作组、画布浮层三处铅笔完全一致，打包产物中不再有 `✎`。
+- 验证：Node **488/488**；浏览器 9/9；artifact-edit **220 checks**（三处 `d` 路径一致、浮层无文本字符）；CSS 192.8 kB。
