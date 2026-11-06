@@ -239,26 +239,26 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     };
   })()`)
   check(editableHint.bodyAnimation.includes('dsh-iui-block-breathe'), false, 'the block body no longer breathes')
-  check(editableHint.marqueeCount, 9, 'every root block draws one marquee')
-  check(editableHint.marqueeAnimation.includes('dsh-iui-block-marquee'), true, 'editable blocks run a light marquee around their edge')
-  check(editableHint.marqueeIteration, 'infinite', 'the marquee keeps orbiting while the canvas idles')
-  check(editableHint.marqueeBackground.includes('conic-gradient'), true, 'the marquee is a rotating conic light')
+  check(editableHint.marqueeCount, 9, 'every root block draws one orbit glow')
+  check(editableHint.marqueeAnimation.includes('dsh-iui-block-orbit'), true, 'editable blocks run a light orbit glow around their edge')
+  check(editableHint.marqueeIteration, 'infinite', 'the orbit glow keeps traveling while the canvas idles')
+  check(editableHint.marqueeBackground.includes('conic-gradient'), true, 'the orbit glow is a rotating conic light')
   check(editableHint.marqueeMask.includes('linear-gradient'), true, 'the light is masked to the rounded block edge')
-  check(editableHint.marqueeOpacity > 0.8, true, 'the marquee is visible at rest')
-  check(new Set(editableHint.stagger).size, 9, 'the marquee orbits at a staggered phase per block')
+  check(editableHint.marqueeOpacity > 0.8, true, 'the orbit glow is visible at rest')
+  check(new Set(editableHint.stagger).size, 9, 'the orbit glow travels at a staggered phase per block')
   const tones = await read(`(() => {
     const first = getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b1"] .dsh-iui-block-marquee')).backgroundImage;
     const second = getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b2"] .dsh-iui-block-marquee')).backgroundImage;
     return { both: first.includes('conic-gradient') && second.includes('conic-gradient'), distinct: first !== second };
   })()`)
-  check(tones.both, true, 'each editable block paints its own conic marquee')
+  check(tones.both, true, 'each editable block paints its own conic orbit glow')
   check(tones.distinct, true, 'neighbouring blocks orbit in different pastel tones')
   await hover('[data-dsh-iui-block-hit="b3"]')
   await new Promise(resolve => setTimeout(resolve, 220))
-  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '1', 'hover brightens the marquee')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '1', 'hover brightens the orbit glow')
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
   await new Promise(resolve => setTimeout(resolve, 260))
-  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '0.9', 'the marquee settles back when the pointer leaves')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '0.9', 'the orbit glow settles back when the pointer leaves')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   await new Promise(resolve => setTimeout(resolve, 120))
   const reducedMotion = await read(`(() => {
@@ -276,9 +276,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // 3. Opening a popover does not create a request.
   await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'popover opened')
+  await wait(`document.querySelectorAll('.dsh-iui-block-scrim').length === 8`, 'focus scrim outside the edited block')
+  check(await count('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-frame.is-active'), 1, 'the edited block keeps the focus frame')
+  check(await count('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-scrim'), 0, 'the edited block is not dimmed')
+  await shot('harness-focus-mode.png')
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'draft popover creates no request')
   await click('[data-dsh-iui-edit-cancel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-popover]")', 'draft popover closed')
+  check(await count('.dsh-iui-block-scrim'), 0, 'closing the editor clears the focus scrim')
+  check(await count('.dsh-iui-block-marquee'), 9, 'closing the editor restores every orbit glow')
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'still no request after cancel')
 
   // 4. Saving a block instruction creates the request entry, number and colour.
@@ -293,36 +299,45 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'canvas badge number 1')
   const selectedVisual = await read(`(() => {
     const item = document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"]');
+    const pending = item?.querySelector('.dsh-iui-block-pending');
     const frame = item?.querySelector('.dsh-iui-block-frame');
-    const badge = item?.querySelector('.dsh-iui-block-badge');
-    const tools = item?.querySelector('.dsh-iui-block-tools');
+    const marquee = item?.querySelector('.dsh-iui-block-marquee');
+    const pageIndex = item?.querySelector('.dsh-iui-block-page-index');
     const hit = item?.querySelector('.dsh-iui-block-hit');
     return {
-      frameShadow: frame === null || frame === undefined ? 'none' : getComputedStyle(frame).boxShadow,
-      frameRadius: frame === null || frame === undefined ? 0 : parseFloat(getComputedStyle(frame).borderTopLeftRadius),
-      badge: badge?.textContent ?? null,
-      tools: tools?.querySelectorAll('button').length ?? 0,
+      pending: pending !== null && pending !== undefined,
+      pendingNumber: pending?.querySelector('.dsh-iui-block-pending-number')?.textContent ?? null,
+      pendingDot: pending?.querySelector('.dsh-iui-block-pending-dot') !== null,
+      frame: frame !== null && frame !== undefined,
+      marqueePending: marquee?.classList.contains('is-pending') ?? false,
+      marqueeDuration: marquee === null || marquee === undefined ? '' : getComputedStyle(marquee).animationDuration,
+      marqueeOpacity: marquee === null || marquee === undefined ? 1 : parseFloat(getComputedStyle(marquee).opacity),
+      pageIndex: pageIndex?.textContent ?? null,
       hitLabel: hit?.getAttribute('aria-label') ?? null,
       hitPressed: hit?.getAttribute('aria-pressed') ?? null,
     };
   })()`)
-  check(selectedVisual.frameShadow !== 'none', true, 'selected block casts a floating shadow')
-  check(selectedVisual.frameRadius >= 12, true, 'selected block gets a rounded frame')
-  check(selectedVisual.badge, '1', 'selected block shows its request number')
-  check(selectedVisual.tools, 2, 'selected block offers edit and deselect tools')
+  check(selectedVisual.pending, true, 'saving an instruction turns the selection into a quiet pending marker')
+  check(selectedVisual.pendingNumber, '1', 'the pending marker keeps the request number')
+  check(selectedVisual.pendingDot, true, 'the pending marker carries a coloured dot')
+  check(selectedVisual.frame, false, 'a saved block no longer shows the big selected frame')
+  check(selectedVisual.marqueePending, true, 'a pending root block keeps a quieter orbit glow')
+  check(selectedVisual.marqueeDuration, '5.2s', 'the pending orbit glow is slower')
+  check(selectedVisual.marqueeOpacity < 0.5, true, 'the pending orbit glow is dimmer')
+  check(selectedVisual.pageIndex, null, 'the pending marker replaces the page-order badge')
   check(selectedVisual.hitLabel !== null && selectedVisual.hitLabel !== '', true, 'the hit target is labelled for screen readers')
   check(selectedVisual.hitPressed, 'true', 'the hit target reports its pressed state')
-  await shot('harness-selected-block.png')
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await new Promise(resolve => setTimeout(resolve, 180))
+  await shot('harness-pending-block.png')
   const pencilPaths = await read(`(() => {
-    const overlay = document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-tool svg path')?.getAttribute('d') ?? null;
     const row = document.querySelector('[data-dsh-iui-edit-structure-edit] svg path')?.getAttribute('d') ?? null;
     const requestRow = document.querySelector('[data-dsh-iui-edit-request-edit] svg path')?.getAttribute('d') ?? null;
-    return { overlay, row, requestRow, text: document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-tool')?.textContent ?? '' };
+    return { row, requestRow };
   })()`)
-  check(pencilPaths.overlay, pencilPaths.row, 'block overlay edit glyph matches the arrangement row pencil')
   check(pencilPaths.requestRow, pencilPaths.row, 'request row edit glyph matches the arrangement row pencil')
-  check(pencilPaths.text, '', 'block overlay edit uses an SVG glyph, not a text character')
-  check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-badge')?.textContent ?? null`), '1', 'arrangement badge number 1')
+  check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-badge')?.textContent ?? null`), '1', 'arrangement badge keeps the request number 1')
+  check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-page-index')?.textContent ?? null`), '3', 'arrangement row shows the page-order index 3')
   check(await read(`document.querySelector('${arrangementSelector('b3')} .dsh-iui-edit-tag')?.textContent ?? null`), '已编辑', 'arrangement edited tag')
   check(await chipLabel(), '编辑 夏令时与冬令时 · 修订 1 · 1 项修改', 'chip shows one edit')
   check(await count('[data-dsh-iui-edit-clear-all]'), 1, 'clear-all control appears')

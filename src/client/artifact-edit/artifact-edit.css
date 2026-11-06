@@ -6,7 +6,7 @@
  * request rows, drag-arrangement list, hover request card, global instruction
  * and send summary, plus the anchored block popover. Block wrappers are
  * layout-transparent; the canvas geometry overlay (hit targets, frames,
- * badges, tools and the pastel marquee) is styled here and positioned by
+ * badges, tools and the pastel orbit glow) is styled here and positioned by
  * `BlockOverlay.tsx`.
  *
  * Surfaces, borders, type and focus ride the DSH semantic theme aliases
@@ -224,7 +224,7 @@
  * Canvas block overlay (geometry-driven selection chrome).
  * ---------------------------------------------------------------------- */
 
-@property --dsh-iui-marquee-angle {
+@property --dsh-iui-orbit-angle {
   syntax: "<angle>";
   inherits: false;
   initial-value: 0deg;
@@ -346,14 +346,14 @@
   outline-offset: 1px;
 }
 
-/* Pastel marquee: a comet orbits the root block's invisible edge. */
-.dsh-iui-block-marquee {
+/* Orbit glow: a comet of light travels around the root block's invisible edge. */
+.dsh-iui-block-orbit {
   position: absolute;
   inset: -3px;
   padding: 1.5px;
   border-radius: 15px;
   background: conic-gradient(
-    from var(--dsh-iui-marquee-angle),
+    from var(--dsh-iui-orbit-angle),
     transparent 0deg 150deg,
     transparent 220deg,
     color-mix(in srgb, var(--dsh-iui-tone) 0%, transparent) 240deg,
@@ -368,23 +368,126 @@
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--dsh-iui-tone) 40%, transparent));
   opacity: 0.9;
   pointer-events: none;
-  animation: dsh-iui-block-marquee 2600ms linear infinite;
+  animation: dsh-iui-block-orbit 2600ms linear infinite;
   animation-delay: calc(var(--dsh-iui-stagger, 0) * 140ms);
 }
 
-.dsh-iui-block-overlay-item:hover .dsh-iui-block-marquee {
+.dsh-iui-block-overlay-item:hover .dsh-iui-block-orbit {
   opacity: 1;
 }
 
-@keyframes dsh-iui-block-marquee {
-  to { --dsh-iui-marquee-angle: 360deg; }
+@keyframes dsh-iui-block-orbit {
+  to { --dsh-iui-orbit-angle: 360deg; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dsh-iui-block-marquee {
+  .dsh-iui-block-orbit {
     animation: none;
     opacity: 0.5;
   }
+}
+
+/* -------------------------------------------------------------------------
+ * Row ↔ canvas mapping: hover, pending markers, page index, focus scrim.
+ * ---------------------------------------------------------------------- */
+
+/* Hover sync: lightweight frame, never confused with selection/pending. */
+.dsh-iui-block-hover-frame {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid color-mix(in srgb, var(--dsh-iui-edit-color-1) 55%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsh-iui-edit-color-1) 4%, transparent);
+  pointer-events: none;
+}
+
+/* Editing focus: everything unrelated to the edited block is dimmed. */
+.dsh-iui-block-scrim {
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 68%, transparent);
+  pointer-events: none;
+}
+
+/* Save turns a selection into a quiet pending marker: dot + request number. */
+.dsh-iui-block-pending {
+  position: absolute;
+  top: -10px;
+  left: -9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 5px 0 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+  color: var(--dsw-alias-label-secondary);
+  pointer-events: none;
+}
+
+.dsh-iui-block-pending-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsh-iui-hit-color, var(--dsh-iui-edit-color-1));
+}
+
+.dsh-iui-block-pending-number {
+  color: var(--dsh-iui-hit-color, var(--dsw-alias-label-primary));
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Page-order index used to match a panel row with its rendered block. */
+.dsh-iui-block-page-index {
+  position: absolute;
+  top: -9px;
+  left: -10px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 88%, transparent);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.dsh-iui-block-orbit.is-pending {
+  animation-duration: 5200ms;
+  opacity: 0.3;
+}
+
+/* The panel row that matches the hovered canvas block. */
+.dsh-iui-edit-arrangement-row.is-hover-linked,
+.dsh-iui-edit-nested-row.is-hover-linked,
+.dsh-iui-edit-request-row.is-hover-linked {
+  background: color-mix(in srgb, var(--dsh-iui-edit-color-1) 9%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--dsh-iui-edit-color-1) 62%, transparent);
+}
+
+/* Page-order index shown in the arrangement/nested rows. */
+.dsh-iui-edit-page-index {
+  flex: none;
+  min-width: 17px;
+  padding: 0 3px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 9.5px;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------------------------

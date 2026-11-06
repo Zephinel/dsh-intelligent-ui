@@ -3,7 +3,7 @@
  *
  * Edit-mode block wrappers are `display: contents`, so they have no box of
  * their own. Everything that needs a block's rectangle (hit testing, badges,
- * tools, the selected frame, the marquee, the instruction popover anchor and
+ * tools, the selected frame, the orbit glow, the instruction popover anchor and
  * the arrangement panel's locate/flash) resolves it from the overlay's hit
  * element, which is positioned from the real content boxes.
  */

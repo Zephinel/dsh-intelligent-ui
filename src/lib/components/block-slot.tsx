@@ -6,7 +6,7 @@
  * `wrapProgramForBlockEditing` rewrites the root `Col` so each editable block
  * sits inside this component. The wrapper is a layout-transparent identity
  * carrier (`display: contents`): it adds no box, so the edit canvas keeps the
- * page's layout. Selection chrome (hit targets, frame, badge, tools, marquee)
+ * page's layout. Selection chrome (hit targets, frame, badge, tools, orbit glow)
  * is painted by the client's geometry overlay from measured content rectangles,
  * not by this wrapper.
  *

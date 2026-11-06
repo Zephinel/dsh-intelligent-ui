@@ -44,6 +44,7 @@ export function ArtifactEditView({
   onOpenHistory,
 }: ArtifactEditViewClosingProps): ReactElement {
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null)
   const [tooNarrow, setTooNarrow] = useState<boolean>(
     typeof window === 'undefined' ? false : !isEditViewportWideEnough(window.innerWidth),
   )
@@ -295,11 +296,27 @@ export function ArtifactEditView({
             />
           )}
         </BlockSlotContext.Provider>
-        <BlockOverlay t={t} session={session} actions={actions} scheme={scheme} canvasRef={canvasRef} />
+        <BlockOverlay
+          t={t}
+          session={session}
+          actions={actions}
+          scheme={scheme}
+          canvasRef={canvasRef}
+          hoveredBlockId={hoveredBlockId}
+          onHoverBlock={setHoveredBlockId}
+        />
       </div>
       <p className="dsh-iui-edit-frozen">{t('edit.frozenHint')}</p>
 
-      <EditPanel t={t} session={session} actions={actions} closing={closing} onOpenHistory={onOpenHistory} />
+      <EditPanel
+        t={t}
+        session={session}
+        actions={actions}
+        closing={closing}
+        onOpenHistory={onOpenHistory}
+        hoveredBlockId={hoveredBlockId}
+        onHoverBlock={setHoveredBlockId}
+      />
       {session.activeBlockId === undefined
         ? null
         : <BlockPopover t={t} session={session} actions={actions} scheme={scheme} />}

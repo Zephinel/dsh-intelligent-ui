@@ -2,23 +2,23 @@
  * Geometry overlay for the edit canvas.
  *
  * Edit-mode wrappers are `display: contents`, so the rendered page keeps its
- * exact normal layout. Interaction chrome cannot live on those wrappers (they
- * have no box), so this client-only layer measures every editable block's real
- * content rectangles inside the canvas and paints, absolutely positioned:
+ * exact normal layout. Interaction chrome cannot live on those wrappers, so
+ * this client-only layer measures every editable block's real content
+ * rectangles inside the canvas and paints:
  *
  * - one transparent hit target per block (pointer capture + keyboard focus),
- * - the hover cursor, selected/active frame, numbered badge and edit/close
- *   tools for selected blocks,
- * - the pastel marquee affordance for unselected root blocks.
+ * - hover sync frames (row hover ↔ canvas hover),
+ * - the focused-editing frame plus a scrim over the rest of the canvas,
+ * - low-key pending markers (dot + request number) after Save,
+ * - page-order index badges for the list ↔ content mapping (roots always,
+ *   nested blocks while hovered),
+ * - the pastel orbit glow for root blocks that are neither edited nor pending.
  *
- * Because the layer is positioned from measured content rectangles, it never
- * changes layout, and the same implementation serves root-level and nested
- * blocks. The overlay lives inside `.dsh-iui-edit-canvas` (position: relative)
- * so scrolling and panel-width changes move the canvas and the overlay together;
- * a ResizeObserver + MutationObserver re-measure when the content reflows.
+ * The overlay lives inside the relatively-positioned `.dsh-iui-edit-canvas`, so
+ * scrolling and panel-width changes move it together with the content; a
+ * ResizeObserver + MutationObserver re-measure when the content reflows.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactElement, type RefObject } from 'react'
-import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { Translate } from '../../shared/locales.ts'
 import type { ArtifactEditActions, ArtifactEditSession } from './contracts.ts'
 
@@ -26,8 +26,8 @@ import type { ArtifactEditActions, ArtifactEditSession } from './contracts.ts'
 interface BlockHit {
   readonly blockId: string
   readonly depth: number
-  /** 1-based display index, used for the pastel stagger and tone. */
-  readonly index: number
+  /** Page-order label: root blocks `1..n`, nested blocks `1.2` style. */
+  readonly pageLabel: string
   readonly left: number
   readonly top: number
   readonly width: number
@@ -45,6 +45,14 @@ interface BlockOverlayProps {
   readonly actions: ArtifactEditActions
   readonly scheme?: 'light' | 'dark'
   readonly canvasRef: RefObject<HTMLElement | null>
+  /** Block currently hovered from the panel or the canvas, for bidirectional sync. */
+  readonly hoveredBlockId?: string | null
+  readonly onHoverBlock?: (blockId: string | null) => void
+}
+
+/** Whether two display ids are the same block or in one ancestor chain. */
+function relatedBlockIds(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}.`) || right.startsWith(`${left}.`)
 }
 
 /** Collect the rendered boxes owned by one wrapper (skip display:contents layers). */
@@ -69,6 +77,11 @@ function collectRects(wrapper: Element): { left: number; top: number; right: num
 function measureBlocks(canvas: HTMLElement, session: ArtifactEditSession): BlockHit[] {
   const canvasRect = canvas.getBoundingClientRect()
   const byId = new Map(session.blocks.map(block => [block.blockId, block]))
+  const rootOrder = new Map<string, number>()
+  let rootCount = 0
+  for (const block of session.blocks) {
+    if ((block.depth ?? 0) === 0) rootOrder.set(block.blockId, ++rootCount)
+  }
   const hits: BlockHit[] = []
   for (const wrapper of Array.from(canvas.querySelectorAll('[data-dsh-iui-block]'))) {
     const blockId = wrapper.getAttribute('data-dsh-iui-block')
@@ -80,10 +93,11 @@ function measureBlocks(canvas: HTMLElement, session: ArtifactEditSession): Block
     const top = Math.min(...rects.map(rect => rect.top))
     const right = Math.max(...rects.map(rect => rect.right))
     const bottom = Math.max(...rects.map(rect => rect.bottom))
+    const depth = block.depth ?? 0
     hits.push({
       blockId,
-      depth: block.depth ?? 0,
-      index: session.blocks.indexOf(block) + 1,
+      depth,
+      pageLabel: depth === 0 ? String(rootOrder.get(blockId) ?? block.originalIndex) : blockId.replace(/^b/, ''),
       left: left - canvasRect.left,
       top: top - canvasRect.top,
       width: right - left,
@@ -91,7 +105,7 @@ function measureBlocks(canvas: HTMLElement, session: ArtifactEditSession): Block
     })
   }
   // Root blocks first; nested blocks paint above their ancestors.
-  return hits.sort((a, b) => a.depth - b.depth || a.index - b.index)
+  return hits.sort((a, b) => a.depth - b.depth || a.pageLabel.localeCompare(b.pageLabel, undefined, { numeric: true }))
 }
 
 /** Compare two measurements without re-rendering identical frames. */
@@ -100,7 +114,7 @@ function sameHits(left: readonly BlockHit[], right: readonly BlockHit[]): boolea
   for (let index = 0; index < left.length; index += 1) {
     const a = left[index] as BlockHit
     const b = right[index] as BlockHit
-    if (a.blockId !== b.blockId || a.depth !== b.depth || a.index !== b.index) return false
+    if (a.blockId !== b.blockId || a.depth !== b.depth || a.pageLabel !== b.pageLabel) return false
     if (Math.abs(a.left - b.left) > 0.5 || Math.abs(a.top - b.top) > 0.5) return false
     if (Math.abs(a.width - b.width) > 0.5 || Math.abs(a.height - b.height) > 0.5) return false
   }
@@ -109,10 +123,10 @@ function sameHits(left: readonly BlockHit[], right: readonly BlockHit[]): boolea
 
 /**
  * Render the edit-canvas block overlay.
- * @param props - locale, session, actions, scheme and the canvas element ref.
+ * @param props - locale, session, actions, scheme, canvas ref and hover state.
  * @returns the overlay layer (empty until the first measurement).
  */
-export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef }: BlockOverlayProps): ReactElement {
+export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef, hoveredBlockId = null, onHoverBlock }: BlockOverlayProps): ReactElement {
   const [hits, setHits] = useState<BlockHit[]>([])
   const tones = scheme === 'dark' ? TONES_DARK : TONES_LIGHT
 
@@ -149,59 +163,54 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef 
   }, [canvasRef, session.blocks, session.key])
 
   const selectionByBlock = useMemo(() => new Map(session.selection.map(entry => [entry.blockId, entry])), [session.selection])
+  const activeId = session.activeBlockId
 
   return (
     <div className="dsh-iui-block-overlay" data-dsh-iui-block-overlay>
       {hits.map(hit => {
         const entry = selectionByBlock.get(hit.blockId)
-        const isActive = session.activeBlockId === hit.blockId
-        const tone = tones[(hit.index - 1) % tones.length] as string
-        const colorIndex = entry === undefined ? undefined : ((entry.order - 1) % 6) + 1
+        const isActive = activeId === hit.blockId
+        const pending = entry !== undefined
+        const hovered = hoveredBlockId === hit.blockId
+        const rootLevel = hit.depth === 0
+        const focused = activeId !== undefined
+        const dimmed = focused && !relatedBlockIds(activeId, hit.blockId)
+        const pendingColor = entry === undefined ? undefined : `var(--dsh-iui-edit-color-${((entry.order - 1) % 6) + 1})`
+        const tone = pendingColor ?? tones[(Number(hit.pageLabel.split('.')[0]) - 1 + tones.length) % tones.length] as string
         const style = {
           left: hit.left,
           top: hit.top,
           width: hit.width,
           height: hit.height,
           zIndex: 10 + hit.depth * 2,
-          '--dsh-iui-hit-color': colorIndex === undefined ? undefined : `var(--dsh-iui-edit-color-${colorIndex})`,
           '--dsh-iui-tone': tone,
-          '--dsh-iui-stagger': String(hit.index - 1),
+          '--dsh-iui-stagger': String(Math.max(0, Number(hit.pageLabel.split('.')[0]) - 1)),
+          '--dsh-iui-hit-color': pendingColor,
         } as CSSProperties
-        const rootLevel = hit.depth === 0
         return (
           <div
             key={hit.blockId}
-            className="dsh-iui-block-overlay-item"
+            className={`dsh-iui-block-overlay-item${hovered ? ' is-hovered' : ''}`}
             style={style}
             data-dsh-iui-block-hit-item={hit.blockId}
+            data-hovered={hovered ? 'true' : undefined}
+            data-pending={pending ? 'true' : undefined}
           >
-            {rootLevel && entry === undefined && !isActive ? <span className="dsh-iui-block-marquee" aria-hidden="true" /> : null}
-            {entry === undefined && !isActive ? null : (
-              <span className={`dsh-iui-block-frame${entry === undefined ? ' is-active' : ''}`} aria-hidden="true" />
-            )}
-            {entry === undefined ? null : <span className="dsh-iui-block-badge" aria-hidden="true">{entry.order}</span>}
-            {entry === undefined ? null : (
-              <span className="dsh-iui-block-tools" role="group" aria-label={t('edit.selected')}>
-                <button
-                  type="button"
-                  className="dsh-iui-block-tool"
-                  title={t('edit.instruction')}
-                  aria-label={t('edit.instruction')}
-                  onClick={(event) => { event.stopPropagation(); actions.openBlockEditor(hit.blockId) }}
-                >
-                  <RemixIcon name="edit-line" size={13} />
-                </button>
-                <button
-                  type="button"
-                  className="dsh-iui-block-tool"
-                  title={t('edit.deselect')}
-                  aria-label={t('edit.deselect')}
-                  onClick={(event) => { event.stopPropagation(); actions.removeSelection(hit.blockId) }}
-                >
-                  <RemixIcon name="close-line" size={12} />
-                </button>
+            {dimmed ? <span className="dsh-iui-block-scrim" aria-hidden="true" /> : null}
+            {rootLevel && !isActive ? (
+              <span className={`dsh-iui-block-orbit dsh-iui-block-marquee${pending ? ' is-pending' : ''}`} aria-hidden="true" />
+            ) : null}
+            {hovered && !isActive ? <span className="dsh-iui-block-hover-frame" aria-hidden="true" /> : null}
+            {isActive ? <span className="dsh-iui-block-frame is-active" aria-hidden="true" /> : null}
+            {pending && entry !== undefined && !isActive ? (
+              <span className="dsh-iui-block-pending" aria-hidden="true" title={t('edit.pendingMarker')}>
+                <span className="dsh-iui-block-pending-dot" />
+                <span className="dsh-iui-block-pending-number">{entry.order}</span>
               </span>
-            )}
+            ) : null}
+            {!pending && (rootLevel || hovered) ? (
+              <span className="dsh-iui-block-page-index" aria-hidden="true">{hit.pageLabel}</span>
+            ) : null}
             <button
               type="button"
               className="dsh-iui-block-hit"
@@ -209,6 +218,8 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef 
               aria-label={t('edit.select')}
               aria-pressed={entry === undefined ? undefined : true}
               onClick={() => { actions.openBlockEditor(hit.blockId) }}
+              onMouseEnter={() => { onHoverBlock?.(hit.blockId) }}
+              onMouseLeave={() => { onHoverBlock?.(null) }}
             />
           </div>
         )

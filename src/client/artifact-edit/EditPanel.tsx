@@ -46,6 +46,10 @@ export interface EditPanelProps {
   readonly closing?: boolean
   /** Opens the revision history dialog; omitted when no history UI is mounted. */
   readonly onOpenHistory?: () => void
+  /** Block hovered in the canvas, mirrored as a row highlight. */
+  readonly hoveredBlockId?: string | null
+  /** Reports row hover to the canvas overlay (bidirectional hover sync). */
+  readonly onHoverBlock?: (blockId: string | null) => void
 }
 
 /** Number of hues in the shared selection palette. */
@@ -241,7 +245,7 @@ function RequestHoverCard({ t, block, order, instruction, onEnter, onLeave }: {
  * @param props - locale seat, block, its request entry and handlers.
  * @returns the list row.
  */
-function RequestRow({ t, block, order, instruction, onOpen, onEdit, onDelete }: {
+function RequestRow({ t, block, order, instruction, onOpen, onEdit, onDelete, hovered, onHoverBlock }: {
   readonly t: Translate
   readonly block: ArtifactBlock
   readonly order: number
@@ -249,13 +253,18 @@ function RequestRow({ t, block, order, instruction, onOpen, onEdit, onDelete }: 
   readonly onOpen: () => void
   readonly onEdit: () => void
   readonly onDelete: () => void
+  readonly hovered: boolean
+  readonly onHoverBlock: (blockId: string | null) => void
 }): ReactElement {
   const title = block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
   return (
     <li
-      className={`dsh-iui-edit-request-row dsh-iui-edit-color-${((order - 1) % COLOR_COUNT) + 1}`}
+      className={`dsh-iui-edit-request-row dsh-iui-edit-color-${((order - 1) % COLOR_COUNT) + 1}${hovered ? ' is-hover-linked' : ''}`}
       data-dsh-iui-edit-request-row
       data-block-id={block.blockId}
+      data-hover-linked={hovered ? 'true' : undefined}
+      onPointerEnter={() => { onHoverBlock(block.blockId) }}
+      onPointerLeave={() => { onHoverBlock(null) }}
     >
       <button type="button" className="dsh-iui-edit-request-open" onClick={onOpen}>
         <span className="dsh-iui-edit-request-index" aria-hidden="true">
@@ -354,7 +363,7 @@ const STRUCTURE_ERROR_TIMEOUT_MS = 8000
  * @param props - locale, target block, busy/confirm state and handlers.
  * @returns the action group or its confirmation state.
  */
-function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove }: {
+function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove, onLocate }: {
   readonly t: Translate
   readonly blockId: string
   readonly title: string
@@ -367,6 +376,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
   readonly onCancelDelete: () => void
   readonly onConfirmDelete: () => void
   readonly onMove: (anchor: HTMLButtonElement) => void
+  readonly onLocate: () => void
 }): ReactElement {
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
@@ -420,6 +430,18 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
         </span>
       ) : (
         <>
+          <button
+            type="button"
+            className="dsh-iui-edit-icon-button"
+            data-dsh-iui-edit-locate
+            data-block-id={blockId}
+            disabled={busy}
+            aria-label={`${t('edit.locate')}: ${title}`}
+            title={t('edit.locate')}
+            onClick={event => { event.stopPropagation(); onLocate() }}
+          >
+            <RemixIcon name="focus-3-line" size={13} />
+          </button>
           <button
             type="button"
             className="dsh-iui-edit-icon-button"
@@ -478,7 +500,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
 }
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
-export function EditPanel({ t, session, actions, closing = false, onOpenHistory }: EditPanelProps): ReactElement {
+export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock }: EditPanelProps): ReactElement {
   const globalId = useId()
   const previewTitleId = useId()
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
@@ -1240,6 +1262,8 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                     onOpen={() => { closeHover(); actions.openBlockEditor(entry.blockId) }}
                     onEdit={() => { closeHover(); actions.openBlockEditor(entry.blockId) }}
                     onDelete={() => { closeHover(); actions.removeSelection(entry.blockId) }}
+                    hovered={hoveredBlockId === entry.blockId}
+                    onHoverBlock={blockId => { onHoverBlock?.(blockId) }}
                   />
                 )
               })}
@@ -1313,14 +1337,15 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                 return (
                   <li
                     key={blockId}
-                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
+                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}`}
                     data-dsh-iui-edit-arrangement-row
                     data-block-id={blockId}
                     data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                     data-order-index={index}
                     data-dragging={dragging ? 'true' : undefined}
-                    onPointerEnter={() => { scheduleHover(blockId) }}
-                    onPointerLeave={scheduleHoverHide}
+                    data-hover-linked={hoveredBlockId === blockId ? 'true' : undefined}
+                    onPointerEnter={() => { onHoverBlock?.(blockId); scheduleHover(blockId) }}
+                    onPointerLeave={() => { onHoverBlock?.(null); scheduleHoverHide() }}
                   >
                     <button
                       type="button"
@@ -1341,6 +1366,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                       title={t('edit.locate')}
                       onClick={() => { closeHover(); locate(blockId) }}
                     >
+                      <span className="dsh-iui-edit-page-index" aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span>
                       {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
                       <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                       <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
@@ -1359,6 +1385,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                       onCancelDelete={() => { cancelDeleteConfirm() }}
                       onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
                       onMove={anchor => { openMoveMenu(blockId, anchor) }}
+                      onLocate={() => { closeHover(); locate(blockId) }}
                     />
                   </li>
                 )
@@ -1486,13 +1513,16 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                         return (
                           <li
                             key={blockId}
-                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}`}
+                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}`}
                             data-dsh-iui-edit-nested-row
                             data-block-id={blockId}
                             data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                             data-parent-id={parentId}
                             data-order-index={index}
                             data-depth={block.depth}
+                            data-hover-linked={hoveredBlockId === blockId ? 'true' : undefined}
+                            onPointerEnter={() => { onHoverBlock?.(blockId) }}
+                            onPointerLeave={() => { onHoverBlock?.(null) }}
                             style={depth === 0 ? undefined : { paddingLeft: `${depth * 12}px` }}
                           >
                             <button
@@ -1514,6 +1544,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                               title={t('edit.locate')}
                               onClick={() => { closeHover(); locate(blockId) }}
                             >
+                              <span className="dsh-iui-edit-page-index" aria-hidden="true">{blockId.replace(/^b/, '')}</span>
                               {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
                               <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                               <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
@@ -1533,6 +1564,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
                               onCancelDelete={() => { cancelDeleteConfirm() }}
                               onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
                               onMove={anchor => { openMoveMenu(blockId, anchor) }}
+                              onLocate={() => { closeHover(); locate(blockId) }}
                             />
                           </li>
                         )
