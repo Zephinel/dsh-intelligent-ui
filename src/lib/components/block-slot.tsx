@@ -138,7 +138,15 @@ export const BlockSlot = defineComponent({
     const selection = context.selection(blockId);
     const active = context.isActive(blockId);
     const colorIndex = selection === undefined ? undefined : ((selection.order - 1) % COLOR_COUNT) + 1;
-    const style = colorIndex === undefined ? undefined : ({ "--iui-edit-block-color": `var(--iui-edit-color-${colorIndex})` } as CSSProperties);
+    // Each slot gets its own pastel marquee tone (the same six hue families as
+    // the selection badges) and one stagger step in reading order.
+    const slotIndex = Math.max(0, blockIndex - 1);
+    const toneIndex = (slotIndex % COLOR_COUNT) + 1;
+    const style = {
+      "--iui-edit-stagger": String(slotIndex),
+      "--iui-edit-tone": `var(--iui-edit-tone-${toneIndex})`,
+      ...colorIndex === undefined ? {} : { "--iui-edit-block-color": `var(--iui-edit-color-${colorIndex})` },
+    } as CSSProperties;
     const activate = (): void => {
       context.onSelect(blockId);
     };

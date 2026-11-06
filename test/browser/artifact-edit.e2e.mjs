@@ -216,8 +216,54 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 8', 'eight blocks')
   check(await count('[data-dsh-iui-block]'), 8, 'all top-level blocks recognized')
   check(await count('[data-dsh-iui-edit-exit-panel]'), 1, 'edit panel offers an exit control')
-  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] > .dsh-iui-block-body')).animationName.includes('dsh-iui-block-breathe')`), true, 'the block body itself breathes before selection')
-  check(await read(`parseFloat(getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"] .dsh-iui-block-layer')).borderTopWidth)`), 0, 'editable hint has no dashed border')
+  const editableHint = await read(`(() => {
+    const block = document.querySelector('[data-dsh-iui-block="b3"]');
+    const body = block.querySelector('.dsh-iui-block-body');
+    const layer = block.querySelector('.dsh-iui-block-layer');
+    const marquee = getComputedStyle(block, '::after');
+    const blocks = [...document.querySelectorAll('[data-dsh-iui-block]')];
+    return {
+      bodyAnimation: getComputedStyle(body).animationName,
+      layerBorder: parseFloat(getComputedStyle(layer).borderTopWidth),
+      marqueeAnimation: marquee.animationName,
+      marqueeIteration: marquee.animationIterationCount,
+      marqueeBackground: marquee.backgroundImage,
+      marqueeMask: marquee.maskImage,
+      marqueeOpacity: parseFloat(marquee.opacity),
+      delays: blocks.map(item => parseFloat(getComputedStyle(item, '::after').animationDelay)),
+    };
+  })()`)
+  check(editableHint.bodyAnimation.includes('dsh-iui-block-breathe'), false, 'the block body no longer breathes')
+  check(editableHint.layerBorder, 0, 'editable hint has no dashed border')
+  check(editableHint.marqueeAnimation.includes('dsh-iui-block-marquee'), true, 'editable blocks run a light marquee around their edge')
+  check(editableHint.marqueeIteration, 'infinite', 'the marquee keeps orbiting while the canvas idles')
+  check(editableHint.marqueeBackground.includes('conic-gradient'), true, 'the marquee is a rotating conic light')
+  check(editableHint.marqueeMask.includes('linear-gradient'), true, 'the light is masked to the rounded block edge')
+  check(editableHint.marqueeOpacity > 0.8, true, 'the marquee is visible at rest')
+  check(new Set(editableHint.delays).size, 8, 'the marquee orbits at a staggered phase per block')
+  const tones = await read(`(() => {
+    const first = getComputedStyle(document.querySelector('[data-dsh-iui-block="b1"]'), '::after').backgroundImage;
+    const second = getComputedStyle(document.querySelector('[data-dsh-iui-block="b2"]'), '::after').backgroundImage;
+    return { both: first.includes('conic-gradient') && second.includes('conic-gradient'), distinct: first !== second };
+  })()`)
+  check(tones.both, true, 'each editable block paints its own conic marquee')
+  check(tones.distinct, true, 'neighbouring blocks orbit in different pastel tones')
+  await hover('[data-dsh-iui-block="b3"]')
+  await new Promise(resolve => setTimeout(resolve, 220))
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"]'), '::after').opacity`), '1', 'hover brightens the marquee')
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await new Promise(resolve => setTimeout(resolve, 260))
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-block="b3"]'), '::after').opacity`), '0.9', 'the marquee settles back when the pointer leaves')
+  await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+  await new Promise(resolve => setTimeout(resolve, 120))
+  const reducedMotion = await read(`(() => {
+    const block = document.querySelector('[data-dsh-iui-block="b3"]');
+    return { orbit: getComputedStyle(block, '::after').animationName, rest: getComputedStyle(block, '::after').opacity };
+  })()`)
+  check(reducedMotion.orbit, 'none', 'reduced motion stops the orbit')
+  check(parseFloat(reducedMotion.rest) >= 0.4, true, 'reduced motion keeps a still glow as the affordance')
+  await cdp.send('Emulation.setEmulatedMedia', { features: [] })
+  await new Promise(resolve => setTimeout(resolve, 120))
   check(await count('[data-dsh-iui-edit-request-list]'), 0, 'request list hidden without saved requests')
   check(await count('[data-dsh-iui-edit-arrangement-list]'), 1, 'arrangement list always present')
   check(await count('[data-dsh-iui-edit-arrangement-row]'), 8, 'arrangement lists every block')
@@ -228,9 +274,16 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-panel]')).includes('Artifact 编辑器'), true, 'panel title')
   check(await count('[data-dsh-iui-edit-send-info]'), 1, 'send summary card')
   check((await text('[data-dsh-iui-edit-send-info]')).includes('保持原样'), true, 'summary reports unchanged order')
-  await read(`(() => { const b = document.querySelector('[data-dsh-iui-block="b1"] > .dsh-iui-block-body'); b.style.animationDelay = '-1.2s'; b.style.animationPlayState = 'paused'; })()`)
-  await shot('harness-breath-mid.png')
-  await read(`(() => { const b = document.querySelector('[data-dsh-iui-block="b1"] > .dsh-iui-block-body'); b.style.animationDelay = ''; b.style.animationPlayState = ''; })()`)
+  await read(`(() => {
+    for (const animation of document.getAnimations()) {
+      if (!animation.effect?.target?.matches?.('[data-dsh-iui-block="b2"]')) continue;
+      if (animation.effect.pseudoElement !== '::after') continue;
+      animation.pause();
+      animation.currentTime = 700;
+    }
+  })()`)
+  await shot('harness-block-marquee.png')
+  await read(`(() => { for (const animation of document.getAnimations()) if (animation.effect?.pseudoElement === '::after') animation.play(); })()`)
   await shot('harness-arrangement-empty.png')
 
   // 3. Opening a popover does not create a request.
