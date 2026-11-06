@@ -60,9 +60,12 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
   readonly onRestore: () => void
 }): ReactElement {
   const edited = revision.editedBlockIds ?? []
+  const layoutLabel = revision.style === 'article'
+    ? t('edit.historyStyleArticle')
+    : revision.style === 'free' ? t('edit.historyStyleFree') : t('edit.historyStyleCard')
   const styleNote = revision.temporaryStyle !== undefined
-    ? t('onDemand.badge')
-    : revision.styleId !== undefined ? revision.styleId : revision.style
+    ? `${t('onDemand.badge')} · ${layoutLabel}`
+    : revision.styleId !== undefined ? `${layoutLabel} · ${t('edit.historyCustomStyle')}` : layoutLabel
   const canRestore = revision.restorable && revision.hasProgram && !revision.current && !restoring
   return (
     <li
@@ -85,10 +88,11 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
           <span className="dsh-iui-history-blocks-label">{t('edit.historyChangedBlocks')}</span>
           <ul className="dsh-iui-history-chips">
             {edited.map(blockId => {
-              const title = blocks.get(blockId)?.title
+              const title = blocks.get(blockId)?.title?.trim()
+              const label = title !== undefined && title !== '' ? title : t('edit.blockFallback')
               return (
-                <li key={blockId} className="dsh-iui-history-chip" title={title ?? blockId} data-block-id={blockId}>
-                  {title !== undefined && title.trim() !== '' ? title : blockId}
+                <li key={blockId} className="dsh-iui-history-chip" title={label} data-block-id={blockId}>
+                  {label}
                 </li>
               )
             })}

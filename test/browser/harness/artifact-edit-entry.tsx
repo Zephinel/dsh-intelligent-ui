@@ -342,7 +342,7 @@ window.fetch = async (url: string | URL, options?: RequestInit) => {
       latestRevision: 3,
       revisions: [
         { revisionId: 'restore_local1', revision: 3, baseRevisionId: 'dst-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1762400000000, current: true, source: 'restore', hasProgram: false, restorable: false },
-        { revisionId: 'dst-call-2', revision: 2, baseRevisionId: 'dst-call-1', title: '夏令时与冬令时', style: 'card', createdAt: 1762300000000, current: false, source: 'edit', hasProgram: true, restorable: true, editedBlockIds: ['b1'] },
+        { revisionId: 'dst-call-2', revision: 2, baseRevisionId: 'dst-call-1', title: '夏令时与冬令时', style: 'card', styleId: 'cs_e2e123', createdAt: 1762300000000, current: false, source: 'edit', hasProgram: true, restorable: true, editedBlockIds: ['b1'] },
         { revisionId: 'dst-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1762200000000, current: false, source: 'initial', hasProgram: true, restorable: true },
       ],
     }), { status: 200, headers: { 'content-type': 'application/json' } })

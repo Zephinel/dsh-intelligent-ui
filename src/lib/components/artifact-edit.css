@@ -48,32 +48,31 @@
   position: absolute;
   inset: -6px;
   z-index: 3;
-  border: 1.5px dashed transparent;
+  border: 0;
   border-radius: calc(var(--iui-radius-lg, 12px) + 4px);
   cursor: pointer;
   pointer-events: auto;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
 .dsh-iui-block-editing:not(.dsh-iui-block-selected):not(.dsh-iui-block-active) .dsh-iui-block-layer {
-  border-color: color-mix(in srgb, var(--iui-ink) 12%, transparent);
-  animation: dsh-iui-block-breathe 2600ms ease-in-out infinite;
+  animation: dsh-iui-block-breathe 2400ms ease-in-out infinite;
 }
 
 @keyframes dsh-iui-block-breathe {
   0%, 100% {
-    border-color: color-mix(in srgb, var(--iui-ink) 10%, transparent);
+    background-color: transparent;
     box-shadow: 0 0 0 0 transparent;
   }
   50% {
-    border-color: color-mix(in srgb, var(--iui-ink) 24%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--iui-ink) 5%, transparent);
+    background-color: color-mix(in srgb, var(--iui-ink) 6%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--iui-ink) 6%, transparent);
   }
 }
 
 .dsh-iui-block-editing:hover .dsh-iui-block-layer {
-  border-color: color-mix(in srgb, var(--iui-ink) 32%, transparent);
-  background: color-mix(in srgb, var(--iui-ink) 3%, transparent);
+  background: color-mix(in srgb, var(--iui-ink) 5%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--iui-ink) 10%, transparent);
   animation: none;
 }
 
@@ -195,8 +194,9 @@
 
 /* Instruction popover open on a block that has no saved request yet. */
 .dsh-iui-block-active:not(.dsh-iui-block-selected) .dsh-iui-block-layer {
-  border: 2px dashed var(--iui-accent);
-  background: color-mix(in srgb, var(--iui-accent) 4%, transparent);
+  border: 0;
+  background: color-mix(in srgb, var(--iui-ink) 3%, transparent);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 10%), 0 2px 6px rgb(0 0 0 / 6%);
 }
 
 /* Arrangement row clicked: briefly identify the corresponding canvas block. */

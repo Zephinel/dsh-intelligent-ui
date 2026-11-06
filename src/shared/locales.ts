@@ -290,6 +290,12 @@ export const zh = {
 
   // Artifact block editing.
   'edit.blockCount': '{count} 个区块',
+  'edit.blockFallback': '区块',
+  'edit.historyStyleCard': '卡片',
+  'edit.historyStyleArticle': '文章',
+  'edit.historyStyleFree': '自由版式',
+  'edit.historyCustomStyle': '自定义样式',
+
   'edit.resetOrder': '重置顺序',
   'edit.resetOrderHint': '只把区块排列恢复为页面原始顺序，保留编辑请求与整体说明',
   'edit.requirement': '编辑需求',
@@ -722,6 +728,12 @@ export const en: Record<keyof typeof zh, string> = {
   'map.route.status.loading': 'Street route loading.',
   'map.error.tiles': 'Map tiles are temporarily unavailable. The places are still shown.',
   'edit.blockCount': '{count} blocks',
+  'edit.blockFallback': 'Block',
+  'edit.historyStyleCard': 'Card',
+  'edit.historyStyleArticle': 'Article',
+  'edit.historyStyleFree': 'Free layout',
+  'edit.historyCustomStyle': 'Custom style',
+
   'edit.resetOrder': 'Reset order',
   'edit.resetOrderHint': 'Restores the original page order of the blocks; requests and the global instruction are kept',
   'edit.requirement': 'Change request',

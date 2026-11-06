@@ -805,7 +805,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory 
     const target = moveTargets.find(candidate => candidate.id === targetId)
     previewTriggerRef.current = moveAnchorRef.current
     closeMoveMenu()
-    announce(t('edit.a11yMoved', { target: target?.title ?? targetId }))
+    announce(t('edit.a11yMoved', { target: target?.title ?? t('edit.blockFallback') }))
     if (actions.previewMoveBlockTo !== undefined) {
       actions.previewMoveBlockTo(moveMenu.blockId, targetId)
       return
