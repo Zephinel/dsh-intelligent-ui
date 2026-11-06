@@ -163,7 +163,7 @@ export function ArtifactEditView({
       <div className="dsh-iui-edit-narrow" role="status" data-dsh-iui-edit-narrow>
         <strong className="dsh-iui-edit-narrow-title">{t('edit.narrowTitle')}</strong>
         <p className="dsh-iui-edit-narrow-body">{t('edit.narrowBody', { width: MIN_EDIT_WIDTH })}</p>
-        <button type="button" className="dsh-iui-edit-button" data-dsh-iui-edit-narrow-exit onClick={() => { actions.closeEditor() }}>
+        <button type="button" className="dsh-iui-edit-button dsh-iui-edit-exit" data-dsh-iui-edit-narrow-exit onClick={() => { actions.closeEditor() }}>
           {t('edit.exit')}
         </button>
       </div>
@@ -222,7 +222,7 @@ export function ArtifactEditView({
           >
             {t('edit.drawerOpen', { count: requestCount })}
           </button>
-          <button type="button" className="dsh-iui-edit-button" data-dsh-iui-edit-exit onClick={() => { actions.closeEditor() }}>
+          <button type="button" className="dsh-iui-edit-button dsh-iui-edit-exit" data-dsh-iui-edit-exit onClick={() => { actions.closeEditor() }}>
             {t('edit.exit')}
           </button>
         </div>

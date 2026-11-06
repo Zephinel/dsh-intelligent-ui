@@ -1585,9 +1585,15 @@
   outline-offset: 1px;
 }
 
-.dsh-iui-edit-entry[aria-pressed='true'] {
-  border-color: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-state-business-primary);
+.dsh-iui-edit-entry.dsh-iui-edit-exit,
+.dsh-iui-edit-entry[aria-pressed='true'].dsh-iui-edit-exit {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-entry.dsh-iui-edit-exit:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .dsh-iui-card[data-dsh-iui-collapsed='true'] .dsh-iui-card-head {

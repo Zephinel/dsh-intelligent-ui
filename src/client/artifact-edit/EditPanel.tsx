@@ -1212,7 +1212,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         <span className="dsh-iui-edit-panel-spacer" />
         <button
           type="button"
-          className="dsh-iui-edit-panel-exit"
+          className="dsh-iui-edit-panel-exit dsh-iui-edit-exit"
           data-dsh-iui-edit-exit-panel
           aria-label={t('edit.exit')}
           title={t('edit.exit')}

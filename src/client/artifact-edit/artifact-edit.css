@@ -744,16 +744,6 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  height: 24px;
-  padding: 0 7px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 11px;
-  line-height: 22px;
-  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -2390,6 +2380,29 @@
 
 .dsh-iui-edit-button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-button.dsh-iui-edit-exit,
+.dsh-iui-edit-panel-exit.dsh-iui-edit-exit {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-button.dsh-iui-edit-exit:hover,
+.dsh-iui-edit-panel-exit.dsh-iui-edit-exit:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .dsh-iui-edit-button:focus-visible,

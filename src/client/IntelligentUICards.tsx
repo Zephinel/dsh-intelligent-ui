@@ -517,7 +517,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           {editable
             ? <button
                 type="button"
-                className="dsh-iui-edit-entry"
+                className={`dsh-iui-edit-entry${editing ? ' dsh-iui-edit-exit' : ''}`}
                 data-dsh-iui-edit-entry
                 aria-pressed={editing}
                 onClick={toggleEditing}
