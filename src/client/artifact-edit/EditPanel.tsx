@@ -440,7 +440,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
             title={t('edit.locate')}
             onClick={event => { event.stopPropagation(); onLocate() }}
           >
-            <RemixIcon name="focus-3-line" size={13} />
+            <RemixIcon name="cursor-line" size={13} />
           </button>
           <button
             type="button"
@@ -1366,7 +1366,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                       title={t('edit.locate')}
                       onClick={() => { closeHover(); locate(blockId) }}
                     >
-                      <span className="dsh-iui-edit-page-index" aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span>
+                      {entry === undefined ? <span className="dsh-iui-edit-page-index" aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span> : null}
                       {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
                       <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                       <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
@@ -1544,7 +1544,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               title={t('edit.locate')}
                               onClick={() => { closeHover(); locate(blockId) }}
                             >
-                              <span className="dsh-iui-edit-page-index" aria-hidden="true">{blockId.replace(/^b/, '')}</span>
+                              {entry === undefined ? <span className="dsh-iui-edit-page-index" aria-hidden="true">{blockId.replace(/^b/, '')}</span> : null}
                               {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
                               <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                               <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>

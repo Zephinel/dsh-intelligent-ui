@@ -208,7 +208,7 @@ export function ArtifactEditView({
             {t('edit.exit')}
           </button>
         </div>
-        <p className="dsh-iui-edit-banner">{session.nestedMode === true ? t('edit.nestedHint') : t('edit.banner')}</p>
+        <p className="dsh-iui-edit-banner">{session.nestedMode === true ? t('edit.bannerNested') : t('edit.bannerTop')}</p>
       </div>
 
       {foreignLease ? (

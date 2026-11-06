@@ -1720,11 +1720,12 @@ async function submitStructureOperation(
   if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
   // Async failures must patch the *current* session, never the snapshot taken
   // before the request: the draft may have been closed or replaced meanwhile.
-  const fail = (message: string): void => {
+  const fail = (message: string, extra?: Pick<ArtifactEditSession, 'propsFallback'>): void => {
     const current = sessions.get(key)
     if (current === undefined) return
     sessions.set(key, {
       ...current,
+      ...extra,
       structureBusy: false,
       ...surface === 'props' ? { propsError: message } : { structureError: message },
     })
@@ -1765,7 +1766,8 @@ async function submitStructureOperation(
           : surface === 'props' && code === 'no_change'
             ? translate('edit.propsNoChange')
             : translate(failureKey)
-      fail(message)
+      const noAuthoritativeBase = surface === 'props' && (code === 'base_missing' || code === 'artifact_missing')
+      fail(noAuthoritativeBase ? translate('edit.propsNoBase') : message, noAuthoritativeBase ? { propsFallback: 'base_missing' } : undefined)
       return
     }
     const value: unknown = await response.json()

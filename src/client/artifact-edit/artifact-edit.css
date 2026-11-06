@@ -472,22 +472,27 @@
 .dsh-iui-edit-arrangement-row.is-hover-linked,
 .dsh-iui-edit-nested-row.is-hover-linked,
 .dsh-iui-edit-request-row.is-hover-linked {
-  background: color-mix(in srgb, var(--dsh-iui-edit-color-1) 9%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--dsh-iui-edit-color-1) 62%, transparent);
+  background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
 }
 
 /* Page-order index shown in the arrangement/nested rows. */
 .dsh-iui-edit-page-index {
   flex: none;
-  min-width: 17px;
-  padding: 0 3px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 5px;
+  width: 22px;
+  padding: 0;
+  border: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 9.5px;
-  line-height: 15px;
-  text-align: center;
+  font-family: var(--dsw-font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-edit-arrangement-row.is-hover-linked .dsh-iui-edit-page-index,
+.dsh-iui-edit-nested-row.is-hover-linked .dsh-iui-edit-page-index {
+  color: var(--dsw-alias-label-primary);
 }
 
 /* -------------------------------------------------------------------------
@@ -1004,15 +1009,25 @@
 }
 
 .dsh-iui-edit-tag {
+  display: inline-flex;
   flex: none;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dsh-iui-edit-hue, var(--dsw-alias-brand-primary)) 12%, transparent);
-  color: var(--dsh-iui-edit-hue, var(--dsw-alias-brand-primary));
-  font-size: 10px;
-  font-weight: 600;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  font-weight: 500;
   line-height: 15px;
   white-space: nowrap;
+}
+
+.dsh-iui-edit-tag::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--dsh-iui-edit-hue, var(--dsw-alias-brand-primary));
 }
 
 /* Block arrangement: the drag reorder list. */
@@ -1069,20 +1084,25 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 22px;
+  width: 20px;
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 4px;
   background: transparent;
-  color: var(--dsw-alias-label-caption);
+  color: var(--dsw-alias-label-tertiary);
   cursor: grab;
   touch-action: none;
 }
 
 .dsh-iui-edit-grip:hover {
-  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
+}
+
+/* Keyboard focus stays visible but reads as a hairline, not a glow. */
+.dsh-iui-edit-grip:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-tertiary);
+  outline-offset: 1px;
 }
 
 .dsh-iui-edit-grip:active,
@@ -1282,16 +1302,27 @@
   align-items: center;
   justify-content: flex-end;
   gap: 1px;
-  /* Always visible action group (edit/duplicate/delete/move). The fixed width is
-     shared by the default and confirming states, so the Edited tag never shifts
-     when the group swaps to the compact Cancel/Delete confirmation. */
-  width: 104px;
-  min-width: 104px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  /* Locate/edit/duplicate/delete/move. The fixed width is shared by the default
+     and confirming states, so the Edited tag never shifts when the group swaps
+     to the compact Cancel/Delete confirmation. */
+  width: 126px;
+  min-width: 126px;
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
   width: 22px;
   height: 22px;
+}
+
+.dsh-iui-edit-arrangement-row:hover .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-arrangement-row:focus-within .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-nested-row:hover .dsh-iui-edit-structure-actions,
+.dsh-iui-edit-nested-row:focus-within .dsh-iui-edit-structure-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:hover {

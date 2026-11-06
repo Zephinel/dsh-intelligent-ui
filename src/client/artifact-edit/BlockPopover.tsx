@@ -97,11 +97,13 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   // literal and inside its domain, and when the block has no saved instruction
   // that would otherwise block the apply. Otherwise fall back to the model
   // instruction path so no binding is silently dropped.
-  const quick = quickState !== undefined && quickState.support.ok && savedInstruction === ''
+  const quick = quickState !== undefined && quickState.support.ok && savedInstruction === '' && session.propsFallback === undefined
   const quickFallback = quickState !== undefined && !quick
-    ? (savedInstruction === ''
-        ? t(quickState.support.ok ? 'edit.propsFallbackValue' : quickState.support.reason === 'dynamic' ? 'edit.propsFallbackDynamic' : 'edit.propsFallbackValue')
-        : t('edit.propsFallbackInstruction'))
+    ? (session.propsFallback === 'base_missing'
+        ? t('edit.propsNoBase')
+        : savedInstruction === ''
+          ? t(quickState.support.ok ? 'edit.propsFallbackValue' : quickState.support.reason === 'dynamic' ? 'edit.propsFallbackDynamic' : 'edit.propsFallbackValue')
+          : t('edit.propsFallbackInstruction'))
     : undefined
   const propsDirty = quick && quickState !== undefined
     && serializeArtifactBlockProps(quickState.componentType, quickState.props) !== serializeArtifactBlockProps(quickState.componentType, propsDraft)
