@@ -549,7 +549,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 实现：新增 `src/lib/components/remix-icon.tsx`（从 `remixicon@4.9.1` 抄录 29 个图标的 path，`REMIX_ICON_PATHS` + `<RemixIcon>`；24 viewBox、`fill=currentColor`，无运行时依赖/字体）。替换编辑面板（铅笔/垃圾桶/复制/移动/拖拽/刷新/关闭/类型 8 种 + 新增）、画布浮层、设置页星标、样式选择器对勾与星、composer 作用域/箭头/对勾/样式、导出菜单、文章折叠箭头、链接外链箭头、媒体空图、Carousel 左右箭头；删除 `✎`/`✦` 字符图标与 DSH primitives sparkle/chevron。
 - 例外：OpenUI 程序内容里的 `Icon("…")` 仍由 `glyph.tsx` 用 lucide 动态解析（程序数据，不是 chrome）。
 - 许可：`licenses/remix-icon-LICENSE` + `NOTICE` 增加 Remix Icon（Remix Icon License v1.0）条目；`integration.md` 出货文件数 43 → **44**。
-- 验证：Node **496/496**；浏览器 9/9；`artifact-edit` 230 checks；`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 200.2）、standalone 3.31 MB + 515.8 kB；pack **44 files** 4.03 / 10.39 MB。
+- 验证：Node **496/496**；浏览器 9/9；`artifact-edit` 230 checks；`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 201.8）、standalone 3.31 MB + 515.8 kB；pack **44 files** 4.03 / 10.39 MB。
 
 ## 0.23 输入框跟随编辑宽度（2026-11-06，已提交 c76ecca）
 
@@ -561,10 +561,10 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - Host：`listForArtifact()`；`GET artifact-history`（metadata 新→旧；current/source/hasProgram/restorable；program-only 初始修订合并）；`GET artifact-history/program` 按需 program；restore 支持初始修订（style 用 latest 兜底）。
 - Client：`ArtifactHistory.tsx` 元数据对话框（改动区块 chips、无整页预览、不可用态、恢复）；入口 = 卡片历史图标 + Revision 徽标 + 编辑面板 header 历史按钮；恢复复用本地修订管线并刷新。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21）；浏览器 9/9；artifact-edit **230 checks**；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 200.2）；pack 44 files 4.03/10.41 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21）；浏览器 9/9；artifact-edit **230 checks**；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 201.8）；pack 44 files 4.03/10.41 MB。
 
-## 0.25 草稿条移到输入框上方（2026-11-06，已提交 395a272/a3cd1f6）
+## 0.25 草稿条移到输入框上方并 unslop（2026-11-06，已提交 395a272/a3cd1f6/5acdf97/fc9e251）
 
 - 需求：面板是当前 Artifact 的，`Pending edits (N/6)` 是 session 级草稿切换器，放在面板里容易混淆；移到输入框上方。
-- 实现：`DraftDock.tsx` 注册到 `conversation.input.dock`，宽度对齐 composer（`--dsh-chat-content-width + 32px`），无草稿零高度；保留原有 activate/attach/discard 与全部 data hooks；EditPanel 移除 DraftSwitcher。
-- 验证：Node **496/496**；浏览器 9/9；artifact-edit **230 checks**（草稿条在 composer 卡片之前、不在 panel 内）；CSS 200.2 kB；真机隔离确认渲染在 composer 上方。
+- 实现：`DraftDock.tsx` 注册到 `conversation.input.overlay`，成为输入框卡片内部顶部草稿行（不覆盖消息滚动区），无草稿零高度；unslop 为一句话工具条：标题/修订同行、active 用 surface step + 中性点、Discard 仅 hover/focus 显示（detached 时 Attach 常显）；保留全部 data hooks；EditPanel 移除 DraftSwitcher。新增 `PRODUCT.md`。
+- 验证：Node **496/496**；浏览器 9/9；artifact-edit **230 checks**（草稿条在 composer 卡片之前、不在 panel 内）；CSS 201.8 kB；真机隔离确认渲染在 composer 上方。

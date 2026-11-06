@@ -400,7 +400,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 496/496、浏览器 9/9、`artifact-edit` 230 checks、`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 200.2）；pack 44 files 4.03 / 10.41 MB。
+- 验证：Node 496/496、浏览器 9/9、`artifact-edit` 230 checks、`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 201.8）；pack 44 files 4.03 / 10.41 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 
@@ -411,6 +411,6 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 
 ### 草稿切换条移到输入框上方
 
-- 编辑面板是**当前 Artifact** 的；而 `Pending edits (N/6)` 是**本 session** 的草稿切换器，放在面板里容易与 Artifact 混淆。现在它渲染在 composer 的 `conversation.input.dock` slot（列表、session scope），位于输入框卡片上方，宽度与 composer 卡片对齐（`--dsh-chat-content-width + 32px`）。
-- `DraftDock.tsx`：无草稿返回 null（零高度）；否则显示 `待提交编辑 (N/6)` + 横向 chips；每项保留 title/Revision/summary/active 点/冲突/failed/detached 标签，支持激活、附加、丢弃；data hooks 与旧面板一致。
+- 编辑面板是**当前 Artifact** 的；而 `Pending edits (N/6)` 是**本 session** 的草稿切换器，放在面板里容易与 Artifact 混淆。现在它渲染在 composer 的 `conversation.input.overlay` slot（列表、session scope），成为输入框卡片内部顶部的一条草稿行（位于 textarea 上方），不再额外占用聊天滚动区高度。
+- `DraftDock.tsx`：无草稿返回 null（零高度）；否则显示安静的一行 `待提交编辑 (N/6)` + 横向 chips；标题与修订信息同行，active 用 surface step + 中性圆点，Discard 仅 hover/focus 显示（detached 时 Attach 常显）；data hooks 与旧面板一致。
 - EditPanel 不再渲染 DraftSwitcher，直接从 Edit requests / Block arrangement 开始；草稿上限/批量附加逻辑不变。

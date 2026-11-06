@@ -407,6 +407,6 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 
 ### Draft switcher moved above the composer
 
-- The edit panel is scoped to one artifact, while `Pending edits (N/6)` is a session-scoped draft switcher; keeping it in the panel invited confusion. It now renders in the composer's `conversation.input.dock` slot (list, session scope) above the composer card, centered at the composer width (`--dsh-chat-content-width + 32px`).
-- `DraftDock.tsx` returns null with no drafts; otherwise it shows `Pending edits (N/6)` plus horizontal chips with title/revision/summary/active/conflict/failed/detached and activate/attach/discard, keeping the former data hooks.
+- The edit panel is scoped to one artifact, while `Pending edits (N/6)` is a session-scoped draft switcher; keeping it in the panel invited confusion. It now renders in the composer's `conversation.input.overlay` slot (list, session scope) as a draft row at the top of the composer card, above the textarea, so it no longer adds height over the message scroll.
+- `DraftDock.tsx` returns null with no drafts; otherwise it renders one quiet `Pending edits (N/6)` row with horizontal chips, title and revision inline, a surface-step active state with a neutral dot, Discard on hover/focus (Attach stays visible while detached), and the former data hooks.
 - EditPanel no longer renders the draft switcher and starts directly with requests/arrangement; draft caps and batch attachment behaviour are unchanged.
