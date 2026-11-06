@@ -413,6 +413,6 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 
 ### Edit affordances and selected card (2026-11-06)
 
-- On entering edit mode, unselected blocks breathe with a **borderless** neutral tint and soft halo over 2.4s (about 6% ink at the midpoint); dashed rings are gone, and hover stops the breathing with a stronger tint/lift.
+- On entering edit mode, the **block container itself** breathes with a borderless brightness pulse (2.4s, `filter: brightness(0.95)`); the overlay only captures clicks and has no stroke, background or outward halo, so there is no extra layer and no spacing overlap. Hover stops the pulse.
 - Selection no longer uses a coloured outline: the block body gets a 16px rounded canvas surface and soft lift, while the overlay keeps only a neutral hairline and elevation; keyboard focus uses a neutral ring.
 - The history dialog subtitle renders only for a real title (never the raw artifact id); style ids render as localized style copy, unknown edited blocks as “Block”, and the edit panel header has an **Exit editing** button.
