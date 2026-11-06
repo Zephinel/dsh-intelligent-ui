@@ -2451,7 +2451,7 @@
 }
 
 .dsh-iui-draft-dock-title {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 16px;
@@ -2459,7 +2459,7 @@
 }
 
 .dsh-iui-draft-dock-count {
-  color: var(--dsw-alias-label-caption);
+  color: var(--dsw-alias-label-tertiary);
   font-size: 10px;
   line-height: 15px;
   font-variant-numeric: tabular-nums;
@@ -2535,7 +2535,7 @@
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-meta {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 10px;
   line-height: 14px;
   font-variant-numeric: tabular-nums;
