@@ -662,7 +662,8 @@
   gap: 0;
 }
 
-/* Compact icon button shared by request rows and the arrangement rows. */
+/* Compact icon button shared by request rows and the arrangement rows. One
+   strong icon tone keeps edit/duplicate/delete/move visually consistent. */
 .dsh-iui-edit-icon-button {
   display: grid;
   flex: none;
@@ -673,14 +674,13 @@
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-primary);
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
 .dsh-iui-edit-icon-button:hover {
   background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
 }
 
 .dsh-iui-edit-icon-button-danger:hover {
@@ -983,26 +983,20 @@
   align-items: center;
   justify-content: flex-end;
   gap: 1px;
-  /* Fixed action slot shared by the hidden, hover and confirming states, so the
-     pencil and Edited tag never shift when the actions appear or swap to the
-     compact Cancel/Delete confirmation. */
+  /* Always visible action group (edit/duplicate/delete/move). The fixed width is
+     shared by the default and confirming states, so the Edited tag never shifts
+     when the group swaps to the compact Cancel/Delete confirmation. */
   width: 104px;
   min-width: 104px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.dsh-iui-edit-arrangement-row:hover > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-arrangement-row:focus-within > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row:hover > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row:focus-within > .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-structure-actions:has([data-dsh-iui-edit-structure-confirm]) {
-  opacity: 1;
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
   width: 22px;
   height: 22px;
+}
+
+.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:hover {
+  background: var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-2));
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:disabled {
@@ -1444,43 +1438,6 @@
   white-space: pre-wrap;
 }
 
-.dsh-iui-edit-card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.dsh-iui-edit-card-action {
-  display: inline-flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.dsh-iui-edit-card-action:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.dsh-iui-edit-card-action-danger {
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.dsh-iui-edit-card-action-danger:hover {
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
-}
-
 @media (max-width: 1179px) {
   .dsh-iui-edit-panel-close {
     display: inline-flex;
@@ -1726,7 +1683,6 @@
 .dsh-iui-edit-arrangement-body:focus-visible,
 .dsh-iui-edit-draft-open:focus-visible,
 .dsh-iui-edit-draft-action:focus-visible,
-.dsh-iui-edit-card-action:focus-visible,
 .dsh-iui-edit-link:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;

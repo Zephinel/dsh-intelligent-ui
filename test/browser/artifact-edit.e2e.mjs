@@ -125,7 +125,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const arrangementSelector = id => `[data-dsh-iui-edit-arrangement-row][data-block-id="${id}"]`
   const openArrangementEditor = async id => {
     await wait(`!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'previous editor settled')
-    await click(`${arrangementSelector(id)} [data-dsh-iui-edit-arrangement-edit]`)
+    await click(`${arrangementSelector(id)} [data-dsh-iui-edit-structure-edit]`)
   }
   const saveInstruction = async value => {
     await typeInto('[data-dsh-iui-edit-instruction]', value)
@@ -241,7 +241,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   await wait('!!document.querySelector("[data-dsh-iui-edit-hover-card]")', 'hover card', { timeout: 5000 })
   check((await text('[data-dsh-iui-edit-hover-card]')).includes('把模拟时钟改为数字时钟'), true, 'hover card shows the request')
-  check(await count('[data-dsh-iui-edit-hover-card] .dsh-iui-edit-card-action'), 2, 'hover card edit + delete actions')
+  check(await count('[data-dsh-iui-edit-hover-card] .dsh-iui-edit-card-action'), 0, 'hover card is read-only (row owns the actions)')
   await shot('harness-arrangement-hover.png')
   await read(`document.querySelector('${arrangementSelector('b3')}').dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse' }))`)
   await wait('!document.querySelector("[data-dsh-iui-edit-hover-card]")', 'hover card hides', { timeout: 3000 }).catch(() => undefined)
@@ -733,7 +733,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-edit-strict]').getAttribute('aria-pressed') === 'true'`, 'strict enabled')
   await click('[data-dsh-iui-edit-nested]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-row]")', 'strict nested rows')
-  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-nested-edit]')
+  await click('[data-dsh-iui-edit-nested-row][data-block-id="b1.1.1"] [data-dsh-iui-edit-structure-edit]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'strict popover')
   await saveInstruction('strict protection edit')
   const strictEnvelope = await read('window.__serializeChipMatching("嵌套区块样例")')
@@ -830,7 +830,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-arrangement-row]")', 'popover clamp rows')
   await read(`window.scrollTo(0, 0)`)
   await new Promise(resolve => setTimeout(resolve, 300))
-  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-arrangement-edit]')
+  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-structure-edit]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'clamped popover')
   await new Promise(resolve => setTimeout(resolve, 250))
   const popRect = await read(`(() => {
@@ -876,14 +876,20 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const deleteTrigger = `${actionRow} [data-dsh-iui-edit-structure-delete]`
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
   await new Promise(resolve => setTimeout(resolve, 200))
-  const pencilX = await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`)
+  const actionSlot = `${actionRow} .dsh-iui-edit-structure-actions`
+  check(await read(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(actionSlot)})).opacity)`), 1, 'row actions are visible without hovering')
+  check(await count(`${actionRow} [data-dsh-iui-edit-structure-edit]`), 1, 'edit is grouped with the row actions')
+  check(await count(`${actionRow} [data-dsh-iui-edit-structure-duplicate]`), 1, 'duplicate sits in the same action group')
+  check(await count(`${actionRow} [data-dsh-iui-edit-move]`), 1, 'move sits in the same action group')
+  const pencilX = await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-structure-edit]`)}).getBoundingClientRect().x`)
+  const slotX = await read(`document.querySelector(${JSON.stringify(actionSlot)}).getBoundingClientRect().x`)
   await hover(actionRow)
-  await wait(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(`${actionRow} .dsh-iui-edit-structure-actions`)})).opacity) === 1`, 'row structure actions revealed on hover')
-  check(Math.abs(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`) - pencilX) < 0.5, true, 'hovering the row does not move the pencil control')
+  await new Promise(resolve => setTimeout(resolve, 200))
+  check(Math.abs(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-structure-edit]`)}).getBoundingClientRect().x`) - pencilX) < 0.5, true, 'hovering the row does not move the pencil control')
   check(await read(`document.querySelector(${JSON.stringify(deleteTrigger)}).getBoundingClientRect().width > 0`), true, 'structural delete is reachable on row hover')
   await click(deleteTrigger)
   await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm]")', 'delete confirmation group')
-  check(Math.abs(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-arrangement-edit]`)}).getBoundingClientRect().x`) - pencilX) < 0.5, true, 'confirming delete does not move the pencil control')
+  check(Math.abs(await read(`document.querySelector(${JSON.stringify(actionSlot)}).getBoundingClientRect().x`) - slotX) < 0.5, true, 'confirming delete keeps the action group in place')
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel') === true`, 'delete confirmation focus')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-structure-cancel')`), true, 'delete confirmation focuses Cancel')
   check(await count('[data-dsh-iui-edit-structure-confirm-delete]'), 1, 'delete confirmation offers a compact Delete action')
@@ -901,7 +907,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await new Promise(resolve => setTimeout(resolve, 200))
   await shot('harness-polish-delete-confirm.png')
   // Textarea focus ring has room inside the popover scroll container.
-  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-arrangement-edit]')
+  await click('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"] [data-dsh-iui-edit-structure-edit]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'focus ring popover')
   await read(`(() => { const ta = document.querySelector('[data-dsh-iui-edit-instruction]'); ta.focus(); return true; })()`)
   await new Promise(resolve => setTimeout(resolve, 100))

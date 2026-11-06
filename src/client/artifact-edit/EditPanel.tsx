@@ -200,13 +200,11 @@ interface CardPlacement {
  * @param props - locale seat, block, its request, and card actions.
  * @returns the body-portaled card.
  */
-function RequestHoverCard({ t, block, order, instruction, onEdit, onDelete, onEnter, onLeave }: {
+function RequestHoverCard({ t, block, order, instruction, onEnter, onLeave }: {
   readonly t: Translate
   readonly block: ArtifactBlock
   readonly order: number
   readonly instruction: string
-  readonly onEdit: () => void
-  readonly onDelete: () => void
   readonly onEnter: () => void
   readonly onLeave: () => void
 }): ReactElement {
@@ -269,20 +267,6 @@ function RequestHoverCard({ t, block, order, instruction, onEdit, onDelete, onEn
       </div>
       <p className="dsh-iui-edit-card-label">{t('edit.requirement')}</p>
       <p className="dsh-iui-edit-card-body">{instruction}</p>
-      <div className="dsh-iui-edit-card-actions">
-        <button type="button" className="dsh-iui-edit-card-action" data-dsh-iui-edit-hover-edit onClick={onEdit}>
-          <EditGlyph />{t('edit.openRequirement')}
-        </button>
-        <button
-          type="button"
-          className="dsh-iui-edit-card-action dsh-iui-edit-card-action-danger"
-          data-dsh-iui-edit-hover-delete
-          title={t('edit.removeRequestHint')}
-          onClick={onDelete}
-        >
-          <TrashGlyph />{t('edit.removeRequest')}
-        </button>
-      </div>
     </div>,
     document.body,
   )
@@ -407,12 +391,14 @@ const STRUCTURE_ERROR_TIMEOUT_MS = 8000
  * @param props - locale, target block, busy/confirm state and handlers.
  * @returns the action group or its confirmation state.
  */
-function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove }: {
+function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove }: {
   readonly t: Translate
   readonly blockId: string
+  readonly title: string
   readonly busy: boolean
   readonly confirming: boolean
   readonly moveOpen: boolean
+  readonly onEdit: () => void
   readonly onDuplicate: (anchor: HTMLButtonElement) => void
   readonly onRequestDelete: (anchor: HTMLButtonElement) => void
   readonly onCancelDelete: () => void
@@ -471,6 +457,18 @@ function StructureActions({ t, blockId, busy, confirming, moveOpen, onDuplicate,
         </span>
       ) : (
         <>
+          <button
+            type="button"
+            className="dsh-iui-edit-icon-button"
+            data-dsh-iui-edit-structure-edit
+            data-block-id={blockId}
+            disabled={busy}
+            aria-label={`${t('edit.openRequirement')}: ${title}`}
+            title={t('edit.openRequirement')}
+            onClick={event => { event.stopPropagation(); onEdit() }}
+          >
+            <EditGlyph />
+          </button>
           <button
             type="button"
             className="dsh-iui-edit-icon-button"
@@ -1480,20 +1478,12 @@ export function EditPanel({ t, session, actions, closing = false }: EditPanelPro
                       <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
                       {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                     </button>
-                    <button
-                      type="button"
-                      className="dsh-iui-edit-icon-button"
-                      data-dsh-iui-edit-arrangement-edit
-                      aria-label={`${t('edit.openRequirement')}: ${title}`}
-                      title={t('edit.openRequirement')}
-                      onClick={() => { closeHover(); actions.openBlockEditor(blockId) }}
-                    >
-                      <EditGlyph />
-                    </button>
                     <StructureActions
                       t={t}
                       blockId={blockId}
+                      title={title}
                       busy={rowActionsBusy}
+                      onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                       confirming={confirmDeleteId === blockId}
                       moveOpen={moveMenu?.blockId === blockId}
                       onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
@@ -1662,20 +1652,12 @@ export function EditPanel({ t, session, actions, closing = false }: EditPanelPro
                               <span className="dsh-iui-edit-nested-type">{blockKindLabel(block.kind, t)}</span>
                               {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                             </button>
-                            <button
-                              type="button"
-                              className="dsh-iui-edit-icon-button"
-                              data-dsh-iui-edit-nested-edit
-                              aria-label={`${t('edit.openRequirement')}: ${title}`}
-                              title={t('edit.openRequirement')}
-                              onClick={() => { closeHover(); actions.openBlockEditor(blockId) }}
-                            >
-                              <EditGlyph />
-                            </button>
                             <StructureActions
                               t={t}
                               blockId={blockId}
+                              title={title}
                               busy={rowActionsBusy}
+                              onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                               confirming={confirmDeleteId === blockId}
                               moveOpen={moveMenu?.blockId === blockId}
                               onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
@@ -1772,8 +1754,6 @@ export function EditPanel({ t, session, actions, closing = false }: EditPanelPro
           block={hoverBlock}
           order={hoverEntry.order}
           instruction={hoverEntry.instruction}
-          onEdit={() => { closeHover(); actions.openBlockEditor(hoverBlockId) }}
-          onDelete={() => { closeHover(); actions.removeSelection(hoverBlockId) }}
           onEnter={keepHover}
           onLeave={scheduleHoverHide}
         />
