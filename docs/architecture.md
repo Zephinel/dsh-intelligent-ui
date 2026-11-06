@@ -391,7 +391,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 编排行右侧是一个**常显**的动作组 `[data-dsh-iui-edit-structure-actions]`，把编辑（`data-dsh-iui-edit-structure-edit`）、复制、删除、移动四个图标放在同一个 104px 固定槽位里，所有图标同一白色调（`label-primary`）；编辑铅笔统一为**笔尖朝左下**的同一个描边路径（画布选中浮层、请求行、编排组共用，取代原先字符 `✎` 的镜像笔形）；悬停请求卡只读，不再重复提供编辑/删除。
 - 结构性删除改为持久的紧凑两态确认：默认 edit/duplicate/delete/move 图标；确认时替换为 `data-dsh-iui-edit-structure-confirm` 内的安静 Cancel 与 danger-tinted Delete 两个按钮，无行红底/大红 pill；**移除 3 秒自动恢复 timer**，确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消后回到 Delete 图标；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；`artifact-edit` **230 checks**（圆角/inset/overflow 几何、enter/exit 动画名、`data-closing`、删除确认 >3.6s 持久 / Cancel / Delete preview、popover 四边 clamp）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）；pack 43 files 4.02 / 10.37 MB。
+- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；`artifact-edit` **232 checks**（圆角/inset/overflow 几何、enter/exit 动画名、`data-closing`、删除确认 >3.6s 持久 / Cancel / Delete preview、popover 四边 clamp）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）；pack 43 files 4.02 / 10.37 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -400,7 +400,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 496/496、浏览器 9/9、`artifact-edit` 230 checks、`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 201.8）；pack 44 files 4.03 / 10.41 MB。
+- 验证：Node 496/496、浏览器 9/9、`artifact-edit` 232 checks、`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 202.0）；pack 44 files 4.03 / 10.41 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 
