@@ -193,25 +193,6 @@ dsh web
 - 贡献者与 AI 协作代理都应遵循[文档同步技能](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md)：行为、文案或计数变化时，同步中英 README、`CHANGELOG.md` 与 `docs/` 对应文档。checkout 中以本地 `.agents/skills/sync-iui-docs/SKILL.md` 为准。
 - 维护者：[@Zephinel](https://github.com/Zephinel)。
 
-<details>
-<summary>原始截图 / Raw captures</summary>
-
-![行程页面](assets/intelligent-ui-itinerary.webp)
-![组件总览](assets/intelligent-ui-components-layout.webp)
-![输入与数据组件](assets/intelligent-ui-components-inputs.webp)
-![交互与绘图组件](assets/intelligent-ui-components-drawing.webp)
-![销售看板](assets/intelligent-ui-example-dashboard.webp)
-![冲煮小测](assets/intelligent-ui-example-quiz.webp)
-![窄屏计算器](assets/intelligent-ui-responsive.webp)
-![Composer UI 开关](assets/intelligent-ui-toggle.png)
-![样式面板](assets/intelligent-ui-style-panel.webp)
-![按需生成提示](assets/intelligent-ui-on-demand-hint.webp)
-![临时结果](assets/intelligent-ui-temporary-result.webp)
-![临时结果（深色）](assets/intelligent-ui-temporary-result-dark.webp)
-![设置页](assets/intelligent-ui-settings.webp)
-
-</details>
-
 ## 已知限制
 
 卡片在轮末出现；模型校验、网络依赖、导出、模板安全、编辑范围、旧页面/base 限制、真机和 a11y 未验证项等完整边界见[已知限制](docs/limitations.md)。

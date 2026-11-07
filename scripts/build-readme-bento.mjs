@@ -42,16 +42,16 @@ const groups = [
   },
   {
     out: 'assets/intelligent-ui-readme-controls.webp',
-    width: 1600, height: 920,
+    width: 1600, height: 920, columns: 2, fit: 'contain',
     cells: [
       { file: 'intelligent-ui-style-panel.webp', col: '1 / 2', row: '1 / 3' },
-      { file: 'intelligent-ui-toggle.png', col: '2 / 3', row: '1 / 2' },
+      { file: 'intelligent-ui-toggle.png', col: '2 / 3', row: '1 / 2', fit: 'cover', position: 'right bottom' },
       { file: 'intelligent-ui-on-demand-hint.webp', col: '2 / 3', row: '2 / 3' },
     ],
   },
   {
     out: 'assets/intelligent-ui-readme-temporary.webp',
-    width: 1600, height: 800,
+    width: 1600, height: 560, columns: 2, rows: 1, fit: 'contain',
     cells: [
       { file: 'intelligent-ui-temporary-result.webp', col: '1 / 2', row: '1 / 2' },
       { file: 'intelligent-ui-temporary-result-dark.webp', col: '2 / 3', row: '1 / 2' },
@@ -69,13 +69,13 @@ try {
   for (const group of groups) {
     const cards = []
     for (const cell of group.cells) {
-      cards.push(`<figure style="grid-column:${cell.col};grid-row:${cell.row}"><img src="${await dataUri(cell.file)}" alt=""></figure>`)
+      cards.push(`<figure style="grid-column:${cell.col};grid-row:${cell.row}"><img src="${await dataUri(cell.file)}" alt="" style="object-fit:${cell.fit ?? group.fit ?? 'cover'};object-position:${cell.position ?? 'top center'}"></figure>`)
     }
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;padding:0;background:#f4f3f0;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-#frame{width:${group.width}px;height:${group.height}px;box-sizing:border-box;padding:28px;display:grid;grid-template-columns:repeat(${group.columns ?? 3},1fr);grid-template-rows:repeat(2,1fr);gap:18px}
-figure{margin:0;min-width:0;min-height:0;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgb(0 0 0 / 8%);}
-img{display:block;width:100%;height:100%;object-fit:cover;object-position:top center}
+#frame{width:${group.width}px;height:${group.height}px;box-sizing:border-box;padding:28px;display:grid;grid-template-columns:repeat(${group.columns ?? 3},1fr);grid-template-rows:repeat(${group.rows ?? 2},1fr);gap:18px}
+figure{margin:0;min-width:0;min-height:0;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgb(0 0 0 / 8%);display:flex;align-items:center;justify-content:center;}
+img{display:block;width:100%;height:100%;}
 </style></head><body><div id="frame">${cards.join('')}</div></body></html>`
     await writeFile(join(temp, 'index.html'), html)
     if (!server) {
@@ -90,7 +90,10 @@ img{display:block;width:100%;height:100%;object-fit:cover;object-position:top ce
     }
     await cdp.waitFor('document.readyState === "complete"', 'bento ready', { timeout: 10000 })
     await new Promise(resolve => setTimeout(resolve, 250))
-    const shot = await cdp.send('Page.captureScreenshot', { format: 'webp', quality: 90 })
+    const shot = await cdp.send('Page.captureScreenshot', {
+      format: 'webp', quality: 90,
+      clip: { x: 0, y: 0, width: group.width, height: group.height, scale: 1 },
+    })
     await writeFile(join(root, group.out), Buffer.from(shot.data, 'base64'))
     console.log(`bento: ${group.out}`)
   }

@@ -193,25 +193,6 @@ The published artifact is a DSH bundle; deploying means installing the plugin in
 - Contributors and AI coding agents should follow the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md): when behavior, copy or counts change, update both READMEs, `CHANGELOG.md` and the matching documents under `docs/`. In a checkout, use the local `.agents/skills/sync-iui-docs/SKILL.md`.
 - Maintainer: [@Zephinel](https://github.com/Zephinel).
 
-<details>
-<summary>Raw captures</summary>
-
-![Itinerary](assets/intelligent-ui-itinerary.webp)
-![Component overview](assets/intelligent-ui-components-layout.webp)
-![Input and data components](assets/intelligent-ui-components-inputs.webp)
-![Interaction and drawing components](assets/intelligent-ui-components-drawing.webp)
-![Sales dashboard](assets/intelligent-ui-example-dashboard.webp)
-![Brewing quiz](assets/intelligent-ui-example-quiz.webp)
-![Narrow calculator](assets/intelligent-ui-responsive.webp)
-![Composer UI switch](assets/intelligent-ui-toggle.png)
-![Style panel](assets/intelligent-ui-style-panel.webp)
-![On-demand hint](assets/intelligent-ui-on-demand-hint.webp)
-![Temporary result](assets/intelligent-ui-temporary-result.webp)
-![Temporary result (dark)](assets/intelligent-ui-temporary-result-dark.webp)
-![Settings page](assets/intelligent-ui-settings.webp)
-
-</details>
-
 ## Known limitations
 
 Cards appear at the end of the turn; full boundaries for model validation, network dependencies, export, template security, editing scope, legacy pages/base limits and unverified accessibility are in [Known limitations](docs/limitations.en.md).

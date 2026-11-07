@@ -57,6 +57,17 @@ test('the published files list covers every runtime and bundle input', () => {
 test('every shipped screenshot exists and is used by the matching README', () => {
   const screenshots = readdirSync(new URL('assets', root))
   assert.equal(screenshots.length, 20, 'assets ships the current README screenshot set')
+  // Source captures are used to build the bento galleries and kept in assets/
+  // for docs/history; the READMEs reference the composites instead.
+  const sourceCaptures = new Set([
+    'intelligent-ui-itinerary.webp', 'intelligent-ui-components-layout.webp',
+    'intelligent-ui-components-inputs.webp', 'intelligent-ui-components-drawing.webp',
+    'intelligent-ui-example-dashboard.webp', 'intelligent-ui-example-quiz.webp',
+    'intelligent-ui-responsive.webp', 'intelligent-ui-toggle.png',
+    'intelligent-ui-style-panel.webp', 'intelligent-ui-on-demand-hint.webp',
+    'intelligent-ui-temporary-result.webp', 'intelligent-ui-temporary-result-dark.webp',
+    'intelligent-ui-settings.webp',
+  ])
   // Language-specific captures live only in the README of the same language;
   // all other screenshots remain shared by both READMEs.
   const languageSpecific = new Set([
@@ -65,6 +76,7 @@ test('every shipped screenshot exists and is used by the matching README', () =>
   ])
   for (const image of screenshots) {
     assert.ok(existsSync(new URL(`assets/${image}`, root)), `assets/${image} exists`)
+    if (sourceCaptures.has(image)) continue
     if (languageSpecific.has(image)) {
       const readme = image.endsWith('-zh.webp') ? 'README.md' : 'README.en.md'
       assert.ok(read(readme).includes(`assets/${image}`), `${readme} uses ${image}`)
