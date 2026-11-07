@@ -40,7 +40,7 @@ import {
   isAnswerStyle,
 } from '../shared/intelligent-ui.ts'
 import type { AnswerStyle, RenderLayout } from '../shared/intelligent-ui.ts'
-import { ARTIFACT_ID_PATTERN, BLOCK_EDIT_TOOL, isRequestId } from '../shared/artifact-edit.ts'
+import { ARTIFACT_ID_PATTERN, BLOCK_EDIT_TOOL, isRequestId, isStyleEditRequest } from '../shared/artifact-edit.ts'
 import { spliceBlockBundle } from '../shared/artifact-block-bundle.ts'
 import {
   STYLE_THEME_FONTS, STYLE_RADII, STYLE_DENSITIES, STYLE_SHADOWS,
@@ -51,6 +51,7 @@ import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
 import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
+import { registerArtifactBaseRoute } from './artifact-base.ts'
 import {
   createArtifactProgramStore,
   createArtifactStructureOperationStore,
@@ -211,7 +212,7 @@ const PARAMETERS = {
     },
     temporaryStyle: {
       type: 'object',
-      description: 'Only for a Host-authorized on-demand operation. A result-owned style; omit styleId. '
+      description: 'Only for a Host-authorized on-demand operation, or for a pending natural-language style edit selected with editRequestId (the style envelope records the approved snapshot). A result-owned style; omit styleId. '
         + 'Use reusable design rules, not copies of the current content. `theme` is optional: omit it to inherit the session theme. '
         + 'When a theme is passed it must be complete, and both ink/canvas and accent/canvas need >= 3:1 contrast in each scheme (>= 4.5:1 recommended).',
       properties: {
@@ -238,7 +239,7 @@ const PARAMETERS = {
     },
     editRequestId: {
       type: 'string',
-      description: 'Only when several Artifact edit requests are pending in this session: the requestId from the order-only/global-only edit envelope being applied. Omit it for ordinary renders.',
+      description: 'The requestId of the one pending Artifact edit request this call applies. Required for a natural-language style edit (kind "style") and used for order-only/global-only block requests; omit it for ordinary renders. A pending style request is never applied without it.',
     },
   },
   required: ['program', 'style'],
@@ -269,6 +270,9 @@ const OUTPUT = {
     revision: { type: 'integer', description: '1-based artifact revision number of this result. Present only when this result applied a block edit.' },
     editedBlockIds: { type: 'array', items: { type: 'string' }, description: 'Root-level block ids the user asked to change.' },
     program: { type: 'string', description: 'Host-normalized complete openui-lang program; present only when the Host adjusted the top-level block order.' },
+    styleEdit: { type: 'boolean', description: 'True when this result applied a pending natural-language style edit; the page keeps the recorded layout and the approved temporaryStyle.' },
+    temporaryStyle: { type: 'object', description: 'Approved result-owned temporary style snapshot recorded with a style edit; the card keeps this style instead of styleId.' },
+    title: { type: 'string', description: 'Recorded page title carried by an artifact edit result, when the artifact had one.' },
   },
   required: ['statements', 'style'],
   additionalProperties: false,
@@ -342,6 +346,32 @@ interface BlockEditValue {
 }
 
 const parser = createParser((librarySpec as { readonly schema: unknown }).schema as never, 'Col')
+
+/**
+ * Validate one result-owned temporary style snapshot for either a
+ * Host-authorized on-demand render or a pending natural-language style edit.
+ * Both paths share this check so layout, schema and contrast cannot drift.
+ * @param snapshot - untrusted snapshot argument.
+ * @param style - the top-level style the snapshot must match.
+ * @param warnings - collector for the recommended-but-passing contrast range.
+ */
+function validateTemporaryStyleSnapshot(snapshot: unknown, style: unknown, warnings: string[]): void {
+  if (!isStyleSnapshot(snapshot)) {
+    throw new Error(`render_ui: invalid temporaryStyle: ${describeStyleSnapshotProblem(snapshot) ?? 'snapshot rejected'}. Pass schemaVersion 1, baseLayout, and non-empty directives; add a theme (light and dark palettes plus font, radius, density and shadow) only when the page should not inherit the session theme.`)
+  }
+  if (snapshot.baseLayout !== style) throw new Error('render_ui: temporaryStyle.baseLayout must match style.')
+  // The theme is optional (inherit the session theme); only a passed one is checked.
+  const snapshotTheme = snapshot.theme
+  if (snapshotTheme === undefined) return
+  for (const scheme of ['light', 'dark'] as const) {
+    const palette = snapshotTheme[scheme]
+    for (const token of ['ink', 'accent'] as const) {
+      const ratio = contrastRatio(palette[token], palette.canvas)
+      if (ratio < 3) throw new Error(`render_ui: temporaryStyle ${scheme} ${token}/canvas contrast must be at least 3:1.`)
+      if (ratio < 4.5) warnings.push(`Temporary style ${scheme} ${token}/canvas contrast is ${ratio.toFixed(2)}:1; 4.5:1 is recommended.`)
+    }
+  }
+}
 
 /** Statement count of one already-validated program. */
 function countStatements(program: string): number {
@@ -421,6 +451,7 @@ const ARTIFACT_EDIT_NOTE =
   + 'holding only those selected blocks\' updated top-level expressions in request order, plus any new helper statements; '
   + 'the Host splices them back into the unchanged page. The full page in the envelope is read-only reference. '
   + 'Requests that only change block order or the global instruction still use render_ui once with the complete updated program. '
+  + 'A natural-language style edit request (kind "style") is neither: call render_ui exactly once with the complete updated program, the recorded style, and a complete temporaryStyle snapshot, passing its requestId as editRequestId; do not call edit_ui_blocks for it. '
   + 'A user message may carry several artifact edit requests; apply each one with its own tool call and its requestId.'
 
 /** Recovery sentence for an unusable pending block edit request. */
@@ -432,7 +463,9 @@ function pendingChoiceLine(pending: PendingArtifactEditSummary): string {
     ? 'block edit: use edit_ui_blocks with requestId'
     : pending.mode === 'full'
       ? 'order/global only: use render_ui with editRequestId'
-      : 'unusable request: pass its requestId to a tool to see why'
+      : pending.mode === 'style'
+        ? 'style edit: use render_ui with editRequestId and temporaryStyle'
+        : 'unusable request: pass its requestId to a tool to see why'
   const artifact = pending.artifactId === undefined ? 'unknown artifact' : `artifactId ${JSON.stringify(pending.artifactId)}`
   return `requestId ${JSON.stringify(pending.requestId)} / ${artifact} (${mode})`
 }
@@ -563,7 +596,7 @@ export function apply(ctx: {
   assertDshToolSchema(BLOCK_EDIT_OUTPUT, 'edit_ui_blocks.output.schema')
   const store = createStyleStore(ctx)
   const results = createResultStore(ctx)
-  const revisions = createArtifactRevisionStore(ctx)
+  const revisions = createArtifactRevisionStore(ctx, results)
   const artifactPrograms = createArtifactProgramStore(ctx)
   const artifactStructureOperations = createArtifactStructureOperationStore(ctx)
   const artifactEdits = createArtifactEditController(ctx as never, revisions)
@@ -571,6 +604,7 @@ export function apply(ctx: {
   const mode = installSessionControls(ctx as never, config, store, onDemand)
   registerStyleRoutes(ctx as never, store, results)
   registerArtifactRevisionRoutes(ctx as never, revisions, artifactPrograms)
+  registerArtifactBaseRoute(ctx as never, { revisions, programs: artifactPrograms })
   registerArtifactStructureRoute(ctx as never, {
     revisions,
     programs: artifactPrograms,
@@ -676,7 +710,8 @@ ${section}`
       + 'applied, plus any new helper statements. The Host splices those block expressions back into the unchanged page, '
       + 'verifies it and records the new revision; never return the whole page. Call it at most once per turn. '
       + 'Order-only or global-instruction-only artifact requests still use render_ui once with the complete page program. '
-      + 'When several Artifact edit requests are pending, pass requestId (and its artifactId) to choose exactly one.',
+      + 'When several Artifact edit requests are pending, pass requestId (and its artifactId) to choose exactly one. '
+      + 'It never applies a natural-language style edit request; those use render_ui once with editRequestId.',
     parameters: BLOCK_EDIT_PARAMETERS,
     output: {
       schema: BLOCK_EDIT_OUTPUT,
@@ -726,6 +761,10 @@ ${section}`
           : `edit_ui_blocks: ${reason.replace(/^render_ui: /, '')}`)
       }
       const request = pendingEdit.request
+      if (isStyleEditRequest(request)) {
+        const hint = ` Pass editRequestId ${JSON.stringify(request.requestId)} to render_ui together with the complete updated program and the approved temporaryStyle.`
+        throw new Error(`edit_ui_blocks: this Artifact edit request changes the page presentation only; call render_ui once with the complete updated program instead.${hint}`)
+      }
       if (request.edits.length === 0 && (request.additions?.length ?? 0) === 0) {
         const hint = request.requestId === undefined ? '' : ` Pass editRequestId ${JSON.stringify(request.requestId)} to render_ui.`
         throw new Error(`edit_ui_blocks: this edit request only changes block order or the global instruction; call render_ui once with the complete updated page program instead.${hint}`)
@@ -785,6 +824,7 @@ ${section}`
       + 'missing data is material ambiguity, not a reason for placeholder content. '
       + 'For a pending Artifact block edit request with selected target blocks, call edit_ui_blocks instead with only those '
       + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page, and when several edit requests are pending pass editRequestId to choose one. '
+      + 'For a pending natural-language style edit request (kind "style"), also call this tool exactly once with the complete updated program, the recorded style, the approved temporaryStyle and editRequestId; keep the layout and the content, and never use edit_ui_blocks for it. '
       + 'Call it at most once per turn, after any brief introductory sentence.',
     parameters: PARAMETERS,
     output: {
@@ -797,7 +837,19 @@ ${section}`
         requestId?: string
         editedBlockIds?: readonly string[]
         program?: string
+        styleEdit?: boolean
+        temporaryStyle?: unknown
+        title?: string
       }) => {
+        if (value.styleEdit === true) {
+          const rendered = `Interactive UI style updated for the user (revision ${value.revision} of the artifact, ${value.style} layout).`
+          return [{
+            type: 'text' as const,
+            text: value.warnings === undefined || value.warnings.length === 0
+              ? rendered
+              : `${rendered} Notes: ${value.warnings.join('; ')}`,
+          }]
+        }
         if (value.revision !== undefined) {
           const edited = value.editedBlockIds?.length ?? 0
           const rendered = edited === 0 && value.program !== undefined
@@ -825,6 +877,10 @@ ${section}`
         revision?: number
         editedBlockIds?: readonly string[]
         program?: string
+        style?: RenderLayout
+        styleEdit?: boolean
+        temporaryStyle?: unknown
+        title?: string
       }) => value.artifactId === undefined || value.revisionId === undefined || value.revision === undefined
         ? null
         : {
@@ -835,6 +891,10 @@ ${section}`
             revision: value.revision,
             ...value.editedBlockIds === undefined ? {} : { editedBlockIds: [...value.editedBlockIds] },
             ...value.program === undefined ? {} : { program: value.program },
+            ...value.title === undefined ? {} : { title: value.title },
+            // A result-owned snapshot only validates against its layout, so the
+            // revision meta must carry the recorded style alongside it.
+            ...value.temporaryStyle === undefined ? {} : { style: value.style, temporaryStyle: value.temporaryStyle },
           },
     },
     async execute(args: { program: string; style?: unknown; styleId?: unknown; temporaryStyle?: unknown; editRequestId?: unknown }, exec?: { callId?: string; agent?: { session?: { id?: string } } }) {
@@ -844,6 +904,35 @@ ${section}`
           'render_ui is disabled for this session. Turn on Intelligent UI with the composer switch or /iui on|inherit.',
         )
       }
+      const warnings: string[] = []
+      // H2: peek at the pending request before any on-demand/temporary
+      // authorization. A selector that does not resolve fails here, and a style
+      // request is recognized before the on-demand branch can reject it.
+      if (args.editRequestId !== undefined && !isRequestId(args.editRequestId)) {
+        throw new Error('render_ui: editRequestId must be 8-80 characters using only A-Z, a-z, 0-9, "_" and "-"; pass the requestId from the edit envelope.')
+      }
+      const editSelector = args.editRequestId === undefined ? undefined : { requestId: args.editRequestId as string }
+      const peekedEdit = sessionId === undefined ? undefined : artifactEdits.pending(sessionId, editSelector)
+      if (editSelector !== undefined && peekedEdit !== undefined && peekedEdit.error !== undefined) {
+        throw pendingSelectionError('render_ui', 'editRequestId', editSelector, peekedEdit, artifactEdits.listPending(sessionId))
+      }
+      const peekedStyle = peekedEdit?.request !== undefined && isStyleEditRequest(peekedEdit.request) ? peekedEdit.request : undefined
+      // H1: a style edit is explicit-only. A single pending style request must
+      // never auto-apply just because the model omitted editRequestId.
+      if (peekedStyle !== undefined && editSelector === undefined) {
+        throw new Error(`render_ui: this session has a pending natural-language style edit (requestId ${JSON.stringify(peekedStyle.requestId)}); pass it as editRequestId together with the complete updated program and the approved temporaryStyle. A style edit is never applied automatically.`)
+      }
+      let styleEditApplied = false
+      if (peekedStyle !== undefined && editSelector !== undefined) {
+        // H3: a revision-bound style edit never shares the turn with on-demand.
+        if (onDemand.bound(sessionId)) {
+          throw new Error('render_ui: this session is inside a Host-authorized on-demand turn, so it cannot apply a pending natural-language style edit. Finish or cancel the on-demand operation first, then apply the style edit with editRequestId.')
+        }
+        if (!('temporaryStyle' in args)) {
+          throw new Error('render_ui: a pending natural-language style edit must be rendered with the approved temporaryStyle snapshot (style edits keep a result-owned temporary style).')
+        }
+        validateTemporaryStyleSnapshot(args.temporaryStyle, args.style, warnings)
+      }
       const temporary = 'temporaryStyle' in args
       // The on-demand turn is a request for a result-owned style. A plain render (or a
       // saved-template styleId) would silently bypass the intent, so reject it and let the
@@ -851,8 +940,7 @@ ${section}`
       if (sessionId !== undefined && onDemand.bound(sessionId) && !temporary) {
         throw new Error('render_ui: this turn is an on-demand UI request; pass a complete temporaryStyle with a matching style (omit styleId), or ask the user a clarifying question first.')
       }
-      const warnings: string[] = []
-      if (temporary) {
+      if (temporary && peekedStyle === undefined) {
         if ('styleId' in args) throw new Error('render_ui: styleId and temporaryStyle are mutually exclusive.')
         if (sessionId === undefined || typeof exec?.callId !== 'string' || !onDemand.allowsTemporaryStyle(sessionId, exec.callId)) {
           // A cap ended the operation; name the cause and the only recovery the user can take.
@@ -867,8 +955,7 @@ ${section}`
         }
         // Name the broken field: a model that omits directives/theme cannot tell
         // which part is missing and otherwise retries the identical payload.
-        if (!isStyleSnapshot(args.temporaryStyle)) throw new Error(`render_ui: invalid temporaryStyle: ${describeStyleSnapshotProblem(args.temporaryStyle) ?? 'snapshot rejected'}. Pass schemaVersion 1, baseLayout, and non-empty directives; add a theme (light and dark palettes plus font, radius, density and shadow) only when the page should not inherit the session theme.`)
-        if (args.temporaryStyle.baseLayout !== args.style) throw new Error('render_ui: temporaryStyle.baseLayout must match style.')
+        validateTemporaryStyleSnapshot(args.temporaryStyle, args.style, warnings)
         const operation = onDemand.view(sessionId)!
         if (operation.kind === 'generate') {
           if (args.style !== 'free') throw new Error('render_ui: on-demand generation requires style: "free" and temporaryStyle.baseLayout: "free"; card/article layouts are only supported when adjusting an existing result.')
@@ -878,18 +965,6 @@ ${section}`
           if (parent === undefined) throw new Error(`render_ui: cannot adjust result ${JSON.stringify(operation.parentResultId)}: its parent snapshot is unavailable in the result registry. Ask the user to cancel this adjustment and start a new on-demand generation.`)
           const layout = parent.snapshot.baseLayout
           if (args.style !== layout) throw new Error(`render_ui: on-demand adjustment must preserve the parent result layout; pass style: "${layout}" and temporaryStyle.baseLayout: "${layout}".`)
-        }
-        // The theme is optional (inherit the session theme); only a passed one is checked.
-        const snapshotTheme = args.temporaryStyle.theme
-        if (snapshotTheme !== undefined) {
-          for (const scheme of ['light', 'dark'] as const) {
-            const palette = snapshotTheme[scheme]
-            for (const token of ['ink', 'accent'] as const) {
-              const ratio = contrastRatio(palette[token], palette.canvas)
-              if (ratio < 3) throw new Error(`render_ui: temporaryStyle ${scheme} ${token}/canvas contrast must be at least 3:1.`)
-              if (ratio < 4.5) warnings.push(`Temporary style ${scheme} ${token}/canvas contrast is ${ratio.toFixed(2)}:1; 4.5:1 is recommended.`)
-            }
-          }
         }
       }
       const template = temporary ? undefined : mode.templateFor(sessionId)
@@ -945,31 +1020,41 @@ ${section}`
         revision: number
         editedBlockIds?: readonly string[]
         program?: string
+        temporaryStyle?: StyleSnapshot
+        title?: string
       } | undefined
       if (sessionId !== undefined) {
-        if (args.editRequestId !== undefined && !isRequestId(args.editRequestId)) {
-          throw new Error('render_ui: editRequestId must be 8-80 characters using only A-Z, a-z, 0-9, "_" and "-"; pass the requestId from the edit envelope.')
-        }
-        const selector = args.editRequestId === undefined ? undefined : { requestId: args.editRequestId as string }
-        const pendingEdit = artifactEdits.pending(sessionId, selector)
+        const pendingEdit = artifactEdits.pending(sessionId, editSelector)
         if (pendingEdit === undefined) {
-          if (selector !== undefined) {
-            throw new Error(`render_ui: no pending Artifact edit request matches editRequestId ${JSON.stringify(selector.requestId)}; render the answer normally without editRequestId.`)
+          if (editSelector !== undefined) {
+            throw new Error(`render_ui: no pending Artifact edit request matches editRequestId ${JSON.stringify(editSelector.requestId)}; render the answer normally without editRequestId.`)
           }
         } else if (pendingEdit.error !== undefined) {
-          throw pendingSelectionError('render_ui', 'editRequestId', selector ?? {}, pendingEdit, artifactEdits.listPending(sessionId))
+          throw pendingSelectionError('render_ui', 'editRequestId', editSelector ?? {}, pendingEdit, artifactEdits.listPending(sessionId))
         } else {
-          // A content edit must go through the structural block path, not a full rewrite.
-          if (pendingEdit.request !== undefined && (pendingEdit.request.edits.length > 0 || (pendingEdit.request.additions?.length ?? 0) > 0)) {
-            const hint = pendingEdit.request.requestId === undefined ? '' : ` Pass requestId ${JSON.stringify(pendingEdit.request.requestId)} to edit_ui_blocks.`
+          const pendingRequest = pendingEdit.request
+          if (pendingRequest !== undefined && isStyleEditRequest(pendingRequest)) {
+            // H1: the peek above already rejected a selector-less style edit; keep
+            // the explicit-selection check beside the apply boundary too.
+            if (editSelector === undefined || args.editRequestId !== pendingRequest.requestId) {
+              throw new Error(`render_ui: the pending natural-language style edit requires editRequestId ${JSON.stringify(pendingRequest.requestId)}.`)
+            }
+            const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, requestId: pendingEdit.requestId })
+            lineage = applied.lineage
+            styleEditApplied = applied.styleEdit === true
+            warnings.push(...applied.warnings)
+          } else if (pendingRequest !== undefined && (pendingRequest.edits.length > 0 || (pendingRequest.additions?.length ?? 0) > 0)) {
+            // A content edit must go through the structural block path, not a full rewrite.
+            const hint = pendingRequest.requestId === undefined ? '' : ` Pass requestId ${JSON.stringify(pendingRequest.requestId)} to edit_ui_blocks.`
             throw new Error(`render_ui: this artifact edit request has selected blocks to change; call edit_ui_blocks once with a mini program containing only the selected blocks' updated expressions instead of the whole page. The request stays armed, so do not answer in prose.${hint}`)
+          } else {
+            const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, requestId: pendingEdit.requestId })
+            lineage = applied.lineage
+            warnings.push(...applied.warnings)
           }
-          const applied = artifactEdits.apply({ sessionId, callId: exec?.callId, args, requestId: pendingEdit.requestId })
-          lineage = applied.lineage
-          warnings.push(...applied.warnings)
         }
       }
-      if (temporary && isStyleSnapshot(args.temporaryStyle)) {
+      if (temporary && !styleEditApplied && isStyleSnapshot(args.temporaryStyle)) {
         const parentResultId = onDemand.view(sessionId!)?.parentResultId
         // No await between the authorization check, durable write and completion.
         results.record({ resultId: exec!.callId!, sessionId: sessionId!, snapshot: args.temporaryStyle,
@@ -987,7 +1072,13 @@ ${section}`
           revision: lineage.revision,
           ...lineage.editedBlockIds === undefined ? {} : { editedBlockIds: [...lineage.editedBlockIds] },
           ...lineage.program === undefined ? {} : { program: lineage.program },
-        } }
+        },
+        ...styleEditApplied && lineage !== undefined ? {
+          styleEdit: true,
+          ...args.temporaryStyle === undefined ? {} : { temporaryStyle: args.temporaryStyle },
+          ...lineage.title === undefined ? {} : { title: lineage.title },
+        } : {},
+      }
       const callId = exec?.callId
       if (callId !== undefined) {
         artifactPrograms.record({

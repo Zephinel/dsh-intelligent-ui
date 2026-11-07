@@ -11,8 +11,16 @@ note = Text("调整分割线和间距。", "sm", "muted")`
 export const PROPS_PROGRAM_APPLIED = `root = Col([head, rule, gap, note])
 head = Title("属性调整样例", "lg")
 rule = Divider("info", "60%", 2)
-gap = Spacer(12, "auto")
+gap = Spacer(12, "50%")
 note = Text("调整分割线和间距。", "sm", "muted")`
+
+/** Legacy revision carrying the removed "auto" Spacer height; must stay editable. */
+export const PROPS_LEGACY_AUTO_TITLE = '自动间距样例'
+export const PROPS_LEGACY_AUTO_PROGRAM = `root = Col([head, rule, gap, note])
+head = Title("自动间距样例", "lg")
+rule = Divider()
+gap = Spacer(null, "auto")
+note = Text("旧版自动间距仍可渲染。", "sm", "muted")`
 
 /** Cards used by the layout-parity, dirty-guard and nested-preview checks. */
 export const PROPS_CENTER_TITLE = '居中属性样例'

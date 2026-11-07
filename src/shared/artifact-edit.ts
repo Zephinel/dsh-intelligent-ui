@@ -17,6 +17,11 @@ import { isStyleSnapshot, type StyleSnapshot } from './style-templates.ts'
 /** Envelope version persisted in the model-facing text. */
 export const ARTIFACT_EDIT_SCHEMA_VERSION = 1
 
+/** Envelope discriminator for revision-bound natural-language style edits. */
+export const ARTIFACT_STYLE_EDIT_KIND = 'style'
+/** Optional discriminator marker for block edits; serializers never emit it. */
+export const ARTIFACT_BLOCK_EDIT_KIND = 'blocks'
+
 /** Tool the model calls for block-level edits (Phase 1: selected top-level blocks). */
 export const BLOCK_EDIT_TOOL = 'edit_ui_blocks'
 
@@ -50,11 +55,28 @@ export const MAX_ARTIFACT_BATCH_EDITS = 24
 export const MAX_TARGET_ORDER_BLOCKS = 100
 export const MAX_BLOCK_INSTRUCTION_CHARS = 2000
 export const MAX_GLOBAL_INSTRUCTION_CHARS = 4000
+/** Bound on the natural-language style instruction of one style envelope. */
+export const MAX_STYLE_INSTRUCTION_CHARS = 2000
 export const MAX_ARTIFACT_PROGRAM_CHARS = 200_000
 export const MAX_ARTIFACT_TITLE_CHARS = 200
 
 /** Stable identity shape for artifact and revision ids (tool call ids). */
 export const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9_:.-]{1,200}$/
+
+/**
+ * Whether one revision id is an artifact's initial revision identity.
+ *
+ * The first render's tool call id is both the artifact id and the id of its
+ * revision 1. Revision 1 is stored only as an authoritative program (never as
+ * a revision record; recorded revisions start at 2), so this check is how the
+ * Host recognizes the unrecorded initial revision without scanning history.
+ * @param artifactId - artifact identity (the first render call id).
+ * @param revisionId - candidate revision identity.
+ * @returns true when revisionId names that artifact's first render.
+ */
+export function isInitialRevisionId(artifactId: string, revisionId: string): boolean {
+  return artifactId === revisionId
+}
 
 /** Coarse classification used by the edit panel copy. */
 export const ARTIFACT_BLOCK_KINDS = [
@@ -125,8 +147,10 @@ export interface ArtifactBlockAddition {
   readonly instruction: string
 }
 
-/** The complete structured edit intent sent to the model. */
-export interface ArtifactEditRequest {
+/** The complete structured block/arrangement edit intent sent to the model. */
+export interface ArtifactBlockEditRequest {
+  /** Optional discriminator; absent on legacy envelopes and never serialized. */
+  readonly kind?: typeof ARTIFACT_BLOCK_EDIT_KIND
   readonly schemaVersion: typeof ARTIFACT_EDIT_SCHEMA_VERSION
   /** Identity of the rendered artifact (first revision's call id). */
   readonly artifactId: string
@@ -167,6 +191,53 @@ export interface ArtifactEditRequest {
   /** Complete OpenUI Lang program the user was looking at. */
   readonly program: string
 }
+
+/**
+ * One revision-bound natural-language style edit request.
+ *
+ * It carries no block targets: the model returns the complete base program with
+ * only the presentation changed, and the Host records a new revision whose
+ * lineage keeps the recorded layout/skin.
+ */
+export interface ArtifactStyleEditRequest {
+  readonly kind: typeof ARTIFACT_STYLE_EDIT_KIND
+  readonly schemaVersion: typeof ARTIFACT_EDIT_SCHEMA_VERSION
+  /** The Host binds the style result to exactly this request id; required. */
+  readonly requestId: string
+  /** Identity of the rendered artifact (first revision's call id). */
+  readonly artifactId: string
+  /** Revision the user saw and edited; guards against stale edits. */
+  readonly baseRevisionId: string
+  /** 1-based revision number of `baseRevisionId`. */
+  readonly baseRevision: number
+  /** Display title of the artifact, when it had one. */
+  readonly title?: string
+  /** Recorded base layout; the returned program must keep it. */
+  readonly style: RenderLayout
+  /** Recorded custom template id, when the artifact used one. */
+  readonly styleId?: string
+  /** Recorded result-owned temporary skin; the returned program must keep it. */
+  readonly temporaryStyle?: StyleSnapshot
+  /** Explicitly base the new revision on an older revision instead of the current head. */
+  readonly branch?: boolean
+  /** Natural-language presentation requirement. */
+  readonly styleInstruction: string
+  /** Complete OpenUI Lang program the user was looking at. */
+  readonly program: string
+}
+
+/** The structured edit intent carried by one model-facing envelope. */
+export type ArtifactEditRequest = ArtifactBlockEditRequest | ArtifactStyleEditRequest
+
+/**
+ * Whether one parsed request is the natural-language style branch.
+ * @param request - shape-valid edit request.
+ * @returns true for style requests, narrowing the union.
+ */
+export function isStyleEditRequest(request: ArtifactEditRequest): request is ArtifactStyleEditRequest {
+  return request.kind === ARTIFACT_STYLE_EDIT_KIND
+}
+
 
 /** Revision lineage projected onto the render_ui result meta. */
 export interface ArtifactRevisionMeta {
@@ -291,7 +362,18 @@ function isIdentity(value: unknown): value is string {
   return typeof value === 'string' && ARTIFACT_ID_PATTERN.test(value)
 }
 
-function isBoundedText(value: unknown, min: number, max: number): value is string {
+/**
+ * Check one bounded, single-line user/author text value.
+ *
+ * Shared by every artifact route body validator so the cap and the rejected
+ * control characters cannot drift between the edit envelope, restore, and base
+ * registration contracts.
+ * @param value - untrusted value.
+ * @param min - minimum trimmed length (1 for non-empty fields).
+ * @param max - maximum trimmed length.
+ * @returns whether the value is acceptable bounded text.
+ */
+export function isBoundedText(value: unknown, min: number, max: number): value is string {
   return typeof value === 'string' && value.trim().length >= min && value.trim().length <= max
     && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(value)
 }
@@ -346,15 +428,23 @@ export function describeBlockEditProblem(value: unknown): string | undefined {
 /**
  * Describe why one structured edit request is unusable, or undefined when valid.
  * Validation is shape-only; block references are checked against the parsed
- * program by the Host (and by the composer before sending).
+ * program by the Host (and by the composer before sending). Dispatch follows
+ * the `kind` discriminator; legacy block envelopes omit it.
  * @param value - untrusted request value.
  * @returns a short machine-readable problem label with an optional field name.
  */
 export function describeEditRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
+  if (value.kind === ARTIFACT_STYLE_EDIT_KIND) return describeStyleEditRequestProblem(value)
+  return describeBlockEditRequestProblem(value)
+}
+
+/** Strict allowlist/shape checks for one block edit envelope. */
+function describeBlockEditRequestProblem(value: Record<string, unknown>): string | undefined {
   const keys = Object.keys(value)
-  const allowed = ['schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'additions', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'strict', 'globalInstruction', 'program']
+  const allowed = ['kind', 'schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'edits', 'additions', 'targetOrder', 'orderByParent', 'orderChanged', 'branch', 'strict', 'globalInstruction', 'program']
   if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
+  if (value.kind !== undefined && value.kind !== ARTIFACT_BLOCK_EDIT_KIND) return 'unknown_kind'
   if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
   if ('requestId' in value && !isRequestId(value.requestId)) return 'invalid_request_id'
   if (!isIdentity(value.artifactId)) return 'invalid_artifact_id'
@@ -422,6 +512,38 @@ export function describeEditRequestProblem(value: unknown): string | undefined {
 }
 
 /**
+ * Strict allowlist/shape checks for one natural-language style envelope.
+ *
+ * Style requests carry no block targets: every block/arrangement field is
+ * rejected as an unknown field, so the style branch can never smuggle content
+ * edits past the Host's style application path.
+ * @param value - untrusted request value whose kind is 'style'.
+ * @returns a short machine-readable problem label, or undefined when valid.
+ */
+function describeStyleEditRequestProblem(value: Record<string, unknown>): string | undefined {
+  const keys = Object.keys(value)
+  const allowed = ['kind', 'schemaVersion', 'requestId', 'artifactId', 'baseRevisionId', 'baseRevision', 'title', 'style', 'styleId', 'temporaryStyle', 'branch', 'styleInstruction', 'program']
+  if (keys.some(key => !allowed.includes(key))) return 'unknown_field'
+  if (value.schemaVersion !== ARTIFACT_EDIT_SCHEMA_VERSION) return 'unsupported_version'
+  if (!isRequestId(value.requestId)) return 'invalid_request_id'
+  if (!isIdentity(value.artifactId)) return 'invalid_artifact_id'
+  if (!isIdentity(value.baseRevisionId)) return 'invalid_base_revision_id'
+  if (typeof value.baseRevision !== 'number' || !Number.isSafeInteger(value.baseRevision) || value.baseRevision < 1) return 'invalid_base_revision'
+  if ('title' in value && !isBoundedText(value.title, 1, MAX_ARTIFACT_TITLE_CHARS)) return 'invalid_title'
+  if (!isEditLayout(value.style)) return 'invalid_style'
+  if ('styleId' in value && (typeof value.styleId !== 'string' || !/^cs_[a-z0-9]{6,64}$/i.test(value.styleId))) return 'invalid_style_id'
+  if ('temporaryStyle' in value) {
+    if ('styleId' in value) return 'invalid_temporary_style'
+    if (!isStyleSnapshot(value.temporaryStyle) || value.temporaryStyle.baseLayout !== value.style) return 'invalid_temporary_style'
+    if (JSON.stringify(value.temporaryStyle).length > 20_000) return 'invalid_temporary_style'
+  }
+  if ('branch' in value && typeof value.branch !== 'boolean') return 'invalid_branch'
+  if (!isBoundedText(value.styleInstruction, 1, MAX_STYLE_INSTRUCTION_CHARS)) return 'invalid_style_instruction'
+  if (!isBoundedText(value.program, 1, MAX_ARTIFACT_PROGRAM_CHARS)) return 'invalid_program'
+  return undefined
+}
+
+/**
  * Split an envelope text into its JSON header and the original program.
  * The program is the last fenced section, so a `<artifact-program>`-like
  * string inside a model-authored Text literal cannot truncate it.
@@ -447,14 +569,26 @@ function splitEnvelope(text: string): { json: string; program: string; rest: str
 /**
  * Serialize the model-facing user message for one edit request.
  *
- * The returned text is what the composer submits instead of the chip: the JSON
- * header is machine-readable for the Host, the surrounding prose tells the model
- * exactly how to apply the edits, and the program gives it the structure it must
- * modify. JSON strings escape `<` so a user instruction cannot close the header.
+ * Dispatches on the envelope kind so existing call sites keep one entry point;
+ * block envelopes serialize exactly as before.
  * @param request - complete, validated edit request.
  * @returns the envelope text.
  */
 export function buildEditRequestText(request: ArtifactEditRequest): string {
+  return isStyleEditRequest(request) ? buildStyleEditRequestText(request) : buildBlockEditRequestText(request)
+}
+
+/**
+ * Serialize the model-facing user message for one block/arrangement edit request.
+ *
+ * The returned text is what the composer submits instead of the chip: the JSON
+ * header is machine-readable for the Host, the surrounding prose tells the model
+ * exactly how to apply the edits, and the program gives it the structure it must
+ * modify. JSON strings escape `<` so a user instruction cannot close the header.
+ * @param request - complete, validated block edit request.
+ * @returns the envelope text.
+ */
+export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): string {
   const header = JSON.stringify({
     schemaVersion: request.schemaVersion,
     ...request.requestId === undefined ? {} : { requestId: request.requestId },
@@ -596,6 +730,67 @@ export function buildEditRequestText(request: ArtifactEditRequest): string {
   return lines.join('\n')
 }
 
+/**
+ * Serialize the model-facing user message for one natural-language style edit.
+ *
+ * Unlike block edits this request returns a complete program: the header tells
+ * the Host which revision and skin to keep, and the prose asks the model to
+ * change presentation only. JSON strings escape `<` so the instruction cannot
+ * close the header.
+ * @param request - complete, validated style edit request.
+ * @returns the envelope text.
+ */
+export function buildStyleEditRequestText(request: ArtifactStyleEditRequest): string {
+  const header = JSON.stringify({
+    schemaVersion: request.schemaVersion,
+    kind: ARTIFACT_STYLE_EDIT_KIND,
+    requestId: request.requestId,
+    artifactId: request.artifactId,
+    baseRevisionId: request.baseRevisionId,
+    baseRevision: request.baseRevision,
+    ...request.title === undefined ? {} : { title: request.title },
+    style: request.style,
+    ...request.styleId === undefined ? {} : { styleId: request.styleId },
+    ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
+    ...request.branch === true ? { branch: true } : {},
+    styleInstruction: request.styleInstruction,
+  }).replace(/</g, '\\u003c')
+
+  const styleTarget = request.temporaryStyle !== undefined
+    ? `- Keep the recorded result-owned temporary skin: pass the complete temporaryStyle ${JSON.stringify(request.temporaryStyle)} to render_ui and omit styleId.`
+    : request.styleId === undefined
+      ? `- Keep the recorded page layout: pass style: ${JSON.stringify(request.style)} to render_ui.`
+      : `- Keep the recorded page layout and saved template: pass style: ${JSON.stringify(request.style)} and styleId: ${JSON.stringify(request.styleId)} to render_ui.`
+
+  const lines = [
+    ARTIFACT_EDIT_OPEN,
+    header,
+    ARTIFACT_EDIT_CLOSE,
+    '',
+    'This message is a targeted style edit request for one existing rendered page (an artifact the user is looking at). It changes presentation, not the content the page carries.',
+    'Call the render_ui tool exactly once with the complete updated program. Do not answer in prose, do not return a diff, and do not switch to another page layout.',
+    `Pass editRequestId: ${JSON.stringify(request.requestId)} and artifactId: ${JSON.stringify(request.artifactId)} in the tool arguments so the Host applies exactly this request.`,
+    '',
+    'Style contract for that call:',
+    '- Apply the style instruction below to the visual presentation: colour palette, typography, spacing, surfaces, borders, radii, shadows and other decoration.',
+    styleTarget,
+    '- Return the complete page program, not only the parts that look different; keep every block and statement identifiable by its statement name or title.',
+    '- Preserve every block\'s content, structure, data and interactive behaviour unless the style instruction explicitly asks to change it. The Host validates the returned program and warns when blocks change unexpectedly.',
+    '- Do not reorder, add or remove blocks unless the style instruction explicitly asks for it.',
+    '- If the instruction is materially ambiguous, ask one focused question with ask_user_question instead of guessing; otherwise produce the update directly.',
+    ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
+    '',
+    'Style instruction:',
+    request.styleInstruction,
+    '',
+    `The current page is revision ${request.baseRevision} of its artifact. It is reference context: return the same page with only the requested presentation changes.`,
+    ARTIFACT_PROGRAM_OPEN,
+    request.program,
+    ARTIFACT_PROGRAM_CLOSE,
+  ]
+  return lines.join('\n')
+}
+
 /** Request ids generated per draft; safe inside the JSON header and Host maps. */
 export function isRequestId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(value)
@@ -631,12 +826,12 @@ export function isReorderedOrder(originalOrder: readonly string[], targetOrder: 
 }
 
 /**
- * Whether a request changes nothing at all (no edits, same order, no global instruction).
- * @param request - shape-valid edit request.
+ * Whether a block request changes nothing at all (no edits, same order, no global instruction).
+ * @param request - shape-valid block edit request.
  * @param baseBlockIds - recognized top-level block ids of the base program, in page order.
  * @returns true for a no-op request.
  */
-export function isNoOpEditRequest(request: ArtifactEditRequest, baseBlockIds: readonly string[]): boolean {
+export function isNoOpEditRequest(request: ArtifactBlockEditRequest, baseBlockIds: readonly string[]): boolean {
   return request.edits.length === 0
     && (request.additions?.length ?? 0) === 0
     && (request.globalInstruction?.trim() ?? '') === ''
@@ -700,11 +895,12 @@ export function isArtifactEditRequest(value: unknown): value is ArtifactEditRequ
  * Find the next complete edit envelope at or after one offset, for the
  * sent-message summary node. The range covers the header and the pasted
  * program so a sent message renders one compact chip, not the raw payload.
+ * Style envelopes report `style: true` and no block/arrangement facts.
  * @param text - original user message body.
  * @param from - inclusive search start.
  * @returns the covered range and summary facts, or undefined.
  */
-export function nextEditRequestSummary(text: string, from: number): { start: number; end: number; count: number; globalOnly: boolean; reordered: boolean; hasGlobal: boolean } | undefined {
+export function nextEditRequestSummary(text: string, from: number): { start: number; end: number; count: number; globalOnly: boolean; reordered: boolean; hasGlobal: boolean; style: boolean } | undefined {
   const start = text.indexOf(ARTIFACT_EDIT_OPEN, from)
   if (start < 0) return undefined
   const close = text.indexOf(ARTIFACT_EDIT_CLOSE, start + ARTIFACT_EDIT_OPEN.length)
@@ -722,14 +918,18 @@ export function nextEditRequestSummary(text: string, from: number): { start: num
   let globalOnly = false
   let reordered = false
   let hasGlobal = false
+  let style = false
   try {
-    const value = JSON.parse(text.slice(start + ARTIFACT_EDIT_OPEN.length, close)) as { edits?: unknown; globalInstruction?: unknown; orderChanged?: unknown }
-    if (Array.isArray(value.edits)) count = value.edits.length
-    reordered = value.orderChanged === true
-    hasGlobal = typeof value.globalInstruction === 'string' && value.globalInstruction.trim() !== ''
-    globalOnly = count === 0 && !reordered && hasGlobal
+    const value = JSON.parse(text.slice(start + ARTIFACT_EDIT_OPEN.length, close)) as { kind?: unknown; edits?: unknown; globalInstruction?: unknown; orderChanged?: unknown }
+    style = value.kind === ARTIFACT_STYLE_EDIT_KIND
+    if (!style) {
+      if (Array.isArray(value.edits)) count = value.edits.length
+      reordered = value.orderChanged === true
+      hasGlobal = typeof value.globalInstruction === 'string' && value.globalInstruction.trim() !== ''
+      globalOnly = count === 0 && !reordered && hasGlobal
+    }
   } catch { /* the range still collapses, only the summary is unknown */ }
-  return { start, end, count, globalOnly, reordered, hasGlobal }
+  return { start, end, count, globalOnly, reordered, hasGlobal, style }
 }
 
 /**

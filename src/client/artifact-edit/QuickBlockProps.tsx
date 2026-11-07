@@ -17,21 +17,25 @@ const COLOR_OPTIONS = ['' as const, ...ARTIFACT_BLOCK_COLOR_TOKENS]
 
 /** One length field split into a number and a unit selection. */
 interface LengthDraft {
-  readonly unit: '' | 'px' | '%' | 'auto'
+  /** Default ('') omits the value, so the renderer keeps its own layout default. */
+  readonly unit: '' | 'px' | '%'
   readonly value: string
 }
 
 function lengthDraft(value: number | string | undefined): LengthDraft {
   if (value === undefined) return { unit: '', value: '' }
   if (typeof value === 'number') return { unit: 'px', value: String(value) }
-  if (value === 'auto') return { unit: 'auto', value: '' }
+  // Legacy revisions may still carry the old "auto" value; show it as Default
+  // without rewriting the committed props, so Apply stays disabled until the
+  // user actually edits the field.
+  if (value === 'auto') return { unit: '', value: '' }
   if (value.endsWith('%')) return { unit: '%', value: value.slice(0, -1) }
   if (value.endsWith('px')) return { unit: 'px', value: value.slice(0, -2) }
   return { unit: '', value: '' }
 }
 
 function lengthValue(draft: LengthDraft): number | string | undefined {
-  if (draft.unit === '' || draft.unit === 'auto') return draft.unit === 'auto' ? 'auto' : undefined
+  if (draft.unit === '') return undefined
   if (draft.value.trim() === '') return undefined
   const number = Number(draft.value)
   if (!Number.isFinite(number)) return undefined
@@ -85,14 +89,25 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
     onChange(bag)
   }
 
-  const unitOptions = (allowAuto: boolean) => [
-    { value: '', label: t('edit.propsDefault') },
-    { value: 'px', label: t('edit.propsPx') },
-    { value: '%', label: t('edit.propsPercent') },
-    ...allowAuto ? [{ value: 'auto', label: t('edit.propsAuto') }] : [],
+  const unitOptions = (defaultDescription: string): { value: string; label: string; description: string }[] => [
+    { value: '', label: t('edit.propsDefault'), description: defaultDescription },
+    { value: 'px', label: t('edit.propsPx'), description: t('edit.propsPx.desc') },
+    { value: '%', label: t('edit.propsPercent'), description: t('edit.propsPercent.desc') },
   ]
 
-  const lengthRow = (key: 'width' | 'height', label: string, draft: LengthDraft, allowAuto: boolean): ReactElement => {
+  const lengthRow = (key: 'width' | 'height', label: string, draft: LengthDraft): ReactElement => {
+    // Default ('') means different things per row: a Divider width spans its
+    // column, a Spacer width fills the free Row space, and a Spacer height
+    // usually collapses.
+    const defaultDescription = componentType === 'Divider'
+      ? t('edit.propsDefault.dividerWidth.desc')
+      : key === 'height'
+        ? t('edit.propsDefault.spacerHeight.desc')
+        : t('edit.propsDefault.desc')
+    const options = unitOptions(defaultDescription)
+    // The explanation follows the selected unit so the row always says what
+    // the current value means (Default included).
+    const description = options.find(option => option.value === draft.unit)?.description ?? ''
     const sliderValue = Number(draft.value)
     const safeSliderValue = Number.isFinite(sliderValue) ? sliderValue : 0
     const slider = draft.unit === '%'
@@ -106,7 +121,7 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
           <span className="dsh-iui-edit-props-label">{label}</span>
           <QuickSelect
             value={draft.unit}
-            options={unitOptions(allowAuto)}
+            options={options}
             ariaLabel={`${label} ${t('edit.propsUnit')}`}
             onChange={unitValue => {
               const nextDraft = { unit: unitValue as LengthDraft['unit'], value: draft.value }
@@ -122,8 +137,8 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
             step={1}
             inputMode="numeric"
             aria-label={label}
-            disabled={draft.unit === '' || draft.unit === 'auto'}
-            value={draft.unit === '' || draft.unit === 'auto' ? '' : draft.value}
+            disabled={draft.unit === ''}
+            value={draft.unit === '' ? '' : draft.value}
             onChange={event => {
               const nextDraft = { unit: draft.unit, value: event.target.value }
               if (key === 'width') setWidth(nextDraft)
@@ -142,7 +157,7 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
               max={slider.max}
               step={slider.step}
               unit={slider.unit}
-              disabled={draft.unit === '' || draft.unit === 'auto'}
+              disabled={draft.unit === ''}
               onChange={nextValue => {
                 const nextDraft = { unit: draft.unit, value: String(nextValue) }
                 if (key === 'width') setWidth(nextDraft)
@@ -152,6 +167,7 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
             />
           </div>
         )}
+        <p className="dsh-iui-edit-props-desc" data-dsh-iui-edit-props-desc>{description}</p>
       </div>
     )
   }
@@ -197,7 +213,7 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
               />
             ) : null}
           </div>
-          {lengthRow('width', t('edit.propsWidth'), width, false)}
+          {lengthRow('width', t('edit.propsWidth'), width)}
           <div data-dsh-iui-edit-prop="thickness">
             <div className="dsh-iui-edit-props-row">
               <span className="dsh-iui-edit-props-label">{t('edit.propsThickness')}</span>
@@ -236,8 +252,8 @@ export function QuickBlockProps({ t, componentType, props, onChange }: QuickBloc
         </>
       ) : (
         <>
-          {lengthRow('width', t('edit.propsWidth'), width, true)}
-          {lengthRow('height', t('edit.propsHeight'), height, true)}
+          {lengthRow('width', t('edit.propsWidth'), width)}
+          {lengthRow('height', t('edit.propsHeight'), height)}
         </>
       )}
     </div>

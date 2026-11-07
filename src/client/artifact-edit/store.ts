@@ -20,11 +20,13 @@ import { useEffect, useSyncExternalStore } from 'react'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_REVISION_ROUTE_PATH,
+  ARTIFACT_STYLE_EDIT_KIND,
   MAX_ARTIFACT_ADDITIONS,
   MAX_ARTIFACT_BATCH_REQUESTS,
   MAX_BLOCK_INSTRUCTION_CHARS,
   MAX_ARTIFACT_DRAFTS,
   MAX_ARTIFACT_PROGRAM_CHARS,
+  MAX_STYLE_INSTRUCTION_CHARS,
   describeEditRequestProblem,
   describeTargetOrderProblem,
   isArtifactRevisionStatus,
@@ -34,6 +36,7 @@ import {
   type ArtifactBlock,
   type ArtifactBlockEdit,
   type ArtifactEditRequest,
+  type ArtifactStyleEditRequest,
 } from '../../shared/artifact-edit.ts'
 import { extractArtifactBlocks, wrapProgramForBlockEditing } from '../../shared/artifact-blocks.ts'
 import { buildArtifactTree, replaceNodeContent } from '../../shared/program-cst.ts'
@@ -49,6 +52,7 @@ import {
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
+import { ensureArtifactBase, invalidateArtifactBase, type ArtifactBaseOutcome } from './artifact-base.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
@@ -77,7 +81,7 @@ export type SerializeOutcome =
      * chip whose edit session no longer exists (`stale`). `missing` is reserved
      * for an empty/internal reference that never named a session.
      */
-    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing' | 'temporary_order'
+    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing' | 'temporary_order' | 'style_mixed' | 'style_unsupported'
   }
 
 interface SessionMapSnapshot {
@@ -94,16 +98,52 @@ const activeKeys = new Map<string, string>()
 let snapshot: SessionMapSnapshot = { sessions: new Map() }
 let bridge: ArtifactComposerBridge | undefined
 let translate: Translate = fallbackT
+/**
+ * Host capability for revision-bound style editing, learned from the mode
+ * projection. `undefined` until the projection is known; `false` on an old Host,
+ * where style instructions are dropped so no unreadable envelope is ever sent.
+ */
+let styleEditSupported: boolean | undefined
+
+/**
+ * Record the Host's style-edit capability from the current mode projection.
+ *
+ * When the capability disappears (an old/upgraded-away Host), every pending
+ * style instruction is cleared and its draft re-persisted, because such a Host
+ * cannot parse a style envelope. Clearing is silent and keeps block edits.
+ * @param supported - true when the Host announced the capability.
+ */
+export function setArtifactStyleEditSupported(supported: boolean): void {
+  if (styleEditSupported === supported) return
+  styleEditSupported = supported
+  if (supported) return
+  const changedSessions = new Set<string>()
+  for (const [key, session] of sessions) {
+    if (session.styleInstruction.trim() === '') continue
+    sessions.set(key, { ...session, styleInstruction: '' })
+    scheduleDraftPersist(key)
+    changedSessions.add(session.sessionId)
+  }
+  if (changedSessions.size === 0) return
+  publish()
+  for (const sessionId of changedSessions) scheduleChipSync(sessionId, true)
+}
+
+/** Whether the Host supports style editing; undefined before the projection arrives. */
+export function isArtifactStyleEditSupported(): boolean | undefined {
+  return styleEditSupported
+}
 
 /** Whether one draft currently holds unsent edit content. */
 export function hasArtifactEditContent(
-  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction'> & { readonly nestedOrderChanged?: boolean },
+  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction'> & { readonly nestedOrderChanged?: boolean },
 ): boolean {
   return session.selection.length > 0
     || (session.additions?.length ?? 0) > 0
     || session.orderChanged
     || session.nestedOrderChanged === true
     || session.globalInstruction.trim() !== ''
+    || session.styleInstruction.trim() !== ''
 }
 
 /** Whether a draft counts against the per-chat draft cap and shows in the switcher. */
@@ -183,6 +223,8 @@ interface PersistedDraft {
   readonly orderChanged: boolean
   readonly selection: readonly { readonly blockId: string; readonly order: number; readonly instruction: string }[]
   readonly globalInstruction: string
+  /** Optional for drafts persisted before style editing existed. */
+  readonly styleInstruction?: string
   readonly attached: boolean
 }
 
@@ -272,6 +314,7 @@ function serializePersistedDraft(session: ArtifactEditSession): string | undefin
       instruction: entry.instruction,
     })),
     globalInstruction: session.globalInstruction,
+    ...session.styleInstruction.trim() === '' ? {} : { styleInstruction: session.styleInstruction },
     attached: session.attached,
   }
   try {
@@ -372,6 +415,11 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
   if (!record.targetOrder.every(entry => typeof entry === 'string')) return undefined
   if (typeof record.orderChanged !== 'boolean' || typeof record.attached !== 'boolean') return undefined
   if (typeof record.globalInstruction !== 'string') return undefined
+  // Tolerant migration: drafts persisted before style editing simply lack the
+  // field; a corrupt one is dropped rather than failing the whole draft.
+  const styleInstruction = typeof record.styleInstruction === 'string'
+    ? record.styleInstruction.slice(0, MAX_STYLE_INSTRUCTION_CHARS)
+    : ''
   if (!Array.isArray(record.selection)) return undefined
   const selection: PersistedDraft['selection'][number][] = []
   for (const entry of record.selection) {
@@ -399,6 +447,7 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
     orderChanged: record.orderChanged,
     selection,
     globalInstruction: record.globalInstruction,
+    ...styleInstruction === '' ? {} : { styleInstruction },
     attached: record.attached,
   }
 }
@@ -458,6 +507,7 @@ export function ensureArtifactDraft(key: string): ArtifactEditSession | undefine
     orderChanged: isReorderedOrder(blockIds, record.targetOrder),
     selection,
     globalInstruction: record.globalInstruction.slice(0, 4000),
+    styleInstruction: styleEditSupported === false ? '' : (record.styleInstruction ?? '').slice(0, MAX_STYLE_INSTRUCTION_CHARS),
     editing: false,
     drawerOpen: false,
     status: 'ready',
@@ -467,6 +517,9 @@ export function ensureArtifactDraft(key: string): ArtifactEditSession | undefine
   sessions.set(key, session)
   persistedDrafts.set(key, raw)
   referenceForSession(key)
+  // An old Host cannot parse a style envelope: keep the restored draft but drop
+  // its instruction and rewrite the persisted copy without it.
+  if (styleEditSupported === false && (record.styleInstruction ?? '') !== '') scheduleDraftPersist(key)
   publish()
   scheduleChipSync(record.sessionId)
   return session
@@ -706,6 +759,33 @@ function lineageOf(program: IntelligentUIProgram): { artifactId: string; baseRev
   }
 }
 
+/**
+ * Ensure the Host recorded the authoritative base program for one draft's
+ * rendered revision. Fire-and-forget callers dedupe through the module cache;
+ * authoritative operations await it and proceed even when it is unavailable.
+ * @param session - draft facts naming the rendered revision and its program.
+ * @returns the registration outcome (never throws).
+ */
+function ensureBaseForSession(session: Pick<ArtifactEditSession, 'artifactId' | 'baseRevisionId' | 'program'>): Promise<ArtifactBaseOutcome> {
+  return ensureArtifactBase({
+    artifactId: session.artifactId,
+    revisionId: session.baseRevisionId,
+    program: session.program,
+  })
+}
+
+/**
+ * Drop the cached base registration after the Host reports it is missing, so
+ * the next authoritative operation re-posts the rendered program instead of
+ * serving a stale success (the Host may have evicted the program after our
+ * registration, or the record may have disappeared with an older Host).
+ * @param session - draft facts naming the affected revision.
+ * @param code - Host error code of the failed operation, when one was parsed.
+ */
+function invalidateBaseAfterMiss(session: Pick<ArtifactEditSession, 'artifactId' | 'baseRevisionId'>, code: string | undefined): void {
+  if (code === 'base_missing' || code === 'artifact_missing') invalidateArtifactBase(session.artifactId, session.baseRevisionId)
+}
+
 /** Make one draft the chat's active canvas and close every other canvas. */
 function activateKeyFor(sessionId: string, key: string): void {
   for (const [otherKey, other] of sessions) {
@@ -873,6 +953,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
 
   // Retained draft: show its canvas again without touching the content.
   if (existing !== undefined && existing.status !== 'submitted') {
+    void ensureBaseForSession(existing)
     activateKeyFor(sessionId, key)
     patch(key, session => ({
       ...session,
@@ -927,6 +1008,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       orderChanged: false,
       selection: [],
       globalInstruction: '',
+      styleInstruction: '',
       editing: true,
       drawerOpen: false,
       status: 'checking',
@@ -935,11 +1017,13 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     }
     sessions.set(key, created)
     publish()
+    void ensureBaseForSession(created)
     checkRevision(key)
     return { ok: true }
   }
 
   // Submitted draft reused: content was sent, so this is a fresh draft.
+  void ensureBaseForSession(existing)
   activateKeyFor(sessionId, key)
   patch(key, session => ({
     ...session,
@@ -953,6 +1037,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     selection: [],
     removable: undefined,
     globalInstruction: '',
+    styleInstruction: '',
     targetOrder: extraction.blocks.map(block => block.blockId),
     orderChanged: false,
     nestedMode: false,
@@ -1190,6 +1275,27 @@ export function setArtifactGlobalInstruction(key: string, text: string): void {
   scheduleDraftPersist(key)
 }
 
+/**
+ * Replace the natural-language style instruction of one draft.
+ *
+ * The text is capped at the contract bound and persisted with the draft; the
+ * composer chip label follows immediately (style takes precedence over block
+ * facts). A draft with a style instruction can no longer carry block edits —
+ * serialize rejects that mix before sending.
+ * @param key - edit-session key.
+ * @param text - new style requirement (may be empty to clear).
+ */
+export function setArtifactStyleInstruction(key: string, text: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted') return
+  const next = text.slice(0, MAX_STYLE_INSTRUCTION_CHARS)
+  if (session.styleInstruction === next) return
+  sessions.set(key, { ...session, styleInstruction: next })
+  publish()
+  scheduleChipSync(session.sessionId)
+  scheduleDraftPersist(key)
+}
+
 /** Build parent display id -> child display ids groups from a nested block map. */
 function orderGroups(blocks: readonly { blockId: string; parentBlockId?: string }[]): Record<string, string[]> {
   const groups: Record<string, string[]> = {}
@@ -1418,6 +1524,46 @@ function diffProgramLines(before: string, after: string): ArtifactStructurePrevi
   return lines
 }
 
+/** Host error code carried by one failed authoritative response body. */
+function failureCodeOf(value: unknown): string | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const error = (value as { error?: unknown }).error
+  if (error === null || typeof error !== 'object') return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : undefined
+}
+
+/**
+ * Locale copy for one failed authoritative operation.
+ *
+ * Structure preview, the structure apply POST and quick adjust share this
+ * mapping, so artifact_missing/base_missing always explain the missing
+ * registration or evicted record (and the close/reopen, re-render and
+ * instruction-edit paths) instead of ending in a blind retry. Other codes keep
+ * the operation-specific prompt.
+ * @param input - Host error code, which surface failed, and its generic key.
+ * @returns the message shown for that operation.
+ */
+function structureFailureMessage(input: {
+  readonly code: string | undefined
+  readonly surface: 'structure' | 'props'
+  readonly failureKey: string
+}): string {
+  const { code, surface, failureKey } = input
+  if (code === 'artifact_missing' || code === 'base_missing') {
+    if (surface === 'props') return translate(code === 'artifact_missing' ? 'edit.propsMissingArtifact' : 'edit.propsNoBase')
+    return translate('edit.structureBaseMissing')
+  }
+  if (surface === 'props' && code === 'base_not_latest') return translate('edit.propsStale')
+  if (surface === 'props' && code === 'no_change') return translate('edit.propsNoChange')
+  return translate(failureKey)
+}
+
+/** Quick-adjust fallback state recorded with the unified missing-base copy. */
+function propsFallbackFor(code: string | undefined): 'base_missing' | 'artifact_missing' | undefined {
+  return code === 'base_missing' ? 'base_missing' : code === 'artifact_missing' ? 'artifact_missing' : undefined
+}
+
 /** Preview one deterministic structure operation without recording a revision. */
 async function previewStructureOperation(
   key: string,
@@ -1440,6 +1586,7 @@ async function previewStructureOperation(
     structureError: undefined,
   })
   publish()
+  await ensureBaseForSession(session)
   try {
     const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
       method: 'POST',
@@ -1459,11 +1606,21 @@ async function previewStructureOperation(
       }),
     })
     const value: unknown = await response.json().catch(() => undefined)
-    if (!response.ok || !isArtifactStructurePreview(value)) {
-      const message = translate(failureKey)
+    if (!response.ok) {
+      const code = failureCodeOf(value)
+      invalidateBaseAfterMiss(session, code)
+      const message = structureFailureMessage({ code, surface: 'structure', failureKey })
       sessions.set(key, {
         ...session,
         structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: message },
+      })
+      publish()
+      return
+    }
+    if (!isArtifactStructurePreview(value)) {
+      sessions.set(key, {
+        ...session,
+        structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: translate(failureKey) },
       })
       publish()
       return
@@ -1735,6 +1892,7 @@ async function submitStructureOperation(
   }
   sessions.set(key, { ...session, structureBusy: true, structureError: undefined })
   publish()
+  await ensureBaseForSession(session)
   try {
     const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
       method: 'POST',
@@ -1753,30 +1911,12 @@ async function submitStructureOperation(
       }),
     })
     if (!response.ok) {
-      let code: string | undefined
-      try {
-        const body: unknown = await response.json()
-        if (body !== null && typeof body === 'object') {
-          const error = (body as { error?: unknown }).error
-          if (error !== null && typeof error === 'object') code = String((error as { code?: unknown }).code ?? '')
-        }
-      } catch { /* fall through to the generic message */ }
-      const message = code === 'base_missing' || code === 'artifact_missing'
-        ? translate(surface === 'props' ? 'edit.propsBaseMissing' : 'edit.structureBaseMissing')
-        : surface === 'props' && code === 'base_not_latest'
-          ? translate('edit.propsStale')
-          : surface === 'props' && code === 'no_change'
-            ? translate('edit.propsNoChange')
-            : translate(failureKey)
-      const fallback = surface === 'props' && code === 'base_missing'
-        ? 'base_missing'
-        : surface === 'props' && code === 'artifact_missing'
-          ? 'artifact_missing'
-          : undefined
-      fail(fallback === undefined
-        ? message
-        : translate(fallback === 'base_missing' ? 'edit.propsNoBase' : 'edit.propsMissingArtifact'),
-      fallback === undefined ? undefined : { propsFallback: fallback })
+      const body: unknown = await response.json().catch(() => undefined)
+      const code = failureCodeOf(body)
+      invalidateBaseAfterMiss(session, code)
+      const fallback = surface === 'props' ? propsFallbackFor(code) : undefined
+      fail(structureFailureMessage({ code, surface, failureKey }),
+        fallback === undefined ? undefined : { propsFallback: fallback })
       return
     }
     const value: unknown = await response.json()
@@ -2086,12 +2226,48 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // composer was busy while the store removed it; never send the same draft twice.
   if (session.status === 'submitted') return { ok: false, problem: 'stale' }
   const globalInstruction = session.globalInstruction.trim()
+  const styleInstruction = session.styleInstruction.trim()
   if (session.selection.length === 0
     && (session.additions?.length ?? 0) === 0
     && !session.orderChanged
     && session.nestedOrderChanged !== true
-    && globalInstruction === '') return { ok: false, problem: 'empty' }
+    && globalInstruction === ''
+    && styleInstruction === '') return { ok: false, problem: 'empty' }
   if (session.selection.some(item => item.instruction.trim() === '')) return { ok: false, problem: 'empty_instruction' }
+  // A style instruction sends its own envelope and can never be combined with
+  // block content/arrangement/global requirements (the Host has one apply path
+  // per request kind). An old Host that cannot parse style envelopes refuses it.
+  const hasBlockContent = session.selection.length > 0
+    || (session.additions?.length ?? 0) > 0
+    || session.orderChanged
+    || session.nestedOrderChanged === true
+    || globalInstruction !== ''
+  if (styleInstruction !== '') {
+    if (styleEditSupported === false) return { ok: false, problem: 'style_unsupported' }
+    if (hasBlockContent) return { ok: false, problem: 'style_mixed' }
+    const styleRequest: ArtifactStyleEditRequest = {
+      kind: ARTIFACT_STYLE_EDIT_KIND,
+      schemaVersion: 1,
+      requestId: session.requestId,
+      artifactId: session.artifactId,
+      baseRevisionId: session.baseRevisionId,
+      baseRevision: session.baseRevision,
+      ...session.branch === true ? { branch: true } : {},
+      ...session.title === undefined ? {} : { title: session.title },
+      style: session.style,
+      ...session.styleId === undefined || session.temporaryStyle !== undefined ? {} : { styleId: session.styleId },
+      ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+      styleInstruction,
+      program: session.program,
+    }
+    if (describeEditRequestProblem(styleRequest) !== undefined) return { ok: false, problem: 'invalid' }
+    // Branch drafts are allowed to target an older base; the Host re-validates
+    // the branch on apply. Non-branch drafts keep the strict latest-head guard.
+    const styleProbe = await probeRevision(session)
+    if (styleProbe.result === 'conflict' && session.branch !== true) return { ok: false, problem: 'conflict' }
+    markSubmitted(key)
+    return { ok: true, request: styleRequest }
+  }
   const edits: ArtifactBlockEdit[] = [...session.selection]
     .sort((a, b) => a.order - b.order)
     .map(item => {
@@ -2189,6 +2365,8 @@ export function editProblemMessage(problem: Extract<SerializeOutcome, { ok: fals
     case 'missing': return t('edit.errorSend', { error: t('edit.errorCheck') })
     case 'invalid': return t('edit.errorInvalid')
     case 'temporary_order': return t('edit.errorTemporaryOrder')
+    case 'style_mixed': return t('edit.styleMixed')
+    case 'style_unsupported': return t('edit.styleUnavailable')
   }
 }
 
@@ -2197,16 +2375,20 @@ export interface EditChipFacts {
   readonly count: number
   readonly reordered: boolean
   readonly hasGlobal: boolean
+  /** Natural-language style edit takes precedence over block facts. */
+  readonly style?: boolean
 }
 
 /**
  * Localized composer chip summary for the current request shape:
  * order-only, N content edits, or N edits + arrangement (plus optional global note).
+ * A style edit is always labelled first: it cannot be combined with block content.
  * @param facts - request counts and flags.
  * @returns the summary label.
  */
 export function editChipLabel(facts: EditChipFacts): string {
   const t = translate
+  if (facts.style === true) return t('edit.chipTail.style')
   let base = t('edit.chip.order')
   if (facts.count > 0 && facts.reordered) base = t('edit.chip.mixed', { count: facts.count })
   else if (facts.count > 0) base = t('edit.chip.edits', { count: facts.count })
@@ -2221,20 +2403,23 @@ export function editChipLabel(facts: EditChipFacts): string {
  * @param session - draft whose chip label is requested.
  * @returns the localized label.
  */
-export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[] }): string {
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[] }): string {
   const t = translate
   const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
   const count = session.selection.length + (session.additions?.length ?? 0)
   const reordered = session.orderChanged || session.nestedOrderChanged === true
   const hasGlobal = session.globalInstruction.trim() !== ''
-  let summary = count > 0 && reordered
-    ? t('edit.chipTail.mixed', { count })
-    : count > 0
-      ? t('edit.chipTail.edits', { count })
-      : reordered
-        ? t('edit.chipTail.order')
-        : t('edit.chipTail.global')
-  if (hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
+  const hasStyle = session.styleInstruction.trim() !== ''
+  let summary = hasStyle
+    ? t('edit.chipTail.style')
+    : count > 0 && reordered
+      ? t('edit.chipTail.mixed', { count })
+      : count > 0
+        ? t('edit.chipTail.edits', { count })
+        : reordered
+          ? t('edit.chipTail.order')
+          : t('edit.chipTail.global')
+  if (!hasStyle && hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
   const branchSuffix = session.branch === true ? t('edit.chip.branchSuffix') : ''
   return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}${branchSuffix}`
 }

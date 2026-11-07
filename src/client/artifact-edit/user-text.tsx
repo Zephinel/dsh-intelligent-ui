@@ -20,6 +20,8 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
       readonly globalOnly: boolean
       readonly reordered: boolean
       readonly hasGlobal: boolean
+      /** Natural-language style envelope: labelled first, never combined with block facts. */
+      readonly style: boolean
     }
   }
 }
@@ -35,7 +37,7 @@ export const artifactEditSummaryRule: UserTextRule<'artifact-edit-summary'> = {
       id: ARTIFACT_EDIT_SUMMARY,
       start: range.start,
       end: range.end,
-      data: { count: range.count, globalOnly: range.globalOnly, reordered: range.reordered, hasGlobal: range.hasGlobal },
+      data: { count: range.count, globalOnly: range.globalOnly, reordered: range.reordered, hasGlobal: range.hasGlobal, style: range.style },
     }
   },
 }
@@ -51,6 +53,7 @@ type SummaryProps = UserTextNodeProps<'artifact-edit-summary'> & PropsLocale<typ
 export function ArtifactEditSummary({ node, raw, t }: SummaryProps): React.ReactElement {
   const count = node.data.count
   const reordered = node.data.reordered === true
+  if (node.data.style === true) return <ReferenceChip appearance="file" label={t('edit.chip.style')} title={raw} />
   let label = count > 0 && reordered
     ? t('edit.chip.mixed', { count })
     : count > 0

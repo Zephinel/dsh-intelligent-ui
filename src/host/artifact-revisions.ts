@@ -16,6 +16,7 @@ import {
 import { extractArtifactBlocks } from '../shared/artifact-blocks.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.ts'
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
+import type { ResultStore } from './result-store.ts'
 
 /** Retained revision records; oldest creation times are dropped first. */
 export const MAX_ARTIFACT_REVISIONS = 400
@@ -25,6 +26,8 @@ export const MAX_RESTORE_BODY_BYTES = 300 * 1024
 
 /** Revision id prefix for local restores; the suffix is 16 random hex characters. */
 const RESTORE_REVISION_PREFIX = 'restore_'
+/** Revision id prefix for deterministic structure operations (see `artifact-structure.ts`). */
+const STRUCTURE_REVISION_PREFIX = 'struct_'
 
 /** Session identity recorded for revisions created without a model turn. */
 const RESTORE_SESSION_ID = 'local-restore'
@@ -109,8 +112,22 @@ function validate(revisions: unknown): asserts revisions is ArtifactRevisionReco
   }
 }
 
-/** Open the durable revision registry stored beside the other extension files. */
-export function createArtifactRevisionStore(ctx: { logger?: { warn(message: string): void } } = {}): ArtifactRevisionStore {
+/**
+ * Open the durable revision registry stored beside the other extension files.
+ *
+ * When a result store sink is supplied, a revision carrying a result-owned
+ * `temporaryStyle` first records that snapshot in the result registry and only
+ * then writes the revision: a revision must never exist without the snapshot
+ * its later restore/adjustment paths read. The snapshot is not backfilled for
+ * revisions recorded before this boundary existed (non-goal), and a caller can
+ * retry the whole call after a failed write.
+ * @param ctx - optional logger for corrupt-registry warnings.
+ * @param results - optional result snapshot sink; omit for a metadata-only store.
+ */
+export function createArtifactRevisionStore(
+  ctx: { logger?: { warn(message: string): void } } = {},
+  results?: Pick<ResultStore, 'record'>,
+): ArtifactRevisionStore {
   const file = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'dsh-intelligent-ui-artifacts.json')
   let revisions: ArtifactRevisionRecord[] = []
   let corrupt = false
@@ -154,6 +171,20 @@ export function createArtifactRevisionStore(ctx: { logger?: { warn(message: stri
       if (existing !== undefined) {
         if (JSON.stringify(existing) !== JSON.stringify(record)) throw new Error('Artifact revisions are immutable')
         return
+      }
+      // Snapshot first, revision second: the result registry is what later
+      // restore/adjustment paths read, so it must never lag the revision it
+      // belongs to. A failure here aborts before the revisions file is touched.
+      if (record.temporaryStyle !== undefined && results !== undefined) {
+        results.record({
+          resultId: record.revisionId,
+          sessionId: record.sessionId,
+          snapshot: record.temporaryStyle,
+          ...(record.baseRevisionId === undefined || record.baseRevisionId === record.revisionId
+            ? {}
+            : { parentResultId: record.baseRevisionId }),
+          createdAt: record.createdAt,
+        })
       }
       const next = [...revisions, structuredClone(record)]
         .sort((a, b) => a.createdAt - b.createdAt)
@@ -268,6 +299,12 @@ function readRestoreJson(req: IncomingMessage): Promise<unknown> {
 /** Which pipeline created one recorded revision. */
 function historySource(record: ArtifactRevisionRecord): ArtifactHistorySource {
   if (record.revisionId.startsWith(RESTORE_REVISION_PREFIX)) return 'restore'
+  // Structure operations mint `struct_<16 hex>` ids; their revisions often carry
+  // `editedBlockIds` but are not block-content edits.
+  if (record.revisionId.startsWith(STRUCTURE_REVISION_PREFIX)) return 'structure'
+  // A style-only revision (B1 style editing) keeps the result-owned snapshot and
+  // changes no block: no new durable source value, inferred as an edit.
+  if (record.temporaryStyle !== undefined && (record.editedBlockIds?.length ?? 0) === 0) return 'edit'
   if ((record.editedBlockIds?.length ?? 0) > 0) return 'edit'
   return 'structure'
 }

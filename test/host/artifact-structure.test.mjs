@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { EventEmitter } from 'node:events'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -190,6 +190,27 @@ test('the authoritative program registry persists, reloads and prunes by LRU bou
   assert.equal(reopened.lookup('art-1', 'rev-3'), 'root = Col([Text("c")])')
   assert.throws(() => reopened.record({ artifactId: 'art-1', revisionId: 'rev-1', program: 'root = Col([Title("other")])' }), /immutable/)
   assert.ok(MAX_PROGRAM_RECORDS >= 200)
+})
+
+test('a failed program-store write leaves no phantom record and can be retried', () => {
+  const home = tempHome('iui-artifact-programs-atomic-')
+  const file = join(home, 'dsh-intelligent-ui-programs.json')
+  const store = createArtifactProgramStore()
+  chmodSync(home, 0o555)
+  try {
+    assert.throws(
+      () => store.record({ artifactId: 'art-1', revisionId: 'rev-1', program: 'root = Col([Text("a")])' }),
+      /EACCES|permission/i,
+    )
+  } finally {
+    chmodSync(home, 0o755)
+  }
+  assert.equal(store.lookup('art-1', 'rev-1'), undefined, 'a failed write leaves no phantom record')
+  assert.equal(store.size(), 0)
+  assert.equal(existsSync(file), false)
+  store.record({ artifactId: 'art-1', revisionId: 'rev-1', program: 'root = Col([Text("a")])' })
+  assert.equal(store.lookup('art-1', 'rev-1'), 'root = Col([Text("a")])')
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).programs.length, 1)
 })
 
 test('render_ui and edit_ui_blocks successful results feed the authoritative registry', async () => {

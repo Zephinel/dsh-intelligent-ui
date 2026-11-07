@@ -44,6 +44,7 @@ function Shot() {
   }), [formState])
   if (shot === 'settings') return <SettingsPage styles={styles} settingsForm={settingsForm as never} t={t} />
   if (shot === 'result') return <IntelligentUICards turn={{ turn: 1 } as never} styles={styles} sessionId="e2e-session"
+    useProjection={() => ({ ...base, styleEdit: true }) as never}
     usePrograms={() => nodes as never} adjustStyle={async () => null} t={t} />
   return <div data-screenshot-composer>
     {shot === 'hint' ? <div data-composer-overlay><OnDemandHint useProjection={() => ({ ...view, onDemand: {

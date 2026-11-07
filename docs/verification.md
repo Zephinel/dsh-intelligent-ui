@@ -16,7 +16,7 @@
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
-- **Style panel 浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 先用无头 Chrome + CDP 加载 `test/browser/harness` 的 `ToggleControl`，验证 chip → menu（无「全部会话」、含「显示样式」）→ 仅本会话 → 样式面板，以及面板内返回按钮回到作用域菜单而不是关闭全部浮层、返回后焦点落在「显示样式」行；菜单宽度按内容且不小于 208px、右缘与 chip 对齐、统一最小行高与间距、分割线内缩、展开时 chevron 旋转 180°；关闭开关后「显示样式」仍显示但为 disabled，点击不能打开面板；面板矩形完全在视口内，焦点进入面板；拖动真实滑杆到 Article 后发出 `style:article`；Escape 关闭后焦点回到 chip。该测试不启动完整 DSH Web，也不替代 Host/Client 集成 E2E。
+- **Style panel 浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 先用无头 Chrome + CDP 加载 `test/browser/harness` 的 `ToggleControl`，验证 chip → menu（无「全部会话」、含「显示样式」）→ 切换「仅本会话」只发 `enable:on` 且**不**自动打开样式面板 → 再点已激活项或「显示样式」行才打开面板，以及面板内返回按钮回到作用域菜单而不是关闭全部浮层、返回后焦点落在「显示样式」行；菜单宽度按内容且不小于 208px、右缘与 chip 对齐、统一最小行高与间距、分割线内缩、展开时 chevron 旋转 180°；关闭开关后「显示样式」仍显示但为 disabled，点击不能打开面板；面板矩形完全在视口内，焦点进入面板；拖动真实滑杆到 Article 后发出 `style:article`；Escape 关闭后焦点回到 chip。该测试不启动完整 DSH Web，也不替代 Host/Client 集成 E2E。
 - **图片导出浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 随后加载 `test/browser/harness/export-entry.tsx`：真实 `ExportAction` + 真实渲染器卡片 + 两个入口（其中一个的 Chat selector 经结构化快照运行真实的 `messageHasRenderUi` 并报告无渲染输出），卡片里是真实的 `SearchImage`，其 Wikipedia 查询由 harness stub 到本地 SVG。断言只有扩展回答出现导出药丸按钮（带可见「导出」文案、`order:1`、贴齐操作栏右缘）；导出菜单右缘与按钮对齐、宽度按内容，上方空间不足时翻到按钮下方，并在触发 scroll 后立即关闭；打开菜单依次导「原始」「卡片」和「圆角 2x」：卡片初始为折叠态，截图时已展开、完成后退回折叠；3D 翻面已展平为可见面、过渡/动画已冻结、lazy 图片改为 eager 且完成加载；harness 用带同样就绪属性的假地图验证导出会等待 resize 后的地图就绪；card 帧尺寸比 raw 多出两侧 padding + 阴影留白且底部留白能采到非零阴影像素，圆角 2x 帧尺寸为 raw 的 2 倍再加 2x padding。该测试不启动完整 DSH Web；跨域 Wikimedia 图片的抓取另用同一 session 程序手工复现（见下一条）。
 - **交互页面浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 的交互页面脚本把真实的 `lib/standalone.js` / `lib/standalone.css`、当前主题快照与两张卡片程序交给 `buildStandaloneHtml` 生成单文件 HTML，直接在无头 Chrome 中打开该文件：断言页面没有外部 script/stylesheet 引用、体积 ≥3.4 MB、两张卡片的正文都挂载且没有标题栏/折叠控件、内联主题改变页面背景，并点击一个 `@ToAssistant` 按钮确认页面复制兜底会弹出提示而不调用 DSH；随后打开开启「移除追问操作」的同一页面，断言混排 Card 只隐藏追问控件（Form 字段随之移除）并保留正文、根级追问只隐藏控件而不隐藏页面、纯追问 Card 整块消失、非追问的 `@OpenUrl` 按钮仍可见，并检查没有 `html` 级隐藏属性。图片导出 E2E 也验证同一语义：混排 Card 保留正文、纯追问 Card 不进入 PNG（截图高度变小）。该测试不启动 DSH Web。
 - **自定义选色器浏览器 E2E（组件级，可复跑）**：`npm run test:browser` 的 settings-picker 脚本渲染真实 Plugin 详情页，断言原生 `input[type=color]` 已移除、背景色触发器和 12 个预设色块存在；点击预设会保存 `exportBackground`，输入十六进制并按 Enter 会保存并关闭面板；真实鼠标的“hex 有焦点时点预设”和“输入后点面板外”路径分别验证预设获胜、有效草稿被提交。
@@ -304,3 +304,102 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 0.5.0 首次发布尝试在 CI 的 `typography-check` 出现一次瞬时失败（`Chrome did not expose the page target`），重跑成功。`test/support/browser.mjs` 现在在启动后 10 秒内未出现 page target 时会杀掉进程、换新 profile 与端口重启 Chrome，最多 3 次；`connectCdp` 复用同一等待逻辑。这是测试基础设施改动，不影响发布物。
 
 验证（本地，macOS + Chrome）：`npm run check` PASS（Node **247/247**；renderer 解析/渲染各 **42/42**、CSS 契约 **50/50**、组件契约 **63/63**、typography **22/22**、media-row **17/17**、pressable **9/9**）；`npm run test:browser` **7/7**（on-demand 114、settings 101、standalone 46、export-image 65 条断言）。本轮未发布新版本；下次打 tag 会包含该加固。
+
+## 2026-11-07 — Artifact 基础登记生命周期（未提交工作树）
+
+本条对应当前 main 工作树中尚未提交的基础登记增量（`src/shared/artifact-base.ts`、`src/host/artifact-base.ts`、`src/client/artifact-edit/artifact-base.ts` 以及结构/历史/恢复接线），不是发布验收；npm `latest` 仍为 `0.5.0`。它修复「权威程序 registry 出现之前渲染的卡片无法进入权威状态」的根因：新增一次性、写一次的基础登记生命周期与统一 base resolve/失败边界，覆盖初始锚（`revisionId === artifactId`）与已记录锚两种 provenance。未做回填/后台迁移，未改模型路径，未提交、未推送，未重启 `dsh-web`，也未运行真实模型会话。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run build:host` | PASS；`lib/index.js` **823.0 kB** |
+| `node --test test/host/*.test.mjs` | PASS；**253/253**（新增 `test/host/artifact-base.test.mjs` **12** 条） |
+| `node --test test/client/*.test.mjs` | PASS；**257/257**（新增 `test/client/artifact-base.test.mjs` **5** 条、`test/client/artifact-edit.test.mjs` 新增 3 条） |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**406 checks**（场景 36 新增基础登记、登记先于结构请求、旧 Host 404 降级与统一失败文案断言） |
+| `npm run test:renderer` | PASS；parse **42/42**、render **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
+| `npm run check` | **未完全 PASS**：`tsc --noEmit` PASS、build PASS；Node **531** 条中 **529 通过 / 2 失败**。两条失败均为打包测试，来自工作树中其他增量的待提交 README 真实截图资产：`test/packaging/manifest.test.mjs` 断言 `assets/` 为 28 张而实际 32 张；`test/packaging/references.test.mjs` 断言 `skills/intelligent-ui/references/integration.md` 引用的随包文件应为 63 个而文中仍写 59。二者都不读取本增量产物，属既有基线 delta；`skills/`、README 与资产归其他成员，本任务未修改。renderer 阶段因 `npm test` 非零未在 `check` 内执行，已单独运行并通过（上一行）。 |
+| `npm run pack:check` | PASS；**63** 个文件，压缩 **5,730,101** 字节，解包 **12,512,663** 字节（`prepare` 先重建） |
+| 构建产物 | Host **823.0 kB**；Client **4.00 MB**（js 3.79 MB + css 215.7 kB）；standalone **3.33 MB + 514.4 kB** |
+
+### 覆盖范围
+
+- Host：`POST /api/intelligent-ui/artifact-base` 注册与 disposer、认证先于方法分发、POST-only/content-type/坏 JSON/>1 MiB → 413、字段与 program 校验、初始锚与已记录锚登记、写一次 no-op 与 409 `program_conflict`、unknown revision 与外 artifact 记录、已记录锚解锁结构操作/历史/restore；无模型端到端升级：登记 → 结构 preview/apply **201 revision 2** → 历史含初始 revision 与 revision 2 → restore 初始 **201 revision 3**；结构路由 `artifact_missing`/`base_missing` 语义与文案回归。
+- Client：`ensureArtifactBase` single-flight、成功缓存、旧 Host 404 → `unsupported` 能力缓存（同一 revision 不再探测）、网络/畸形响应可重试且从不抛出；打开编辑画布/结构 preview+apply/修订历史/restore 的接线；preview 现在解析 `error.code`，preview/apply/props 共用统一缺失 base 文案（含关闭重开、重新渲染、指令编辑路径）。
+- 未覆盖：真实模型 DSH 会话、真实旧 Host 进程、`dsh-web` 重启后的真实 GUI（用户未批准重启）；浏览器证据来自临时 HTTP server + headless Chrome harness，不是完整 DSH Web 集成。
+
+## 2026-11-07 — README 真实会话截图、快捷调整单位与基础登记整合后的最终验证（未提交工作树）
+
+本条把同一天工作树中的三组增量放在一起做最终门禁并更新计数：README 生成区改为真实 DSH 会话截图；Divider/Spacer 快捷调整长度单位统一为默认/px/% 并补充说明；Artifact 基础登记生命周期（上一条已单独记录，本轮只做整合回归）。不是发布验收；npm `latest` 仍为 `0.5.0`；未提交、未推送、未重启 `dsh-web`。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；`tsc --noEmit` + build；Node **531/531** = Host **253** + Client **257** + packaging **21**；renderer 解析/渲染各 **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **406 checks**、`nested-edit-renderer` **75**、on-demand **114**、settings **101** 条断言等 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **5,989,503** 字节，解包 **12,783,390** 字节 |
+| `npm run capture:readme` | PASS；重新生成组件/编辑/总览/组件一览/控制/临时结果等 fixture 截图，使开关文案与当前代码一致；真实会话生成 Bento **未被覆盖**（`scripts/build-readme-bento.mjs` 已移除 generation 组，`scripts/build-readme-generation-bento.mjs` 独立组合） |
+| 文档/结构检查 | README 双语标题层级一致；截图引用、语言切换、clone URL、CHANGELOG 链接、本地链接/锚点通过；`git diff --check` PASS |
+
+### 覆盖范围
+
+- 真实会话截图：中英各一套三个不同类型的 Artifact（上海两日游行程、数据看板、交互小测），全部在运行中的 DSH GUI 由 DeepSeek V4.1 Flash · Max 真实生成后，从生产渲染的轮末卡片按 2× 捕获；原始捕获随包发布在 `assets/intelligent-ui-real-*`，组合图为 1600×1130 双语一致几何；来源、会话与提示词见 `docs/screenshots/real-generation.md`。`npm run capture:readme` 不能复现真实会话截图。
+- 快捷调整：Divider width 与 Spacer width/height 只提供默认/px/%，下拉选项与行下各带一句说明；旧 `auto` 仍被 Host/渲染器接受并显示为默认，真正改动前 Apply 禁用；Host/渲染器兼容未收紧。
+- 基础登记：见上一条记录；整合后 Node 总数与打包计数随其新增测试/文件更新。
+- 未覆盖：真实旧 Host 进程、`dsh-web` 重启后的客户端真实行为（用户未批准重启）；真实模型会话截图不可由脚本复现；屏幕阅读器/axe 未运行。
+
+
+## 2026-11-07 — 独立 review 修复与最终门禁（未提交工作树）
+
+本条记录两个只读 review subagent 的发现修复与最终门禁，不是发布验收；npm `latest` 仍为 `0.5.0`；未提交、未推送、未重启 `dsh-web`。
+
+### 修复范围
+
+- **F1（用户决定 A）**：`src/host/artifact-revisions.ts` 的 program-only 回退恢复原语义（source 记录缺失但权威 program 仍在即允许恢复，不额外校验初始身份；文件相对 HEAD 净零 diff），并新增"非初始孤儿 source 仍可恢复"回归测试。
+- **F2**：客户端 `artifact-base` 缓存在结构 preview/apply/props 返回 `artifact_missing`/`base_missing` 时失效（history 的 `hasProgram:false` 同样失效），带 in-flight 代际保护；关闭重开编辑确实会重新登记。
+- **F3**：program store 改为先写盘、成功后提交内存；写盘失败（如 EACCES）不再留下幽灵记录，可安全重试。
+- **F4**：base 校验同时限制 raw program 长度；尾随空格的超长 program 由 500 storage 改为 400 `invalid_program`。
+- **F5/F6**：英文 described 单位下拉获得更大的高度预算（272px，实测 239px 内容不再裁切）；Default 说明按行区分（Divider 宽度撑满列 / Spacer 宽度填满 Row / Spacer 高度通常为 0）。
+- **F7**：ensure-before-structure 测试改为先挂起 base 响应、断言 release 前无结构请求；移除 await 会使测试失败（mutation-checked）。
+- 证据文档 `docs/screenshots/real-generation.md` 的视口/尺寸/语言顺序陈述、维护参考、CHANGELOG 计数与 stale 陈述同步修正；zh 行程卡的 4× 原始捕获已同步进 `.tmp-report/real-generation/`。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；`tsc --noEmit` + build；Node **538/538** = Host **257** + Client **260** + packaging **21**；renderer 解析/渲染各 **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **422 checks**、`nested-edit-renderer` **75**、on-demand **114**、settings **101** 条断言等 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **5,989,940** 字节，解包 **12,784,885** 字节 |
+| 文档/结构检查 | README 双语标题层级一致；截图引用、语言切换、clone URL、CHANGELOG 链接、本地链接/锚点通过；`git diff --check` PASS |
+
+### 未覆盖
+
+真实旧 Host 进程、`dsh-web` 重启后的真实 GUI（用户未批准重启）、真实模型会话截图不可由脚本复现、屏幕阅读器/axe 未运行；zh 的 overview 组合图设置面板仍为英文 UI（既有语言匹配遗留，与本次真实会话生成截图无关）。
+
+## 2026-11-08 — 编辑内自然语言样式调整（B1）与 scope 切换行为修复（未提交工作树）
+
+本条记录 B1"编辑覆盖调整样式"（自然语言、修订语义）与"切换 scope 不再自动打开显示样式面板"的最终实现与门禁；不是发布验收；npm `latest` 仍为 `0.5.0`；未提交、未推送、未重启 `dsh-web`。
+
+### 实现与安全边界
+
+- `ArtifactEditRequest` 变为 block/style 判别联合；block 序列化字节不变、绝不携带 `kind`；style 变体显式 `editRequestId`、记录 layout、`styleInstruction`（≤2000）、完整 base program，禁止任何 block/排序/整体说明字段。
+- Host：style 请求必须显式 selector（H1，不会被无 selector 的 `render_ui` 自动消费）；授权前无副作用 peek（H2）；有 bound on-demand 操作时拒绝（H3，避免同 callId 双写快照）；与 on-demand 共用 `validateTemporaryStyleSnapshot`；记录模型返回的 `temporaryStyle`（H7），不带 `styleId`/`editedBlockIds`；无变化 no-op 不消费；整体重设计补 H4 内容保留 warning；`edit_ui_blocks` 对 style 请求提前重定向并保持 pending。
+- 根因修复：`ArtifactRevisionStore.record` 在写修订前，对携带 `temporaryStyle` 的修订先登记 ResultStore 快照（先快照后修订、失败可重试）；编辑/恢复/结构三条路径的修订卡因此都能「保存为模板」；不做历史回填。
+- 客户端：编辑面板顶部样式区（≤2000 字、直接进草稿、与区块请求互斥 `style_mixed`）、chip/摘要「样式调整」、能力位 `styleEdit`；新 Host + 可编辑卡片隐藏底部「调整样式」（`saveAction` 保留），旧 Host/不可编辑卡片保留回退；能力缺失时清除已持久化样式说明。
+- Scope 切换：成功切换只提交启用命令、不自动打开显示样式面板；面板仅两个显式入口（「显示样式」行、点击已激活且解析为开启的 scope 项）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；`tsc --noEmit` + build；Node **558/558** = Host **269** + Client **268** + packaging **21**；renderer 解析/渲染各 **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **447 checks**、`nested-edit-renderer` **75**、on-demand **114**、settings **101** 条断言等 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **5,992,803** 字节，解包 **12,808,780** 字节 |
+| `npm run capture:readme` | PASS；临时结果截图更新为"保存为模板"（可编辑+新 Host 时底部调整样式已移除）、编辑器截图包含新样式区；真实会话生成 Bento 未被覆盖 |
+| 文档/结构检查 | README 与五组双语文档标题层级一致；本地链接/锚点、截图引用、CHANGELOG 链接通过；`git diff --check` PASS |
+
+### 覆盖与未覆盖
+
+- 覆盖：style 信封/校验/序列化、Host mint/apply/授权、H1/H3/H4/双写变异验证、修订快照边界、history 推断、能力位与 footer 回退、编辑面板样式区/焦点/Escape/清除/chip、scope 切换 E2E、截图与文档同步。
+- 未覆盖：真实模型/真实 GUI 的 style 调整（浏览器 E2E 用 mock Host）；新 Host + 旧客户端或旧 Host + 新客户端的真实混合部署运行；确定性内置/模板样式切换（B2，按裁定不在本增量）。

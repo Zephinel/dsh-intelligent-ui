@@ -229,6 +229,8 @@ export interface IntelligentUIModeView {
   readonly style: StyleId
   /** Whether a switch/style command is still waiting for its result. */
   readonly pending: boolean
+  /** Host supports revision-bound natural-language style editing (B1 capability bit). */
+  readonly styleEdit?: boolean
   readonly onDemand: OnDemandView | null
 }
 

@@ -17,7 +17,7 @@ import { build } from 'esbuild'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 import { DST_PROGRAM } from './fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM } from './fixtures/nested-artifact.ts'
-import { PROPS_PROGRAM_APPLIED } from './fixtures/props-artifact.ts'
+import { PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_PROGRAM_APPLIED } from './fixtures/props-artifact.ts'
 import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
 
 const root = new URL('../../', import.meta.url).pathname
@@ -1280,7 +1280,50 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     return true;
   })()`)
+  const unitOptionsOf = async (rowSelector) => {
+    await read(`document.querySelector(${JSON.stringify(`${rowSelector} [data-dsh-iui-quick-select]`)}).click()`)
+    await wait('!!document.querySelector("[data-dsh-iui-quick-menu]")', 'unit menu open')
+    const menuBox = await read(`(() => {
+      const menu = document.querySelector('[data-dsh-iui-quick-menu]');
+      const items = [...menu.querySelectorAll('[role="option"]')];
+      const menuRect = menu.getBoundingClientRect();
+      return {
+        fits: menu.scrollHeight <= menu.clientHeight,
+        lastVisible: items.at(-1).getBoundingClientRect().bottom <= menuRect.bottom + 1,
+      };
+    })()`)
+    check(menuBox.fits, true, 'the described unit menu is not clipped')
+    check(menuBox.lastVisible, true, 'the last described unit option stays fully visible')
+    const options = await read(`[...document.querySelectorAll('[data-dsh-iui-quick-menu] [role="option"]')].map(option => {
+      const desc = option.querySelector('.dsh-iui-quick-option-desc');
+      const rect = desc?.getBoundingClientRect();
+      return {
+        value: option.getAttribute('data-value'),
+        label: option.querySelector('.dsh-iui-quick-option-label')?.textContent ?? '',
+        description: desc?.textContent ?? '',
+        descriptionVisible: rect !== undefined && rect.width > 0 && rect.height > 0,
+      };
+    })`)
+    await read(`document.querySelector(${JSON.stringify(`${rowSelector} [data-dsh-iui-quick-select]`)}).click()`)
+    await wait('!document.querySelector("[data-dsh-iui-quick-menu]")', 'unit menu closed')
+    return options
+  }
   check(await count('[data-dsh-iui-edit-props] select'), 0, 'quick adjust uses no native select widgets')
+  const dividerWidthUnits = await unitOptionsOf('[data-dsh-iui-edit-prop="width"]')
+  check(dividerWidthUnits.map(option => option.value), ['', 'px', '%'], 'Divider width offers exactly Default/px/%')
+  check(dividerWidthUnits.every(option => option.description.length > 0), true, 'every Divider width unit option carries a description')
+  check(dividerWidthUnits.every(option => option.descriptionVisible), true, 'every Divider width unit description is rendered')
+  check(dividerWidthUnits[0].description.includes('分割线撑满'), true, 'the Divider width Default option explains the column span')
+  check(dividerWidthUnits[1].description.includes('固定像素值'), true, 'the px option explains the fixed pixel size')
+  check(dividerWidthUnits[2].description.includes('相对容器'), true, 'the % option explains the container share')
+  check((await text('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]')).includes('分割线撑满'), true, 'the Divider width row explains the Default column span')
+  const widthDescBox = await read(`(() => {
+    const row = document.querySelector('[data-dsh-iui-edit-prop="width"] .dsh-iui-edit-props-row').getBoundingClientRect();
+    const desc = document.querySelector('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]').getBoundingClientRect();
+    return { below: desc.top >= row.bottom - 1, height: desc.height };
+  })()`)
+  check(widthDescBox.below, true, 'the Divider width unit explanation sits under its row')
+  check(widthDescBox.height > 0, true, 'the Divider width unit explanation is visible')
   await read(`document.querySelector('[data-dsh-iui-edit-prop="color"] [data-dsh-iui-quick-select]').click()`)
   await wait('!!document.querySelector("[data-dsh-iui-quick-menu]")', 'custom colour menu')
   check(await count('[data-dsh-iui-quick-menu] [role="option"]'), 22, 'the colour menu renders every theme token plus custom')
@@ -1289,6 +1332,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled === false`, 'apply enabled after edit')
   const popoverBeforePreview = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
   await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', '%')
+  check((await text('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]')).includes('相对容器'), true, 'the Divider width row explanation follows the selected % unit')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '60')
   await setInputValue('[data-dsh-iui-edit-prop="thickness"] input', '2')
   await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('60%')`, 'divider preview width')
@@ -1313,6 +1357,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(Math.abs(popoverAfterPreview.top - popoverBeforePreview.top) <= 0.5, true, 'the popover keeps its vertical anchor while previewing')
   await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', 'px')
   await wait(`document.querySelector('[data-dsh-iui-block="b2"] hr')?.getAttribute('style')?.includes('60px')`, 'width unit switched to px')
+  check((await text('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]')).includes('固定像素值'), true, 'the Divider width row explanation follows the selected px unit')
   const popoverAfterUnit = await read(`document.querySelector('[data-dsh-iui-edit-popover]').getBoundingClientRect().toJSON()`)
   check(Math.abs(popoverAfterUnit.left - popoverBeforePreview.left) <= 0.5, true, 'switching the width unit does not move the popover horizontally')
   check(Math.abs(popoverAfterUnit.top - popoverBeforePreview.top) <= 0.5, true, 'switching the width unit does not move the popover vertically')
@@ -1370,24 +1415,99 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await clickBlock('b3')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'spacer quick props')
   check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'Spacer blocks show width and height controls')
+  const spacerWidthUnits = await unitOptionsOf('[data-dsh-iui-edit-prop="width"]')
+  check(spacerWidthUnits.map(option => option.value), ['', 'px', '%'], 'Spacer width offers exactly Default/px/%')
+  check(spacerWidthUnits.every(option => option.descriptionVisible), true, 'every Spacer width unit option carries a visible description')
+  check(spacerWidthUnits[0].description.includes('自动填满剩余空间'), true, 'the Spacer width Default option keeps the Row free-space copy')
+  check((await text('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]')).includes('自动填满剩余空间'), true, 'the Spacer width row explains the Default Row free space')
+  // The English Spacer width Default copy is the longest, so its unit menu is
+  // the worst case for the described-menu height calculation.
+  const originalLanguage = await read('window.__lang')
+  await read('window.__language("en")')
+  await wait(`document.querySelector('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]').textContent.includes('No explicit length')`, 'English quick props copy')
+  const enSpacerWidthUnits = await unitOptionsOf('[data-dsh-iui-edit-prop="width"]')
+  check(enSpacerWidthUnits.map(option => option.value), ['', 'px', '%'], 'the English Spacer width menu keeps exactly Default/px/%')
+  check(enSpacerWidthUnits.every(option => option.description.length > 0 && option.descriptionVisible), true, 'every English Spacer width unit option carries a visible description')
+  check(enSpacerWidthUnits[0].description.includes('usually collapses'), true, 'the English Spacer width Default keeps its Row free-space copy')
+  await read(`window.__language(${JSON.stringify(originalLanguage)})`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-prop="width"] [data-dsh-iui-edit-props-desc]').textContent.includes('不设置长度')`, 'quick props copy restored')
+  const spacerHeightUnits = await unitOptionsOf('[data-dsh-iui-edit-prop="height"]')
+  check(spacerHeightUnits.map(option => option.value), ['', 'px', '%'], 'Spacer height offers exactly Default/px/%')
+  check(spacerHeightUnits.every(option => option.descriptionVisible), true, 'every Spacer height unit option carries a visible description')
+  check(spacerHeightUnits[0].description.includes('Spacer 高度通常为 0'), true, 'the Spacer height Default option uses its own copy')
+  check((await text('[data-dsh-iui-edit-prop="height"] [data-dsh-iui-edit-props-desc]')).includes('固定像素值'), true, 'the Spacer height row explains its initial px height')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="height"]', '')
+  check((await text('[data-dsh-iui-edit-prop="height"] [data-dsh-iui-edit-props-desc]')).includes('Spacer 高度通常为 0'), true, 'the Spacer height row explains the Default collapse')
   await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', 'px')
   await setInputValue('[data-dsh-iui-edit-prop="width"] input', '12')
-  await chooseQuickOption('[data-dsh-iui-edit-prop="height"]', 'auto')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="height"]', '%')
+  check((await text('[data-dsh-iui-edit-prop="height"] [data-dsh-iui-edit-props-desc]')).includes('相对容器'), true, 'the Spacer height row explanation follows the selected % unit')
+  await setInputValue('[data-dsh-iui-edit-prop="height"] input', '50')
   await wait(`document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer')?.getAttribute('style')?.includes('12px')`, 'spacer preview width')
+  await wait(`document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer')?.getAttribute('style')?.includes('50%')`, 'spacer preview height')
   const spacerPreview = await read(`(() => {
     const spacer = document.querySelector('[data-dsh-iui-block="b3"] .iui-spacer');
     return { width: getComputedStyle(spacer).width, style: spacer.getAttribute('style') ?? '' };
   })()`)
   check(spacerPreview.width, '12px', 'the canvas preview paints the new spacer width')
-  check(spacerPreview.style.includes('auto'), true, 'the canvas preview keeps the auto height')
+  check(spacerPreview.style.includes('50%'), true, 'the canvas preview paints the new spacer height')
   const localBeforeSpacer = await count('[data-dsh-iui-local-revision]')
   await click('[data-dsh-iui-edit-props-apply]')
   await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeSpacer + 1}`, 'second property revision card')
   const propCallsAfter = await read('window.__propCalls')
   check(propCallsAfter.length, 2, 'the spacer request was sent too')
   check(propCallsAfter[1].operations[0].props.width, 12, 'the spacer request carries the px width')
-  check(propCallsAfter[1].operations[0].props.height, 'auto', 'the spacer request carries the auto height')
+  check(propCallsAfter[1].operations[0].props.height, '50%', 'the spacer request carries the percentage height')
   await shot('harness-quick-props-applied.png')
+
+  // 30b. A legacy Spacer(…, "auto") still opens as Default and writes by omission.
+  await read('window.__addPropsLegacyAutoCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-legacy-auto-call-1"]\')', 'legacy auto props card')
+  await click('[data-dsh-iui-call-id="props-legacy-auto-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy auto editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'legacy auto blocks')
+  await clickBlock('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'legacy auto quick props')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props]').getAttribute('data-component')`), 'Spacer', 'a legacy auto Spacer still opens the quick-adjust panel')
+  check(await text('[data-dsh-iui-edit-prop="height"] .dsh-iui-quick-select-value'), '默认', 'the legacy auto height is shown as Default')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled`), true, 'the untouched legacy auto value leaves Apply disabled')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-prop="height"] input').value`), '', 'Default leaves the height number empty')
+  await chooseQuickOption('[data-dsh-iui-edit-prop="width"]', 'px')
+  await setInputValue('[data-dsh-iui-edit-prop="width"] input', '12')
+  await wait(`document.querySelector('[data-dsh-iui-edit-props-apply]').disabled === false`, 'legacy auto Apply enabled after a real edit')
+  await read(`(() => {
+    window.__legacyPropCalls = [];
+    window.__legacySavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__legacyPropCalls.push(body);
+        const result = {
+          artifactId: 'props-legacy-auto-call-1',
+          revisionId: 'struct_legacy_1',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify(PROPS_PROGRAM_APPLIED)},
+          title: ${JSON.stringify(PROPS_LEGACY_AUTO_TITLE)},
+          style: 'card',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__legacySavedFetch(input, init);
+    };
+    return true;
+  })()`)
+  const localBeforeLegacyAuto = await count('[data-dsh-iui-local-revision]')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeLegacyAuto + 1}`, 'legacy auto property revision card')
+  const legacyPropCalls = await read('window.__legacyPropCalls')
+  check(legacyPropCalls.length, 1, 'the legacy auto edit sends one deterministic request')
+  check(legacyPropCalls[0].operations[0].op, 'props', 'the legacy auto request carries a props operation')
+  check(legacyPropCalls[0].operations[0].props, { width: 12 }, 'Default writes by omission: the auto height is not resubmitted')
+  await read('window.fetch = window.__legacySavedFetch')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy auto editor closed')
 
   // 31. A pending block instruction blocks the property apply with inline copy.
   await read('window.__addPropsCard("props-call-2", "属性调整样例 2")')
@@ -1490,29 +1610,55 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'large page editor closed')
 
-  // 36. Legacy page without an authoritative base falls back to instructions.
+  // 36. Legacy page without an authoritative base registers on first open and
+  // degrades to instructions when the old Host has no registration route.
   await read('window.__addPropsCard("props-call-3", "旧页面属性样例")')
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-3"]\')', 'legacy props card')
-  await click('[data-dsh-iui-call-id="props-call-3"] [data-dsh-iui-edit-entry]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor')
-  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'legacy blocks')
-  await clickBlock('b2')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'legacy quick props')
   await read(`(() => {
+    window.__artifactBaseCalls = [];
+    window.__structureCalls = [];
+    window.__fetchSeq = 0;
     window.__savedFetch = window.fetch;
     window.fetch = (input, init) => {
       const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      window.__fetchSeq += 1;
+      if (url.includes('/api/intelligent-ui/artifact-base')) {
+        const body = JSON.parse(init.body);
+        const status = window.__artifactBaseMode === 404 ? 404 : 200;
+        window.__artifactBaseCalls.push({ ...body, seq: window.__fetchSeq, status });
+        if (status === 404) {
+          return Promise.resolve(new Response(JSON.stringify({ error: { code: 'not_found', message: 'missing' } }), { status: 404, headers: { 'content-type': 'application/json' } }));
+        }
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
       if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        window.__structureCalls.push({ ...JSON.parse(init.body), seq: window.__fetchSeq });
         return Promise.resolve(new Response(JSON.stringify({ error: { code: window.__structureMissingCode ?? 'base_missing', message: 'missing' } }), { status: 404, headers: { 'content-type': 'application/json' } }));
       }
       return window.__savedFetch(input, init);
     };
     return true;
   })()`)
+  await click('[data-dsh-iui-call-id="props-call-3"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor')
+  await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'legacy blocks')
+  await wait('window.__artifactBaseCalls.length === 1', 'legacy card registers its base once')
+  const baseCalls = await read('window.__artifactBaseCalls')
+  check(baseCalls.length, 1, 'opening the legacy card editor registers exactly one base')
+  check(baseCalls[0].schemaVersion, 1, 'the registration carries the base schema version')
+  check(baseCalls[0].artifactId, 'props-call-3', 'the registration names the card artifact')
+  check(baseCalls[0].revisionId, 'props-call-3', 'the initial revision identity is the render call id')
+  check(baseCalls[0].program, PROPS_PROGRAM, 'the registration posts the program the card rendered')
+  await clickBlock('b2')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'legacy quick props')
   await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'info')
   await click('[data-dsh-iui-edit-props-apply]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props-fallback]")', 'legacy fallback note')
-  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('权威基础程序'), true, 'legacy pages explain the missing authoritative base')
+  const legacyStructureCalls = await read('window.__structureCalls')
+  check(legacyStructureCalls.length, 1, 'the quick-adjust apply reached the structure route')
+  check(legacyStructureCalls[0].seq > baseCalls[0].seq, true, 'the base registration precedes the first structure request')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('权威程序记录'), true, 'legacy pages explain the missing authoritative program record')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('重新渲染'), true, 'the fallback offers the re-render path')
   check(await count('[data-dsh-iui-edit-instruction]'), 1, 'legacy pages fall back to the instruction editor')
   await click('[data-dsh-iui-edit-cancel]')
   await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
@@ -1523,12 +1669,57 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'info')
   await click('[data-dsh-iui-edit-props-apply]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props-fallback]")', 'missing-artifact fallback note')
-  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('找不到这张卡片'), true, 'artifact_missing gets its own explanation')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('找不到这张卡片的记录'), true, 'artifact_missing gets its own explanation')
   await click('[data-dsh-iui-edit-cancel]')
-  await read('delete window.__structureMissingCode')
-  await read('window.fetch = window.__savedFetch')
+  // A duplicate preview failure now preserves the Host error code: the dialog
+  // explains the missing authoritative program instead of a generic failure.
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-failed]")', 'legacy duplicate preview failed')
+  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('权威程序记录'), true, 'the duplicate preview explains the missing authoritative program')
+  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('重新渲染'), true, 'the duplicate preview offers the re-render fallback')
+  await click('[data-dsh-iui-edit-preview-cancel]')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor closed')
+  // Old Host without the registration route: the card degrades without blocking,
+  // and its duplicate preview still explains the missing base.
+  await read(`window.__artifactBaseMode = 404`)
+  await read('window.__addPropsCard("props-call-4", "旧 Host 属性样例")')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-4"]\')', 'old-host props card')
+  await click('[data-dsh-iui-call-id="props-call-4"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'old-host editor')
+  await wait(`window.__artifactBaseCalls.filter(call => call.artifactId === 'props-call-4').length === 1`, 'old-host card probed the registration route once')
+  // F2: every base_missing/artifact_missing answer invalidates the cached base,
+  // so the next authoritative operation re-registers. props-call-3 is failed
+  // and retried twice (initial open + two retries); the old Host's 404 for
+  // props-call-4 is cached as unsupported, so it is probed only once.
+  const oldHostBaseCalls = await read('window.__artifactBaseCalls')
+  const oldHostStructureCalls = await read('window.__structureCalls')
+  const baseCallsFor3 = oldHostBaseCalls.filter(call => call.artifactId === 'props-call-3')
+  const baseCallsFor4 = oldHostBaseCalls.filter(call => call.artifactId === 'props-call-4')
+  const structureCallsFor3 = oldHostStructureCalls.filter(call => call.artifactId === 'props-call-3')
+  check(baseCallsFor3.length, 3, 'the invalidated legacy card re-registers for the initial open and both retries')
+  check(baseCallsFor3.map(call => call.status), [200, 200, 200], 'every legacy re-registration succeeds on the current Host')
+  check(baseCallsFor4.length, 1, 'the old-host card probes the registration route once')
+  check(baseCallsFor4[0].artifactId, 'props-call-4', 'the old-host probe names its card')
+  check(baseCallsFor4[0].status, 404, 'the old Host answered the registration route with 404')
+  check(structureCallsFor3.length, 3, 'the legacy card retried its authoritative requests after each failure')
+  check(baseCallsFor3.every((call, index) => call.seq < structureCallsFor3[index].seq), true, 'each legacy re-registration precedes the authoritative request it enables')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-failed]")', 'old-host duplicate preview failed')
+  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('权威程序记录'), true, 'the old-Host preview still explains the missing base')
+  await click('[data-dsh-iui-edit-preview-cancel]')
+  const structureCallsFor4 = (await read('window.__structureCalls')).filter(call => call.artifactId === 'props-call-4')
+  check(structureCallsFor4.length, 1, 'the old-host card sent its duplicate preview request')
+  check(baseCallsFor4[0].seq < structureCallsFor4[0].seq, true, 'the old-host registration precedes its duplicate preview request')
+  const baseCallsAfterPreview = await read('window.__artifactBaseCalls')
+  check(baseCallsAfterPreview.filter(call => call.artifactId === 'props-call-4').length, 1, 'a failed registration is not re-probed for the same revision')
+  await read('window.fetch = window.__savedFetch')
+  await read('delete window.__artifactBaseMode')
+  await read('delete window.__structureMissingCode')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'old-host editor closed')
 
   // 37. Real shell width fit at 1180px: wrap main in the shell chat-content
   // element so applyEditChatContentWidth can run, then check panel/content/card.
@@ -1599,6 +1790,118 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false })
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'touch editor closed')
+
+  // 39. B1 style editing: capability section, focus/Escape/clear, mixed guard,
+  // style chip + envelope, mocked style revision card and footer fallbacks.
+  // A themed temporary snapshot gives the revision card a real Save action.
+  const STYLE_SNAPSHOT = {
+    schemaVersion: 1, baseLayout: 'card', directives: 'Cool editorial palette.',
+    theme: {
+      light: { canvas: '#f5f7fb', ink: '#1c2430', accent: '#3b6fd4' },
+      dark: { canvas: '#111820', ink: '#e8eef7', accent: '#7aa7ff' },
+      font: 'sans', radius: 'soft', density: 'comfortable', shadow: 'soft',
+    },
+  }
+  await read('window.__project({ styleEdit: true })')
+  await click('[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'style editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-section]")', 'style section with the capability')
+  const styleCurrent = await text('[data-dsh-iui-edit-style-current]')
+  check(styleCurrent.includes('内置'), true, 'style section names the recorded built-in skin')
+  check(styleCurrent.includes('卡片'), true, 'style section names the recorded layout')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-toggle]').getAttribute('aria-expanded')`), 'false', 'style section starts collapsed')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-toggle]').getAttribute('aria-expanded') === 'true'`, 'style section expands')
+  await wait(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style]')`, 'expanded style instruction focused')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style]').maxLength`), 2000, 'style instruction uses the contract char cap')
+
+  // Typing updates the draft; Escape collapses and returns focus to the
+  // disclosure button without dropping the text.
+  await typeInto('[data-dsh-iui-edit-style]', '换成更冷静的配色，收紧间距。')
+  check((await text('[data-dsh-iui-edit-style-note]')).length > 0, true, 'style section explains that applying creates a new revision')
+  await read(`document.querySelector('[data-dsh-iui-edit-style]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-toggle]').getAttribute('aria-expanded') === 'false'`, 'style section collapses on Escape')
+  check(await read(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style-toggle]')`), true, 'Escape returns focus to the style disclosure')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-toggle]').getAttribute('aria-controls') === document.querySelector('[data-dsh-iui-edit-style-panel]')?.id`), false, 'the collapsed panel is unmounted (aria-controls target absent)')
+
+  // Clear drops the instruction, announces on the existing live region, then
+  // type it again for the send.
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style]')`, 're-expanded style instruction focused')
+  // Earlier checks leave the 3-attachment batch cap full, so this fresh draft
+  // started detached. Two older drafts were never sent: sending them frees the
+  // batch, then the style draft attaches.
+  await read('window.__serializeChipMatching("第二张卡片")')
+  await read('window.__serializeChipMatching("属性调整样例 2")')
+  const styleAttach = '[data-dsh-iui-call-id="props-call-1"] [data-dsh-iui-draft-attach]'
+  await wait(`document.querySelector(${JSON.stringify(styleAttach)})?.disabled === false`, 'style draft can attach')
+  await click(styleAttach)
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('调整样式'))`, 'style chip label')
+  await click('[data-dsh-iui-edit-style-clear]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style]').value === ''`, 'style clear empties the field')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]').textContent.includes('已清除样式调整')`, 'style clear announces on the live region')
+  await typeInto('[data-dsh-iui-edit-style]', '换成更冷静的配色，收紧间距。')
+
+  // Mixed content: a saved block instruction shows the inline warning and the
+  // send is refused with the section copy.
+  await openArrangementEditor('b4')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'mixed block popover')
+  await saveInstruction('把说明文字改短')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-mixed]")', 'style mixed warning')
+  check((await text('[data-dsh-iui-edit-style-mixed]')).includes('不能与区块修改同时发送'), true, 'style section explains the mixed-content guard')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-mixed]').getAttribute('role')`), 'status', 'the mixed warning is non-alert status copy')
+  const mixedStyleError = await read('window.__serializeChipMatching("调整样式").then(() => null, error => String(error))')
+  check(String(mixedStyleError).includes('不能与区块修改同时发送'), true, 'a mixed style send is blocked with the section copy')
+  await click('[data-dsh-iui-edit-clear-all]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-style-mixed]")', 'mixed warning clears with block edits')
+
+  // Style-only send: the envelope carries kind/styleInstruction and no block
+  // fields; drop the remaining unrelated chip so the send picks the style one.
+  await read(`(() => {
+    const refs = window.__input().occurrences
+      .filter(occurrence => occurrence.source === 'artifact-edit' && !occurrence.label.includes('调整样式'))
+      .map(occurrence => occurrence.ref);
+    for (const ref of refs) window.__deleteChip(ref);
+    return refs.length;
+  })()`)
+  const styleEnvelope = await read('window.__serializeChip()')
+  check(styleEnvelope.includes('"kind":"style"'), true, 'style envelope carries the kind discriminator')
+  check(styleEnvelope.includes('"styleInstruction":"换成更冷静的配色，收紧间距。"'), true, 'style envelope carries the style instruction')
+  check(styleEnvelope.includes('"edits"'), false, 'style envelope has no block edits')
+  check(styleEnvelope.includes('"targetOrder"'), false, 'style envelope has no target order')
+  check(styleEnvelope.includes('editRequestId'), true, 'style envelope asks the model for editRequestId')
+  check(styleEnvelope.includes('pass style: "card"'), true, 'style envelope keeps the recorded layout')
+  check(styleEnvelope.includes('warns when blocks change'), true, 'style envelope tells the model the Host warns about changed blocks')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'style send closes the editor')
+  await wait('!!document.querySelector("[data-sent-summary] [data-reference-chip]")', 'style sent summary chip')
+  check((await text('[data-sent-summary]')).includes('编辑 Artifact · 调整样式'), true, 'sent chip reports the style request')
+  check((await read('window.__input().draft')), '', 'style send clears the composer draft')
+
+  // Mocked Host apply: the model returns the page with the requested skin as
+  // revision 2, carrying the themed temporary snapshot.
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'props-call-1', revisionId: 'props-style-2', baseRevisionId: 'props-call-1', revision: 2,
+    editedBlockIds: [], program: PROPS_PROGRAM_APPLIED, title: '属性调整样例', style: 'card', temporaryStyle: STYLE_SNAPSHOT,
+  })}, 'props-style-2')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-revision]\')', 'style revision card')
+  check((await text('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-revision]')).includes('修订 2'), true, 'style revision card shows its revision number')
+  check(await count('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-save-result]'), 1, 'style revision card keeps the Save action')
+  check(await count('[data-dsh-iui-call-id="props-style-2"] .dsh-iui-result-actions button:not([data-dsh-iui-save-result])'), 0, 'editable + capability hides the legacy adjust action')
+  // Save stays a working action on the new style revision card.
+  await click('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-save-result]')
+  await wait(`!!document.querySelector('.dsh-iui-style-popover[role="dialog"]')`, 'save dialog opens from the style revision card')
+  check(await read(`document.querySelector('.dsh-iui-style-popover[role="dialog"] input') !== null`), true, 'save dialog offers a template name field')
+  await read(`[...document.querySelectorAll('.dsh-iui-style-popover[role="dialog"] button')].find(button => button.textContent === ${JSON.stringify('取消')}).click()`)
+  await wait(`!document.querySelector('.dsh-iui-style-popover[role="dialog"]')`, 'save dialog cancels')
+
+  // Capability off: the section disappears and the legacy footer fallback returns.
+  await read('window.__project({ styleEdit: false })')
+  await click('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy style editor')
+  check(await count('[data-dsh-iui-edit-style-section]'), 0, 'capability-off hides the style section')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy style editor closed')
+  check(await count('[data-dsh-iui-call-id="props-style-2"] .dsh-iui-result-actions button:not([data-dsh-iui-save-result])'), 1, 'capability-off keeps the legacy adjust action')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

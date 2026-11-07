@@ -29,9 +29,11 @@ Structured answers use a card by default; long reading answers can use the Artic
 - The arrangement rows and canvas hover-sync both ways. Each row's **More** menu offers Locate, Edit, Duplicate, Move and Delete; Delete confirms inside the menu.
 - Click a block to write a change request and **Save**; requests stay in the pending list. Drag rows or use ↑/↓/Home/End to reorder top-level blocks.
 - Switch **Top level / Nested blocks** to edit content inside `Col`/`Row`/`Box`/`Grid`/`Card`/`Section`/`Carousel`.
-- `Divider`/`Spacer` open quick-adjust fields: plugin-drawn colour/unit pickers and sliders preview on the canvas and apply through the deterministic Host property route without a model turn.
+- The **Adjust style** section at the top of the panel takes one visual instruction (max 2000 chars), exclusive with block requests; after sending, the model keeps the content and layout, updates only the style, and records a new temporary-style revision. Editable cards on a new Host no longer show the footer Adjust style button (old Hosts or non-editable cards keep the fallback).
+- `Divider`/`Spacer` open quick-adjust fields: plugin-drawn colour/unit pickers and sliders preview on the canvas and apply through the deterministic Host property route without a model turn. Each unit carries a one-line explanation under its row and in the menu: Default means no explicit length, px is a fixed size, and % is a share of the container (a percentage height needs a definite container height).
 - Duplicate/delete/move first show a change preview and record a revision only after confirmation. Turn on **Strict protection** to reject changes to unselected top-level blocks.
 - **Exit editing** in the panel header or the card header leaves the canvas. The pending requests travel in composer chips and only produce a new revision when you send normally.
+- Cards rendered by an older version need no manual migration: the first time you open editing, revision history or restore, the client registers the currently rendered content as the Host's authoritative base, after which structure operations, history and restore work. With an older Host or a failed registration, the affected operations fall back to instruction editing or suggest re-rendering the page.
 
 ## Requests, drafts and revisions
 
@@ -39,12 +41,12 @@ Structured answers use a card by default; long reading answers can use the Artic
 - One chat keeps several drafts (one active canvas); one send can merge up to 3 artifacts' requests, each producing its own revision.
 - Removing a chip only detaches its draft from the send; re-attach it from the **pending edits** area.
 - An older revision can be **Restored as a new revision** (zero model calls, local revision card); a conflict banner can create a branch from an older revision.
-- Temporary-style results keep their style snapshot through content edits; reorder-only or global-only requests still need a page with a saved/built-in style.
+- Temporary-style results keep their style snapshot through content edits; reorder-only or global-only requests still need a page with a saved/built-in style. Natural-language style adjustment for a temporary-style page happens in the **Adjust style** section of the edit canvas.
 
 ## On-demand and templates
 
 - Choose **On-demand UI**, then send a normal request; material ambiguity is clarified with structured questions.
-- Use the result immediately, then **Adjust style** to keep the content and change the layout, or **Save as template** to keep the layout, preferences and theme.
+- Use the result immediately; open the card's **Edit** canvas and describe the visual change under **Adjust style** (content and layout are kept, and a new temporary-style revision is recorded), or use the card footer's **Save as template** to keep the layout, preferences and theme. Old Hosts or non-editable cards keep the footer Adjust style fallback.
 - Export/import templates in **Plugins → My styles** or the composer's style panel. Import creates global templates only and requires an explicit acknowledgement.
 
 ## Export

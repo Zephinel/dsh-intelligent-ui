@@ -847,6 +847,90 @@
 }
 
 /*
+ * B1 style section: recorded skin row, an optional instruction disclosure and
+ * the inline mixed-content guard. Same quiet section language as above.
+ */
+.dsh-iui-edit-style {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-style-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-style-current {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-style-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dsh-iui-edit-style-label {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.dsh-iui-edit-style-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 60px;
+  margin: 0;
+}
+
+.dsh-iui-edit-style-hint,
+.dsh-iui-edit-style-note {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dsh-iui-edit-style-note {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dsh-iui-edit-style-mixed {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-state-warn-primary, var(--dsw-alias-state-warn-primary)) 12%, transparent);
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style .dsh-iui-edit-section-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/*
  * Multi-draft switcher: every retained draft of the chat, in creation order.
  * Same quiet editorial language as the request list: hairline separators, a
  * brand tick on the active canvas, and inline attach/discard affordances.
@@ -2200,9 +2284,38 @@
   flex: none;
 }
 
+/* Described options add a muted second line under the label. */
+.dsh-iui-quick-option.has-desc {
+  min-height: 48px;
+  padding: 4px 8px;
+}
+
+.dsh-iui-quick-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.dsh-iui-quick-option-desc {
+  display: block;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 15px;
+}
+
 /* Plugin-drawn slider: 4px track, filled progress and a 14px thumb. */
 .dsh-iui-edit-props-slider {
   margin: 2px 0 1px 62px;
+}
+
+/* The selected unit's one-line explanation, aligned under the control column. */
+.dsh-iui-edit-props-desc {
+  margin: 3px 0 0 62px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .dsh-iui-quick-slider {

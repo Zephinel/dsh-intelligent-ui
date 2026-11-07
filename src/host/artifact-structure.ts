@@ -44,6 +44,7 @@ import {
 import { isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.ts'
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
 import type { ArtifactRevisionRecord, ArtifactRevisionStore } from './artifact-revisions.ts'
+import { resolveArtifactBase } from './artifact-base.ts'
 
 /** Bound on authoritative programs kept on disk (LRU by last access). */
 export const MAX_PROGRAM_RECORDS = 200
@@ -167,16 +168,29 @@ export function createArtifactProgramStore(ctx: { logger?: Logger } = {}, option
       ctx.logger?.warn('intelligent-ui: could not load authoritative programs; starting empty')
     }
   }
-  const bytes = (): number => programs.reduce((total, record) => total + record.program.length, 0)
-  const prune = (): void => {
-    while (programs.length > maxRecords || bytes() > maxBytes) {
+  const bytesOf = (list: readonly ArtifactProgramRecord[]): number => list.reduce((total, record) => total + record.program.length, 0)
+  const prune = (list: ArtifactProgramRecord[]): ArtifactProgramRecord[] => {
+    let next = list
+    while (next.length > maxRecords || bytesOf(next) > maxBytes) {
       let oldest: ArtifactProgramRecord | undefined
-      for (const record of programs) if (oldest === undefined || record.lastAccessAt < oldest.lastAccessAt) oldest = record
+      for (const record of next) if (oldest === undefined || record.lastAccessAt < oldest.lastAccessAt) oldest = record
       if (oldest === undefined) break
-      programs = programs.filter(record => record !== oldest)
+      next = next.filter(record => record !== oldest)
     }
+    return next
   }
-  const persist = (): void => { writeAtomic(file, { version: 1, programs }, corrupt); corrupt = false }
+  /**
+   * Persist one candidate state, then commit it in memory.
+   *
+   * Writing first keeps a failed disk write (full disk, permissions, a corrupt
+   * recovery rename) from leaving a phantom record or an already-pruned LRU
+   * order in memory while the file still holds the previous state.
+   */
+  const persist = (next: ArtifactProgramRecord[]): void => {
+    writeAtomic(file, { version: 1, programs: next }, corrupt)
+    corrupt = false
+    programs = next
+  }
   return {
     record(input) {
       if (!isIdentity(input.artifactId) || !isIdentity(input.revisionId)) throw new Error('Invalid program revision identity')
@@ -187,19 +201,16 @@ export function createArtifactProgramStore(ctx: { logger?: Logger } = {}, option
       const existing = programs.find(record => record.artifactId === input.artifactId && record.revisionId === input.revisionId)
       if (existing !== undefined) {
         if (existing.program !== input.program) throw new Error('Authoritative programs are immutable')
-        programs = programs.map(record => record === existing ? { ...record, lastAccessAt: timestamp } : record)
-        persist()
+        persist(programs.map(record => record === existing ? { ...record, lastAccessAt: timestamp } : record))
         return
       }
-      programs = [...programs, {
+      persist(prune([...programs, {
         artifactId: input.artifactId,
         revisionId: input.revisionId,
         program: input.program,
         createdAt: timestamp,
         lastAccessAt: timestamp,
-      }]
-      prune()
-      persist()
+      }]))
     },
     lookup(artifactId, revisionId) {
       const found = programs.find(record => record.artifactId === artifactId && record.revisionId === revisionId)
@@ -209,7 +220,7 @@ export function createArtifactProgramStore(ctx: { logger?: Logger } = {}, option
       return found.program
     },
     size: () => programs.length,
-    totalBytes: bytes,
+    totalBytes: () => bytesOf(programs),
     list: () => programs.map(({ artifactId, revisionId, createdAt, lastAccessAt }) => ({ artifactId, revisionId, createdAt, lastAccessAt })),
   }
 }
@@ -798,22 +809,16 @@ function executeStructureRequest(
     }
   }
   const latest = revisions.latestFor(body.artifactId)
-  const firstProgram = programs.lookup(body.artifactId, body.artifactId)
-  const baseProgram = programs.lookup(body.artifactId, body.baseRevisionId)
-  if (baseProgram === undefined) {
-    if (latest === undefined && firstProgram === undefined) {
-      return batchFailure(404, 'artifact_missing', 'no authoritative program is recorded for this artifact; render the page again before changing its structure.')
-    }
-    return batchFailure(404, 'base_missing', 'the authoritative program for the base revision is not available; reload the page and retry.')
+  const base = resolveArtifactBase({ revisions, programs }, { artifactId: body.artifactId, baseRevisionId: body.baseRevisionId })
+  if (base.ok === false) {
+    return base.kind === 'artifact_missing'
+      ? batchFailure(404, 'artifact_missing', 'no authoritative program is recorded for this artifact; render the page again before changing its structure.')
+      : batchFailure(404, 'base_missing', 'the authoritative program for the base revision is not available; reload the page and retry.')
   }
-  if (latest === undefined) {
-    if (body.baseRevisionId !== body.artifactId) {
-      return batchFailure(404, 'base_missing', 'the authoritative program for the base revision is not available; reload the page and retry.')
-    }
-  } else if (latest.revisionId !== body.baseRevisionId && body.branch !== true) {
+  if (latest !== undefined && latest.revisionId !== body.baseRevisionId && body.branch !== true) {
     return batchFailure(409, 'base_not_latest', 'the base revision is no longer the latest; reload the page or resend the batch with branch: true.')
   }
-  const applied = applyStructureBatch(baseProgram, body.operations)
+  const applied = applyStructureBatch(base.program, body.operations)
   if (applied.ok === false) return applied
   if (body.preview === true) {
     return {

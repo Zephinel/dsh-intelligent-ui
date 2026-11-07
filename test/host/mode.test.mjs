@@ -138,12 +138,13 @@ test('the projection folds valid commands and exposes the live settings', () => 
     style: 'card',
     pending: false,
     onDemand: null,
+    styleEdit: true,
   })
 
   state = fold(state, { type: 'command/run', data: { name: 'iui', args: 'on', commandId: 'c1' } })
   assert.deepEqual(state.command, { commandId: 'c1', kind: 'scope' })
   assert.deepEqual(rec.projection.wire.view(state), {
-    sessionEnable: 'inherit', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'card', enabled: false, style: 'card', pending: true, onDemand: null,
+    sessionEnable: 'inherit', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'card', enabled: false, style: 'card', pending: true, onDemand: null, styleEdit: true,
   })
   state = fold(state, { type: 'command/done', data: { commandId: 'c1', kind: 'success' } })
   assert.equal(rec.projection.wire.view(state).pending, false)
@@ -182,7 +183,7 @@ test('the session switch gates prompt and tool visibility', async () => {
   assert.match(on.text, /on for this session/)
   assert.ok(rec.sections[0].text(promptContext('s1')).length > 10_000)
   assert.deepEqual(viewOf(rec, 's1'), {
-    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null,
+    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null, styleEdit: true,
   })
   assert.equal(rec.disposed.length, 1)
   const value = await rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 })

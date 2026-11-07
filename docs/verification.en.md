@@ -16,7 +16,7 @@ End-to-end verification was performed on a second, isolated DSH Web instance (po
 - **Agent Skill end-to-end**: in a real DSH session the model called `skill { name: "intelligent-ui" }` and successfully loaded `<skill_content>` (15 KB body + a hint about the references base directory), then used `render_ui` as described by the skill to generate and render a verification page.
 - **Bundle install path**: the `npm pack` artifact was installed into a throwaway profile (`~/.dsh/profiles/zbundle-test`, depending on `file:/tmp/…tgz` + `dsh.profile.bundles`); `dsh --profile zbundle-test --dump-config` exited 0, and its output contained `# == @zephinel/dsh-intelligent-ui` and the inserted row `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'` (cleaned up after verification).
 - **Three-state switch end-to-end (0.2.1-era record):** with the default "Off", requests contain no `render_ui` and the prompt is empty; after choosing "This session only", requests in that session carry the tool and the prompt and render a card, while a newly opened session is still off; after choosing "All sessions", newly opened sessions carry the tool and prompt directly; after choosing "Off", the file is cleared and new sessions again have neither tool nor prompt; control state syncs between two tabs over BroadcastChannel; the state file `{ "global": false, "sessions": [] }` and the projection behave as expected. The 0.3 session switch/style overrides and Article page still need live verification.
-- **Style-panel browser E2E (component level, rerunnable):** `npm run test:browser` first loads the `ToggleControl` harness in headless Chrome + CDP and verifies chip → menu (no "All sessions", has "Display style") → This session only → style panel, and that the panel's back button returns to the scope menu instead of dismissing every popup, with focus landing on the Display style row; the menu sizes to its content with a 208px minimum, right-aligns with the chip, rows share one minimum height and spacing, the divider is inset, the chevron reaches 180° when open, and with the switch off "Display style" stays visible but disabled and cannot open the panel; the panel rect stayed inside the viewport, focus moved into the panel; dragging the real range to Article emitted `style:article`; Escape closed the panel and returned focus to the chip. This does not boot the full DSH Web and is not a substitute for a Host/Client integration E2E.
+- **Style-panel browser E2E (component level, rerunnable):** `npm run test:browser` first loads the `ToggleControl` harness in headless Chrome + CDP and verifies chip → menu (no "All sessions", has "Display style") → switching to This session only emits `enable:on` and does **not** auto-open the style panel → the panel opens only via the active entry or the Display style row, and that the panel's back button returns to the scope menu instead of dismissing every popup, with focus landing on the Display style row; the menu sizes to its content with a 208px minimum, right-aligns with the chip, rows share one minimum height and spacing, the divider is inset, the chevron reaches 180° when open, and with the switch off "Display style" stays visible but disabled and cannot open the panel; the panel rect stayed inside the viewport, focus moved into the panel; dragging the real range to Article emitted `style:article`; Escape closed the panel and returned focus to the chip. This does not boot the full DSH Web and is not a substitute for a Host/Client integration E2E.
 - **Image-export browser E2E (component level, rerunnable):** `npm run test:browser` then loads `test/browser/harness/export-entry.tsx`: real `ExportAction` + real renderer card + two entries (one whose Chat selector runs the real `messageHasRenderUi` against a structural snapshot and reports no rendered output), with a real `SearchImage` whose Wikipedia lookup is stubbed to a local SVG. It asserts that only the extension answer gets a labeled trigger (visible copy, `order: 1`, flush with the action row's right edge); the export menu is right-aligned, content-sized, flips below the pill when the top edge is short, and dismisses on scroll; it then exports the raw, card and rounded-2x frames from the real menu: the initially collapsed card is expanded for the capture and collapsed again afterwards; the capture sees a flattened 3D flip, frozen transitions/animations, eager/completed lazy photos and a fake map that only reports ready after the expansion resize; the card frame is wider/taller than the raw frame by the padding plus shadow bleed and its shadow band contains non-zero alpha pixels; the rounded-2x frame is twice the raw size plus 2x padding. This does not boot the full DSH Web; cross-origin Wikimedia capture was reproduced manually with the same session program (see the next bullet).
 - **Interactive-page browser E2E (component level, rerunnable):** the interactive-page `npm run test:browser` script passes the real `lib/standalone.js` / `lib/standalone.css`, a theme snapshot and two card programs to `buildStandaloneHtml`, opens the resulting single-file HTML in headless Chrome, and asserts that it has no external script/stylesheet, is at least 3.4 MB, mounts both card bodies with no header/collapse chrome, and that the inline theme applies, and that an `@ToAssistant` button shows the copy fallback toast instead of calling DSH; it then opens the same page with **Remove follow-up actions** on and asserts that a mixed Card keeps its prose while only its follow-up control is hidden (the Form's fields go with it), a root-level follow-up hides only its control rather than the page, a pure follow-up Card disappears whole, a non-follow-up `@OpenUrl` Button remains visible, and no html-level hidden attribute is set; the image-export E2E asserts the same semantics (a mixed Card keeps its content, the pure follow-up Card is absent from the PNG). This does not boot DSH Web.
 - **Custom color-picker browser E2E (component level, rerunnable):** the settings-picker `npm run test:browser` script renders the real Plugin detail page and asserts that the native `input[type=color]` is gone, the background trigger and 12 preset swatches exist, a preset commits `exportBackground`, and a hex value commits on Enter and closes the panel; real-mouse cases prove a preset wins while the hex field is focused and a valid typed draft commits when clicking outside.
@@ -324,3 +324,102 @@ Independent verification: 6/6 PASS (old CSS/component mutations fail the new che
 The first 0.5.0 publish attempt hit a transient `typography-check` failure in CI (`Chrome did not expose the page target`); the rerun succeeded. `test/support/browser.mjs` now kills the process and relaunches Chrome with a fresh profile and port when no page target appears within 10 seconds, up to three attempts; `connectCdp` reuses the same wait helper. This is test-infrastructure-only and does not change the published artifact.
 
 Validation (local, macOS + Chrome): `npm run check` PASS (Node **247/247**; renderer parse/render **42/42** each, CSS contract **50/50**, prop contract **63/63**, typography **22/22**, media-row **17/17**, pressable **9/9**); `npm run test:browser` **7/7** (on-demand 114, settings 101, standalone 46, image-export 65 assertions). No new version was published; the next tag carries this hardening.
+
+## 2026-11-07 — Artifact base-registration lifecycle (uncommitted working tree)
+
+This record covers the uncommitted base-registration increment on the current main working tree (`src/shared/artifact-base.ts`, `src/host/artifact-base.ts`, `src/client/artifact-edit/artifact-base.ts` plus the structure/history/restore wiring). It is not a release acceptance, and npm `latest` remains `0.5.0`. It fixes the root cause that a card rendered before the authoritative program registry existed could not enter authoritative state: one write-once base-registration lifecycle plus a unified base resolve/failure boundary cover both provenance shapes, the initial anchor (`revisionId === artifactId`) and the recorded anchor. There is no backfill or background migration, the model path is unchanged, nothing was committed or pushed, `dsh-web` was not restarted and no real-model session was run.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run build:host` | PASS; `lib/index.js` **823.0 kB** |
+| `node --test test/host/*.test.mjs` | PASS; **253/253** (new `test/host/artifact-base.test.mjs` adds **12** tests) |
+| `node --test test/client/*.test.mjs` | PASS; **257/257** (new `test/client/artifact-base.test.mjs` adds **5** tests; `test/client/artifact-edit.test.mjs` adds 3) |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **406 checks** (scenario 36 adds base registration, registration-before-structure ordering, old-Host 404 degradation and unified failure copy) |
+| `npm run test:renderer` | PASS; parse **42/42**, render **42/42**, contrast OK, i18n **4**, typography **22/22**, media-row **17/17**, pressable **9/9**, CSS contract **50/50**, prop contract **63/63**, nested-css **28/28 direct + 5/5 scoped** |
+| `npm run check` | **not fully PASS**: `tsc --noEmit` PASS, build PASS; of **531** Node tests **529 pass / 2 fail**. Both failures are packaging assertions caused by another pending increment in the working tree (the README real-screenshot assets): `test/packaging/manifest.test.mjs` expects 28 files under `assets/` but finds 32; `test/packaging/references.test.mjs` expects the `skills/intelligent-ui/references/integration.md` shipped-file quote to be 63 while it still says 59. Neither reads this increment's output; they are pre-existing baseline delta, and `skills/`, the READMEs and the assets belong to other members, so this task left them untouched. The renderer phase did not run inside that `check` invocation because `npm test` exited non-zero; it was run separately and passed (previous row). |
+| `npm run pack:check` | PASS; **63** files, **5,730,101** bytes packed, **12,512,663** bytes unpacked (the `prepare` build ran first) |
+| Build artifacts | Host **823.0 kB**; Client **4.00 MB** (js 3.79 MB + css 215.7 kB); standalone **3.33 MB + 514.4 kB** |
+
+### Coverage
+
+- Host: `POST /api/intelligent-ui/artifact-base` registration and disposer, auth before method dispatch, POST-only/content-type/bad JSON/>1 MiB → 413, field and program validation, initial-anchor and recorded-anchor registration, write-once no-op and 409 `program_conflict`, unknown revision and a record from another artifact, and the recorded anchor unlocking structure operations/history/restore; a no-model end-to-end upgrade — register → structure preview/apply **201 revision 2** → history with the initial revision and revision 2 → restore the initial revision **201 revision 3** — plus the structure route's `artifact_missing`/`base_missing` semantics and text regression.
+- Client: `ensureArtifactBase` single flight, success cache, old-Host 404 → `unsupported` capability cache (no further probes for that revision), retryable network/malformed responses that never throw; wiring for opening the edit canvas, structure preview/apply, revision history and restore; preview now parses `error.code` and preview/apply/props share the unified missing-base copy (close-reopen, re-render, instruction-edit paths).
+- Not covered: a real-model DSH session, a real old-Host process, or the real GUI after a `dsh-web` restart (the user has not approved one). Browser evidence comes from a temporary HTTP server plus headless Chrome harness, not a full DSH Web integration run.
+
+## 2026-11-07 — Final verification after the README real-session screenshots, quick-adjust units and base registration (uncommitted working tree)
+
+This record runs the final gate for three deltas in the same day's working tree and refreshes their counts: the README generation section now uses real DSH session screenshots; Divider/Spacer quick adjust offers only Default/px/% with a per-unit explanation; and the Artifact base-registration lifecycle (recorded separately above; this round is integration regression only). It is not a release acceptance, npm `latest` remains `0.5.0`, and nothing was committed or pushed and `dsh-web` was not restarted.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; `tsc --noEmit` + build; **531/531** Node tests = Host **253** + Client **257** + packaging **21**; renderer parse/render **42/42** each, contrast OK, i18n **4**, typography **22/22**, media-row **17/17**, pressable **9/9**, CSS contract **50/50**, prop contract **63/63**, nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS; **9/9** suites; `artifact-edit` **406 checks**, `nested-edit-renderer` **75**, on-demand **114**, settings **101** assertions, etc. |
+| `npm run pack:check` | PASS; **65** files, **5,989,503** bytes packed, **12,783,390** bytes unpacked |
+| `npm run capture:readme` | PASS; regenerated the component/editor/overview/component-tour/controls/temporary fixture captures so the switch copy matches the current code; the real-session generation Bento was **not overwritten** (`scripts/build-readme-bento.mjs` no longer contains the generation group; `scripts/build-readme-generation-bento.mjs` composes it separately) |
+| Docs/structure checks | bilingual README heading levels match; screenshot references, language switches, clone URL, changelog links and local links/anchors pass; `git diff --check` PASS |
+
+### Coverage
+
+- Real-session screenshots: one English and one Chinese set of three different artifact types each (a Shanghai itinerary, a data dashboard, an interactive quiz), all generated in the running DSH GUI by DeepSeek V4.1 Flash · Max and captured at 2× from the production-rendered turn-tail cards. The raw captures ship in `assets/intelligent-ui-real-*`; the 1600×1130 composites have identical geometry in both languages. Sources, sessions and prompts are in `docs/screenshots/real-generation.md`. `npm run capture:readme` cannot reproduce the real-session captures.
+- Quick adjust: Divider width and Spacer width/height offer only Default/px/%, with a one-line explanation under the row and in each menu option; legacy `auto` values are still accepted by the Host/renderer and display as Default, with Apply disabled until a real change; Host/renderer compatibility is unchanged.
+- Base registration: see the record above; the integrated Node total and packaging counts follow its new tests and files.
+- Not covered: a real old-Host process, the real client behavior after a `dsh-web` restart (no approval), reproduction of real-session screenshots by script, or a screen-reader/axe audit.
+
+
+## 2026-11-07 — Independent-review fixes and final gate (uncommitted working tree)
+
+This record covers the fixes for two read-only review subagents and the final gate. It is not a release acceptance; npm `latest` remains `0.5.0`; nothing was committed or pushed and `dsh-web` was not restarted.
+
+### Fixes
+
+- **F1 (owner decision A)**: the restore route's program-only fallback is back to its original semantics (`src/host/artifact-revisions.ts` is net-zero vs HEAD: a missing source record is accepted when its authoritative program is still retained, without an extra initial-identity check), with a new regression test for a non-initial orphan source.
+- **F2**: the client `artifact-base` cache is invalidated when structure preview/apply/props returns `artifact_missing`/`base_missing` (and when history reports `hasProgram:false`), with an in-flight generation guard; close/reopen now really re-registers.
+- **F3**: the program store writes to disk first and commits memory only on success; a failed write (e.g. EACCES) leaves no phantom record and retries safely.
+- **F4**: base validation also caps the raw program length; a padded over-limit program returns 400 `invalid_program` instead of 500 storage.
+- **F5/F6**: English described-unit menus get a larger height budget (272 px; measured 239 px content no longer clipped); the Default explanation is row-aware (Divider width spans its column, Spacer width fills the Row, Spacer height usually collapses).
+- **F7**: the ensure-before-structure test now holds the base response unresolved and asserts no structure request before release; removing the await makes it fail (mutation-checked).
+- Evidence/doc corrections: the viewport/size/language-order statements in `docs/screenshots/real-generation.md`, maintenance references, stale CHANGELOG claims and counts were corrected; the 4× itinerary raws were synced into `.tmp-report/real-generation/`.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; `tsc --noEmit` + build; **538/538** Node tests = Host **257** + Client **260** + packaging **21**; renderer parse/render **42/42** each, contrast OK, i18n **4**, typography **22/22**, media-row **17/17**, pressable **9/9**, CSS contract **50/50**, prop contract **63/63**, nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS; **9/9** suites; `artifact-edit` **422 checks**, `nested-edit-renderer` **75**, on-demand **114**, settings **101** assertions, etc. |
+| `npm run pack:check` | PASS; **65** files, **5,989,940** bytes packed, **12,784,885** bytes unpacked |
+| Docs/structure checks | bilingual README heading levels match; screenshot references, language switches, clone URL, changelog links and local links/anchors pass; `git diff --check` PASS |
+
+### Not covered
+
+A real old-Host process, the real GUI after a `dsh-web` restart (no approval), reproduction of real-session screenshots by script, or a screen-reader/axe audit; the zh overview composite still contains an English-UI settings panel (pre-existing language-match gap, unrelated to the real-session generation screenshots).
+
+## 2026-11-08 — Natural-language style editing in the editor (B1) and scope-switch behavior fix (uncommitted working tree)
+
+This record covers the final implementation and gate for B1 ("editing covers style adjustment", natural-language, revision semantics) and for "switching the scope no longer auto-opens the Display style panel". It is not a release acceptance; npm `latest` remains `0.5.0`; nothing was committed or pushed and `dsh-web` was not restarted.
+
+### Implementation and security boundaries
+
+- `ArtifactEditRequest` is now a block/style discriminated union; the block serializer is byte-identical and never emits `kind`; the style variant requires an explicit `editRequestId`, the recorded layout, a `styleInstruction` (≤2000) and the complete base program, and forbids every block/arrangement/global field.
+- Host: a style request needs an explicit selector (H1 — never auto-applied by a selector-less `render_ui`); a side-effect-free peek runs before authorization (H2); a bound on-demand operation rejects the style apply (H3 — no double result-snapshot write for one callId); the snapshot validator is shared with on-demand; the revision records the model-returned `temporaryStyle` (H7) with no `styleId`/`editedBlockIds`; an unchanged program+snapshot is a no-op that keeps the request armed; a wholesale redesign adds the H4 preservation warning; `edit_ui_blocks` redirects style requests early and keeps them pending.
+- Root-cause fix: before writing a revision, `ArtifactRevisionStore.record` records the ResultStore snapshot for revisions carrying a `temporaryStyle` (snapshot first, revision second; retryable). Temporary-style revisions from edit/restore/structure can therefore use Save as template on revision cards; no backfill.
+- Client: a style section at the top of the edit panel (≤2000 chars, writes straight into the draft, exclusive with block requests via `style_mixed`), style chip/summary, `styleEdit` capability bit; a new Host with an editable card hides the footer Adjust style fallback (Save stays), old Hosts/non-editable cards keep it; persisted style instructions are cleared when the capability is absent.
+- Scope switch: a successful switch only sends the enable command and never auto-opens the Display style panel; the panel has exactly two explicit entries (the Display style row and clicking the already-active scope entry when it resolves to enabled).
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; `tsc --noEmit` + build; **558/558** Node tests = Host **269** + Client **268** + packaging **21**; renderer parse/render **42/42** each, contrast OK, i18n **4**, typography **22/22**, media-row **17/17**, pressable **9/9**, CSS contract **50/50**, prop contract **63/63**, nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS; **9/9** suites; `artifact-edit` **447 checks**, `nested-edit-renderer` **75**, on-demand **114**, settings **101** assertions, etc. |
+| `npm run pack:check` | PASS; **65** files, **5,992,803** bytes packed, **12,808,780** bytes unpacked |
+| `npm run capture:readme` | PASS; the temporary-result captures now show Save as template (the footer Adjust style is gone for editable cards on a new Host) and the editor capture includes the new style section; the real-session generation Bento stays untouched |
+| Docs/structure checks | bilingual README and five doc pairs keep matching heading levels; local links/anchors, screenshot references and changelog links pass; `git diff --check` PASS |
+
+### Coverage and gaps
+
+- Covered: style envelope/validation/serialization, Host mint/apply/authorization, H1/H3/H4/double-write mutation checks, revision snapshot boundary, history inference, capability bit and footer fallback, editor style section/focus/Escape/clear/chip, scope-switch E2E, screenshots and docs sync.
+- Not covered: a real-model/real-GUI style adjustment (browser E2E uses a mocked Host); real mixed deployments (new Host + old client, old Host + new client); deterministic built-in/template style switching (B2, deliberately out of this increment).

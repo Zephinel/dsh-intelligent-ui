@@ -4,7 +4,9 @@
  *
  * Builds `test/browser/harness/entry.tsx`, serves it from a temporary directory,
  * starts headless Chrome with CDP, and drives the real DOM:
- * chip -> menu -> This session only -> style panel -> slider -> Escape.
+ * chip -> menu -> Display style row -> style panel -> slider -> Escape, then a
+ * scope switch (which must NOT auto-open the panel) and the active-entry route
+ * that explicitly opens it.
  *
  * Chrome is required; set CHROME_BIN to override the macOS default. The test is
  * intentionally outside `npm run check` so CI needs no browser.
@@ -148,8 +150,20 @@ try {
   await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
   await cdp.waitFor('!!document.querySelector("[role=menu]")', 'menu reopened')
 
+  // Switching scope only enables/disables; it must never auto-open the style
+  // panel. The panel has exactly two explicit entries: the Display style row
+  // (covered above) and the already-active scope entry (covered below).
   await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => b.textContent.includes("This session only")).click()')
-  await cdp.waitFor('!!document.querySelector("[data-dsh-iui-style-panel]")', 'style panel')
+  await cdp.waitFor(`window.__calls.at(-1) === 'enable:on'`, 'scope command sent')
+  await cdp.waitFor('document.querySelector("[data-dsh-iui-toggle]").dataset.state === "on"', 'chip reports the enabled override')
+  await new Promise(resolve => setTimeout(resolve, 450))
+  assert.equal(await cdp.evaluate('!!document.querySelector("[data-dsh-iui-style-panel]")'), false, 'a scope switch must not auto-open the style panel')
+  assert.equal(await cdp.evaluate('!!document.querySelector("[role=menu]")'), false, 'the scope menu closes after a scope switch')
+
+  await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
+  await cdp.waitFor('!!document.querySelector("[role=menu]")', 'menu after enabling')
+  await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => b.textContent.includes("This session only")).click()')
+  await cdp.waitFor('!!document.querySelector("[data-dsh-iui-style-panel]")', 'style panel via the active session entry')
 
   const panel = await cdp.evaluate(`(() => { const p=document.querySelector('[data-dsh-iui-style-panel]'); const r=p.getBoundingClientRect(); const a=document.activeElement; return { top:r.top, bottom:r.bottom, left:r.left, right:r.right, vw:innerWidth, vh:innerHeight, focusInside:p.contains(a), focusTag:a?.tagName } })()`)
   assert.ok(panel.top >= 0 && panel.bottom <= panel.vh && panel.left >= 0 && panel.right <= panel.vw, 'panel must be inside the viewport')

@@ -30,7 +30,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
-import { type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
+import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { RemixIcon, type RemixIconName } from '../../lib/components/remix-icon.tsx'
@@ -50,6 +50,8 @@ export interface EditPanelProps {
   readonly hoveredBlockId?: string | null
   /** Reports row hover to the canvas overlay (bidirectional hover sync). */
   readonly onHoverBlock?: (blockId: string | null) => void
+  /** Host supports revision-bound style editing; the style section is hidden otherwise. */
+  readonly styleEditSupported?: boolean
 }
 
 /** Number of hues in the shared selection palette. */
@@ -662,9 +664,13 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
 }
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
-export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock }: EditPanelProps): ReactElement {
+export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false }: EditPanelProps): ReactElement {
   const globalId = useId()
+  const stylePanelId = useId()
   const previewTitleId = useId()
+  const [styleOpen, setStyleOpen] = useState(false)
+  const styleToggleRef = useRef<HTMLButtonElement>(null)
+  const styleTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
   const [dragBlockId, setDragBlockId] = useState<string | null>(null)
   const [dragParentId, setDragParentId] = useState<string | null>(null)
@@ -818,6 +824,41 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     if (block === undefined) return `#${removed.order}`
     return block.title ?? blockKindLabel(block.kind, t)
   })()
+
+  // B1 style section facts: the recorded skin, the live instruction and the
+  // mixed guard that mirrors the store's style_mixed rule.
+  const styleHasContent = session.styleInstruction.trim() !== ''
+  const styleBlockContent = session.selection.length > 0
+    || (session.additions?.length ?? 0) > 0
+    || session.orderChanged
+    || session.nestedOrderChanged === true
+    || session.globalInstruction.trim() !== ''
+  const styleMixed = styleHasContent && styleBlockContent
+  const styleSkinLabel = session.temporaryStyle !== undefined
+    ? t('edit.styleSkinTemporary')
+    : session.styleId !== undefined
+      ? t('edit.styleSkinSaved')
+      : t('edit.styleSkinBuiltin')
+  const styleLayoutLabel = session.style === 'card'
+    ? t('edit.historyStyleCard')
+    : session.style === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
+  const styleCurrentLabel = `${styleSkinLabel} · ${styleLayoutLabel}`
+  const styleNewResultHint = session.temporaryStyle !== undefined
+    ? t('edit.styleNewResultTemporary')
+    : t('edit.styleNewResult')
+  const collapseStyleSection = (): void => {
+    setStyleOpen(false)
+    styleToggleRef.current?.focus()
+  }
+  // Expanding moves focus into the instruction field; collapsing returns it to
+  // the disclosure button (Escape from the textarea calls the same helper).
+  useEffect(() => {
+    if (!styleOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      styleTextareaRef.current?.focus({ preventScroll: true })
+    })
+    return () => { window.cancelAnimationFrame(frame) }
+  }, [styleOpen])
 
   const clearHoverTimers = (): void => {
     if (showTimer.current !== null) { window.clearTimeout(showTimer.current); showTimer.current = null }
@@ -1400,6 +1441,66 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       </header>
 
       <div className="dsh-iui-edit-panel-scroll">
+        {!styleEditSupported ? null : (
+          <section className="dsh-iui-edit-style" aria-label={t('edit.styleSection')} data-dsh-iui-edit-style-section>
+            <div className="dsh-iui-edit-style-head">
+              <span className="dsh-iui-edit-section-title">{t('edit.styleSection')}</span>
+              <span className="dsh-iui-edit-style-current" data-dsh-iui-edit-style-current>{t('edit.styleCurrent', { style: styleCurrentLabel })}</span>
+              <span className="dsh-iui-edit-section-spacer" />
+              <button
+                ref={styleToggleRef}
+                type="button"
+                className="dsh-iui-edit-section-action"
+                data-dsh-iui-edit-style-toggle
+                aria-expanded={styleOpen}
+                aria-controls={stylePanelId}
+                onClick={() => { if (styleOpen) collapseStyleSection(); else setStyleOpen(true) }}
+              >
+                {t('edit.styleAdjustAction')}
+                <RemixIcon name={styleOpen ? 'arrow-up-s-line' : 'arrow-down-s-line'} size={12} />
+              </button>
+            </div>
+            {styleOpen ? (
+              <div className="dsh-iui-edit-style-body" id={stylePanelId} data-dsh-iui-edit-style-panel>
+                <label className="dsh-iui-edit-style-label" htmlFor={`${stylePanelId}-input`}>{t('edit.styleInstructionLabel')}</label>
+                <textarea
+                  ref={styleTextareaRef}
+                  id={`${stylePanelId}-input`}
+                  className="dsh-iui-edit-textarea dsh-iui-edit-style-textarea"
+                  data-dsh-iui-edit-style
+                  rows={3}
+                  maxLength={MAX_STYLE_INSTRUCTION_CHARS}
+                  value={session.styleInstruction}
+                  placeholder={t('edit.styleInstructionHint')}
+                  onChange={event => { actions.setStyleInstruction(event.target.value) }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Escape') return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    collapseStyleSection()
+                  }}
+                />
+                <p className="dsh-iui-edit-style-hint">{t('edit.styleAdjustHint')}</p>
+                <div className="dsh-iui-edit-style-foot">
+                  <span className="dsh-iui-edit-style-note" data-dsh-iui-edit-style-note>{styleNewResultHint}</span>
+                  <button
+                    type="button"
+                    className="dsh-iui-edit-section-action"
+                    data-dsh-iui-edit-style-clear
+                    disabled={!styleHasContent}
+                    onClick={() => { actions.setStyleInstruction(''); announce(t('edit.a11yStyleCleared')) }}
+                  >
+                    {t('edit.styleClear')}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {styleMixed ? (
+              <p className="dsh-iui-edit-style-mixed" role="status" data-dsh-iui-edit-style-mixed>{t('edit.styleMixed')}</p>
+            ) : null}
+          </section>
+        )}
+
         {session.selection.length === 0 ? null : (
           <section className="dsh-iui-edit-section" aria-label={t('edit.requests')}>
             <div className="dsh-iui-edit-section-head">

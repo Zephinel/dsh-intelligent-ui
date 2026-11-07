@@ -124,6 +124,12 @@ export interface ArtifactEditSession {
   /** Whether unsaved popover text differs from the saved instruction. */
   readonly activeDirty: boolean
   readonly globalInstruction: string
+  /**
+   * Revision-bound natural-language style requirement. When non-empty this
+   * draft sends a style envelope instead of block edits: style and block
+   * content can never be combined in one send.
+   */
+  readonly styleInstruction: string
   readonly editing: boolean
   readonly drawerOpen: boolean
   readonly status: 'checking' | 'ready' | 'conflict' | 'submitted' | 'error'
@@ -193,6 +199,8 @@ export interface ArtifactEditActions {
   /** Remove every saved block request but keep the arrangement draft and global instruction. */
   clearAllEdits(): void
   setGlobalInstruction(text: string): void
+  /** Replace the natural-language style instruction of this draft. */
+  setStyleInstruction(text: string): void
   /** Exit the edit canvas; a non-empty draft stays as a detached draft + chip. */
   closeEditor(): void
   setDrawerOpen(open: boolean): void
@@ -244,6 +252,11 @@ export interface ArtifactEditViewProps {
   readonly scheme?: 'light' | 'dark'
   /** In-card action continuation, forwarded to the edit-mode renderer. */
   readonly onToAssistant?: (message: string) => void
+  /**
+   * Host capability for revision-bound style editing (B1). Absent/false keeps
+   * the legacy on-demand style fallback and hides the style section.
+   */
+  readonly styleEditSupported?: boolean
 }
 
 /** Localized label for one block kind. */

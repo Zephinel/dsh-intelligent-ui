@@ -56,13 +56,20 @@ test('the published files list covers every runtime and bundle input', () => {
 
 test('every shipped screenshot exists and is used by the matching README', () => {
   const screenshots = readdirSync(new URL('assets', root))
-  assert.equal(screenshots.length, 28, 'assets ships the current README screenshot set')
-  // Source captures are used to build the bento galleries and kept in assets/
-  // for docs/history; the READMEs reference the composites instead.
+  assert.equal(screenshots.length, 34, 'assets ships the current README screenshot set')
+  // Source captures are kept in assets/ for docs/history; the READMEs
+  // reference the composites instead. The real-* files are raw captures from
+  // live DSH model sessions (not reproducible by the capture scripts) that
+  // build the generation composites. The fixture dashboard/quiz/itinerary
+  // sources are retained as historical captures even though the generation
+  // composite no longer consumes them.
   const sourceCaptures = new Set([
     'intelligent-ui-itinerary.webp', 'intelligent-ui-itinerary-en.webp', 'intelligent-ui-itinerary-zh.webp',
     'intelligent-ui-dashboard-en.webp', 'intelligent-ui-dashboard-zh.webp',
     'intelligent-ui-quiz-en.webp', 'intelligent-ui-quiz-zh.webp',
+    'intelligent-ui-real-itinerary-en.webp', 'intelligent-ui-real-itinerary-zh.webp',
+    'intelligent-ui-real-dashboard-en.webp', 'intelligent-ui-real-dashboard-zh.webp',
+    'intelligent-ui-real-quiz-en.webp', 'intelligent-ui-real-quiz-zh.webp',
     'intelligent-ui-components-layout.webp',
     'intelligent-ui-components-inputs.webp', 'intelligent-ui-components-drawing.webp',
     'intelligent-ui-example-dashboard.webp', 'intelligent-ui-example-quiz.webp',

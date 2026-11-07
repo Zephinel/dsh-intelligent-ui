@@ -1,10 +1,12 @@
 /** Structured block-edit requests observed from the user message stream. */
 import {
   ARTIFACT_EDIT_OPEN, ARTIFACT_ID_PATTERN, MAX_ARTIFACT_ADDITIONS, MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_PROGRAM_CHARS,
-  describeTargetOrderProblem, isNoOpEditRequest, isReorderedOrder,
+  describeTargetOrderProblem, isNoOpEditRequest, isReorderedOrder, isStyleEditRequest,
   parseEditRequestTexts,
-  type ArtifactBlockAddition, type ArtifactEditRequest, type ArtifactRevisionMeta, type ArtifactRevisionStatus,
+  type ArtifactBlockAddition, type ArtifactBlockEditRequest, type ArtifactEditRequest,
+  type ArtifactRevisionMeta, type ArtifactRevisionStatus,
 } from '../shared/artifact-edit.ts'
+import { describeStyleSnapshotProblem, isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.ts'
 import { artifactEditWarnings, extractArtifactBlocks, reorderProgramToTargetOrder, verifyEditTargets } from '../shared/artifact-blocks.ts'
 import {
   applyOperations as applyCstOperations,
@@ -40,7 +42,7 @@ interface NestedEditFailure {
 }
 
 /** Whether one request addresses the nested CST tree (node-id edits or additions). */
-export function isNestedEditRequest(request: ArtifactEditRequest): boolean {
+export function isNestedEditRequest(request: ArtifactBlockEditRequest): boolean {
   return (request.additions?.length ?? 0) > 0 || request.edits.some(edit => edit.nodeId !== undefined)
 }
 
@@ -55,7 +57,7 @@ function isTreeNodeAncestor(tree: ArtifactTree, ancestorId: string, nodeId: stri
 }
 
 /** Validate one all-nested request against its base program tree. */
-function planNestedEdits(program: string, request: ArtifactEditRequest): { readonly ok: true; readonly plan: NestedEditPlan } | NestedEditFailure {
+function planNestedEdits(program: string, request: ArtifactBlockEditRequest): { readonly ok: true; readonly plan: NestedEditPlan } | NestedEditFailure {
   const edits = request.edits
   const additions = request.additions ?? []
   if (edits.length === 0 && additions.length === 0) return { ok: false, message: 'the nested edit request has no blocks.' }
@@ -142,7 +144,7 @@ function planNestedEdits(program: string, request: ArtifactEditRequest): { reado
 }
 
 /** Model-readable problem with one nested request, or undefined when it is valid. */
-export function describeNestedEditProblem(program: string, request: ArtifactEditRequest): string | undefined {
+export function describeNestedEditProblem(program: string, request: ArtifactBlockEditRequest): string | undefined {
   const plan = planNestedEdits(program, request)
   return plan.ok ? undefined : plan.message
 }
@@ -206,7 +208,7 @@ function nestedRootBlockIds(program: string, tree: ArtifactTree, nodes: readonly
  * @returns the composed page program, or a model-readable problem.
  */
 export function composeNestedEditProgram(
-  request: ArtifactEditRequest,
+  request: ArtifactBlockEditRequest,
   fragmentProgram: string,
 ): { readonly ok: true; readonly program: string } | NestedEditFailure {
   const fragment = fragmentProgram.trim()
@@ -301,7 +303,7 @@ export function composeNestedEditProgram(
   return { ok: true, program: nextProgram }
 }
 /** Tree options shared by nested content and hierarchical ordering. */
-function nestedTreeOptions(request: ArtifactEditRequest): { baseRevisionId: string; containerTypes: string[] } {
+function nestedTreeOptions(request: ArtifactBlockEditRequest): { baseRevisionId: string; containerTypes: string[] } {
   return { baseRevisionId: request.baseRevisionId, containerTypes: [...NESTED_EDIT_CONTAINER_TYPES] }
 }
 
@@ -357,7 +359,7 @@ function insideEditedSubtree(tree: ArtifactTree, nodeId: string, edited: Readonl
  * permutation of that parent's editable children and does not conflict with
  * `targetOrder.root` or the same request's content edits.
  */
-export function describeOrderByParentProblem(baseProgram: string, request: ArtifactEditRequest): string | undefined {
+export function describeOrderByParentProblem(baseProgram: string, request: ArtifactBlockEditRequest): string | undefined {
   const groups = request.orderByParent
   if (groups === undefined) return undefined
   const tree = buildArtifactTree(baseProgram, nestedTreeOptions(request))
@@ -479,7 +481,7 @@ function resolveCurrentParent(baseTree: ArtifactTree, currentTree: ArtifactTree,
 export function applyOrderByParent(
   baseProgram: string,
   program: string,
-  request: ArtifactEditRequest,
+  request: ArtifactBlockEditRequest,
   options: { readonly containerTypes?: readonly string[]; readonly baseRevisionId?: string } = {},
 ): { readonly ok: true; readonly program: string } | NestedEditFailure {
   const groups = request.orderByParent
@@ -554,7 +556,7 @@ export interface PendingArtifactEdit {
   readonly error?: PendingSelectorError
   readonly requestId?: string
   readonly artifactId?: string
-  readonly mode?: 'block' | 'full'
+  readonly mode?: 'block' | 'full' | 'style'
   readonly messageId?: string
 }
 
@@ -562,7 +564,7 @@ export interface PendingArtifactEdit {
 export interface PendingArtifactEditSummary {
   readonly requestId: string
   readonly artifactId?: string
-  readonly mode?: 'block' | 'full'
+  readonly mode?: 'block' | 'full' | 'style'
   readonly invalid: boolean
 }
 
@@ -570,6 +572,8 @@ export interface PendingArtifactEditSummary {
 export interface AppliedArtifactEdit {
   readonly lineage: ArtifactRevisionMeta
   readonly warnings: string[]
+  /** True when the applied request was the natural-language style branch. */
+  readonly styleEdit?: boolean
 }
 
 export interface ArtifactEditController {
@@ -606,7 +610,7 @@ interface Entry {
   readonly request?: ArtifactEditRequest
   readonly invalidReason?: string
   readonly artifactId?: string
-  readonly mode?: 'block' | 'full'
+  readonly mode?: 'block' | 'full' | 'style'
   readonly messageId?: string
   readonly createdAt: number
 }
@@ -626,6 +630,12 @@ const NO_PENDING_MESSAGE = 'render_ui: no block edit request is pending for this
 const NO_OP_MESSAGE = 'render_ui: this block edit request changes nothing (no instructions, no global instruction and the same block order), so no revision can be rendered. Ask the user to choose an edit or reorder a block before editing again.'
 
 const ARRANGEMENT_MESSAGE = 'render_ui: this block arrangement request could not be verified because the updated program did not keep every top-level block; keep the same top-level blocks with their statement names/titles (no add/remove/merge) and try again.'
+
+/** No-op style edit: the returned program and the approved snapshot are unchanged. */
+const STYLE_NO_OP_MESSAGE = 'render_ui: this style edit request changes nothing (the program and the approved temporaryStyle snapshot are unchanged), so no revision can be rendered. Ask the user to describe the style change they want before editing again.'
+
+/** H4: a style-only revision replaced a page that had editable blocks with one that has none. */
+const STYLE_EMPTY_BLOCKS_WARNING = 'The updated page no longer exposes any editable blocks; a style-only revision should keep the original blocks and change only their presentation.'
 
 const DUPLICATE_ARTIFACT_MESSAGE = (artifactId: string): string =>
   `render_ui: this user message contains more than one edit request for artifactId ${JSON.stringify(artifactId)}; only the first request per artifact is armed. Ask the user to send one edit per artifact.`
@@ -802,8 +812,23 @@ export function createArtifactEditController(
     if (request.branch !== true) {
       const base = revisions.get(request.baseRevisionId)
       if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
-        return `render_ui: this block edit request belongs to a different artifact revision. ${RELOAD}`
+        return `render_ui: this ${isStyleEditRequest(request) ? 'style' : 'block'} edit request belongs to a different artifact revision. ${RELOAD}`
       }
+    }
+    if (isStyleEditRequest(request)) {
+      // Style requests carry no block targets: validate the base page shape and
+      // the same staleness rule, then leave style/arg checks to apply().
+      const extraction = extractArtifactBlocks(request.program)
+      if (extraction.rootType !== 'Col' || extraction.unsupported !== undefined) {
+        return `render_ui: the style edit request's original program cannot be edited (${extraction.unsupported ?? 'root_not_col'}). ${RELOAD}`
+      }
+      if (request.branch !== true) {
+        const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
+        if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
+          return staleMessage(request, status)
+        }
+      }
+      return undefined
     }
     const extraction = extractArtifactBlocks(request.program)
     if (extraction.unsupported !== undefined) {
@@ -878,8 +903,10 @@ export function createArtifactEditController(
       const artifactId = request.artifactId
       const duplicate = acceptedArtifacts.has(artifactId)
       acceptedArtifacts.add(artifactId)
-      const blockMode = request.edits.length > 0 || (request.additions?.length ?? 0) > 0
-      const base = { requestId, request, artifactId, mode: blockMode ? 'block' as const : 'full' as const, createdAt: now(), ...message }
+      const mode: 'block' | 'full' | 'style' = isStyleEditRequest(request)
+        ? 'style'
+        : request.edits.length > 0 || (request.additions?.length ?? 0) > 0 ? 'block' : 'full'
+      const base = { requestId, request, artifactId, mode, createdAt: now(), ...message }
       if (duplicate) {
         ctx.logger?.warn(`intelligent-ui: ignored a duplicate artifact edit request for ${artifactId} in one user message`)
         arm(sessionId, { ...base, invalidReason: DUPLICATE_ARTIFACT_MESSAGE(artifactId) })
@@ -934,7 +961,24 @@ export function createArtifactEditController(
       // A block-level tool supplies the Host-composed page; the render_ui style
       // arguments never travel with it and the recorded request style still wins.
       const composed = composedProgram !== undefined
-      if (!composed) {
+      if (isStyleEditRequest(request)) {
+        // The composed path is edit_ui_blocks only; a style edit is render_ui once.
+        if (composed) {
+          throw new Error('edit_ui_blocks: this request changes the page presentation only; call render_ui once with the complete updated program and the approved temporaryStyle instead.')
+        }
+        if ('styleId' in args) {
+          throw new Error('render_ui: this style edit keeps the recorded page style; omit styleId.')
+        }
+        if (args.style !== request.style) {
+          throw new Error(`render_ui: this style edit must keep the recorded page layout "${request.style}"; pass style: "${request.style}".`)
+        }
+        if (!isStyleSnapshot(args.temporaryStyle)) {
+          throw new Error(`render_ui: this style edit needs the approved temporaryStyle snapshot: ${describeStyleSnapshotProblem(args.temporaryStyle) ?? 'snapshot rejected'}.`)
+        }
+        if (args.temporaryStyle.baseLayout !== request.style) {
+          throw new Error('render_ui: this style edit must keep temporaryStyle.baseLayout equal to the recorded style.')
+        }
+      } else if (!composed) {
         // Temporary-style results are content-editable only through the composed
         // block path; the full-program fallback keeps its on-demand authorization.
         if (request.temporaryStyle !== undefined) {
@@ -964,7 +1008,7 @@ export function createArtifactEditController(
         revisionNumber = (latest === undefined ? request.baseRevision : latest.revision) + 1
       } else {
         if (base !== undefined && (base.artifactId !== request.artifactId || base.revision !== request.baseRevision)) {
-          throw new Error(`${tool}: this block edit request belongs to a different artifact revision. ${RELOAD}`)
+          throw new Error(`${tool}: this ${isStyleEditRequest(request) ? 'style' : 'block'} edit request belongs to a different artifact revision. ${RELOAD}`)
         }
         const status = revisions.status({ artifactId: request.artifactId, revisionId: request.baseRevisionId })
         if (status.conflict || status.revision !== request.baseRevision || status.latestRevision !== request.baseRevision) {
@@ -981,6 +1025,44 @@ export function createArtifactEditController(
         throw new Error(composed
           ? 'edit_ui_blocks: the composed block program is not a valid artifact page; call edit_ui_blocks again with one complete expression per selected block.'
           : 'render_ui: an updated artifact page must keep root = Col([...]); the program was not recorded as a new revision. Fix the root and call render_ui again.')
+      }
+      if (isStyleEditRequest(request)) {
+        const snapshot = args.temporaryStyle as StyleSnapshot
+        // H7: the revision records the snapshot the model returned through the
+        // tool arguments, never the envelope snapshot it started from.
+        if (program === request.program.trim() && JSON.stringify(snapshot) === JSON.stringify(request.temporaryStyle)) {
+          throw new Error(STYLE_NO_OP_MESSAGE)
+        }
+        const warnings = artifactEditWarnings(request.program, program, [])
+        // H4: warn when a style-only revision returns a page with no editable blocks.
+        const baseExtraction = extractArtifactBlocks(request.program)
+        if (baseExtraction.blocks.length > 0 && updated.blocks.length === 0) warnings.push(STYLE_EMPTY_BLOCKS_WARNING)
+        const styleRecord: ArtifactRevisionRecord = {
+          revisionId: callId,
+          artifactId: request.artifactId,
+          baseRevisionId: request.baseRevisionId,
+          revision: revisionNumber,
+          sessionId,
+          style: request.style,
+          temporaryStyle: snapshot,
+          ...request.title === undefined ? {} : { title: request.title },
+          createdAt: now(),
+        }
+        revisions.record(styleRecord)
+        consume(sessionId, entry.requestId)
+        return {
+          lineage: {
+            artifactId: styleRecord.artifactId,
+            revisionId: styleRecord.revisionId,
+            requestId: request.requestId,
+            baseRevisionId: styleRecord.baseRevisionId,
+            revision: styleRecord.revision,
+            temporaryStyle: snapshot,
+            ...request.title === undefined ? {} : { title: request.title },
+          },
+          warnings,
+          styleEdit: true,
+        }
       }
       const nested = isNestedEditRequest(request)
       let nestedPlan: NestedEditPlan | undefined

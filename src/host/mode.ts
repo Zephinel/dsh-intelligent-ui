@@ -96,6 +96,9 @@ const modeViewSchema = z.object({
     resultIds: z.array(z.string().max(200)).max(8),
     resume: z.boolean().optional(),
   }).strict().nullable(),
+  // Capability bit: the Host can apply revision-bound natural-language style
+  // edits from the editor. Optional so an older Host's view still validates.
+  styleEdit: z.literal(true).optional(),
 }).strict()
 
 /** One parsed `/iui` invocation. */
@@ -342,6 +345,7 @@ export function installSessionControls(ctx: ModeHostContext, config: Intelligent
       enabled: effectiveEnabled(sessionId),
       style: styleFor(sessionId),
       onDemand: onDemand.projection(sessionId),
+      styleEdit: true,
     }
   }
 

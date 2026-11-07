@@ -16,9 +16,11 @@ import {
   ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH, ARTIFACT_HISTORY_ROUTE_PATH,
   ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH,
 } from '../../src/shared/artifact-edit.ts'
+import { ARTIFACT_BASE_ROUTE_PATH } from '../../src/shared/artifact-base.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH } from '../../src/shared/artifact-structure.ts'
-import { buildArtifactHistory, MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { buildArtifactHistory, MAX_ARTIFACT_REVISIONS, MAX_RESTORE_BODY_BYTES, createArtifactRevisionStore, registerArtifactRevisionRoutes } from '../../src/host/artifact-revisions.ts'
 import { createArtifactProgramStore } from '../../src/host/artifact-structure.ts'
+import { createResultStore } from '../../src/host/result-store.ts'
 import { THEME } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
@@ -40,6 +42,17 @@ afterEach(() => {
   if (originalHome === undefined) delete process.env.DSH_HOME
   else process.env.DSH_HOME = originalHome
 })
+
+/** Mount one revision store that forwards result-owned snapshots to the result registry. */
+function mountHomeWithResults() {
+  const home = mkdtempSync(join(tmpdir(), 'iui-artifacts-results-'))
+  homes.push(home)
+  process.env.DSH_HOME = home
+  const resultsFile = join(home, 'dsh-intelligent-ui-results.json')
+  const results = createResultStore()
+  const store = createArtifactRevisionStore({}, results)
+  return { home, results, resultsFile, store }
+}
 
 const revision = (overrides = {}) => ({
   revisionId: 'call-2', artifactId: 'call-1', baseRevisionId: 'call-1', revision: 2,
@@ -202,6 +215,32 @@ test('restore accepts the program-only initial revision and copies style from th
   assert.equal(createArtifactProgramStore().lookup('call-1', body.revision.revisionId), restoredProgram)
 })
 
+test('restore accepts any unrecorded source revision whose program is still retained', async () => {
+  // Decision A: the retained-program fallback is not limited to the initial
+  // revision id — an unrecorded revision whose program survived in the
+  // authoritative registry (for example after its revision record was evicted)
+  // is still restorable as a copied revision.
+  const records = [revision({ revisionId: 'call-3', revision: 2, createdAt: 3 })]
+  const programs = [
+    programRecord({ revisionId: 'call-orphan', program: 'root = Col([Title("Orphan")])', createdAt: 1, lastAccessAt: 1 }),
+    programRecord({ revisionId: 'call-3', program: 'root = Col([Title("Second")])', createdAt: 3, lastAccessAt: 3 }),
+  ]
+  const m = mountSourceRoutes({ revisions: records, programs })
+  const restoredProgram = 'root = Col([Title("Restored orphan")])'
+  const response = await postRestore(m.restoreRoute, {
+    body: { schemaVersion: 1, artifactId: 'call-1', sourceRevisionId: 'call-orphan', program: restoredProgram },
+  })
+  assert.equal(response.status, 201, response.body)
+  const body = readJson(response)
+  assert.equal(body.ok, true)
+  assert.equal(body.revision.baseRevisionId, 'call-orphan')
+  assert.equal(body.revision.revision, 3)
+  assert.equal(body.revision.program, restoredProgram)
+  const latest = createArtifactRevisionStore().latestFor('call-1')
+  assert.equal(latest.revisionId, body.revision.revisionId)
+  assert.equal(latest.baseRevisionId, 'call-orphan')
+})
+
 test('restore reports source_missing/program states for initial revisions', async () => {
   const noHistory = mountRoutes({ revisions: [], programs: [programRecord()] })
   const alreadyLatest = await postRestore(noHistory.restoreRoute, {
@@ -279,6 +318,92 @@ test('a revision record keeps a temporary style snapshot and refuses mismatches'
     assert.throws(() => store.record(revision({ revisionId: 'call-2', temporaryStyle })), /Invalid/)
   }
   assert.deepEqual(store.get('call-2').temporaryStyle, TEMPORARY_STYLE, 'rejected records leave the stored one unchanged')
+})
+
+test('the revision store records the result snapshot before writing a temporary revision', () => {
+  const { store, results, resultsFile } = mountHomeWithResults()
+  store.record(revision({ temporaryStyle: TEMPORARY_STYLE }))
+  const persisted = JSON.parse(readFileSync(resultsFile, 'utf8'))
+  assert.equal(persisted.version, 1)
+  assert.equal(persisted.results.length, 1)
+  assert.deepEqual(persisted.results[0], {
+    resultId: 'call-2',
+    sessionId: 's1',
+    snapshot: TEMPORARY_STYLE,
+    parentResultId: 'call-1',
+    createdAt: 1,
+  })
+  assert.deepEqual(results.get('call-2').snapshot, TEMPORARY_STYLE)
+  // Idempotent replay writes neither registry twice.
+  store.record(revision({ temporaryStyle: TEMPORARY_STYLE }))
+  assert.equal(JSON.parse(readFileSync(resultsFile, 'utf8')).results.length, 1)
+  assert.deepEqual(store.get('call-2').temporaryStyle, TEMPORARY_STYLE)
+  // A revision without a temporary style records no snapshot.
+  store.record(revision({ revisionId: 'call-3', baseRevisionId: 'call-2', revision: 3, createdAt: 2 }))
+  assert.equal(JSON.parse(readFileSync(resultsFile, 'utf8')).results.length, 1)
+})
+
+test('a failed snapshot write aborts before the revision write and can be retried', () => {
+  const home = mkdtempSync(join(tmpdir(), 'iui-artifacts-boundary-'))
+  homes.push(home)
+  process.env.DSH_HOME = home
+  const artifactsFile = join(home, 'dsh-intelligent-ui-artifacts.json')
+  const broken = createArtifactRevisionStore({}, { record() { throw new Error('snapshot store full') } })
+  assert.throws(() => broken.record(revision({ temporaryStyle: TEMPORARY_STYLE })), /snapshot store full/)
+  assert.equal(existsSync(artifactsFile), false, 'the revision file is not touched when the snapshot write fails')
+  assert.equal(broken.get('call-2'), undefined, 'no revision exists without its snapshot')
+  // The whole call is retryable once the sink works again.
+  const results = createResultStore()
+  const retried = createArtifactRevisionStore({}, results)
+  retried.record(revision({ temporaryStyle: TEMPORARY_STYLE }))
+  assert.deepEqual(retried.get('call-2').temporaryStyle, TEMPORARY_STYLE)
+  assert.ok(existsSync(artifactsFile))
+  assert.deepEqual(results.get('call-2').snapshot, TEMPORARY_STYLE)
+})
+
+test('restoring a temporary-style revision records its snapshot in the result registry', async () => {
+  const source = revision({ title: 'Temp page', temporaryStyle: TEMPORARY_STYLE })
+  const latest = revision({ revisionId: 'call-3', baseRevisionId: 'call-2', revision: 3, createdAt: 2 })
+  const m = mountSourceRoutes({ revisions: [source, latest] })
+  const response = await postRestore(m.restoreRoute, { body: RESTORE_BODY })
+  assert.equal(response.status, 201, response.body)
+  const body = readJson(response)
+  assert.deepEqual(m.resultsStore.get(body.revision.revisionId).snapshot, TEMPORARY_STYLE)
+  const snapshot = JSON.parse(readFileSync(m.resultsFile, 'utf8')).results
+    .find(entry => entry.resultId === body.revision.revisionId)
+  assert.deepEqual(snapshot, {
+    resultId: body.revision.revisionId,
+    sessionId: 'local-restore',
+    snapshot: TEMPORARY_STYLE,
+    parentResultId: 'call-2',
+    createdAt: snapshot.createdAt,
+  })
+})
+
+test('history infers structure and style-only revisions without new durable fields', () => {
+  const { store } = mountHome()
+  store.record(revision({
+    revisionId: 'struct_aaaabbbbccccdddd', revision: 2, createdAt: 2,
+    editedBlockIds: ['b1'], temporaryStyle: TEMPORARY_STYLE,
+  }))
+  store.record(revision({
+    revisionId: 'call-style-only', revision: 3, baseRevisionId: 'struct_aaaabbbbccccdddd', createdAt: 3,
+    editedBlockIds: [], temporaryStyle: TEMPORARY_STYLE,
+  }))
+  store.record(revision({
+    revisionId: 'call-style-edited', revision: 4, baseRevisionId: 'call-style-only', createdAt: 4,
+    editedBlockIds: ['b1'], temporaryStyle: TEMPORARY_STYLE,
+  }))
+  // Legacy shapes keep their previous inference.
+  store.record(revision({ revisionId: 'legacy-edit', revision: 5, baseRevisionId: 'call-style-edited', createdAt: 5, editedBlockIds: ['b1'] }))
+  store.record(revision({ revisionId: 'legacy-structure', revision: 6, baseRevisionId: 'legacy-edit', createdAt: 6, editedBlockIds: [] }))
+  const history = buildArtifactHistory(store, undefined, 'call-1')
+  const source = new Map(history.revisions.map(entry => [entry.revisionId, entry.source]))
+  assert.equal(source.get('struct_aaaabbbbccccdddd'), 'structure', 'the struct_ prefix wins over editedBlockIds and temporaryStyle')
+  assert.equal(source.get('call-style-only'), 'edit', 'a style-only temporary revision is inferred as an edit')
+  assert.equal(source.get('call-style-edited'), 'edit')
+  assert.equal(source.get('legacy-edit'), 'edit')
+  assert.equal(source.get('legacy-structure'), 'structure')
 })
 
 test('corrupt files, versions, schemas, duplicate ids and oversize collections are preserved on the next atomic write', () => {
@@ -396,6 +521,42 @@ function postRestore(route, { body, raw, headers = { 'content-type': 'applicatio
   return result.done
 }
 
+/**
+ * Mount the source restore route directly with its own stores.
+ *
+ * The plugin-path harness above loads the previously built `lib/index.js`; the
+ * host bundle is deliberately not rebuilt in this fix stream, so the reverted
+ * retained-program fallback is exercised through the source registration.
+ */
+function mountSourceRoutes({ revisions = [], programs } = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'iui-artifact-restore-src-'))
+  homes.push(home)
+  process.env.DSH_HOME = home
+  writeFileSync(join(home, 'dsh-intelligent-ui-artifacts.json'), JSON.stringify({ version: 1, revisions }))
+  if (programs !== undefined) writeFileSync(join(home, 'dsh-intelligent-ui-programs.json'), JSON.stringify({ version: 1, programs }))
+  const resultsStore = createResultStore()
+  const revisionStore = createArtifactRevisionStore({}, resultsStore)
+  const programStore = createArtifactProgramStore()
+  const routes = []
+  registerArtifactRevisionRoutes({
+    inject(dependencies, callback) {
+      callback({
+        webServer: { register(route) { routes.push(route); return () => {} } },
+        connection: { requestRejection() { return undefined } },
+        effect(fn) { return fn() },
+      })
+    },
+  }, revisionStore, programStore)
+  return {
+    revisionStore,
+    programStore,
+    resultsStore,
+    resultsFile: join(home, 'dsh-intelligent-ui-results.json'),
+    routes,
+    restoreRoute: routes.find(route => route.path === ARTIFACT_RESTORE_ROUTE_PATH),
+  }
+}
+
 /** One authoritative program registry entry. */
 const programRecord = (overrides = {}) => ({
   artifactId: 'call-1', revisionId: 'call-1', program: 'root = Col([Title("Initial")])',
@@ -440,7 +601,7 @@ test('one disposer disposes the status and restore routes together', () => {
   assert.deepEqual(
     disposedPaths.filter(path => path.startsWith('/api/intelligent-ui/artifact-')).sort(),
     [ARTIFACT_RESTORE_ROUTE_PATH, ARTIFACT_REVISION_ROUTE_PATH, ARTIFACT_STRUCTURE_ROUTE_PATH,
-      ARTIFACT_HISTORY_ROUTE_PATH, ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH].sort(),
+      ARTIFACT_HISTORY_ROUTE_PATH, ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH, ARTIFACT_BASE_ROUTE_PATH].sort(),
   )
 })
 

@@ -63,8 +63,8 @@ npm run test:browser   # 8 个 Chrome 套件：按需生成、样式面板、主
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植（含 M4-1 `nestedEditLibrary` 容器 HOC、`nested-edit.css` 直接子选择器补偿与 B2-6 `runtimeState`/`onRuntimeStateChange` 转发）；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` / `edit_ui_blocks` 进程行（失败时一行原因）、程序提取器（含 block-edit 修订卡片与 `requestId`）、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册；另有 Artifact 区块编辑与编排（多草稿 store、单 active 画布与草稿切换区、每草稿一个 Composer chip、编辑视图/Artifact 编辑器/区块浮层、实时排序预览、后台修订探测、已发送消息逐信封摘要、Turn 关闭按 `requestId` 对账与 failed 草稿恢复，以及旧修订的 branch 模式和 `local-revisions.ts` 零模型本地修订卡片（localStorage，按 Turn 渲染）、`store.ts` 的 sessionStorage 草稿持久化/懒恢复与 `tabs.ts` 的 BroadcastChannel 跨标签软租约，以及临时样式结果的内容编辑（快照随请求、纯排序/整体说明被阻止）、`nested.ts` 的 CST→嵌套区块映射与编辑画布「嵌套区块」opt-in 模式、嵌套「嵌套区块编排」同父排序（`nestedOrder`/drag/keyboard/reset）、编排行复制/两段式删除/「移动到…」跨容器移动（本地结构修订卡 `kind` 为 structure）、嵌套组「添加区块」（模型 additions）与结构操作 preview→diff 模态确认。
 - `src/standalone/**`：交互页面的独立入口与页面 chrome（卡片标题/折叠、`@ToAssistant` 复制兜底、主题样式）；由 `npm run build` 打成 `lib/standalone.*`，Host 通过 same-origin 路由提供给导出流程。
-- `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）；Artifact 区块编辑也在这里定义任务信封与形状校验（`artifact-edit.ts`，含 `requestId`、`parseEditRequestTexts` 与多卡片批次上限）、区块识别/包装与确定性排序（`artifact-blocks.ts`），以及区块片段切片/回填（`artifact-block-bundle.ts`）。
-- `src/host/**`：工具注册（`render_ui` 与区块片段工具 `edit_ui_blocks`，多 pending 时用 `editRequestId` / `requestId`+`artifactId` 选择，branch 请求允许旧 base）、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale` / `removeFollowUps`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性，关闭时 deny 两个工具）；`artifact-revisions.ts` / `artifact-edit.ts` 提供修订注册表、认证查询路由与 POST 零模型恢复路由，以及多信封解析（`parseEditRequestTexts`）、按 `requestId` 的 pending Map、branch 校验、targetOrder 校验、片段合并与确定性排序控制器，M4-2 `orderByParent` 层级校验与最深优先重建、M4-3 权威 program 注册表 + 幂等 ledger + `POST /api/intelligent-ui/artifact-structure` 确定性结构路由，以及 M4-4 共享容器白名单与 Section children 参数接入。
+- `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）；Artifact 区块编辑也在这里定义任务信封与形状校验（`artifact-edit.ts`，含 `requestId`、`parseEditRequestTexts` 与多卡片批次上限，以及 B1 的 block/style 判别信封与样式序列化）、区块识别/包装与确定性排序（`artifact-blocks.ts`）、区块片段切片/回填（`artifact-block-bundle.ts`），以及基础登记契约与校验（`artifact-base.ts`，供 Host 路由与客户端 shared 使用）。
+- `src/host/**`：工具注册（`render_ui` 与区块片段工具 `edit_ui_blocks`，多 pending 时用 `editRequestId` / `requestId`+`artifactId` 选择，branch 请求允许旧 base）、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `exportBackground` / `exportScale` / `removeFollowUps`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性，关闭时 deny 两个工具）；`artifact-revisions.ts` / `artifact-edit.ts` 提供修订注册表、认证查询路由与 POST 零模型恢复路由，以及多信封解析（`parseEditRequestTexts`）、按 `requestId` 的 pending Map、branch 校验、targetOrder 校验、片段合并与确定性排序控制器，M4-2 `orderByParent` 层级校验与最深优先重建、M4-3 权威 program 注册表 + 幂等 ledger + `POST /api/intelligent-ui/artifact-structure` 确定性结构路由、M4-4 共享容器白名单与 Section children 参数接入，以及 `artifact-base.ts` 的 base 登记生命周期与 `resolveArtifactBase` 边界（结构路由共用），和 `artifact-revisions.ts` 的临时样式快照边界（修订写入前登记 ResultStore）与 history 来源推断。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
 
@@ -99,6 +99,17 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 ### 工具 JSON Schema 子集（激活失败排查）
 
 DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`src/host/tool-schema.ts` 在注册任何工具/路由/提示词之前先用同一子集验证 `render_ui` 参数与输出 schema，因此不合法的 schema 会让整个插件激活失败并指出具体关键字，而不是留下“工具缺失但提示词已启用”的半活状态。限制写进 `description` 并在 execute 中校验；`test/host/tool-schema.test.mjs` 守护子集与失败形态，`test/host/tool.test.mjs` 继续守护实际参数/输出 schema。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
+
+### 新增 Host 侧协作状态的硬性要求
+
+任何新增 Host 侧协作状态的能力（例如权威 program registry、本轮的基础登记）必须同时交付以下四项，缺一不可：
+
+1. **状态版本**：持久化文件与路由 body 带 schema version；读到旧版本时必须能安全失败或显式迁移。
+2. **幂等登记/迁移路径**：已存在的内容必须能通过一条带 provenance 校验、写一次、可重放的路径进入权威状态；不允许依赖客户端每次重传、手工脚本或后台任务。
+3. **旧形态测试**：用「安装该能力之前渲染的卡片 / 写出的状态文件」作为 fixture 覆盖升级路径，而不只测新数据。
+4. **混合版本降级**：新 Client + 旧 Host（或反向）必须有明确行为：缺路由/缺字段时降级到哪个 UI 文案与哪条非权威路径，且不阻塞主流程。
+
+反例是基础登记之前的旧卡：同一张卡在结构操作、修订历史与恢复里分别失败成不同错误。参考实现：`src/shared/artifact-base.ts`（共享契约与校验）、`src/host/artifact-base.ts`（登记生命周期与 base resolve 边界）、`src/client/artifact-edit/artifact-base.ts`（single-flight ensure 与旧 Host 能力缓存）。
 
 ## 目录（发布相关）
 

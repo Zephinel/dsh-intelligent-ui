@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ARTIFACT_EDIT_CLOSE, ARTIFACT_EDIT_OPEN, ARTIFACT_PROGRAM_CLOSE, ARTIFACT_PROGRAM_OPEN,
-  buildEditRequestText, isArtifactRevisionMeta,
+  buildEditRequestText, buildStyleEditRequestText, isArtifactRevisionMeta,
 } from '../../src/shared/artifact-edit.ts'
 import { extractArtifactBlocks, readRootLayout, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
 import { extractBlockBundle } from '../../src/shared/artifact-block-bundle.ts'
@@ -218,6 +218,40 @@ function rawEnvelope(request) {
 const ENVELOPE = buildEditRequestText(editRequest())
 const MALFORMED_ENVELOPE = `${ARTIFACT_EDIT_OPEN}\n{broken}\n${ARTIFACT_EDIT_CLOSE}`
 
+/** One approved result-owned snapshot for a natural-language style edit. */
+const STYLE_SNAPSHOT = { ...TEMPORARY_STYLE, directives: 'Quieter editorial layout: fewer decorations, lighter headings, more breathing room.' }
+/** A different snapshot used to prove a changed style is accepted. */
+const STYLE_SNAPSHOT_ALT = { ...STYLE_SNAPSHOT, directives: 'Spacious magazine layout with an airy type scale and muted dividers.' }
+
+/** One revision-bound natural-language style edit request for the DST fixture. */
+function styleRequest(overrides = {}) {
+  return {
+    kind: 'style',
+    schemaVersion: 1,
+    requestId: 'req_style_0001',
+    artifactId: 'call-original',
+    baseRevisionId: 'call-original',
+    baseRevision: 1,
+    title: DST_TITLE,
+    style: 'card',
+    temporaryStyle: TEMPORARY_STYLE,
+    styleInstruction: '更安静的编辑感排版：减少装饰、标题更轻、留白更舒展。',
+    program: DST_PROGRAM,
+    ...overrides,
+  }
+}
+
+/** The render_ui arguments one model call uses to apply a pending style edit. */
+function styleArgs(overrides = {}) {
+  return {
+    program: DST_PROGRAM,
+    style: 'card',
+    temporaryStyle: STYLE_SNAPSHOT,
+    editRequestId: 'req_style_0001',
+    ...overrides,
+  }
+}
+
 /** Mount the plugin on a stub context that keeps every live session listener. */
 function mount({ answerStyle = 'auto', templates = [], revisions = [] } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'iui-artifact-edit-'))
@@ -225,18 +259,26 @@ function mount({ answerStyle = 'auto', templates = [], revisions = [] } = {}) {
   process.env.DSH_HOME = home
   writeFileSync(join(home, 'dsh-intelligent-ui-styles.json'), JSON.stringify({ version: 1, templates }))
   if (revisions.length > 0) writeFileSync(join(home, 'dsh-intelligent-ui-artifacts.json'), JSON.stringify({ version: 1, revisions }))
-  const registered = { tools: [], sessionEvents: [] }
+  const registered = { tools: [], sessionEvents: [], commands: [] }
   plugin.apply({
     tools: { register(definition) { registered.tools.push(definition) } },
     systemPrompt: { section() {} },
     on(event, handler) { if (event === 'session/event') registered.sessionEvents.push(handler) },
     inject(dependencies, callback) {
-      if (!dependencies.includes('webServer')) return
-      callback({
-        webServer: { register() { return () => {} } },
-        connection: { requestRejection() { return undefined } },
-        effect(fn) { return fn() },
-      })
+      if (dependencies.includes('webServer')) {
+        callback({
+          webServer: { register() { return () => {} } },
+          connection: { requestRejection() { return undefined } },
+          effect(fn) { return fn() },
+        })
+        return
+      }
+      if (dependencies.includes('sessionProjections') && dependencies.includes('commands')) {
+        callback({
+          sessionProjections: { register() { return () => {} } },
+          commands: { register(definition) { registered.commands.push(definition); return () => {} } },
+        })
+      }
     },
   }, { globalEnabled: { get: () => true }, answerStyle: { get: () => answerStyle } })
   const agent = { session: { id: 's1' } }
@@ -247,7 +289,8 @@ function mount({ answerStyle = 'auto', templates = [], revisions = [] } = {}) {
   const send = text => event('user/message', { id: 'edit-message', source: { kind: 'user' }, content: [{ type: 'text', text }] })
   const tool = registered.tools.find(definition => definition.name === 'render_ui')
   const blockTool = registered.tools.find(definition => definition.name === 'edit_ui_blocks')
-  return { ...registered, tool, blockTool, home, agent, event, send, file: join(home, 'dsh-intelligent-ui-artifacts.json') }
+  const command = rawInput => registered.commands.at(-1).handler({ agent, rawInput })
+  return { ...registered, tool, blockTool, home, agent, event, send, command, file: join(home, 'dsh-intelligent-ui-artifacts.json') }
 }
 
 test('registers the revision output fields while ordinary renders keep a null presentation meta', async () => {
@@ -1469,4 +1512,193 @@ test('the pending registry keeps at most 64 sessions and drops the oldest', () =
   assert.equal(direct.controller.pending('session-0'), undefined)
   assert.ok(direct.controller.pending('session-1').request)
   assert.ok(direct.controller.pending('session-64').request)
+})
+
+test('render_ui advertises the style-edit fields without leaking the branch flag in the projection', () => {
+  const m = mount()
+  const properties = m.tool.output.schema.properties
+  for (const key of ['styleEdit', 'temporaryStyle', 'title']) assert.ok(properties[key], key)
+  assert.equal(properties.styleEdit.type, 'boolean')
+  assert.equal(properties.temporaryStyle.type, 'object')
+  assertDshToolSchema(m.tool.output.schema, 'render_ui.output.schema')
+  assert.deepEqual(m.tool.output.schema.required, ['statements', 'style'])
+})
+
+test('a natural-language style edit records revision 2 with the model snapshot and no block ids', async () => {
+  const m = mount()
+  await m.tool.execute({ program: DST_PROGRAM, style: 'card' }, { agent: m.agent, callId: 'call-original' })
+  m.send(buildEditRequestText(styleRequest()))
+  const value = await m.tool.execute(styleArgs(), { agent: m.agent, callId: 'call-style-1' })
+  assert.equal(value.styleEdit, true)
+  assert.equal(value.revision, 2)
+  assert.equal(value.requestId, 'req_style_0001')
+  assert.equal(value.baseRevisionId, 'call-original')
+  assert.equal(value.style, 'card')
+  assert.deepEqual(value.temporaryStyle, STYLE_SNAPSHOT)
+  assert.equal(value.title, DST_TITLE)
+  assert.equal(Object.hasOwn(value, 'styleId'), false)
+  assert.equal(Object.hasOwn(value, 'editedBlockIds'), false, 'a style edit changes no block')
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.revisionId, 'call-style-1')
+  assert.equal(record.style, 'card')
+  assert.deepEqual(record.temporaryStyle, STYLE_SNAPSHOT, 'H7: the approved tool-argument snapshot is recorded')
+  assert.equal(Object.hasOwn(record, 'styleId'), false)
+  assert.equal(Object.hasOwn(record, 'editedBlockIds'), false)
+  // The revision boundary recorded the result snapshot exactly once, before the revision write.
+  const results = JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-results.json'), 'utf8')).results
+  assert.deepEqual(results, [{
+    resultId: 'call-style-1',
+    sessionId: 's1',
+    snapshot: STYLE_SNAPSHOT,
+    parentResultId: 'call-original',
+    createdAt: record.createdAt,
+  }])
+  const meta = m.tool.output.presentationMeta({}, value)
+  assert.deepEqual(meta, {
+    artifactId: 'call-original',
+    revisionId: 'call-style-1',
+    requestId: 'req_style_0001',
+    baseRevisionId: 'call-original',
+    revision: 2,
+    style: 'card',
+    temporaryStyle: STYLE_SNAPSHOT,
+    title: DST_TITLE,
+  })
+  assert.equal(isArtifactRevisionMeta(meta), true)
+  assert.equal(Object.hasOwn(meta, 'styleEdit'), false, 'H6: the projection meta never carries the branch flag')
+  assert.equal(Object.hasOwn(meta, 'kind'), false)
+  assert.equal(m.tool.output.render({}, value)[0].text, 'Interactive UI style updated for the user (revision 2 of the artifact, card layout).')
+  const programs = JSON.parse(readFileSync(join(m.home, 'dsh-intelligent-ui-programs.json'), 'utf8')).programs
+  assert.ok(programs.some((entry) => entry.revisionId === 'call-style-1'))
+  // The request was consumed exactly once.
+  await assert.rejects(
+    () => m.tool.execute(styleArgs({ temporaryStyle: STYLE_SNAPSHOT_ALT }), { agent: m.agent, callId: 'call-style-again' }),
+    /no pending Artifact edit request matches editRequestId/,
+  )
+})
+
+test('a style edit on a template-based page keeps the layout and drops the template id', async () => {
+  const custom = template()
+  const m = mount({ answerStyle: custom.id, templates: [custom] })
+  await m.tool.execute({ program: DST_PROGRAM, style: custom.baseLayout, styleId: custom.id }, { agent: m.agent, callId: 'call-original' })
+  m.send(buildEditRequestText(styleRequest({ styleId: custom.id, temporaryStyle: undefined })))
+  const value = await m.tool.execute(styleArgs(), { agent: m.agent, callId: 'call-style-template' })
+  assert.equal(value.styleEdit, true)
+  assert.equal(value.style, custom.baseLayout)
+  assert.equal(Object.hasOwn(value, 'styleId'), false, 'the snapshot replaces the template id')
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.style, custom.baseLayout)
+  assert.equal(Object.hasOwn(record, 'styleId'), false)
+  assert.deepEqual(record.temporaryStyle, STYLE_SNAPSHOT)
+})
+
+test('an unchanged style edit is a no-op that stays armed; a changed snapshot is accepted', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest()))
+  await assert.rejects(
+    () => m.tool.execute(styleArgs({ temporaryStyle: TEMPORARY_STYLE }), { agent: m.agent, callId: 'call-style-noop' }),
+    /changes nothing \(the program and the approved temporaryStyle snapshot are unchanged\)/,
+  )
+  assert.equal(existsSync(m.file), false, 'a no-op records no revision')
+  const value = await m.tool.execute(styleArgs({ temporaryStyle: STYLE_SNAPSHOT }), { agent: m.agent, callId: 'call-style-retry' })
+  assert.equal(value.styleEdit, true)
+  assert.equal(value.revision, 2)
+})
+
+test('style edits are explicit, snapshot-bound and never mix with block or on-demand paths', async () => {
+  // H2: an unknown selector fails before any on-demand authorization.
+  const selectorMiss = mount()
+  await assert.rejects(
+    () => selectorMiss.tool.execute(styleArgs({ editRequestId: 'req_unknown_0001' }), { agent: selectorMiss.agent, callId: 'call-selector' }),
+    /no pending Artifact edit request matches editRequestId/,
+  )
+  // H1: a single pending style request is never auto-applied without editRequestId.
+  const h1 = mount()
+  h1.send(buildEditRequestText(styleRequest()))
+  await assert.rejects(
+    () => h1.tool.execute({ program: DST_PROGRAM, style: 'card', temporaryStyle: STYLE_SNAPSHOT }, { agent: h1.agent, callId: 'call-h1' }),
+    /pending natural-language style edit \(requestId "req_style_0001"\)/,
+  )
+  assert.equal(existsSync(h1.file), false, 'H1: the style request was not applied')
+  // A style edit without the approved snapshot is rejected.
+  await assert.rejects(
+    () => h1.tool.execute({ program: DST_PROGRAM, style: 'card', editRequestId: 'req_style_0001' }, { agent: h1.agent, callId: 'call-no-snapshot' }),
+    /must be rendered with the approved temporaryStyle snapshot/,
+  )
+  // Bad baseLayout and unsafe contrast reuse the on-demand snapshot checks.
+  await assert.rejects(
+    () => h1.tool.execute(styleArgs({ temporaryStyle: { ...STYLE_SNAPSHOT, baseLayout: 'article' } }), { agent: h1.agent, callId: 'call-bad-layout' }),
+    /baseLayout must match style/,
+  )
+  await assert.rejects(
+    () => h1.tool.execute(styleArgs({ temporaryStyle: { ...STYLE_SNAPSHOT, theme: { ...THEME, light: { ...THEME.light, accent: '#aaaaaa' } } } }), { agent: h1.agent, callId: 'call-bad-contrast' }),
+    /contrast must be at least 3:1/,
+  )
+  // The recorded styleId must not travel with the model's style-edit arguments.
+  await assert.rejects(
+    () => h1.tool.execute(styleArgs({ styleId: 'cs_abcdef123456' }), { agent: h1.agent, callId: 'call-style-id' }),
+    /keeps the recorded page style; omit styleId/,
+  )
+  // edit_ui_blocks redirects a style request and keeps it armed.
+  await assert.rejects(
+    () => h1.blockTool.execute({ program: 'root = Col([Text("x")])' }, { agent: h1.agent, callId: 'call-redirect' }),
+    /changes the page presentation only; call render_ui/,
+  )
+  assert.equal(existsSync(h1.file), false, 'the redirect consumes nothing')
+  // With no pending request at all, a temporaryStyle still needs on-demand authorization.
+  const noPending = mount()
+  await assert.rejects(
+    () => noPending.tool.execute({ program: DST_PROGRAM, style: 'card', temporaryStyle: STYLE_SNAPSHOT }, { agent: noPending.agent, callId: 'call-no-pending' }),
+    /requires a bound, running on-demand operation/,
+  )
+  // A temporaryStyle argument cannot substitute for a pending block request either.
+  const blockTemp = mount()
+  blockTemp.send(buildEditRequestText(editRequest()))
+  await assert.rejects(
+    () => blockTemp.tool.execute({ program: DST_PROGRAM, style: 'card', temporaryStyle: STYLE_SNAPSHOT }, { agent: blockTemp.agent, callId: 'call-block-temp' }),
+    /requires a bound, running on-demand operation/,
+  )
+})
+
+test('an armed on-demand turn cannot absorb a pending style edit (H3)', async () => {
+  const m = mount()
+  const armed = m.command('on-demand')
+  assert.match(String(armed.text), /armed/)
+  m.send(buildEditRequestText(styleRequest()))
+  await assert.rejects(
+    () => m.tool.execute(styleArgs(), { agent: m.agent, callId: 'call-h3' }),
+    /inside a Host-authorized on-demand turn, so it cannot apply a pending natural-language style edit/,
+  )
+  assert.equal(existsSync(m.file), false, 'H3: the style edit records nothing during an on-demand turn')
+})
+
+test('stale and branch base rules apply to natural-language style edits', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest()))
+  // A block edit on the same artifact records revision 2 while the style request stays armed.
+  m.send(buildEditRequestText(editRequest({ requestId: 'req_block_0001' })))
+  await m.blockTool.execute({ program: blockFragment(['b4'], { b4: UPDATED_MONTH }), requestId: 'req_block_0001' }, { agent: m.agent, callId: 'call-block-1' })
+  await assert.rejects(
+    () => m.tool.execute(styleArgs(), { agent: m.agent, callId: 'call-style-stale' }),
+    /targets revision 1, but revision 2 is now the latest; the page is out of date/,
+  )
+  // A branch style edit may target the older revision; it records latest + 1.
+  m.send(buildEditRequestText(styleRequest({ requestId: 'req_style_branch', branch: true, temporaryStyle: undefined })))
+  const branched = await m.tool.execute(
+    styleArgs({ editRequestId: 'req_style_branch' }),
+    { agent: m.agent, callId: 'call-style-branch' },
+  )
+  assert.equal(branched.styleEdit, true)
+  assert.equal(branched.revision, 3)
+  assert.equal(branched.baseRevisionId, 'call-original')
+})
+
+test('a style edit that returns no editable blocks warns once (H4)', async () => {
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest()))
+  const value = await m.tool.execute(styleArgs({ program: 'root = Col([])' }), { agent: m.agent, callId: 'call-h4' })
+  assert.equal(value.styleEdit, true)
+  assert.ok(value.warnings.includes('The updated page no longer exposes any editable blocks; a style-only revision should keep the original blocks and change only their presentation.'))
+  const rendered = m.tool.output.render({}, value)[0].text
+  assert.match(rendered, /Interactive UI style updated for the user \(revision 2 of the artifact, card layout\)\. Notes: .*editable blocks/)
 })

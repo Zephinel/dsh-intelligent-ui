@@ -104,7 +104,7 @@ Shows content in a small panel when the trigger is clicked: a definition, a sour
 Divider(color?: Color, width?: Length, thickness?: number)
 ```
 
-**Notes.** A horizontal rule. `color` takes a theme token or CSS colour, `width` a px/percentage length (centred when narrowed) and `thickness` 0.5–12 px; omit an argument for the theme default.
+**Notes.** A horizontal rule. `color` takes a theme token or CSS colour, `width` a px number or a percentage (centred when narrowed) and `thickness` 0.5–12 px; omit an argument for the theme default. For `width`, omit it for no explicit length (the rule keeps the layout default), use px for a fixed size, or a percentage for a share of the container.
 
 ### `Spacer`
 
@@ -112,9 +112,9 @@ Divider(color?: Color, width?: Length, thickness?: number)
 Spacer(width?: Length, height?: Length)
 ```
 
-Fills the free space in a Row. Set `width`/`height` (px, percentage or `auto`) to turn it into a fixed gap instead of a flexible one.
+Fills the free space in a Row. Set `width`/`height` to a px number or a percentage to turn it into a fixed gap instead of a flexible one; omit them to keep the flexible default.
 
-**Notes.** Fills the free space in a Row; put it between items you want pushed apart.
+**Notes.** Fills the free space in a Row; put it between items you want pushed apart. Length forms: Default (omit) means no explicit length; px is a fixed size that neither grows nor shrinks; a percentage is a share of the container, and a percentage height needs a definite container height or it becomes 0.
 
 ### `Section`
 

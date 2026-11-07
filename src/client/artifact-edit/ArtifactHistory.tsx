@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision, ArtifactHistorySource } from '../../shared/artifact-edit.ts'
 import type { LocalArtifactRevision } from './local-revisions.ts'
+import { ensureArtifactBase, invalidateArtifactBase } from './artifact-base.ts'
 import { fetchArtifactHistory, fetchArtifactHistoryProgram, restoreRevision } from './local-revisions.ts'
 import type { Translate } from '../../shared/locales.ts'
 
@@ -23,6 +24,8 @@ export interface ArtifactHistoryProps {
   readonly artifactId: string
   /** Revision currently rendered by this card (marked as current). */
   readonly currentRevisionId: string
+  /** Program of the rendered card, registered as the Host base before authoritative reads. */
+  readonly program: string
   /** Display blocks of the current card, used to name edited block ids. */
   readonly blocks: ArtifactHistoryBlocks
   readonly onClose: () => void
@@ -126,7 +129,7 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
  * @param props - locale, artifact identity, current blocks and close/restore callbacks.
  * @returns the portaled dialog.
  */
-export function ArtifactHistory({ t, artifactId, currentRevisionId, blocks, onClose, onRestored }: ArtifactHistoryProps): ReactElement {
+export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blocks, onClose, onRestored }: ArtifactHistoryProps): ReactElement {
   const [status, setStatus] = useState<HistoryStatus>('loading')
   const [history, setHistory] = useState<ArtifactHistoryResponse | undefined>(undefined)
   const [restoringId, setRestoringId] = useState<string | null>(null)
@@ -140,14 +143,23 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, blocks, onCl
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
-    void fetchArtifactHistory(artifactId).then(result => {
+    // The list (and its initial-revision row) is authoritative Host state: make
+    // sure this rendered card has been registered as the base first.
+    void ensureArtifactBase({ artifactId, revisionId: currentRevisionId, program }).then(() => fetchArtifactHistory(artifactId)).then(result => {
       if (cancelled) return
       if (result === undefined) { setStatus('error'); return }
+      // The Host reports whether each revision's program is still retained. If
+      // our own base revision lost its program (eviction / restarted Host
+      // state), drop the cached registration so restore or the next
+      // authoritative click re-posts the rendered program once.
+      if (result.revisions.some(revision => revision.revisionId === currentRevisionId && revision.hasProgram === false)) {
+        invalidateArtifactBase(artifactId, currentRevisionId)
+      }
       setHistory(result)
       setStatus('ready')
     })
     return () => { cancelled = true }
-  }, [artifactId, reloadKey])
+  }, [artifactId, currentRevisionId, program, reloadKey])
 
   useEffect(() => {
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -171,10 +183,11 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, blocks, onCl
     if (restoringId !== null) return
     setRestoreError(false)
     setRestoringId(revision.revisionId)
-    const program = await fetchArtifactHistoryProgram(artifactId, revision.revisionId)
-    const restored = program === undefined
+    await ensureArtifactBase({ artifactId, revisionId: currentRevisionId, program })
+    const sourceProgram = await fetchArtifactHistoryProgram(artifactId, revision.revisionId)
+    const restored = sourceProgram === undefined
       ? undefined
-      : await restoreRevision({ artifactId, sourceRevisionId: revision.revisionId, program: program.program })
+      : await restoreRevision({ artifactId, sourceRevisionId: revision.revisionId, program: sourceProgram.program })
     setRestoringId(null)
     if (restored === undefined) { setRestoreError(true); return }
     onRestored(restored)

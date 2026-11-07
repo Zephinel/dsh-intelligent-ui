@@ -15,6 +15,8 @@ import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 export interface QuickSelectOption {
   readonly value: string
   readonly label: string
+  /** Optional muted second line explaining the choice. */
+  readonly description?: string
 }
 
 interface QuickSelectProps {
@@ -36,7 +38,11 @@ interface Placement {
 const MENU_GAP = 4
 const MENU_MARGIN = 8
 const OPTION_HEIGHT = 30
+/** Described options carry a wrapped 11px/15px second line and grow accordingly. */
+const DESCRIBED_OPTION_HEIGHT = 88
 const MAX_MENU_HEIGHT = 240
+/** Long localized explanations make described menus taller than the colour menu. */
+const MAX_DESCRIBED_MENU_HEIGHT = 320
 
 /**
  * Render one custom dropdown.
@@ -52,15 +58,18 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
   const listboxId = useId()
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value))
   const selected = options[selectedIndex] ?? options[0]
+  const described = options.some(option => option.description !== undefined)
 
   useLayoutEffect(() => {
     if (!open) return
     const trigger = triggerRef.current
     if (trigger === null) return
+    const optionHeight = described ? DESCRIBED_OPTION_HEIGHT : OPTION_HEIGHT
+    const menuHeightBudget = described ? MAX_DESCRIBED_MENU_HEIGHT : MAX_MENU_HEIGHT
     const place = (): void => {
       const rect = trigger.getBoundingClientRect()
       const width = Math.max(rect.width, 168)
-      const maxHeight = Math.min(MAX_MENU_HEIGHT, options.length * OPTION_HEIGHT + 8)
+      const maxHeight = Math.min(menuHeightBudget, options.length * optionHeight + 8)
       const below = window.innerHeight - rect.bottom - MENU_GAP - MENU_MARGIN
       const above = rect.top - MENU_GAP - MENU_MARGIN
       const flip = below < maxHeight && above > below
@@ -69,7 +78,7 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
         left: Math.max(MENU_MARGIN, Math.min(rect.left, window.innerWidth - width - MENU_MARGIN)),
         top: flip ? Math.max(MENU_MARGIN, rect.top - MENU_GAP - height) : rect.bottom + MENU_GAP,
         width,
-        maxHeight: Math.max(OPTION_HEIGHT, height),
+        maxHeight: Math.max(optionHeight, height),
       })
     }
     place()
@@ -79,7 +88,7 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [open, options.length])
+  }, [open, options.length, described])
 
   // Focus follows the popup while it is open.
   useEffect(() => {
@@ -192,11 +201,16 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
               aria-selected={option.value === value}
               data-value={option.value}
               data-index={index}
-              className={`dsh-iui-quick-option${index === active ? ' is-active' : ''}${option.value === value ? ' is-selected' : ''}`}
+              className={`dsh-iui-quick-option${option.description === undefined ? '' : ' has-desc'}${index === active ? ' is-active' : ''}${option.value === value ? ' is-selected' : ''}`}
               onPointerMove={() => { setActive(index) }}
               onClick={() => { choose(option.value) }}
             >
-              <span className="dsh-iui-quick-option-label">{option.label}</span>
+              <span className="dsh-iui-quick-option-text">
+                <span className="dsh-iui-quick-option-label">{option.label}</span>
+                {option.description === undefined ? null : (
+                  <span className="dsh-iui-quick-option-desc">{option.description}</span>
+                )}
+              </span>
               {option.value === value ? <RemixIcon name="check-line" size={13} /> : null}
             </div>
           ))}

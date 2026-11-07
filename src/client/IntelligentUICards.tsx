@@ -33,6 +33,7 @@ import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
 import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
+import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
 import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession } from './artifact-edit/contracts.ts'
 import {
@@ -73,6 +74,8 @@ import {
   setArtifactNestedMode,
   setArtifactStrictMode,
   setArtifactGlobalInstruction,
+  setArtifactStyleEditSupported,
+  setArtifactStyleInstruction,
   reconcileArtifactSubmissions,
   supportsBlockEditing,
   undoArtifactRemove,
@@ -146,7 +149,16 @@ export function IntelligentUICards({
   const scheme = useStyleScheme()
   // A theme-less result snapshot inherits the session's selected template; the
   // projection publishes the effective style id (a template id for saved styles).
-  const sessionStyle = (useProjection ?? noProjection)(MODE_PROJECTION_KEY)?.style
+  const modeView = (useProjection ?? noProjection)(MODE_PROJECTION_KEY)
+  const sessionStyle = modeView?.style
+  // B1 capability: an old Host without the bit keeps the legacy on-demand style
+  // fallback; a pending style instruction is dropped so it is never sent to a
+  // Host that cannot parse the style envelope.
+  const styleEditSupported = modeView?.styleEdit === true
+  const styleEditKnown = modeView !== undefined && modeView !== null
+  useEffect(() => {
+    if (styleEditKnown) setArtifactStyleEditSupported(styleEditSupported)
+  }, [styleEditKnown, styleEditSupported])
   useEffect(() => { void styles.ensure(sessionId) }, [styles, sessionId])
   // The renderer calls this when an in-card action should continue in the
   // composer: seed the draft with the model-authored message and submit it.
@@ -184,6 +196,7 @@ export function IntelligentUICards({
             t={t}
             scheme={scheme}
             onAdjust={adjustStyle === undefined ? undefined : adjust}
+            styleEditSupported={styleEditSupported}
             // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
             saveAction={program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={program.callId}
               snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
@@ -207,6 +220,7 @@ function scrollBehavior(): ScrollBehavior {
 function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
   if (session.status === 'conflict') return t('edit.conflictTitle')
   if (session.submitFailed === true) return t('edit.draftFailed')
+  if (session.styleInstruction.trim() !== '') return `${t('edit.pendingDrafts')} · ${t('edit.chipTail.style')}`
   const count = session.selection.length
   if (count > 0) return `${t('edit.pendingDrafts')} · ${t('edit.requestsCount', { count })}`
   if (session.orderChanged) return `${t('edit.pendingDrafts')} · ${t('edit.summaryOrderChanged')}`
@@ -224,6 +238,8 @@ interface IntelligentUICardProps {
   readonly scheme: 'light' | 'dark'
   readonly onAdjust?: (program: IntelligentUIProgram) => Promise<string | null>
   readonly saveAction?: ReactNode
+  /** Host supports revision-bound style editing inside the edit canvas. */
+  readonly styleEditSupported?: boolean
 }
 
 /**
@@ -233,7 +249,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -342,6 +358,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     resetOrder: () => { resetArtifactOrder(editKey) },
     clearAllEdits: () => { clearAllArtifactEdits(editKey) },
     setGlobalInstruction: text => { setArtifactGlobalInstruction(editKey, text) },
+    setStyleInstruction: text => { setArtifactStyleInstruction(editKey, text) },
     closeEditor: () => { closeArtifactEditor(editKey) },
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
@@ -394,6 +411,9 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const restore = async (): Promise<void> => {
     if (restoreState !== 'available') return
     setRestoreState('busy')
+    // Restore records Host state for this artifact: register the rendered base
+    // first (one shared request per card; no-op once the Host knows it).
+    await ensureArtifactBase({ artifactId: restoreArtifactId, revisionId: restoreRevisionId, program: program.program })
     const revision = await restoreRevision({ artifactId: restoreArtifactId, sourceRevisionId: restoreRevisionId, program: program.program })
     if (revision === undefined) { setRestoreState('error'); return }
     addLocalRevision(sessionId, { ...revision, turn: turnNumber })
@@ -574,6 +594,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               themeStyle={themeStyle}
               scheme={scheme}
               onToAssistant={onToAssistant}
+              styleEditSupported={styleEditSupported}
               closing={editorClosing && !editing}
               onOpenHistory={() => { setHistoryOpen(true) }}
             />
@@ -598,7 +619,10 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       </div>
       {program.temporaryStyle ? (
         <div className="dsh-iui-result-actions">
-          {onAdjust === undefined ? null : <button type="button" disabled={adjusting || program.running} onClick={() => { void adjust() }}>{t('onDemand.adjust')}</button>}
+          {/* The in-canvas style section replaces the legacy on-demand adjust
+              action only when the Host supports it AND this card is editable;
+              otherwise the footer keeps the old fallback. */}
+          {onAdjust === undefined || (styleEditSupported && editable) ? null : <button type="button" disabled={adjusting || program.running} onClick={() => { void adjust() }}>{t('onDemand.adjust')}</button>}
           {saveAction}
           {error === null ? null : <span className="dsh-iui-style-error" role="alert">{error}</span>}
         </div>
@@ -608,6 +632,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             t={t}
             artifactId={restoreArtifactId}
             currentRevisionId={restoreRevisionId}
+            program={program.program}
             blocks={blocksById}
             onClose={() => { setHistoryOpen(false) }}
             onRestored={revision => { handleHistoryRestored(revision); setHistoryOpen(false) }}

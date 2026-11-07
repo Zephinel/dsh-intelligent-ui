@@ -66,7 +66,10 @@ events but not the full DSH Web integration.
   adds the single-row **More** menu (Locate/Edit/Duplicate/Move/Delete with an
   in-menu delete confirmation), the input focus orbit, menu keyboard/focus and
   forced-colors checks, page/request numbering, a real shell-width 1180px fit,
-  and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. 360 checks; no real
+  and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. Scenario 36
+  covers the Artifact base-registration lifecycle on legacy cards: opening the editor registers exactly one base with the render call id as the
+  revision identity and the rendered program, the registration precedes the first structure request, the old-host 404 degrades without blocking,
+  both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, and the legacy footer Adjust fallback rules. 447 checks; no real
   model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
@@ -74,8 +77,7 @@ events but not the full DSH Web integration.
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
-- `style-panel.e2e.mjs` drives the composer style panel: chip -> menu -> This
-  session only -> style panel -> back to menu -> built-in/custom preview cards -> composer import entry -> export confirmation for global and session templates -> Escape/focus return, and checks the
+- `style-panel.e2e.mjs` drives the composer style panel: chip -> menu -> Display style row -> style panel -> back to menu -> scope switch to This session only (asserts no auto-open) -> active entry opens the panel -> built-in/custom preview cards -> composer import entry -> export confirmation for global and session templates -> Escape/focus return, and checks the
   content-sized menu, upright chevron, inset divider and disabled Display style
   row while the switch is off. It renders the real `ToggleControl` in a browser.
 - `export-image.e2e.mjs` renders a card with a flipped `Flashcard` and a real

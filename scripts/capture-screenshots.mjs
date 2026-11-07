@@ -187,9 +187,9 @@ const SHOTS = [
   { name:'hint', surface:'hint', width:760, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
     wait:'!!document.querySelector("[data-dsh-iui-on-demand-hint]")', expect:['On-demand UI','Cancel on-demand UI','Highlight the key metrics'], out:'intelligent-ui-on-demand-hint.webp' },
   { name:'result', surface:'result', width:768, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
-    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Weekly review','Temporary style','Adjust style','Save as template','75% complete'], out:'intelligent-ui-temporary-result.webp' },
+    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Weekly review','Temporary style','Save as template','75% complete'], out:'intelligent-ui-temporary-result.webp' },
   { name:'result-dark', surface:'result', dark:true, width:768, heightExpr:"Math.ceil(document.getElementById('root').getBoundingClientRect().bottom + 24)",
-    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Temporary style','Adjust style','Save as template'], out:'intelligent-ui-temporary-result-dark.webp' },
+    wait:'!!document.querySelector("[data-dsh-iui-save-result]")', expect:['Temporary style','Save as template'], out:'intelligent-ui-temporary-result-dark.webp' },
 ]
 
 const requested = args.filter((argument) => !argument.startsWith('-'))

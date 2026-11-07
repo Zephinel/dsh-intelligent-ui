@@ -17,7 +17,7 @@ import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DST_PROGRAM, DST_TITLE } from '../fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM, NESTED_TITLE } from '../fixtures/nested-artifact.ts'
 import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/nested-containers.ts'
-import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
+import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_LEGACY_AUTO_PROGRAM, PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
 import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 
@@ -248,6 +248,15 @@ w.__addPropsCenterCard = (callId: string = 'props-center-call-1', title: string 
     root: {
       kind: 'tool-result', callId, name: 'render_ui', isError: false,
       call: { name: 'render_ui', argsRaw: JSON.stringify({ program: PROPS_CENTER_PROGRAM, title, style: 'card' }) },
+    },
+  }]
+  update()
+}
+w.__addPropsLegacyAutoCard = (callId: string = 'props-legacy-auto-call-1', title: string = PROPS_LEGACY_AUTO_TITLE) => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program: PROPS_LEGACY_AUTO_PROGRAM, title, style: 'card' }) },
     },
   }]
   update()

@@ -1,12 +1,13 @@
 /**
  * Composer control for the Intelligent UI session settings.
  *
- * The chip opens the scope menu (off, this session, all sessions). Choosing
- * `on` / clicking the already-active session entry opens the answer-style panel:
- * built-in and custom tiles, and a follow-global switch. Follow global retains
- * the existing inherit semantics; it does not write the global switch. The Host
- * owns every state decision; the control forwards one explicit `/iui` command
- * and the next projection frame settles the chip.
+ * The chip opens the scope menu (off, this session, follow global). Choosing a
+ * scope only changes the enable state; it never opens the answer-style panel.
+ * The panel has exactly two explicit entries: the menu's "Display style" row,
+ * and clicking the already-active scope entry while the session is enabled.
+ * Follow global retains the existing inherit semantics; it does not write the
+ * global switch. The Host owns every state decision; the control forwards one
+ * explicit `/iui` command and the next projection frame settles the chip.
  */
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -251,16 +252,19 @@ export function ToggleControl({
     setOpen(true)
   }
 
+  // The answer-style panel is available only when this session resolves to an
+  // enabled state (explicit `on`, or follow-global while the global switch is
+  // on). Selecting a scope never opens it; only the two explicit entries do.
   const opensStyle = (scope: SessionEnable): boolean =>
     scope === 'on' || (scope === 'inherit' && view.globalEnabled)
 
   const choose = (scope: SessionEnable): void => {
     if (disabled) return
     // Clicking the active entry opens the style panel instead of re-running a
-    // no-op command. Follow-global also opens it when the global switch is on,
-    // so a session style override does not require changing the enable scope.
-    if (scope === sessionEnable && opensStyle(scope)) {
-      openPanel()
+    // no-op command; when the active scope resolves to disabled, just close.
+    if (scope === sessionEnable) {
+      if (opensStyle(scope)) openPanel()
+      else setOpen(false)
       return
     }
     setOpen(false)
@@ -276,7 +280,6 @@ export function ToggleControl({
           enabled: scope === 'on' ? true : scope === 'off' ? false : view.globalEnabled,
           pending: false,
         }, sessionId, projected)
-        if (opensStyle(scope)) openPanel()
       }
     })
   }
