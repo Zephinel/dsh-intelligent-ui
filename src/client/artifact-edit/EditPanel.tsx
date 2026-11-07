@@ -19,6 +19,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -357,19 +358,20 @@ interface NestedGroup {
 const STRUCTURE_ERROR_TIMEOUT_MS = 8000
 
 /**
- * Hover/focus inline structure actions for one arrangement row.
- * Duplicate and move open a preview immediately; delete swaps the action group
- * for a compact, persistent Cancel/Delete confirmation (focus goes to Cancel).
+ * One compact overflow action menu per arrangement row.
+ *
+ * A single 24px trigger keeps the row title readable at every panel width and
+ * works on touch; the menu carries locate/edit/duplicate/move/delete with a
+ * persistent two-step delete confirmation.
  * @param props - locale, target block, busy/confirm state and handlers.
- * @returns the action group or its confirmation state.
+ * @returns the trigger and its portaled menu.
  */
-function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove, onLocate }: {
+function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove, onLocate }: {
   readonly t: Translate
   readonly blockId: string
   readonly title: string
   readonly busy: boolean
   readonly confirming: boolean
-  readonly moveOpen: boolean
   readonly onEdit: () => void
   readonly onDuplicate: (anchor: HTMLButtonElement) => void
   readonly onRequestDelete: (anchor: HTMLButtonElement) => void
@@ -378,123 +380,247 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
   readonly onMove: (anchor: HTMLButtonElement) => void
   readonly onLocate: () => void
 }): ReactElement {
-  const deleteButtonRef = useRef<HTMLButtonElement>(null)
-  const cancelButtonRef = useRef<HTMLButtonElement>(null)
-  const wasConfirmingRef = useRef(false)
+  const [open, setOpen] = useState(false)
+  const [placement, setPlacement] = useState<{ left: number; top: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const firstItemRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const wasConfirming = useRef(false)
+  const menuId = useId()
+  const width = 208
+
+  const close = (restoreFocus: boolean): void => {
+    setOpen(false)
+    if (!restoreFocus || typeof window === 'undefined') return
+    window.requestAnimationFrame(() => { triggerRef.current?.focus({ preventScroll: true }) })
+  }
+
+  // Keep the confirmation step in the open menu; close it when the parent clears it.
   useEffect(() => {
-    if (confirming) {
-      wasConfirmingRef.current = true
-      if (typeof window === 'undefined') return
-      window.requestAnimationFrame(() => { cancelButtonRef.current?.focus({ preventScroll: true }) })
+    if (confirming && !wasConfirming.current) {
+      wasConfirming.current = true
+      setOpen(true)
       return
     }
-    if (!wasConfirmingRef.current) return
-    wasConfirmingRef.current = false
-    const trigger = deleteButtonRef.current
-    if (trigger !== null && trigger.isConnected && typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => { trigger.focus({ preventScroll: true }) })
+    if (!confirming && wasConfirming.current) {
+      wasConfirming.current = false
+      setOpen(false)
     }
   }, [confirming])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const trigger = triggerRef.current
+    if (trigger === null) return
+    const place = (): void => {
+      const rect = trigger.getBoundingClientRect()
+      const height = menuRef.current?.offsetHeight ?? (confirming ? 92 : 190)
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      const below = rect.bottom + 4
+      const top = below + height <= window.innerHeight - 8
+        ? below
+        : Math.max(8, rect.top - height - 4)
+      setPlacement({ left, top })
+    }
+    place()
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
+    observer?.observe(trigger)
+    if (menuRef.current !== null) observer?.observe(menuRef.current)
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    const frame = requestAnimationFrame(() => {
+      ;(confirming ? cancelRef.current : firstItemRef.current)?.focus({ preventScroll: true })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      observer?.disconnect()
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, confirming])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (triggerRef.current?.contains(target as Node) === true) return
+      if (menuRef.current?.contains(target as Node) === true) return
+      close(false)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      close(true)
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [open])
+
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      close(true)
+      return
+    }
+    if (event.key === 'Tab') {
+      close(false)
+      return
+    }
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"], [data-dsh-iui-edit-structure-cancel], [data-dsh-iui-edit-structure-confirm-delete]') ?? [])]
+      .filter(item => !item.hasAttribute('disabled'))
+    if (items.length === 0) return
+    const current = items.indexOf(document.activeElement as HTMLElement)
+    if (event.key === 'Home') {
+      event.preventDefault()
+      items[0]?.focus()
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      items[items.length - 1]?.focus()
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      const next = current < 0 ? (step > 0 ? 0 : items.length - 1) : (current + step + items.length) % items.length
+      items[next]?.focus()
+    }
+  }
+
+  const anchor = (): HTMLButtonElement | null => triggerRef.current
+
+  const run = (action: () => void): void => {
+    close(false)
+    action()
+  }
+
   return (
     <span className="dsh-iui-edit-structure-actions">
-      {confirming ? (
-        <span
-          className="dsh-iui-edit-structure-confirm"
-          data-dsh-iui-edit-structure-confirm
-          role="group"
-          aria-label={t('edit.structureConfirmQuestion')}
+      <button
+        ref={triggerRef}
+        type="button"
+        className="dsh-iui-edit-row-menu-trigger"
+        data-dsh-iui-edit-row-menu
+        data-block-id={blockId}
+        disabled={busy}
+        aria-label={`${t('edit.moreActions')}: ${title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        title={t('edit.moreActions')}
+        onClick={event => {
+          event.stopPropagation()
+          if (open) close(true)
+          else setOpen(true)
+        }}
+      >
+        <RemixIcon name="more-line" size={15} />
+      </button>
+      {open ? createPortal(
+        <div
+          ref={menuRef}
+          id={menuId}
+          className="dsh-iui-edit-row-menu"
+          data-dsh-iui-edit-row-menu-panel
+          role="menu"
+          aria-label={`${t('edit.moreActions')}: ${title}`}
+          style={placement === null ? { left: 0, top: 0, width, opacity: 0 } : { ...placement, width }}
+          onKeyDown={onMenuKeyDown}
+          onClick={event => { event.stopPropagation() }}
         >
-          <button
-            ref={cancelButtonRef}
-            type="button"
-            className="dsh-iui-edit-structure-cancel"
-            data-dsh-iui-edit-structure-cancel
-            disabled={busy}
-            aria-label={t('edit.structureCancel')}
-            title={t('edit.structureCancel')}
-            onClick={event => { event.stopPropagation(); onCancelDelete() }}
-          >
-            {t('edit.structureCancel')}
-          </button>
-          <button
-            type="button"
-            className="dsh-iui-edit-structure-confirm-delete"
-            data-dsh-iui-edit-structure-confirm-delete
-            disabled={busy}
-            aria-label={t('edit.structureDeleteNow')}
-            title={t('edit.structureDeleteNow')}
-            onClick={event => { event.stopPropagation(); onConfirmDelete() }}
-          >
-            {t('edit.structureDeleteNow')}
-          </button>
-        </span>
-      ) : (
-        <>
-          <button
-            type="button"
-            className="dsh-iui-edit-icon-button"
-            data-dsh-iui-edit-locate
-            data-block-id={blockId}
-            disabled={busy}
-            aria-label={`${t('edit.locate')}: ${title}`}
-            title={t('edit.locate')}
-            onClick={event => { event.stopPropagation(); onLocate() }}
-          >
-            <RemixIcon name="map-pin-line" size={13} />
-          </button>
-          <button
-            type="button"
-            className="dsh-iui-edit-icon-button"
-            data-dsh-iui-edit-structure-edit
-            data-block-id={blockId}
-            disabled={busy}
-            aria-label={`${t('edit.openRequirement')}: ${title}`}
-            title={t('edit.openRequirement')}
-            onClick={event => { event.stopPropagation(); onEdit() }}
-          >
-            <EditGlyph />
-          </button>
-          <button
-            type="button"
-            className="dsh-iui-edit-icon-button"
-            data-dsh-iui-edit-structure-duplicate
-            data-block-id={blockId}
-            disabled={busy}
-            aria-label={`${t('edit.structureDuplicate')}: ${title}`}
-            title={t('edit.structureDuplicate')}
-            onClick={event => { event.stopPropagation(); onDuplicate(event.currentTarget) }}
-          >
-            <DuplicateGlyph />
-          </button>
-          <button
-            ref={deleteButtonRef}
-            type="button"
-            className="dsh-iui-edit-icon-button dsh-iui-edit-structure-delete"
-            data-dsh-iui-edit-structure-delete
-            data-block-id={blockId}
-            disabled={busy}
-            aria-label={`${t('edit.structureDelete')}: ${title}`}
-            title={t('edit.structureDelete')}
-            onClick={event => { event.stopPropagation(); onRequestDelete(event.currentTarget) }}
-          >
-            <TrashGlyph />
-          </button>
-          <button
-            type="button"
-            className="dsh-iui-edit-icon-button"
-            data-dsh-iui-edit-move
-            data-block-id={blockId}
-            disabled={busy}
-            aria-haspopup="menu"
-            aria-expanded={moveOpen ? 'true' : undefined}
-            aria-label={`${t('edit.moveBlock')}: ${title}`}
-            title={t('edit.moveBlock')}
-            onClick={event => { event.stopPropagation(); onMove(event.currentTarget) }}
-          >
-            <MoveGlyph />
-          </button>
-        </>
-      )}
+          {confirming ? (
+            <div
+              className="dsh-iui-edit-structure-confirm"
+              data-dsh-iui-edit-structure-confirm
+              role="group"
+              aria-label={t('edit.structureConfirmQuestion')}
+            >
+              <p className="dsh-iui-edit-row-menu-question">{t('edit.structureConfirmQuestion')}</p>
+              <div className="dsh-iui-edit-row-menu-confirm-actions">
+                <button
+                  ref={cancelRef}
+                  type="button"
+                  className="dsh-iui-edit-row-menu-button"
+                  data-dsh-iui-edit-structure-cancel
+                  disabled={busy}
+                  onClick={() => { onCancelDelete(); close(true) }}
+                >{t('edit.structureCancel')}</button>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-row-menu-button is-danger"
+                  data-dsh-iui-edit-structure-confirm-delete
+                  disabled={busy}
+                  onClick={() => { onConfirmDelete(); close(false) }}
+                >{t('edit.structureDeleteNow')}</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                ref={firstItemRef}
+                type="button"
+                className="dsh-iui-edit-row-menu-item"
+                role="menuitem"
+                data-dsh-iui-edit-locate
+                data-block-id={blockId}
+                disabled={busy}
+                onClick={() => run(onLocate)}
+              >
+                <RemixIcon name="map-pin-line" size={14} /><span>{t('edit.locate')}</span>
+              </button>
+              <button
+                type="button"
+                className="dsh-iui-edit-row-menu-item"
+                role="menuitem"
+                data-dsh-iui-edit-structure-edit
+                data-block-id={blockId}
+                disabled={busy}
+                onClick={() => run(onEdit)}
+              >
+                <EditGlyph /><span>{t('edit.openRequirement')}</span>
+              </button>
+              <button
+                type="button"
+                className="dsh-iui-edit-row-menu-item"
+                role="menuitem"
+                data-dsh-iui-edit-structure-duplicate
+                data-block-id={blockId}
+                disabled={busy}
+                onClick={() => { const target = anchor(); close(false); onDuplicate(target as HTMLButtonElement) }}
+              >
+                <DuplicateGlyph /><span>{t('edit.structureDuplicate')}</span>
+              </button>
+              <button
+                type="button"
+                className="dsh-iui-edit-row-menu-item"
+                role="menuitem"
+                data-dsh-iui-edit-move
+                data-block-id={blockId}
+                disabled={busy}
+                onClick={() => { const target = anchor(); close(false); onMove(target as HTMLButtonElement) }}
+              >
+                <MoveGlyph /><span>{t('edit.moveBlock')}</span>
+              </button>
+              <div className="dsh-iui-edit-row-menu-sep" aria-hidden="true" />
+              <button
+                type="button"
+                className="dsh-iui-edit-row-menu-item is-danger"
+                role="menuitem"
+                data-dsh-iui-edit-structure-delete
+                data-block-id={blockId}
+                disabled={busy}
+                onClick={() => onRequestDelete(anchor() as HTMLButtonElement)}
+              >
+                <TrashGlyph /><span>{t('edit.structureDelete')}</span>
+              </button>
+            </>
+          )}
+        </div>,
+        document.body,
+      ) : null}
     </span>
   )
 }
@@ -1381,7 +1507,6 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                       busy={rowActionsBusy}
                       onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                       confirming={confirmDeleteId === blockId}
-                      moveOpen={moveMenu?.blockId === blockId}
                       onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
                       onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                       onCancelDelete={() => { cancelDeleteConfirm() }}
@@ -1561,7 +1686,6 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               busy={rowActionsBusy}
                               onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                               confirming={confirmDeleteId === blockId}
-                              moveOpen={moveMenu?.blockId === blockId}
                               onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
                               onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                               onCancelDelete={() => { cancelDeleteConfirm() }}

@@ -1413,138 +1413,172 @@
 }
 
 /* -------------------------------------------------------------------------
- * M4-3 structural row actions (duplicate / two-step inline delete).
+ * Row overflow actions
  *
- * The actions stay out of the eye until the row is hovered or something inside
- * it has keyboard focus; keeping them in the DOM (opacity rather than display)
- * lets Tab reach them and reveals them through :has(:focus-visible). Sizes match the
- * existing 26px pencil/drag controls, so row height does not change.
+ * One 24px trigger per row keeps titles readable at narrow panel widths and
+ * works on touch. The menu is portaled so it is not clipped by the scrolling
+ * panel; delete stays a deliberate two-step confirmation inside the menu.
  * ---------------------------------------------------------------------- */
 
 .dsh-iui-edit-structure-actions {
-  position: absolute;
-  top: 50%;
-  right: 2px;
-  z-index: 2;
   display: inline-flex;
+  flex: none;
   align-items: center;
-  justify-content: flex-end;
-  gap: 1px;
-  width: 126px;
-  min-width: 126px;
-  padding: 0 1px;
-  border-radius: 6px;
-  background: var(--dsw-alias-interactive-bg-hover);
-  transform: translateY(-50%);
-  opacity: 0;
-  transition: opacity 120ms ease;
-  pointer-events: none;
-  /* Locate/edit/duplicate/delete/move. The fixed width is shared by the default
-     and confirming states; the group overlays the row tail so titles keep the
-     full row width instead of losing 126px to invisible controls. */
 }
 
-.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
+.dsh-iui-edit-row-menu-trigger {
+  display: grid;
+  flex: none;
+  place-items: center;
   width: 24px;
   height: 24px;
-}
-
-.dsh-iui-edit-arrangement-row:hover,
-.dsh-iui-edit-arrangement-row:has(:focus-visible),
-.dsh-iui-edit-nested-row:hover,
-.dsh-iui-edit-nested-row:has(:focus-visible) {
-  /* The actions overlay the tail; stop the title/type before the overlay instead
-     of letting text run underneath the icons. */
-  padding-right: 130px;
-}
-
-.dsh-iui-edit-arrangement-row:hover .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-arrangement-row:has(:focus-visible) .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row:hover .dsh-iui-edit-structure-actions,
-.dsh-iui-edit-nested-row:has(:focus-visible) .dsh-iui-edit-structure-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-@media (hover: none), (pointer: coarse) {
-  .dsh-iui-edit-arrangement-row,
-  .dsh-iui-edit-nested-row {
-    padding-right: 130px;
-  }
-
-  .dsh-iui-edit-structure-actions {
-    background: var(--dsw-alias-bg-layer-1);
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
-.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:hover {
-  background: var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-2));
-}
-
-.dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* Compact, persistent delete confirmation: two quiet 22px buttons in place of
-   the icon group. No row tint, no pill, no auto-dismiss. */
-.dsh-iui-edit-structure-confirm {
-  display: inline-flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  min-width: 0;
-}
-
-.dsh-iui-edit-structure-cancel,
-.dsh-iui-edit-structure-confirm-delete {
-  height: 22px;
-  padding: 0 7px;
+  padding: 0;
+  border: 0;
   border-radius: var(--dsw-radius-sm);
-  font: inherit;
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 20px;
-  white-space: nowrap;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
-.dsh-iui-edit-structure-cancel {
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.dsh-iui-edit-structure-cancel:hover {
+.dsh-iui-edit-row-menu-trigger:hover,
+.dsh-iui-edit-row-menu-trigger[aria-expanded='true'] {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-iui-edit-structure-confirm-delete {
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
-  color: var(--dsw-alias-state-error-primary);
+.dsh-iui-edit-row-menu-trigger:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-tertiary);
+  outline-offset: -1px;
 }
 
-.dsh-iui-edit-structure-confirm-delete:hover {
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent);
+.dsh-iui-edit-row-menu-trigger:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-.dsh-iui-edit-structure-cancel:disabled,
-.dsh-iui-edit-structure-confirm-delete:disabled {
+.dsh-iui-edit-row-menu {
+  position: fixed;
+  z-index: 1400;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 8%);
+  animation: dsh-iui-edit-row-menu-in 120ms ease-out;
+}
+
+@keyframes dsh-iui-edit-row-menu-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-edit-row-menu {
+    animation: none;
+  }
+}
+
+.dsh-iui-edit-row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-row-menu-item svg {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-edit-row-menu-item:hover,
+.dsh-iui-edit-row-menu-item:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  outline: none;
+}
+
+.dsh-iui-edit-row-menu-item:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.dsh-iui-edit-structure-busy {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10.5px;
-  line-height: 16px;
+.dsh-iui-edit-row-menu-item.is-danger {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-row-menu-item.is-danger svg {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-row-menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-structure-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px;
+}
+
+.dsh-iui-edit-row-menu-question {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.dsh-iui-edit-row-menu-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dsh-iui-edit-row-menu-button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 24px;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-row-menu-button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-row-menu-button.is-danger {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-row-menu-button.is-danger:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent);
+}
+
+.dsh-iui-edit-row-menu-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Inline structural failure (no alert/confirm dialog). */
