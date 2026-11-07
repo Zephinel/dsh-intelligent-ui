@@ -1704,11 +1704,11 @@
 }
 
 .dsh-iui-input-orbit {
-  --dsh-iui-input-orbit-tone: color-mix(in srgb, var(--dsw-alias-state-business-primary) 68%, white);
+  --dsh-iui-input-orbit-tone: var(--dsw-alias-state-business-primary);
   position: fixed;
   z-index: 3100;
   box-sizing: border-box;
-  padding: 1.5px;
+  padding: 2px;
   background: conic-gradient(
     from var(--dsh-iui-input-orbit-angle),
     transparent 0deg 150deg,
@@ -1723,9 +1723,20 @@
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 38%, transparent));
-  opacity: 0.9;
+  opacity: 1;
   pointer-events: none;
   animation: dsh-iui-input-orbit 2600ms linear infinite;
+}
+
+/* A full-perimeter static ring keeps focus visible even when the moving
+   highlight is at the far side of its orbit; the comet is the accent. */
+.dsh-iui-input-orbit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--dsh-iui-input-orbit-tone);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 @keyframes dsh-iui-input-orbit {
@@ -1735,6 +1746,25 @@
 @media (prefers-reduced-motion: reduce) {
   .dsh-iui-input-orbit {
     animation: none;
-    opacity: 0.65;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .dsh-iui-input-orbit::before {
+    border-width: 2px;
+  }
+}
+
+/* Forced colors strips backgrounds (including the comet); restore a system
+   focus outline so keyboard focus never becomes invisible. */
+@media (forced-colors: active) {
+  .dsh-iui-input-orbit-target:focus,
+  .dsh-iui-input-orbit-target:focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 2px;
+  }
+
+  .dsh-iui-input-orbit {
+    display: none;
   }
 }

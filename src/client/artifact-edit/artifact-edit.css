@@ -124,6 +124,10 @@
   outline-offset: 1px;
 }
 
+.dsh-iui-edit-control-group .dsh-iui-info-tip-trigger:focus-visible {
+  outline-offset: -2px;
+}
+
 .dsh-iui-info-tooltip {
   position: fixed;
   z-index: 1250;
@@ -136,7 +140,7 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 11.5px;
   line-height: 17px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 /* -------------------------------------------------------------------------
@@ -1170,6 +1174,7 @@
 }
 
 .dsh-iui-edit-arrangement-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1404,29 +1409,36 @@
  *
  * The actions stay out of the eye until the row is hovered or something inside
  * it has keyboard focus; keeping them in the DOM (opacity rather than display)
- * lets Tab reach them and reveals them through :focus-within. Sizes match the
+ * lets Tab reach them and reveals them through :has(:focus-visible). Sizes match the
  * existing 26px pencil/drag controls, so row height does not change.
  * ---------------------------------------------------------------------- */
 
 .dsh-iui-edit-structure-actions {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  z-index: 2;
   display: inline-flex;
-  flex: none;
   align-items: center;
   justify-content: flex-end;
   gap: 1px;
+  width: 126px;
+  min-width: 126px;
+  padding: 0 1px;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  transform: translateY(-50%);
   opacity: 0;
   transition: opacity 120ms ease;
   pointer-events: none;
   /* Locate/edit/duplicate/delete/move. The fixed width is shared by the default
-     and confirming states, so the Edited tag never shifts when the group swaps
-     to the compact Cancel/Delete confirmation. */
-  width: 126px;
-  min-width: 126px;
+     and confirming states; the group overlays the row tail so titles keep the
+     full row width instead of losing 126px to invisible controls. */
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .dsh-iui-edit-arrangement-row:hover .dsh-iui-edit-structure-actions,
@@ -1435,6 +1447,19 @@
 .dsh-iui-edit-nested-row:has(:focus-visible) .dsh-iui-edit-structure-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .dsh-iui-edit-arrangement-row,
+  .dsh-iui-edit-nested-row {
+    padding-right: 130px;
+  }
+
+  .dsh-iui-edit-structure-actions {
+    background: var(--dsw-alias-bg-layer-1);
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button:hover {

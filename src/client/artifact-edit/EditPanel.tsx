@@ -460,7 +460,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
             data-dsh-iui-edit-structure-duplicate
             data-block-id={blockId}
             disabled={busy}
-            aria-label={t('edit.structureDuplicate')}
+            aria-label={`${t('edit.structureDuplicate')}: ${title}`}
             title={t('edit.structureDuplicate')}
             onClick={event => { event.stopPropagation(); onDuplicate(event.currentTarget) }}
           >
@@ -473,7 +473,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
             data-dsh-iui-edit-structure-delete
             data-block-id={blockId}
             disabled={busy}
-            aria-label={t('edit.structureDelete')}
+            aria-label={`${t('edit.structureDelete')}: ${title}`}
             title={t('edit.structureDelete')}
             onClick={event => { event.stopPropagation(); onRequestDelete(event.currentTarget) }}
           >
@@ -487,7 +487,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
             disabled={busy}
             aria-haspopup="menu"
             aria-expanded={moveOpen ? 'true' : undefined}
-            aria-label={t('edit.moveBlock')}
+            aria-label={`${t('edit.moveBlock')}: ${title}`}
             title={t('edit.moveBlock')}
             onClick={event => { event.stopPropagation(); onMove(event.currentTarget) }}
           >

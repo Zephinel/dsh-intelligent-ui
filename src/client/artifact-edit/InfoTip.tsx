@@ -2,8 +2,10 @@
  * Small information affordance with a plugin-drawn tooltip.
  *
  * The native `title` tooltip is OS-painted and clashes with the editor's
- * surface language, so this is a themed alternative: an info icon that opens a
- * portaled tooltip on hover/focus/click, with Escape and viewport clamping.
+ * surface language, so this is a themed alternative. Hover is used only on
+ * hover-capable pointers; a click pins the tooltip open for touch, keyboard or
+ * a deliberate mouse click. The tooltip is hoverable, closes on outside
+ * pointerdown/Escape, and stays anchored through panel width transitions.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
@@ -27,6 +29,7 @@ interface Placement {
 const GAP = 8
 const MARGIN = 10
 const WIDTH = 280
+const CLOSE_DELAY = 120
 
 /**
  * Render one info icon with a custom tooltip.
@@ -38,7 +41,34 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
   const [placement, setPlacement] = useState<Placement | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const tipRef = useRef<HTMLDivElement>(null)
+  const pinned = useRef(false)
+  const closeTimer = useRef<number | undefined>(undefined)
   const id = useId()
+
+  const cancelClose = (): void => {
+    if (closeTimer.current === undefined) return
+    window.clearTimeout(closeTimer.current)
+    closeTimer.current = undefined
+  }
+
+  const close = (): void => {
+    cancelClose()
+    pinned.current = false
+    setOpen(false)
+  }
+
+  const scheduleClose = (): void => {
+    if (pinned.current) return
+    cancelClose()
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = undefined
+      setOpen(false)
+    }, CLOSE_DELAY)
+  }
+
+  useEffect(() => () => {
+    if (closeTimer.current !== undefined) window.clearTimeout(closeTimer.current)
+  }, [])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -48,16 +78,22 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
       const rect = trigger.getBoundingClientRect()
       const tip = tipRef.current
       const height = tip?.offsetHeight ?? 60
-      const width = Math.min(WIDTH, Math.max(180, rect.width + 240))
+      const width = Math.min(WIDTH, Math.max(180, window.innerWidth - MARGIN * 2))
       const left = Math.max(MARGIN, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - MARGIN))
       const below = rect.bottom + GAP
       const top = below + height <= window.innerHeight - MARGIN ? below : Math.max(MARGIN, rect.top - GAP - height)
       setPlacement({ left, top, width })
     }
     place()
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => { place() })
+      : null
+    observer?.observe(trigger)
+    if (tipRef.current !== null) observer?.observe(tipRef.current)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     return () => {
+      observer?.disconnect()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
@@ -65,13 +101,24 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
 
   useEffect(() => {
     if (!open) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (triggerRef.current?.contains(target as Node) === true) return
+      if (tipRef.current?.contains(target as Node) === true) return
+      close()
+    }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      setOpen(false)
+      event.stopPropagation()
+      close()
     }
+    document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeyDown, true)
-    return () => { document.removeEventListener('keydown', onKeyDown, true) }
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
   }, [open])
 
   return (
@@ -82,13 +129,29 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
         className="dsh-iui-info-tip-trigger"
         data-dsh-iui-info-tip={testId}
         aria-label={label}
-        aria-expanded={open}
-        aria-describedby={open ? id : undefined}
-        onPointerEnter={() => { setOpen(true) }}
-        onPointerLeave={() => { setOpen(false) }}
-        onFocus={() => { setOpen(true) }}
-        onBlur={() => { setOpen(false) }}
-        onClick={() => { setOpen(current => !current) }}
+        aria-describedby={id}
+        onPointerEnter={event => {
+          if (event.pointerType !== 'mouse') return
+          cancelClose()
+          setOpen(true)
+        }}
+        onPointerLeave={event => {
+          if (event.pointerType !== 'mouse') return
+          scheduleClose()
+        }}
+        onFocus={() => {
+          cancelClose()
+          setOpen(true)
+        }}
+        onBlur={() => {
+          pinned.current = false
+          scheduleClose()
+        }}
+        onClick={() => {
+          cancelClose()
+          pinned.current = true
+          setOpen(true)
+        }}
       >
         <RemixIcon name="information-line" size={13} />
       </button>
@@ -100,6 +163,14 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
           id={id}
           data-dsh-iui-info-tooltip
           style={placement === null ? { left: 0, top: 0, width: WIDTH, opacity: 0 } : placement}
+          onPointerEnter={event => {
+            if (event.pointerType !== 'mouse') return
+            cancelClose()
+          }}
+          onPointerLeave={event => {
+            if (event.pointerType !== 'mouse') return
+            scheduleClose()
+          }}
         >
           {text}
         </div>,
