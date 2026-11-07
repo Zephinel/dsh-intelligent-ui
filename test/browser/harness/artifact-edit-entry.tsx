@@ -300,9 +300,9 @@ w.__applyRevision = (program: string, meta: Record<string, unknown> = {}) => {
   update()
 }
 // Multi-card E2E: append another settled artifact card from the same fixture.
-w.__addCard = (callId: string, title: string = '第二张卡片') => {
+w.__addCard = (callId: string, title: string = '第二张卡片', program: string = DST_PROGRAM) => {
   w.__lastAdd = callId
-  nodes = [...nodes, cardNode(callId, DST_PROGRAM, undefined, title)]
+  nodes = [...nodes, cardNode(callId, program, undefined, title)]
   update()
 }
 w.__nodeCount = () => nodes.length

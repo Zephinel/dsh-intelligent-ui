@@ -324,6 +324,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   check(tones.both, true, 'each editable block paints its own conic orbit glow')
   check(tones.distinct, true, 'neighbouring blocks orbit in different pastel tones')
+  const orbitGaps = await read(`(() => {
+    const orbits = [...document.querySelectorAll('.dsh-iui-block-orbit')].map(el => el.getBoundingClientRect());
+    return orbits.every((orbit, index) => index === 0 || orbit.top + 0.5 >= orbits[index - 1].bottom);
+  })()`)
+  check(orbitGaps, true, 'neighbouring orbit halos do not overlap')
   await hover('[data-dsh-iui-block-hit="b3"]')
   await new Promise(resolve => setTimeout(resolve, 220))
   check(await read(`getComputedStyle(document.querySelector('.dsh-iui-block-overlay-item[data-dsh-iui-block-hit-item="b3"] .dsh-iui-block-marquee')).opacity`), '1', 'hover brightens the orbit glow')

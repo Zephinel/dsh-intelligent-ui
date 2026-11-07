@@ -164,6 +164,20 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef,
 
   const selectionByBlock = useMemo(() => new Map(session.selection.map(entry => [entry.blockId, entry])), [session.selection])
   const activeId = session.activeBlockId
+  // Root blocks sit in one vertical flow; shrink each orbit so neighbouring
+  // halos meet at the gap instead of painting over each other when two blocks
+  // are close (for example a Title followed by its subtitle).
+  const orbitInsets = new Map<string, number>()
+  const rootHits = hits.filter(hit => hit.depth === 0)
+  for (let index = 0; index < rootHits.length; index += 1) {
+    const hit = rootHits[index]
+    const above = rootHits[index - 1]
+    const below = rootHits[index + 1]
+    const gapAbove = above === undefined ? Number.POSITIVE_INFINITY : hit.top - (above.top + above.height)
+    const gapBelow = below === undefined ? Number.POSITIVE_INFINITY : below.top - (hit.top + hit.height)
+    const gap = Math.min(gapAbove, gapBelow)
+    orbitInsets.set(hit.blockId, Number.isFinite(gap) ? Math.min(10, Math.max(1, gap / 2 - 1)) : 10)
+  }
 
   return (
     <div className="dsh-iui-block-overlay" data-dsh-iui-block-overlay>
@@ -177,6 +191,7 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef,
         const dimmed = focused && !relatedBlockIds(activeId, hit.blockId)
         const pendingColor = entry === undefined ? undefined : `var(--dsh-iui-edit-color-${((entry.order - 1) % 6) + 1})`
         const tone = pendingColor ?? tones[(Number(hit.pageLabel.split('.')[0]) - 1 + tones.length) % tones.length] as string
+        const orbitInset = orbitInsets.get(hit.blockId) ?? 10
         const style = {
           left: hit.left,
           top: hit.top,
@@ -186,6 +201,8 @@ export function BlockOverlay({ t, session, actions, scheme = 'light', canvasRef,
           '--dsh-iui-tone': tone,
           '--dsh-iui-stagger': String(Math.max(0, Number(hit.pageLabel.split('.')[0]) - 1)),
           '--dsh-iui-hit-color': pendingColor,
+          '--dsh-iui-orbit-inset': `${Math.round(orbitInset * 10) / 10}px`,
+          '--dsh-iui-orbit-radius': `${Math.round((orbitInset + 12) * 10) / 10}px`,
         } as CSSProperties
         return (
           <div

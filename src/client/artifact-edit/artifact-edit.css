@@ -481,9 +481,9 @@
    room instead of hugging the content. */
 .dsh-iui-block-orbit {
   position: absolute;
-  inset: -10px;
+  inset: calc(-1 * var(--dsh-iui-orbit-inset, 10px));
   padding: 2.5px;
-  border-radius: 22px;
+  border-radius: var(--dsh-iui-orbit-radius, 22px);
   background: conic-gradient(
     from var(--dsh-iui-orbit-angle),
     transparent 0deg 150deg,

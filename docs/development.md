@@ -8,7 +8,7 @@
 
 ## 安装
 
-需要 DSH 0.2.1（`dsh` CLI）与 Node 24。浏览器半边还要求部署组合了 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.1 默认包含；缺少它时开关和卡片不会挂载，Host 工具与提示词不受影响）。
+需要 DSH 0.2.2（`dsh` CLI）与 Node 24。浏览器半边还要求部署组合了 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含；缺少它时开关和卡片不会挂载，Host 工具与提示词不受影响）。
 
 从 npm 或 GitHub 安装 bundle（推荐）：
 
@@ -42,7 +42,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 node scripts/install.mjs --uninstall   # 然后同样重启 DSH Web 进程
 ```
 
-> 0.2.1-rc.2 的宿主在 patch 文件变化后会重组插件树（Host 工具立即出现），但浏览器端插件可能停留在旧 revision：**刷新页面**通常即可；仍异常再 restart。
+> 0.2.2-rc.1 的宿主在 patch 文件变化后会重组插件树（Host 工具立即出现），但浏览器端插件可能停留在旧 revision：**刷新页面**通常即可；仍异常再 restart。
 
 ## 开发
 
@@ -98,7 +98,7 @@ Host 半边只在**进程启动**时加载；浏览器半边在**刷新页面**�
 
 ### 工具 JSON Schema 子集（激活失败排查）
 
-DSH 0.2.1 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`src/host/tool-schema.ts` 在注册任何工具/路由/提示词之前先用同一子集验证 `render_ui` 参数与输出 schema，因此不合法的 schema 会让整个插件激活失败并指出具体关键字，而不是留下“工具缺失但提示词已启用”的半活状态。限制写进 `description` 并在 execute 中校验；`test/host/tool-schema.test.mjs` 守护子集与失败形态，`test/host/tool.test.mjs` 继续守护实际参数/输出 schema。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
+DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required` / `additionalProperties` / `items` / `enum` / `const` 加注解（`description` / `title` / `default` / `examples`）。`src/host/tool-schema.ts` 在注册任何工具/路由/提示词之前先用同一子集验证 `render_ui` 参数与输出 schema，因此不合法的 schema 会让整个插件激活失败并指出具体关键字，而不是留下“工具缺失但提示词已启用”的半活状态。限制写进 `description` 并在 execute 中校验；`test/host/tool-schema.test.mjs` 守护子集与失败形态，`test/host/tool.test.mjs` 继续守护实际参数/输出 schema。此类错误只在 Host 激活时暴露，修复后必须重启宿主。
 
 ## 目录（发布相关）
 

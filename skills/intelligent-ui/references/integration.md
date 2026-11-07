@@ -13,14 +13,14 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Requirements
 
-- DSH **0.2.1** (validated on `0.2.1-rc.2`), Node **24**.
+- DSH **0.2.2** (validated on `0.2.2-rc.1`, current latest), Node **24**.
 - The **web** profile (or any profile whose app has a browser chat surface); the client half declares `"dsh": { "client": { "platform": "web" } }`.
 - Interactive-page export additionally needs a `webServer` service so the Host can serve the standalone renderer assets; without it image export still works and page export reports a build failure.
 - Style catalog and management require Host `webServer` plus `connection.requestRejection` authentication. On-demand uses the deployment's normal default conversation model services and session events; there is no extension-owned draft model endpoint, `llm` injection or `agentDefaultModel` injection. The structured clarification path additionally needs the built-in `ask_user_question` tool; a text fallback keeps the operation pending for the next message instead of requiring an immediate re-arm.
 - The app composes the client locale service (`@deepseek-ai/dsh-client-locale`; DSH Web includes it by default). The browser half requires the `locale` service: without it the switch and the card do not mount, while the Host tool and prompt keep working. UI dictionaries live in `src/shared/locales.ts` (`zh` as the key-set source of truth, `en` checked complete); the renderer falls back to English outside DSH.
 - Network access for the nice-to-haves: Wikipedia/Wikimedia (photo search), OpenFreeMap tiles and OSRM demo routing (Map). Offline, the page still renders with the fallbacks described below.
 - Runtime dependency **`@deepseek-ai/schemastery`** (~3.18.5), installed with the package; the Host uses it only for the Plugin detail page Config schema.
-- The package declares **no `engines.dsh` yet**; it was verified against `0.2.1-rc.2`. A later DSH may refuse it until a compatible release lands or an exact-version exemption is granted (below).
+- The package declares **no `engines.dsh` yet**; it was verified against `0.2.2-rc.1`. A later DSH may refuse it until a compatible release lands or an exact-version exemption is granted (below).
 
 ## Session switch and answer style
 
@@ -65,7 +65,7 @@ DSH Desktop installs the same bundle from the app instead of the CLI: **Plugins*
 
 Packaging behavior that matters when publishing:
 
-- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (44 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
+- The registry tarball ships the prebuilt `lib/` (host and client bundles), `cordis.patch.yml`, `skills/`, `locale/`, `licenses/`, `assets/`, the two READMEs (`README.md` / `README.en.md`), `LICENSE`, `NOTICE` and `icon.svg` (51 files). The generated component spec and generation prompt are build inputs compiled into `lib/index.js`; `vendor/` and `src/` are not shipped.
 - A Git checkout installs from source: pnpm runs the package's `prepare` build, so the install may ask for **build-script approval** and needs the toolchain. A registry tarball has nothing to build.
 - Without `dsh.bundle`, the manager would install the package as a plain dependency with the warning `declares no dsh.bundle — installed as a plain dependency, not a profile layer`, and nothing would load. This package declares it, so that warning means the wrong spec or an old tarball.
 
@@ -73,7 +73,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.5.0 --dsh-version 0.2.1-rc.2 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.5.0 --dsh-version 0.2.2-rc.1 --accept-risk
 ```
 
 Remove it with the mirror command:

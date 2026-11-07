@@ -54,13 +54,24 @@ test('the published files list covers every runtime and bundle input', () => {
   }
 })
 
-test('every shipped screenshot exists and is used by both READMEs', () => {
+test('every shipped screenshot exists and is used by the matching README', () => {
   const screenshots = readdirSync(new URL('assets', root))
-  assert.equal(screenshots.length, 13, 'assets ships the current README screenshot set')
+  assert.equal(screenshots.length, 20, 'assets ships the current README screenshot set')
+  // Language-specific captures live only in the README of the same language;
+  // all other screenshots remain shared by both READMEs.
+  const languageSpecific = new Set([
+    'intelligent-ui-editing-zh.webp', 'intelligent-ui-editing-en.webp',
+    'intelligent-ui-readme-overview-zh.webp', 'intelligent-ui-readme-overview-en.webp',
+  ])
   for (const image of screenshots) {
     assert.ok(existsSync(new URL(`assets/${image}`, root)), `assets/${image} exists`)
-    assert.ok(read('README.md').includes(`assets/${image}`), `README.md uses ${image}`)
-    assert.ok(read('README.en.md').includes(`assets/${image}`), `README.en.md uses ${image}`)
+    if (languageSpecific.has(image)) {
+      const readme = image.endsWith('-zh.webp') ? 'README.md' : 'README.en.md'
+      assert.ok(read(readme).includes(`assets/${image}`), `${readme} uses ${image}`)
+    } else {
+      assert.ok(read('README.md').includes(`assets/${image}`), `README.md uses ${image}`)
+      assert.ok(read('README.en.md').includes(`assets/${image}`), `README.en.md uses ${image}`)
+    }
   }
   // The other direction: a README must not point at a screenshot that is gone.
   for (const readme of ['README.md', 'README.en.md']) {

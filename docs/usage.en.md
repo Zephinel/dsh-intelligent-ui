@@ -1,0 +1,61 @@
+# Usage guide
+
+[中文](usage.md) | [Back to README](../README.en.md)
+
+This is a practical tour of the extension. For implementation details, Host/Client contracts and the full boundaries, see [Architecture and behavior](architecture.en.md).
+
+## Turn it on
+
+1. Click the **UI** control to the right of the composer and choose **This session only**, or send `/iui on`.
+2. A structured answer is then rendered as a card at the end of its turn.
+3. To enable it for new sessions by default, open **Plugins → Intelligent UI** and turn on **Enable in all sessions**.
+
+While the switch is off the model does not see `render_ui` and answers in text; turn it back on. To force a card (or when the model still answers in text), invoke the skill explicitly with `/intelligent-ui` in an enabled session.
+
+## Ask
+
+Describe the page and the interactive parts you need, for example:
+
+- "Plan two days in Shanghai, with checkboxes and adjustments"
+- "Build a 7-speed bicycle shifting simulator"
+- "Turn these tables into a filterable sales dashboard"
+- "Introduce Chinese history with expandable dynasties"
+
+Structured answers use a card by default; long reading answers can use the Article style. You can override the style per session under **UI → Display style**.
+
+## Edit a rendered page
+
+- Click **Edit** in the card header; top-level editable blocks show a soft orbit glow.
+- The arrangement rows and canvas hover-sync both ways. Each row's **More** menu offers Locate, Edit, Duplicate, Move and Delete; Delete confirms inside the menu.
+- Click a block to write a change request and **Save**; requests stay in the pending list. Drag rows or use ↑/↓/Home/End to reorder top-level blocks.
+- Switch **Top level / Nested blocks** to edit content inside `Col`/`Row`/`Box`/`Grid`/`Card`/`Section`/`Carousel`.
+- `Divider`/`Spacer` open quick-adjust fields: plugin-drawn colour/unit pickers and sliders preview on the canvas and apply through the deterministic Host property route without a model turn.
+- Duplicate/delete/move first show a change preview and record a revision only after confirmation. Turn on **Strict protection** to reject changes to unselected top-level blocks.
+- **Exit editing** in the panel header or the card header leaves the canvas. The pending requests travel in composer chips and only produce a new revision when you send normally.
+
+## Requests, drafts and revisions
+
+- Each edited artifact gets one composer chip: `Edit {title} · revision N · {summary}`.
+- One chat keeps several drafts (one active canvas); one send can merge up to 3 artifacts' requests, each producing its own revision.
+- Removing a chip only detaches its draft from the send; re-attach it from the **pending edits** area.
+- An older revision can be **Restored as a new revision** (zero model calls, local revision card); a conflict banner can create a branch from an older revision.
+- Temporary-style results keep their style snapshot through content edits; reorder-only or global-only requests still need a page with a saved/built-in style.
+
+## On-demand and templates
+
+- Choose **On-demand UI**, then send a normal request; material ambiguity is clarified with structured questions.
+- Use the result immediately, then **Adjust style** to keep the content and change the layout, or **Save as template** to keep the layout, preferences and theme.
+- Export/import templates in **Plugins → My styles** or the composer's style panel. Import creates global templates only and requires an explicit acknowledgement.
+
+## Export
+
+The **Export** button at the right of the message actions can:
+
+- Export all cards in the turn as one PNG (original / rounded / card; background and 1x/2x live in the plugin settings).
+- Export a single-file HTML page that stays interactive in a browser; `@ToAssistant` copies its message and asks you to paste it back into DSH.
+
+## Related
+
+- [Architecture and behavior](architecture.en.md) — component tree, Host/Client contracts, editing and export internals.
+- [Known limitations](limitations.en.md) — current boundaries and unverified areas.
+- [Development and deployment](development.en.md) — install, uninstall, development commands and restart notes.
