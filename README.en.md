@@ -33,15 +33,6 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 - A rendered page can be edited again: click **Edit** in the card header, write change requests for blocks, drag or keyboard-reorder them in **Block arrangement**; duplicate, delete, move, nested editing, quick adjust and revisions are recorded deterministically by the Host. See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
 - Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer and send it.
 
-## Editing
-
-![Editing canvas: orbit glow, row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
-
-- Click **Edit** in the card header to open the canvas; root blocks show a soft orbit glow.
-- Each row's **More** menu offers Locate/Edit/Duplicate/Move/Delete; Delete confirms inside the menu.
-- Block requests, drag/keyboard reordering, nested editing, Divider/Spacer quick adjust and structure previews all happen in the left panel; the Host records a revision after sending.
-- See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
-
 ## Component tour
 
 The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The composite below is a real render from the extension: same renderer, same DSH theme tokens, no mockups:
@@ -49,6 +40,17 @@ The renderer is not a chat bubble around a paragraph — it is a full component 
 ![Component and example overview: layout, text, inputs, media, data, interaction, drawing and real examples](assets/intelligent-ui-readme-components.webp)
 
 Ten real examples (sales dashboard, brewing quiz, narrow calculator and more) are in the same image; on narrow screens cards reflow to one column and long chart labels truncate instead of overflowing.
+
+## Editing a rendered page
+
+A rendered page stays editable.
+
+![Editing canvas: orbit glow, row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
+
+- Click **Edit** in the card header to open the canvas; root blocks show a soft orbit glow.
+- Each row's **More** menu offers Locate/Edit/Duplicate/Move/Delete; Delete confirms inside the menu.
+- Block requests, drag/keyboard reordering, nested editing, Divider/Spacer quick adjust and structure previews all happen in the left panel; the Host records a revision after sending.
+- See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
 
 ## Capabilities
 
