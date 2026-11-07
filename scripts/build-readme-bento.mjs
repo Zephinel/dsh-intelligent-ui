@@ -28,6 +28,15 @@ const groups = [
       { file: 'intelligent-ui-settings.webp', col: '2 / 3', row: '2 / 3' },
     ],
   })),
+  ...['zh', 'en'].map(lang => ({
+    out: `assets/intelligent-ui-readme-generation-${lang}.webp`,
+    width: 1600, height: 720, columns: 3, rows: 1, fit: 'contain',
+    cells: [
+      { file: `intelligent-ui-itinerary-${lang}.webp`, col: '1 / 2', row: '1 / 2' },
+      { file: `intelligent-ui-dashboard-${lang}.webp`, col: '2 / 3', row: '1 / 2' },
+      { file: `intelligent-ui-quiz-${lang}.webp`, col: '3 / 4', row: '1 / 2' },
+    ],
+  })),
   {
     out: 'assets/intelligent-ui-readme-components.webp',
     width: 1600, height: 960,

@@ -17,9 +17,11 @@ import { chromeExists, connectCdp, launchChrome, startStaticServer } from '../te
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const lang = process.argv.includes('--en') ? 'en' : 'zh'
-const cardMode = process.argv.includes('--card')
+const cardArg = process.argv.find(arg => arg.startsWith('--card='))
+const cardMode = cardArg !== undefined
+const cardKind = cardMode ? cardArg.slice('--card='.length) : undefined
 const out = join(root, cardMode
-  ? `assets/intelligent-ui-itinerary-${lang}.webp`
+  ? `assets/intelligent-ui-${cardKind}-${lang}.webp`
   : lang === 'en' ? 'assets/intelligent-ui-editing-en.webp' : 'assets/intelligent-ui-editing-zh.webp')
 const ENGLISH_PROGRAM = `root = Col([headline, intro, facts, routeCard, stayCard, dayCard, budgetCard, paceCard, note], 3)
 headline = Title("Two days in Shanghai", "2xl")
@@ -47,6 +49,53 @@ note = Text("点编辑可以改任意区块，或拖动行调整页面顺序；�
 $pace = "轻松"
 $garden = false
 $bund = false`
+const DASHBOARD_EN = `root = Col([headline, intro, kpis, trend, breakdown, detail, note], 3)
+headline = Title("Q3 revenue review", "2xl")
+intro = Text("Revenue is up 18.5% over August. Change the region filter to see the detail update.", "md", "muted")
+kpis = Grid([kpiRevenue, kpiOrders, kpiAov, kpiGrowth], 4, 150, 3)
+kpiRevenue = Card([Caption("REVENUE"), Title("$11,830", "xl"), Caption("+18.5% vs August")], "soft")
+kpiOrders = Card([Caption("ORDERS"), Title("16", "xl"), Caption("+2.4% vs August")], "soft")
+kpiAov = Card([Caption("AVG ORDER"), Title("$739", "xl"), Caption("+15.7% vs August")], "soft")
+kpiGrowth = Card([Caption("GROWTH"), Title("+18.5%", "xl"), Caption("August to July")], "soft")
+trend = Card([Title("Revenue by week", "lg"), Chart("line", [{week: "W1", revenue: 3200}, {week: "W2", revenue: 4100}, {week: "W3", revenue: 3800}, {week: "W4", revenue: 4630}], "week", ["revenue"], "currency", "USD")], "outline")
+breakdown = Card([Title("Share by region", "lg"), Chart("donut", [{region: "North", share: 42.1}, {region: "South", share: 26}, {region: "East", share: 31.9}], "region", ["share"], "percent")], "outline")
+detail = Card([Title("Orders by region", "lg"), Table(["Region", "Orders", "Revenue"], [["North", "7", "$4,980"], ["South", "4", "$3,010"], ["East", "5", "$3,840"]])], "outline")
+note = Text("All numbers update locally; no model round trip.", "sm", "muted")`
+const DASHBOARD_ZH = `root = Col([headline, intro, kpis, trend, breakdown, detail, note], 3)
+headline = Title("第三季度营收回顾", "2xl")
+intro = Text("营收比八月增长 18.5%。切换地区筛选，明细会立即重算。", "md", "muted")
+kpis = Grid([kpiRevenue, kpiOrders, kpiAov, kpiGrowth], 4, 150, 3)
+kpiRevenue = Card([Caption("营收"), Title("$11,830", "xl"), Caption("比八月 +18.5%")], "soft")
+kpiOrders = Card([Caption("订单"), Title("16", "xl"), Caption("比八月 +2.4%")], "soft")
+kpiAov = Card([Caption("客单价"), Title("$739", "xl"), Caption("比八月 +15.7%")], "soft")
+kpiGrowth = Card([Caption("增长"), Title("+18.5%", "xl"), Caption("八月对七月")], "soft")
+trend = Card([Title("每周营收", "lg"), Chart("line", [{week: "W1", revenue: 3200}, {week: "W2", revenue: 4100}, {week: "W3", revenue: 3800}, {week: "W4", revenue: 4630}], "week", ["revenue"], "currency", "USD")], "outline")
+breakdown = Card([Title("地区占比", "lg"), Chart("donut", [{region: "北部", share: 42.1}, {region: "南部", share: 26}, {region: "东部", share: 31.9}], "region", ["share"], "percent")], "outline")
+detail = Card([Title("各地区订单", "lg"), Table(["地区", "订单", "营收"], [["北部", "7", "$4,980"], ["南部", "4", "$3,010"], ["东部", "5", "$3,840"]])], "outline")
+note = Text("所有数字在本地重算，不产生模型请求。", "sm", "muted")`
+const QUIZ_EN = `root = Col([headline, intro, q1, q2, score, note], 3)
+headline = Title("Coffee brewing quiz", "2xl")
+intro = Text("Three quick questions; feedback appears as you answer.", "md", "muted")
+q1 = Card([Title("1. Brew ratio", "lg"), Text("20 g coffee, 300 g water — what ratio is that?", "sm"), RadioGroup($q1, ["1:10", "1:15", "1:18"], "Ratio"), Text($q1 == "1:15" ? "Correct — 300 ÷ 20 = 15." : "Try again: 300 ÷ 20 = 15.", "sm", $q1 == "" ? "muted" : "success")], "outline")
+q2 = Card([Title("2. Water temperature", "lg"), Text("Which temperature is recommended for a light roast?", "sm"), RadioGroup($q2, ["82 °C", "92–94 °C", "100 °C"], "Temperature"), Text($q2 == "92–94 °C" ? "Correct — light roasts need hotter water." : "Try again: light roasts need hotter water.", "sm", $q2 == "" ? "muted" : "success")], "outline")
+score = Card([Title("Score", "lg"), Text(($q1 == "1:15" ? 1 : 0) + ($q2 == "92–94 °C" ? 1 : 0) + " / 2"), Celebration($q1 == "1:15" && $q2 == "92–94 °C")], "soft")
+note = Text("Every answer is checked in the browser; no model round trip.", "sm", "muted")
+$q1 = ""
+$q2 = ""`
+const QUIZ_ZH = `root = Col([headline, intro, q1, q2, score, note], 3)
+headline = Title("咖啡冲煮小测", "2xl")
+intro = Text("三道快问快答；回答后立即显示反馈。", "md", "muted")
+q1 = Card([Title("1. 冲煮比例", "lg"), Text("20 g 咖啡粉配 300 g 水，比例是多少？", "sm"), RadioGroup($q1, ["1:10", "1:15", "1:18"], "比例"), Text($q1 == "1:15" ? "正确 — 300 ÷ 20 = 15。" : "再试一次：300 ÷ 20 = 15。", "sm", $q1 == "" ? "muted" : "success")], "outline")
+q2 = Card([Title("2. 水温", "lg"), Text("浅烘咖啡推荐用多少度的水？", "sm"), RadioGroup($q2, ["82 °C", "92–94 °C", "100 °C"], "水温"), Text($q2 == "92–94 °C" ? "正确 — 浅烘需要更高的水温。" : "再试一次：浅烘需要更高的水温。", "sm", $q2 == "" ? "muted" : "success")], "outline")
+score = Card([Title("得分", "lg"), Text(($q1 == "1:15" ? 1 : 0) + ($q2 == "92–94 °C" ? 1 : 0) + " / 2"), Celebration($q1 == "1:15" && $q2 == "92–94 °C")], "soft")
+note = Text("所有答案都在浏览器里判断，不产生模型请求。", "sm", "muted")
+$q1 = ""
+$q2 = ""`
+const PROGRAMS = {
+  itinerary: { title: { en: 'Two days in Shanghai', zh: '上海两日行程' }, program: { en: ENGLISH_PROGRAM, zh: CHINESE_PROGRAM } },
+  dashboard: { title: { en: 'Q3 revenue review', zh: '第三季度营收回顾' }, program: { en: DASHBOARD_EN, zh: DASHBOARD_ZH } },
+  quiz: { title: { en: 'Coffee brewing quiz', zh: '咖啡冲煮小测' }, program: { en: QUIZ_EN, zh: QUIZ_ZH } },
+}
 const temp = await mkdtemp(join(tmpdir(), 'iui-editor-shot-'))
 let server, browser, cdp
 
@@ -111,8 +160,9 @@ try {
   await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'edit entry')
   await read(`window.__language(${JSON.stringify(lang)})`)
   await read(`window.__resetCards()`)
-  const program = lang === 'en' ? ENGLISH_PROGRAM : CHINESE_PROGRAM
-  const title = lang === 'en' ? 'Two days in Shanghai' : '上海两日行程'
+  const spec = PROGRAMS[cardKind ?? 'itinerary']
+  const program = spec.program[lang]
+  const title = spec.title[lang]
   await read(`window.__addCard('editor-shot', ${JSON.stringify(title)}, ${JSON.stringify(program)})`)
   await wait(`!!document.querySelector('[data-dsh-iui-call-id="editor-shot"] [data-dsh-iui-edit-entry]')`, 'editor card')
   if (cardMode) {

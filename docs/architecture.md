@@ -252,7 +252,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - **列表↔画布映射、编辑聚焦与 pending 标记（追加）**：编排/嵌套/请求行 hover 与画布区块双向联动（中性蓝 2px 细框 + 4% 淡底，未选中/未编辑时显示）；根层常显页面顺序索引（嵌套块仅在 hover 时显示）；有 pending 请求的行仍保留页面序号，并在标题后显示带 tooltip 的请求序号 badge；行尾新增「更多」菜单（定位/编辑/复制/移动/删除；定位仍复用 900ms 脉冲），保留点击行主体定位。打开任一区块编辑器时，其余区块被 scrim 压暗，当前区块保留编辑框；Save/Cancel 关闭后 scrim 消失。Save 不再保留大选中框：改为「圆点 + 请求序号」的低调 pending 标记，pending 根层区块的 orbit glow 降速（5.2s）变淡（0.3）；`selection` 数据不变，发送时照常提交。确定性 Apply/结构操作仍按既定行为记录修订并退出编辑（1A 不变）。
 - **状态一致性**：未发送拦截统一用 `hasArtifactEditContent`（包含嵌套排序）；异步结构/属性请求失败只回写当前 session（不会复活已关闭/已提交的编辑器）；嵌套 kind 复用共享映射；快捷面板打开即聚焦、`aria-busy`、`edit.propsUnit`、stale-base/no-change/busy 文案齐全。
 - **限制与预算**：快捷调整只支持 Divider/Spacer 的上述属性；属性修订卡与其他本地修订一样只在 localStorage/触发 Turn 渲染，不参与导出；自定义 CSS 颜色由渲染器 `isSafeCss` 约束，Host 只做保守格式校验；根层 wrapper 已无盒子，依赖 `.dsh-iui-block` 盒子的旧样式/hook 不再存在（测试改为 overlay hit/frame 选择器）。CST 节点预算为 200（此前 60）：长文章页面（如 105 节点的 Solid 2.0 导览）现在可以找到嵌套 Spacer 并使用快捷调整；66 节点 fixture 在浏览器套件中回归。
-- **验证**：Node **510/510**；浏览器 9/9；`artifact-edit` **350 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 215.3 kB；standalone 3.32 MB + 514.4 kB；pack 53 files 5.06 MB / 11.80 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
+- **验证**：Node **510/510**；浏览器 9/9；`artifact-edit` **350 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 215.3 kB；standalone 3.32 MB + 514.4 kB；pack 59 files 5.41 MB / 12.16 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
 
 ### 运行时状态部分保留（B2-6）
 
@@ -402,7 +402,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 编排行右侧是一个正常的 24px「更多」触发器 `[data-dsh-iui-edit-row-menu]`，不再有覆盖文字的动作组；它打开 portal 菜单，包含定位、编辑、复制、移动到…、删除五项（`data-dsh-iui-edit-locate` / `-structure-edit` / `-structure-duplicate` / `-move` / `-structure-delete`），菜单项有 role=menuitem、方向键/Home/End、Escape、外部点击和焦点返回；触发器在正常 flow 中，标题不会与按钮重叠。
 - 结构性删除是菜单内的持久两态确认：选择「删除区块」后，同一个菜单切换为 `data-dsh-iui-edit-structure-confirm` 的安静 Cancel 与 danger-tinted Delete 两个按钮（该步骤用 dialog 语义），无行红底/大红 pill；确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消/离开时回到行触发器；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时的轨道光晕也留出了可见余量。
-- 验证：Node **510/510**（Host 241、Client 248、packaging 21）；浏览器 9/9；`artifact-edit` **350 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 53 files 5.06 / 11.80 MB。
+- 验证：Node **510/510**（Host 241、Client 248、packaging 21）；浏览器 9/9；`artifact-edit` **350 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 59 files 5.41 / 12.16 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -411,7 +411,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 510/510、浏览器 9/9、`artifact-edit` 350 checks、`nested-edit-renderer` 75；构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 53 files 5.06 / 11.80 MB。
+- 验证：Node 510/510、浏览器 9/9、`artifact-edit` 350 checks、`nested-edit-renderer` 75；构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 59 files 5.41 / 12.16 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 
