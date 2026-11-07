@@ -281,6 +281,23 @@ dsh web
 - [变更日志](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)：按版本记录新增、变更与修复（英文）。
 - [GitHub Releases](https://github.com/Zephinel/dsh-intelligent-ui/releases)：带日期的版本发布页与安装说明。
 
+## 致谢与第三方依赖
+
+这个扩展建立在下面这些开源项目与素材之上，感谢作者和维护者：
+
+- **[Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) / [OpenUI](https://github.com/thesysdev/openui)** — 组件库、渲染层、系统提示词与组件规范的起点。MIT，Copyright (c) 2026 Thesys Inc.
+- **OpenUI packages** — `@openuidev/lang-core`、`@openuidev/react-lang`，以及随依赖树附带的 `@openuidev/devtools`、`@openuidev/observability`；负责 OpenUI Lang 解析、组件定义与渲染。MIT。
+- **[Remix Icon](https://github.com/Remix-Design/RemixIcon)** — 插件自身 chrome 的图标（编辑、删除、移动、定位、信息等），path 数据按原样内联。Remix Icon License v1.0，Copyright (c) 2017-2026 Remix Design。
+- **[lucide-react](https://github.com/lucide-icons/lucide)** — 模型生成内容中 `Icon` 组件的图标。ISC。
+- **[KaTeX](https://github.com/KaTeX/KaTeX)** — `Math` 组件的公式渲染，含随包内联的字体。MIT。
+- **[MapLibre GL JS](https://github.com/maplibre/maplibre-gl-js)** — 地图与路线渲染，worker 源码随 bundle 内嵌。BSD-3-Clause，Copyright (c) MapLibre contributors。
+- **[SnapDOM](https://github.com/zumerlab/snapdom)**（`@zumer/snapdom`）— 把回答卡片导出为图片。MIT，Copyright (c) 2025 ZumerLab。
+- **[zod](https://github.com/colinhacks/zod)** — 组件 props 与 OpenUI 程序结构的运行时校验。MIT。
+
+此外，**React / React DOM**（MIT）由 DSH Web 平台提供，独立交互页面 bundle 会内置它们。地图底图与路线数据来自 OpenFreeMap / OpenMapTiles / OpenStreetMap、Esri 与 OSRM，使用时会在图内显示相应 attribution。
+
+每项的完整许可证见 [NOTICE](NOTICE) 与 [licenses/](licenses/)。如果发现遗漏或归属有误，欢迎提 issue 或 PR。
+
 ## 许可证
 
 本项目采用 [MIT](LICENSE) 许可证。基于 Open Intelligent UI（MIT, Copyright (c) 2026 Thesys Inc.）与 OpenUI 生态；浏览器 bundle 内含 lucide-react（ISC）、KaTeX（MIT）、MapLibre GL JS（BSD-3-Clause）、zod（MIT）与 SnapDOM（MIT）；交互页面的独立 bundle 还内联 React / React DOM（MIT）。完整声明与许可证全文见 [NOTICE](NOTICE) 与 [licenses/](licenses/)。

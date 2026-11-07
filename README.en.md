@@ -280,6 +280,23 @@ Detailed docs, the changelog and repository maintenance skills are excluded from
 - [Changelog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md): additions, changes and fixes per release.
 - [GitHub Releases](https://github.com/Zephinel/dsh-intelligent-ui/releases): dated release pages with install notes.
 
+## Credits and third-party dependencies
+
+This extension builds on the following open-source projects and assets; thanks to their authors and maintainers:
+
+- **[Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) / [OpenUI](https://github.com/thesysdev/openui)** — the starting point for the component library, renderer, system prompt and component spec. MIT, Copyright (c) 2026 Thesys Inc.
+- **OpenUI packages** — `@openuidev/lang-core`, `@openuidev/react-lang`, plus the transitive `@openuidev/devtools` and `@openuidev/observability`; they parse OpenUI Lang, define components and render them. MIT.
+- **[Remix Icon](https://github.com/Remix-Design/RemixIcon)** — icons used by the plugin's own chrome (edit, delete, move, locate, info, etc.); path data is transcribed as-is. Remix Icon License v1.0, Copyright (c) 2017-2026 Remix Design.
+- **[lucide-react](https://github.com/lucide-icons/lucide)** — icons for the model-rendered `Icon` component. ISC.
+- **[KaTeX](https://github.com/KaTeX/KaTeX)** — math rendering for the `Math` component, including the bundled fonts. MIT.
+- **[MapLibre GL JS](https://github.com/maplibre/maplibre-gl-js)** — map and route rendering; its worker source is embedded in the bundle. BSD-3-Clause, Copyright (c) MapLibre contributors.
+- **[SnapDOM](https://github.com/zumerlab/snapdom)** (`@zumer/snapdom`) — answer-card image export. MIT, Copyright (c) 2025 ZumerLab.
+- **[zod](https://github.com/colinhacks/zod)** — runtime validation for component props and OpenUI programs. MIT.
+
+**React / React DOM** (MIT) are provided by the DSH Web platform; the standalone interactive-page bundle inlines them. Map tiles and routing data come from OpenFreeMap / OpenMapTiles / OpenStreetMap, Esri and OSRM, and the map shows the corresponding attribution in place.
+
+Full license texts are in [NOTICE](NOTICE) and [licenses/](licenses/). If something is missing or misattributed, please open an issue or PR.
+
 ## License
 
 This project is [MIT](LICENSE). It is based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem; the browser bundle contains lucide-react (ISC), KaTeX (MIT), MapLibre GL JS (BSD-3-Clause), zod (MIT) and SnapDOM (MIT); the standalone interactive-page bundle also inlines React / React DOM (MIT). Full notices and license texts are in [NOTICE](NOTICE) and [licenses/](licenses/).
