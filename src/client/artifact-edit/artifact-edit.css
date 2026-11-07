@@ -195,6 +195,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 9px 12px;
+  /* Pull the header up while leaving margin below for the first block's orbit
+     glow (which extends 10px past the block edge). */
+  margin: -4px 0 8px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2));
