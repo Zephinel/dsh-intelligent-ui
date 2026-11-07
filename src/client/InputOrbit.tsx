@@ -28,8 +28,8 @@ const ORBIT_PADDING = 5
 
 /**
  * Whether an element is a text-like field that belongs to the extension.
- * Buttons that read as fields (the custom select trigger) are included;
- * checkboxes, radios, ranges and files keep their native focus treatment.
+ * Dropdown triggers (native selects and the custom select button) are excluded:
+ * they keep their normal menu focus treatment instead of the input orbit.
  * @param element - focused element.
  * @returns the element to ring, or null.
  */
@@ -37,8 +37,7 @@ function inputTarget(element: Element | null): HTMLElement | null {
   if (!(element instanceof HTMLElement)) return null
   if (element.closest('[class*="dsh-iui-"]') === null) return null
   if (element.closest('.dsh-iui-input-orbit-host') !== null) return null
-  if (element.matches('.dsh-iui-quick-select')) return element
-  if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) return element
+  if (element instanceof HTMLTextAreaElement) return element
   if (element instanceof HTMLInputElement) {
     return TEXT_INPUT_TYPES.has(element.type) ? element : null
   }

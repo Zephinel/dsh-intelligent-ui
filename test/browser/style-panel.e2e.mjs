@@ -58,8 +58,8 @@ try {
 
   const initial = await cdp.evaluate(`(() => { const b=document.querySelector('[data-dsh-iui-toggle]'); return { state:b.dataset.state, label:b.textContent.trim(), aria:b.getAttribute('aria-label') } })()`)
   assert.equal(initial.state, 'inherit')
-  assert.match(initial.label, /UI: All sessions/)
-  assert.equal(initial.aria, 'Intelligent UI: all sessions')
+  assert.match(initial.label, /UI: Follow global/)
+  assert.equal(initial.aria, 'Intelligent UI: follow global (Global is on)')
 
   await cdp.evaluate('document.querySelector("[data-dsh-iui-toggle]").click()')
   await cdp.waitFor('!!document.querySelector("[role=menu]")', 'menu')
@@ -69,7 +69,8 @@ try {
     return Math.abs(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI) > 170
   })()`, 'chevron rotated up')
   const menu = await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].map(b => b.textContent.trim())')
-  assert.ok(menu.some(item => /All sessions|全部会话/.test(item)), 'All sessions represents the existing inherit scope')
+  assert.ok(menu.some(item => /Follow global|跟随全局/.test(item)), 'Follow global represents the existing inherit scope')
+  assert.ok(menu.some(item => /Global is on|全局当前开启/.test(item)), 'the inherited global state is visible in the menu')
   assert.ok(menu.some(item => /Display style|显示样式/.test(item)), 'Display style entry must exist')
 
   await cdp.waitFor(`getComputedStyle(document.querySelector('[data-dsh-iui-toggle]')).backgroundColor === 'rgb(46, 46, 46)'`, 'chip hover transition settled')
@@ -117,12 +118,12 @@ try {
   assert.equal(layout.wraps, false, 'menu labels and hints stay on one line')
 
   // The explicit Display style row must open the panel while the chip stays on
-  // All sessions (inherit); this is the route that does not require an `on` override.
+  // Follow global (inherit); this is the route that does not require an `on` override.
   await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => /Display style|显示样式/.test(b.textContent)).click()')
   await cdp.waitFor('!!document.querySelector("[data-dsh-iui-style-panel]")', 'style panel via Display style')
   const route = await cdp.evaluate(`(() => { const b=document.querySelector('[data-dsh-iui-toggle]'); return { state:b.dataset.state, label:b.textContent.trim() } })()`)
   assert.equal(route.state, 'inherit', 'Display style must not change the enable scope')
-  assert.match(route.label, /All sessions/, 'the chip must stay on All sessions')
+  assert.match(route.label, /Follow global/, 'the chip must stay on Follow global')
 
   // Back goes one level up (scope menu), it does not dismiss every popup.
   await cdp.evaluate('document.querySelector(".dsh-iui-style-back").click()')
@@ -137,7 +138,7 @@ try {
     }
   })()`)
   assert.equal(afterBack.state, 'inherit', 'back must not change the enable scope')
-  assert.match(afterBack.label, /All sessions/)
+  assert.match(afterBack.label, /Follow global/)
   assert.ok(afterBack.items >= 4, 'back lands on the full scope menu')
   assert.equal(afterBack.focusBackOnStyle, true, 'back restores focus to the Display style row')
   await cdp.evaluate('[...document.querySelectorAll("[role=menuitem]")].find(b => /Display style|显示样式/.test(b.textContent)).click()')

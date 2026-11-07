@@ -3,7 +3,7 @@
  *
  * The chip opens the scope menu (off, this session, all sessions). Choosing
  * `on` / clicking the already-active session entry opens the answer-style panel:
- * built-in and custom tiles, and a follow-global switch. All sessions retains
+ * built-in and custom tiles, and a follow-global switch. Follow global retains
  * the existing inherit semantics; it does not write the global switch. The Host
  * owns every state decision; the control forwards one explicit `/iui` command
  * and the next projection frame settles the chip.
@@ -313,9 +313,14 @@ export function ToggleControl({
     }
   }
 
+  const inheritStateOn = view.globalEnabled === true
+  const inheritStateKey = inheritStateOn ? 'scope.inherit.stateOn' : 'scope.inherit.stateOff'
   const items: ScopeMenuItem[] = (['off', 'on', 'inherit'] as const).map(scope => ({
     id: scope,
     label: t(SCOPES[scope].menu),
+    ...scope === 'inherit'
+      ? { hint: t(inheritStateOn ? 'scope.inherit.hintOn' : 'scope.inherit.hintOff') }
+      : {},
     icon: <ScopeIcon scope={scope} />,
   }))
   // The style entry stays visible so the menu anatomy is stable; it is
@@ -361,6 +366,17 @@ export function ToggleControl({
     )
     : null
 
+  const inherit = sessionEnable === 'inherit'
+  const scopeLabel = inherit
+    ? t(inheritStateOn ? 'scope.inherit.triggerOn' : 'scope.inherit.triggerOff')
+    : t(current.trigger)
+  const scopeAria = inherit
+    ? `${t(current.aria)} (${t(inheritStateKey)})`
+    : t(current.aria)
+  const scopeDescription = inherit
+    ? `${t(current.description)} · ${t(inheritStateKey)}`
+    : t(current.description)
+
   const trigger = (
     <button
       ref={triggerRef}
@@ -370,10 +386,10 @@ export function ToggleControl({
       data-dsh-iui-toggle="true"
       data-state={state}
       data-enabled={enabled ? 'true' : 'false'}
-      aria-label={t('chip.aria', { scope: t(current.aria) })}
+      aria-label={t('chip.aria', { scope: scopeAria })}
       aria-haspopup={panelOpen ? 'dialog' : 'menu'}
       aria-expanded={open || panelOpen}
-      title={t('chip.title', { description: t(current.description) })}
+      title={t('chip.title', { description: scopeDescription })}
       disabled={disabled}
       onClick={() => {
         if (panelOpen && importBusyRef.current) return
@@ -384,7 +400,7 @@ export function ToggleControl({
       }}
     >
       <span className="dsh-iui-trigger-icon" aria-hidden><ScopeIcon scope={sessionEnable} /></span>
-      <span className="dsh-iui-trigger-label">{t('chip.label', { scope: t(current.trigger) })}</span>
+      <span className="dsh-iui-trigger-label">{t('chip.label', { scope: scopeLabel })}</span>
       <span className="dsh-iui-chevron" data-open={open || panelOpen ? 'true' : 'false'} aria-hidden>
         <ChevronIcon />
       </span>

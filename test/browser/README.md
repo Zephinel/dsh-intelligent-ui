@@ -66,7 +66,7 @@ events but not the full DSH Web integration.
   adds the single-row **More** menu (Locate/Edit/Duplicate/Move/Delete with an
   in-menu delete confirmation), the input focus orbit, menu keyboard/focus and
   forced-colors checks, page/request numbering, a real shell-width 1180px fit,
-  and artifact-missing/reflow coverage. 350 checks; no real
+  and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. 360 checks; no real
   model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and

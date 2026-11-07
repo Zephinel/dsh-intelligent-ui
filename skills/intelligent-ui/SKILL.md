@@ -10,7 +10,7 @@ whenToUse: "A visual, interactive or computed answer would serve better than pro
 
 ## Before you start: is the session enabled?
 
-The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **All sessions** (inherits the global switch), and **Auto** / **Card** / **Article** or a saved custom template. You cannot see the composer, so infer the state from the request:
+The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **Follow global** (inherits the global switch; its chip states whether the global switch is on or off), and **Auto** / **Card** / **Article** or a saved custom template. You cannot see the composer, so infer the state from the request:
 
 - **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; a page is the default answer format.
 - **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) in the **UI** chip on the right side of the composer, run `/iui on`, or enable the extension for all sessions on the Plugin detail page. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.

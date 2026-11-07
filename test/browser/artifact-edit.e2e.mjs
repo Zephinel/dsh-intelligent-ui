@@ -83,6 +83,7 @@ body[data-ds-dark-theme] { color-scheme:dark;
   --dsw-alias-interactive-bg-hover:#2e2e2e; --dsw-alias-interactive-bg-hover-solid:#333;
   --dsw-specific-menu:#242424; --dsw-specific-bubble:#2b3440; --dsw-specific-input-major:#1f1f1f;
 }
+html { scrollbar-width:none; } ::-webkit-scrollbar { width:0; height:0; }
 body { margin:0; background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary); font:14px/1.5 var(--dsw-font-family); }
 main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
 [data-composer-card] { position:fixed; bottom:16px; left:16px; right:16px; max-width:748px; margin:auto; border:1px solid var(--dsw-alias-border-l2); border-radius:14px; background:var(--dsw-alias-bg-layer-1); padding:8px 12px; }
@@ -1262,6 +1263,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const chooseQuickOption = async (rowSelector, value) => {
     await read(`document.querySelector(${JSON.stringify(`${rowSelector} [data-dsh-iui-quick-select]`)}).click()`)
     await wait('!!document.querySelector("[data-dsh-iui-quick-menu]")', 'quick menu open')
+    await wait('!document.querySelector("[data-dsh-iui-input-orbit]")', 'dropdown focus clears the input orbit')
+    check(await count('[data-dsh-iui-input-orbit]'), 0, 'dropdown triggers keep their menu focus, not the input orbit')
     await read(`(() => {
       const option = [...document.querySelectorAll('[data-dsh-iui-quick-menu] [data-value]')]
         .find(el => el.getAttribute('data-value') === ${JSON.stringify(value)});

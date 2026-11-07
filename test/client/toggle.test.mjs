@@ -121,13 +121,21 @@ test('session scope labels the chip This session only and hints the session comm
   assert.doesNotMatch(html, /disabled=""/)
 })
 
-test('inherit labels the chip All sessions and retains the inherit command', () => {
-  const { html } = render(view({ sessionEnable: 'inherit' }))
+test('inherit labels the chip Follow global and shows the global state', () => {
+  const { html } = render(view({ sessionEnable: 'inherit', globalEnabled: true }))
   assert.match(html, /data-state="inherit"/)
-  assert.match(html, /aria-label="Intelligent UI: all sessions"/)
-  assert.match(html, />UI: All sessions</)
+  assert.match(html, /aria-label="Intelligent UI: follow global \(Global is on\)"/)
+  assert.match(html, />UI: Follow global · global on</)
   assert.match(html, /\/iui inherit/)
   assert.doesNotMatch(html, /disabled=""/)
+})
+
+test('inherit warns when the global switch is off', () => {
+  const { html } = render(view({ sessionEnable: 'inherit', globalEnabled: false }))
+  assert.match(html, /data-state="inherit"/)
+  assert.match(html, /aria-label="Intelligent UI: follow global \(Global is off\)"/)
+  assert.match(html, />UI: Follow global · global off</)
+  assert.match(html, /Global is off/)
 })
 
 test('a Chinese locale seat translates the chip, aria label and tooltip', () => {
@@ -150,7 +158,7 @@ test('pending disables the chip and reports the pending state', () => {
 test('a locked composer disables the chip without changing its state', () => {
   const { html } = render(view({ sessionEnable: 'inherit' }), { locked: true })
   assert.match(html, /data-state="inherit"/)
-  assert.match(html, />UI: All sessions</)
+  assert.match(html, />UI: Follow global · global on</)
   assert.match(html, /disabled=""/)
 })
 
