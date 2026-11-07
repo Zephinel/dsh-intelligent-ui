@@ -1711,12 +1711,11 @@
   padding: 2px;
   background: conic-gradient(
     from var(--dsh-iui-input-orbit-angle),
-    transparent 0deg 150deg,
-    transparent 220deg,
-    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 0%, transparent) 240deg,
-    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 50%, transparent) 300deg,
-    var(--dsh-iui-input-orbit-tone) 334deg 340deg,
-    transparent 358deg 360deg
+    transparent 0deg 120deg,
+    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 0%, transparent) 160deg,
+    color-mix(in srgb, var(--dsh-iui-input-orbit-tone) 45%, transparent) 240deg,
+    var(--dsh-iui-input-orbit-tone) 300deg 342deg,
+    transparent 360deg
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -1728,12 +1727,14 @@
   animation: dsh-iui-input-orbit 2600ms linear infinite;
 }
 
-/* A full-perimeter static ring keeps focus visible even when the moving
-   highlight is at the far side of its orbit; the comet is the accent. */
+/* Reduced-motion/high-contrast users get a still perimeter ring; in the
+   normal case the wider comet itself is the focus indicator, so the input
+   does not revert to looking like a plain blue border. */
 .dsh-iui-input-orbit::before {
   content: "";
   position: absolute;
   inset: 0;
+  display: none;
   border: 1.5px solid var(--dsh-iui-input-orbit-tone);
   border-radius: inherit;
   pointer-events: none;
@@ -1747,10 +1748,15 @@
   .dsh-iui-input-orbit {
     animation: none;
   }
+
+  .dsh-iui-input-orbit::before {
+    display: block;
+  }
 }
 
 @media (prefers-contrast: more) {
   .dsh-iui-input-orbit::before {
+    display: block;
     border-width: 2px;
   }
 }
