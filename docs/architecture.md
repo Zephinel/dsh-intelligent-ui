@@ -132,7 +132,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 编辑器顶部是标题「Artifact 编辑器」与窄屏关闭抽屉按钮（桌面停靠栏无展开/收起按钮）。「编辑请求」列表只在存在已保存请求时出现：数量、右对齐的「清空」（只清请求，保留编排与整体说明），以及每项的编号、标题、修改说明与编辑/删除按钮。
 - 「区块编排」始终可见：标题「区块编排」+「· N 个区块」、重置顺序与提示「拖拽调整区块顺序，点击区块可查看或添加编辑需求。」。重置顺序只把 `targetOrder` 恢复为基础版本的页面顺序，保留全部请求、编号与整体说明。列表按 `targetOrder` 列出全部顶层区块：拖拽把手（指针拖拽，4px 阈值、按行中点显示 2px 插入线，放下才调用一次 `moveBlock`；键盘 ↑/↓ 与 Home/End 也可重排）、只定位不打开浮层的正文（滚动到画布中的区块并高亮约 900ms）、类型图标、截断标题、有请求时的编号/颜色与「已编辑」标签，以及行尾打开操作菜单的「更多」按钮（定位/编辑/复制/移动到/删除，删除在菜单内二次确认）；悬停有请求的行约 180ms 后显示锚定的小卡片（标题、编号、全文与编辑/删除）。
 - 编排草稿在编辑画布内实时预览：`wrapProgramForBlockEditing(program, extraction, targetOrder)` 按 `targetOrder` 重排真实 `BlockSlot` 包裹的顺序，工具栏显示「预览目标顺序」；预览只影响编辑态，已记录的修订与导出在发送前保持不变。
-- 编辑器内容顺序固定为：头部 →（有请求时）编辑请求 →（可撤销的删除提示）→ 区块编排 → 分隔线 → 「整体编辑说明（可选）」→「将发送给模型」摘要（区块编辑需求 N 项、结构顺序 保持原样/已调整、整体说明 已填写/未填写）与说明。宽视口（≥1180px）是右侧停靠栏，可展开加宽；700–1179px 折叠为底部抽屉，由工具栏的「编辑请求（{count}）」按钮打开；小于 720px 不提供区块编辑，卡片与活动编辑视图都显示「窗口太窄」提示（包含最小宽度说明、关闭或退出按钮），加宽窗口后恢复。冲突时显示「Artifact 已有更新的版本」横幅，可重试或退出；检查中显示「正在检查 Artifact…」。
+- 编辑器内容顺序固定为：头部 →（有请求时）编辑请求 →（可撤销的删除提示）→ 区块编排 → 分隔线 → 「整体编辑说明（可选）」→「将发送给模型」摘要（区块编辑需求 N 项、结构顺序 保持原样/已调整、整体说明 已填写/未填写）与说明。宽视口（≥1180px）是右侧停靠栏（宽度自适应，无展开按钮）；700–1179px 折叠为底部抽屉，由工具栏的「编辑请求（{count}）」按钮打开；小于 720px 不提供区块编辑，卡片与活动编辑视图都显示「窗口太窄」提示（包含最小宽度说明、关闭或退出按钮），加宽窗口后恢复。冲突时显示「Artifact 已有更新的版本」横幅，可重试或退出；检查中显示「正在检查 Artifact…」。
 - 编辑期间每 15 秒以及窗口重新聚焦/由隐藏转为可见时调用 `probeArtifactRevisionStatus` 做静默修订探测；只有返回 `conflict` 才会把会话置为冲突（不会自动清除冲突），并发更新因此在发送前就显示冲突横幅。
 - 修改说明通过区块浮层编辑：Escape/外部点击关闭，未保存文本先做行内放弃确认；单条最多 2,000 字符，整体说明最多 4,000 字符，单次最多 12 条内容修改。
 
@@ -290,7 +290,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 真机（ego，最新隔离构建，1800×1000，sidebar 280 / 聊天列 left=280 width=1520）：打开编辑后 inline 内容宽度变为 **752px**；聊天卡片右缘 1412.5、Exit editing 按钮右缘 1382.5，面板左缘 1440 → 按钮可见、无遮挡；编辑中把用户宽度偏好设为 1600，仍保持 752 不重叠；退出后 inline 覆盖移除，父元素偏好保留 1600。
 - 部署：client 插件改动只有**重启 `dsh-web`** 才会加载（页面刷新不够）。用户主 GUI 曾因加载旧 client bundle 仍显示旧行为；排查文档/行为不一致时先确认服务已重启。
 - 限制：仅 ≥1180px docked 模式生效；面板自身 CSS clamp 仍以 748 为 fallback；若 shell 未来迁移 `--dsh-chat-content-width`/`--dsh-chat-user-width` 或 `data-conversation-*` 属性，需要更新集中式 selector/变量常量。
-- 测试：`test/client/panel-width.test.mjs`（10 条：固定点/默认视口/宽视口/断点/已适配/过小视口/minContent/常见视口不重叠/非法值/column-aware sidebar 偏移）；浏览器 `artifact-edit` 186 checks 含自动拟合/恢复、动态跟随用户宽度与 expand 按钮不存在的用例。
+- 测试：`test/client/panel-width.test.mjs`（10 条：固定点/默认视口/宽视口/断点/已适配/过小视口/minContent/常见视口不重叠/非法值/column-aware sidebar 偏移）；浏览器 `artifact-edit` 349 checks 含自动拟合/恢复、动态跟随用户宽度、真实 1180px shell fit、菜单/轨道光晕与 expand 按钮不存在的用例。
 
 ### 区块片段编辑（Phase 1）
 
@@ -397,12 +397,12 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 
 ### 面板动画、删除确认与 popover 裁切（第三/四轮用户反馈修复）
 
-- 编辑面板改为圆角浮动卡片：桌面 `top:64px / right:12px / bottom:12px`、`border-radius:16px`、1px 边框与双层阴影、`overflow:hidden`；窄屏 bottom sheet 使用 14px 圆角。进出动画只作用于面板，320ms `cubic-bezier(.22,1,.36,1)`：桌面从右滑入/滑出并淡入淡出 + 轻微 scale，窄屏从底部滑入/滑出；`prefers-reduced-motion: reduce` 时禁用。退出时编辑器延迟约 320ms 卸载（`data-closing="true"`），切换 active 草稿时旧编辑器立即卸载、不播放退出动画。
+- 编辑面板改为无外边框的圆角浮动卡片：桌面 `top:64px / right:12px / bottom:12px`、`border-radius:16px`、双层阴影、`overflow:hidden`；窄屏 bottom sheet 同样无边框，使用 14px 圆角。进出动画只作用于面板，320ms `cubic-bezier(.22,1,.36,1)`：桌面从右滑入/滑出并淡入淡出 + 轻微 scale，窄屏从底部滑入/滑出；`prefers-reduced-motion: reduce` 时禁用。退出时编辑器延迟约 320ms 卸载（`data-closing="true"`），切换 active 草稿时旧编辑器立即卸载、不播放退出动画。
 - 浮动面板增加 12px 右侧 inset，宽度拟合新增 `panelRightInset`（默认 0；DOM helper 传 12），因内容居中会在两侧各计入 inset：1440/748 + inset12 → 648，1300/900 → 508，1500/900 → 708；无 inset 的旧默认结果不变。退出卸载时恢复用户原来的 inline 宽度。
-- 编排行右侧是一个**常显**的动作组 `[data-dsh-iui-edit-structure-actions]`，把编辑（`data-dsh-iui-edit-structure-edit`）、复制、删除、移动四个图标放在同一个 104px 固定槽位里，所有图标同一白色调（`label-primary`）；编辑铅笔统一为**笔尖朝左下**的同一个描边路径（画布选中浮层、请求行、编排组共用，取代原先字符 `✎` 的镜像笔形）；悬停请求卡只读，不再重复提供编辑/删除。
-- 结构性删除改为持久的紧凑两态确认：默认 edit/duplicate/delete/move 图标；确认时替换为 `data-dsh-iui-edit-structure-confirm` 内的安静 Cancel 与 danger-tinted Delete 两个按钮，无行红底/大红 pill；**移除 3 秒自动恢复 timer**，确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消后回到 Delete 图标；live region 播报一次。
+- 编排行右侧是一个正常的 24px「更多」触发器 `[data-dsh-iui-edit-row-menu]`，不再有覆盖文字的动作组；它打开 portal 菜单，包含定位、编辑、复制、移动到…、删除五项（`data-dsh-iui-edit-locate` / `-structure-edit` / `-structure-duplicate` / `-move` / `-structure-delete`），菜单项有 role=menuitem、方向键/Home/End、Escape、外部点击和焦点返回；触发器在正常 flow 中，标题不会与按钮重叠。
+- 结构性删除是菜单内的持久两态确认：选择「删除区块」后，同一个菜单切换为 `data-dsh-iui-edit-structure-confirm` 的安静 Cancel 与 danger-tinted Delete 两个按钮（该步骤用 dialog 语义），无行红底/大红 pill；确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消/离开时回到行触发器；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时的轨道光晕也留出了可见余量。
-- 验证：Node **496/496**（Host 236、Client 239、packaging 21；特性 239）；浏览器 9/9；`artifact-edit` **246 checks**（圆角/inset/overflow 几何、enter/exit 动画名、`data-closing`、删除确认 >3.6s 持久 / Cancel / Delete preview、popover 四边 clamp）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 812.9 kB、client 3.91 MB（js 3.72 / css 193.0）；pack 43 files 4.02 / 10.37 MB。
+- 验证：Node **510/510**（Host 241、Client 248、packaging 21）；浏览器 9/9；`artifact-edit` **349 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 44 files 4.25 / 11.01 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -411,7 +411,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 496/496、浏览器 9/9、`artifact-edit` 246 checks、`nested-edit-renderer` 75；构建 host 812.9 kB、client 3.93 MB（js 3.73 / css 203.4）；pack 44 files 4.03 / 10.41 MB。
+- 验证：Node 510/510、浏览器 9/9、`artifact-edit` 349 checks、`nested-edit-renderer` 75；构建 host 819.0 kB、client 3.99 MB（js 3.78 / css 215.3）；pack 44 files 4.25 / 11.01 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 

@@ -62,10 +62,11 @@ events but not the full DSH Web integration.
   the runtime `$state` (the selected DST option and its derived note). The B1-5
   scenario then checks the live region announces nested reorders and additions,
   the nested grip references the hidden keyboard hint, and the **Move to…**
-  menu focuses its first target and moves focus with arrow keys. 246 checks;
-  The last scenarios check the editing width fit: the chat content is narrowed
-  while editing and restored on exit, no expand button remains, and the fitted
-  width follows a live change of the shell width preference. 246 checks; no real
+  menu focuses its first target and moves focus with arrow keys. The latest round
+  adds the single-row **More** menu (Locate/Edit/Duplicate/Move/Delete with an
+  in-menu delete confirmation), the input focus orbit, menu keyboard/focus and
+  forced-colors checks, page/request numbering, a real shell-width 1180px fit,
+  and artifact-missing/reflow coverage. 349 checks; no real
   model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and
