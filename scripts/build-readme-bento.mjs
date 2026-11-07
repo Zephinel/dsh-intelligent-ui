@@ -21,9 +21,9 @@ let server, browser, cdp
 const groups = [
   ...['zh', 'en'].map(lang => ({
     out: `assets/intelligent-ui-readme-overview-${lang}.webp`,
-    width: 1600, height: 1000, columns: 2,
+    width: 1600, height: 1000, columns: 2, rowTemplate: '1.4fr 1fr',
     cells: [
-      { file: 'intelligent-ui-itinerary.webp', col: '1 / 2', row: '1 / 3' },
+      { file: `intelligent-ui-itinerary-${lang}.webp`, col: '1 / 2', row: '1 / 3' },
       { file: `intelligent-ui-editing-${lang}.webp`, col: '2 / 3', row: '1 / 2' },
       { file: 'intelligent-ui-settings.webp', col: '2 / 3', row: '2 / 3' },
     ],
@@ -73,7 +73,7 @@ try {
     }
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;padding:0;background:#f4f3f0;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-#frame{width:${group.width}px;height:${group.height}px;box-sizing:border-box;padding:28px;display:grid;grid-template-columns:repeat(${group.columns ?? 3},1fr);grid-template-rows:repeat(${group.rows ?? 2},1fr);gap:18px}
+#frame{width:${group.width}px;height:${group.height}px;box-sizing:border-box;padding:28px;display:grid;grid-template-columns:repeat(${group.columns ?? 3},1fr);grid-template-rows:${group.rowTemplate ?? `repeat(${group.rows ?? 2},1fr)`};gap:18px}
 figure{margin:0;min-width:0;min-height:0;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgb(0 0 0 / 8%);display:flex;align-items:center;justify-content:center;}
 img{display:block;width:100%;height:100%;}
 </style></head><body><div id="frame">${cards.join('')}</div></body></html>`
