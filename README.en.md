@@ -33,6 +33,17 @@ Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-
 - A rendered page can be edited again: click **Edit** in the card header, write change requests for blocks, drag or keyboard-reorder them in **Block arrangement**; duplicate, delete, move, nested editing, quick adjust and revisions are recorded deterministically by the Host. See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
 - Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer and send it.
 
+## Generation
+
+Generation is the core of the extension: open the **UI** control to the right of the composer (or send `/iui on`), then ask normally. The model calls `render_ui` and writes the answer as an [OpenUI Lang](https://openui.com) program; DSH renders it as an interactive page when the turn ends.
+
+- No extra step: ask → the model generates → the card appears at the end of the turn.
+- **Auto** lets the model choose a compact Card or a reading Article; override it per session under **UI → Display style**, or use **On-demand UI** to describe the result without picking a template.
+- `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` puts a short message back into the composer.
+- The result is real components, not a screenshot: checkboxes, drag, expand and play all work, and the page can be edited afterwards.
+
+See the [usage guide](docs/usage.en.md) for switches, styles, templates and on-demand generation.
+
 ## Component tour
 
 The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The composite below is a real render from the extension: same renderer, same DSH theme tokens, no mockups:
