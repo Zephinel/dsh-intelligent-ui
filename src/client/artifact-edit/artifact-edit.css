@@ -891,7 +891,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
 }
 
 .dsh-iui-edit-draft-dot {
@@ -1502,10 +1501,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.dsh-iui-edit-row-menu-item:hover,
+.dsh-iui-edit-row-menu-item:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .dsh-iui-edit-row-menu-item:focus-visible {
   background: var(--dsw-alias-interactive-bg-hover);
-  outline: none;
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
 }
 
 .dsh-iui-edit-row-menu-item:disabled {
@@ -1566,6 +1569,19 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.dsh-iui-edit-row-menu-button:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-edit-row-menu-item:focus-visible,
+  .dsh-iui-edit-row-menu-button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
 .dsh-iui-edit-row-menu-button.is-danger {
   border-color: transparent;
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent);
@@ -1579,6 +1595,14 @@
 .dsh-iui-edit-row-menu-button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.dsh-iui-edit-structure-busy {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 /* Inline structural failure (no alert/confirm dialog). */
@@ -2876,8 +2900,6 @@
   white-space: nowrap;
 }
 
-.dsh-iui-edit-structure-cancel:focus-visible,
-.dsh-iui-edit-structure-confirm-delete:focus-visible,
 .dsh-iui-edit-move-target:focus-visible,
 .dsh-iui-edit-move-menu:focus-visible,
 .dsh-iui-edit-add-button:focus-visible,

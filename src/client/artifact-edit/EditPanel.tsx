@@ -29,7 +29,6 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
 import { type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
@@ -396,6 +395,11 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
     window.requestAnimationFrame(() => { triggerRef.current?.focus({ preventScroll: true }) })
   }
 
+  const dismiss = (restoreFocus: boolean): void => {
+    if (confirming) onCancelDelete()
+    close(restoreFocus)
+  }
+
   // Keep the confirmation step in the open menu; close it when the parent clears it.
   useEffect(() => {
     if (confirming && !wasConfirming.current) {
@@ -446,13 +450,13 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
       const target = event.target
       if (triggerRef.current?.contains(target as Node) === true) return
       if (menuRef.current?.contains(target as Node) === true) return
-      close(false)
+      dismiss(false)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      close(true)
+      dismiss(true)
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeyDown, true)
@@ -465,11 +469,21 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault()
-      close(true)
+      dismiss(true)
       return
     }
     if (event.key === 'Tab') {
-      close(false)
+      if (confirming) {
+        const choices = [...(menuRef.current?.querySelectorAll<HTMLElement>('[data-dsh-iui-edit-structure-cancel], [data-dsh-iui-edit-structure-confirm-delete]') ?? [])]
+        const index = choices.indexOf(document.activeElement as HTMLElement)
+        const leaving = (!event.shiftKey && index === choices.length - 1) ||
+          (event.shiftKey && index === 0)
+        if (!leaving) return
+      }
+      // Focus the trigger before the menu unmounts so the browser's default Tab
+      // continues from a real, connected element instead of document.body.
+      triggerRef.current?.focus({ preventScroll: true })
+      dismiss(false)
       return
     }
     const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"], [data-dsh-iui-edit-structure-cancel], [data-dsh-iui-edit-structure-confirm-delete]') ?? [])]
@@ -492,9 +506,11 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
 
   const anchor = (): HTMLButtonElement | null => triggerRef.current
 
-  const run = (action: () => void): void => {
+  const run = (action: () => void, restoreFocus = false): void => {
     close(false)
     action()
+    if (!restoreFocus || typeof window === 'undefined') return
+    window.requestAnimationFrame(() => { triggerRef.current?.focus({ preventScroll: true }) })
   }
 
   return (
@@ -567,7 +583,7 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
                 data-dsh-iui-edit-locate
                 data-block-id={blockId}
                 disabled={busy}
-                onClick={() => run(onLocate)}
+                onClick={() => run(onLocate, true)}
               >
                 <RemixIcon name="map-pin-line" size={14} /><span>{t('edit.locate')}</span>
               </button>
@@ -935,7 +951,11 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       moveAnchorRef.current?.focus({ preventScroll: true })
       return
     }
-    if (event.key === 'Tab') { closeMoveMenu(); return }
+    if (event.key === 'Tab') {
+      moveAnchorRef.current?.focus({ preventScroll: true })
+      closeMoveMenu()
+      return
+    }
     const targets = moveMenuTargets()
     if (targets.length === 0) return
     const active = document.activeElement
