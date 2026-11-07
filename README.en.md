@@ -44,14 +44,6 @@ Generation is the core of the extension: open the **UI** control to the right of
 
 See the [usage guide](docs/usage.en.md) for switches, styles, templates and on-demand generation.
 
-## Component tour
-
-The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The composite below is a real render from the extension: same renderer, same DSH theme tokens, no mockups:
-
-![Component and example overview: layout, text, inputs, media, data, interaction, drawing and real examples](assets/intelligent-ui-readme-components.webp)
-
-Ten real examples (sales dashboard, brewing quiz, narrow calculator and more) are in the same image; on narrow screens cards reflow to one column and long chart labels truncate instead of overflowing.
-
 ## Editing a rendered page
 
 A rendered page stays editable.
@@ -62,6 +54,14 @@ A rendered page stays editable.
 - Each row's **More** menu offers Locate/Edit/Duplicate/Move/Delete; Delete confirms inside the menu.
 - Block requests, drag/keyboard reordering, nested editing, Divider/Spacer quick adjust and structure previews all happen in the left panel; the Host records a revision after sending.
 - See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
+
+## Component tour
+
+Generated pages are built from the components below. The renderer is not a chat bubble around a paragraph — it is a full component library: **57 components, 73 functions, 5 action steps**. The composite below is a real render from the extension: same renderer, same DSH theme tokens, no mockups:
+
+![Component and example overview: layout, text, inputs, media, data, interaction, drawing and real examples](assets/intelligent-ui-readme-components.webp)
+
+Ten real examples (sales dashboard, brewing quiz, narrow calculator and more) are in the same image; on narrow screens cards reflow to one column and long chart labels truncate instead of overflowing.
 
 ## Capabilities
 
