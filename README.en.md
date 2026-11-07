@@ -42,6 +42,8 @@ Generation is the core of the extension: open the **UI** control to the right of
 - `$variables`, `@Set` and `@functions` run in the browser; only `@ToAssistant` puts a short message back into the composer.
 - The result is real components, not a screenshot: checkboxes, drag, expand and play all work, and the page can be edited afterwards.
 
+![Generated result: the same program rendered as an interactive page in the browser](assets/intelligent-ui-itinerary-en.webp)
+
 See the [usage guide](docs/usage.en.md) for switches, styles, templates and on-demand generation.
 
 ## Editing a rendered page
