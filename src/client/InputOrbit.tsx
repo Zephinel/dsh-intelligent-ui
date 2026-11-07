@@ -76,6 +76,7 @@ export function InputOrbit(): ReactElement | null {
     let focusOutFrame = 0
     let last: OrbitBox | null = null
     let until = 0
+    let resample = 0
     let observer: ResizeObserver | null = null
 
     const same = (a: OrbitBox, b: OrbitBox): boolean =>
@@ -92,6 +93,8 @@ export function InputOrbit(): ReactElement | null {
 
     const hide = (): void => {
       stop()
+      if (resample !== 0) window.clearInterval(resample)
+      resample = 0
       observer?.disconnect()
       observer = null
       current.current?.classList.remove(TARGET_CLASS)
@@ -122,6 +125,17 @@ export function InputOrbit(): ReactElement | null {
       if (now < until) frame = requestAnimationFrame(tick)
     }
 
+    const sample = (): void => {
+      const target = current.current
+      if (target === null || !target.isConnected) return
+      const next = measure(target)
+      if (next === null) return
+      if (last === null || !same(next, last)) {
+        last = next
+        setBox(next)
+      }
+    }
+
     const kick = (duration = 160): void => {
       if (current.current === null) return
       until = Math.max(until, performance.now() + duration)
@@ -135,6 +149,7 @@ export function InputOrbit(): ReactElement | null {
         return
       }
       stop()
+      if (resample !== 0) window.clearInterval(resample)
       observer?.disconnect()
       current.current?.classList.remove(TARGET_CLASS)
       current.current = target
@@ -142,6 +157,9 @@ export function InputOrbit(): ReactElement | null {
       last = null
       observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { kick() }) : null
       observer?.observe(target)
+      // A cheap fallback for layout shifts that move the field without resizing
+      // it or firing a scroll/transition event (async content above the field).
+      resample = window.setInterval(sample, 500)
       until = performance.now() + 700
       tick(performance.now())
     }
@@ -168,6 +186,7 @@ export function InputOrbit(): ReactElement | null {
     return () => {
       stop()
       if (focusOutFrame !== 0) cancelAnimationFrame(focusOutFrame)
+      if (resample !== 0) window.clearInterval(resample)
       observer?.disconnect()
       current.current?.classList.remove(TARGET_CLASS)
       document.removeEventListener('focusin', focusIn, true)

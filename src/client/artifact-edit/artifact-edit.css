@@ -1457,7 +1457,9 @@
 
 .dsh-iui-edit-row-menu {
   position: fixed;
-  z-index: 1400;
+  /* Keep the row menu below the structure-preview backdrop (1300), so a stale
+     menu can never paint over a modal. */
+  z-index: 1290;
   box-sizing: border-box;
   padding: 4px;
   border: 1px solid var(--dsw-alias-border-l2);

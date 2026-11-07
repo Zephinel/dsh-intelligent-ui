@@ -29,7 +29,7 @@ interface Placement {
 const GAP = 8
 const MARGIN = 10
 const WIDTH = 280
-const CLOSE_DELAY = 120
+const CLOSE_DELAY = 350
 
 /**
  * Render one info icon with a custom tooltip.
@@ -90,12 +90,17 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
       : null
     observer?.observe(trigger)
     if (tipRef.current !== null) observer?.observe(tipRef.current)
+    const onLayoutEnd = (): void => { place() }
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
+    document.addEventListener('transitionend', onLayoutEnd, true)
+    document.addEventListener('animationend', onLayoutEnd, true)
     return () => {
       observer?.disconnect()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
+      document.removeEventListener('transitionend', onLayoutEnd, true)
+      document.removeEventListener('animationend', onLayoutEnd, true)
     }
   }, [open])
 
@@ -149,6 +154,11 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
         }}
         onClick={() => {
           cancelClose()
+          if (pinned.current && open) {
+            pinned.current = false
+            setOpen(false)
+            return
+          }
           pinned.current = true
           setOpen(true)
         }}
@@ -171,6 +181,7 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
             if (event.pointerType !== 'mouse') return
             scheduleClose()
           }}
+          onClick={() => { close() }}
         >
           {text}
         </div>,

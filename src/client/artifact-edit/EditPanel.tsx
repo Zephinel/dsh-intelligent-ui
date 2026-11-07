@@ -365,12 +365,13 @@ const STRUCTURE_ERROR_TIMEOUT_MS = 8000
  * @param props - locale, target block, busy/confirm state and handlers.
  * @returns the trigger and its portaled menu.
  */
-function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove, onLocate }: {
+function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdit, onDuplicate, onRequestDelete, onCancelDelete, onConfirmDelete, onMove, onLocate }: {
   readonly t: Translate
   readonly blockId: string
   readonly title: string
   readonly busy: boolean
   readonly confirming: boolean
+  readonly moveOpen: boolean
   readonly onEdit: () => void
   readonly onDuplicate: (anchor: HTMLButtonElement) => void
   readonly onRequestDelete: (anchor: HTMLButtonElement) => void
@@ -455,7 +456,6 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      event.stopPropagation()
       dismiss(true)
     }
     document.addEventListener('pointerdown', onPointerDown, true)
@@ -466,12 +466,18 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
     }
   }, [open])
 
-  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      dismiss(true)
-      return
+  useEffect(() => {
+    if (!open) return
+    const onFocusOut = (event: FocusEvent): void => {
+      const next = event.relatedTarget
+      if (next instanceof Node && (menuRef.current?.contains(next) || triggerRef.current?.contains(next))) return
+      dismiss(false)
     }
+    document.addEventListener('focusout', onFocusOut, true)
+    return () => { document.removeEventListener('focusout', onFocusOut, true) }
+  }, [open, confirming])
+
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Tab') {
       if (confirming) {
         const choices = [...(menuRef.current?.querySelectorAll<HTMLElement>('[data-dsh-iui-edit-structure-cancel], [data-dsh-iui-edit-structure-confirm-delete]') ?? [])]
@@ -524,7 +530,7 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
         disabled={busy}
         aria-label={`${t('edit.moreActions')}: ${title}`}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={open || moveOpen}
         aria-controls={open ? menuId : undefined}
         title={t('edit.moreActions')}
         onClick={event => {
@@ -541,7 +547,7 @@ function StructureActions({ t, blockId, title, busy, confirming, onEdit, onDupli
           id={menuId}
           className="dsh-iui-edit-row-menu"
           data-dsh-iui-edit-row-menu-panel
-          role="menu"
+          role={confirming ? 'dialog' : 'menu'}
           aria-label={`${t('edit.moreActions')}: ${title}`}
           style={placement === null ? { left: 0, top: 0, width, opacity: 0 } : { ...placement, width }}
           onKeyDown={onMenuKeyDown}
@@ -1527,6 +1533,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                       busy={rowActionsBusy}
                       onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                       confirming={confirmDeleteId === blockId}
+                      moveOpen={moveMenu?.blockId === blockId}
                       onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
                       onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                       onCancelDelete={() => { cancelDeleteConfirm() }}
@@ -1706,6 +1713,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               busy={rowActionsBusy}
                               onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
                               confirming={confirmDeleteId === blockId}
+                              moveOpen={moveMenu?.blockId === blockId}
                               onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
                               onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
                               onCancelDelete={() => { cancelDeleteConfirm() }}

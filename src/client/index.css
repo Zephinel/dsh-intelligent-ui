@@ -1643,7 +1643,8 @@
 
 .dsh-iui-edit-narrow-dismiss {
   flex: none;
-  padding: 0 4px;
+  min-height: 24px;
+  padding: 2px 4px;
   border: 0;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
