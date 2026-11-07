@@ -888,6 +888,7 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
       propsPreview: undefined,
       propsError: undefined,
       propsBusy: false,
+      propsFallback: undefined,
     }))
     if (existing.status === 'conflict') {
       patch(key, session => ({ ...session, status: 'checking', error: undefined }))
@@ -1026,6 +1027,7 @@ export function openArtifactBlockEditor(key: string, blockId: string): void {
       activeDirty: false,
       propsPreview: session.propsPreview?.blockId === blockId ? session.propsPreview : undefined,
       propsError: undefined,
+      propsFallback: undefined,
     }
   })
 }
@@ -1766,8 +1768,15 @@ async function submitStructureOperation(
           : surface === 'props' && code === 'no_change'
             ? translate('edit.propsNoChange')
             : translate(failureKey)
-      const noAuthoritativeBase = surface === 'props' && (code === 'base_missing' || code === 'artifact_missing')
-      fail(noAuthoritativeBase ? translate('edit.propsNoBase') : message, noAuthoritativeBase ? { propsFallback: 'base_missing' } : undefined)
+      const fallback = surface === 'props' && code === 'base_missing'
+        ? 'base_missing'
+        : surface === 'props' && code === 'artifact_missing'
+          ? 'artifact_missing'
+          : undefined
+      fail(fallback === undefined
+        ? message
+        : translate(fallback === 'base_missing' ? 'edit.propsNoBase' : 'edit.propsMissingArtifact'),
+      fallback === undefined ? undefined : { propsFallback: fallback })
       return
     }
     const value: unknown = await response.json()

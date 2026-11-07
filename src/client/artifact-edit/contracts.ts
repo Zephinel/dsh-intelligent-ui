@@ -143,7 +143,7 @@ export interface ArtifactEditSession {
   /** Last property adjustment failure, shown in the quick-adjust popover. */
   readonly propsError?: string
   /** Why quick adjust cannot persist for this artifact (legacy page without an authoritative base). */
-  readonly propsFallback?: 'base_missing'
+  readonly propsFallback?: 'base_missing' | 'artifact_missing'
   /** Structural operation request in flight; row actions are disabled meanwhile. */
   readonly structureBusy?: boolean
   /** Last structural operation failure, shown inline in the arrangement panel. */

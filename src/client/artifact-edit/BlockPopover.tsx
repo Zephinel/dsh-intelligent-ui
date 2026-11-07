@@ -99,8 +99,8 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   // instruction path so no binding is silently dropped.
   const quick = quickState !== undefined && quickState.support.ok && savedInstruction === '' && session.propsFallback === undefined
   const quickFallback = quickState !== undefined && !quick
-    ? (session.propsFallback === 'base_missing'
-        ? t('edit.propsNoBase')
+    ? (session.propsFallback === 'base_missing' || session.propsFallback === 'artifact_missing'
+        ? t(session.propsFallback === 'base_missing' ? 'edit.propsNoBase' : 'edit.propsMissingArtifact')
         : savedInstruction === ''
           ? t(quickState.support.ok ? 'edit.propsFallbackValue' : quickState.support.reason === 'dynamic' ? 'edit.propsFallbackDynamic' : 'edit.propsFallbackValue')
           : t('edit.propsFallbackInstruction'))

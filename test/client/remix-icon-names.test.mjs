@@ -27,17 +27,29 @@ function sourceFiles(directory) {
   return files
 }
 
-test('every literal RemixIcon name exists in the inline path table', () => {
+test('every static RemixIcon name exists in the inline path table', () => {
   // Parse the path table from the .tsx source: Node's test runner does not
   // transform JSX, so the module cannot be imported directly here.
   const tableSource = readFileSync(resolve(root, 'src/lib/components/remix-icon.tsx'), 'utf8')
-  const known = new Set([...tableSource.matchAll(/^  "([^"]+)": /gm)].map(match => match[1]))
+  const known = new Map([...tableSource.matchAll(/^  "([^"]+)": "([^"]*)",/gm)].map(match => [match[1], match[2]]))
   assert.ok(known.size > 10, 'the inline icon table was found')
+  for (const [name, path] of known) assert.ok(path.length > 0, `empty path for ${name}`)
+
   const missing = []
   for (const file of sourceFiles(resolve(root, 'src'))) {
     const source = readFileSync(file, 'utf8')
-    for (const match of source.matchAll(/<RemixIcon\s+[^>]*name="([^"]+)"/g)) {
-      const name = match[1]
+    const names = []
+    for (const tag of source.matchAll(/<RemixIcon\b[^>]*>/g)) {
+      const attribute = tag[0].match(/\bname=(?:"([^"]+)"|'([^']+)'|\{([^}]*)\})/)
+      if (attribute === null) continue
+      if (attribute[1] !== undefined || attribute[2] !== undefined) {
+        names.push(attribute[1] ?? attribute[2])
+      } else {
+        // Static string literals inside a JSX expression, e.g. a ternary.
+        for (const literal of attribute[3].matchAll(/["']([^"']+)["']/g)) names.push(literal[1])
+      }
+    }
+    for (const name of names) {
       if (!known.has(name)) missing.push(`${file.replace(root + '/', '')}: ${name}`)
     }
   }

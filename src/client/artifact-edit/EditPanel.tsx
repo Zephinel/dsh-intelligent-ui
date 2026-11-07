@@ -1365,12 +1365,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                       className="dsh-iui-edit-arrangement-body"
                       data-dsh-iui-edit-arrangement-body
                       title={t('edit.locate')}
+                      aria-label={`${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: session.originalOrder.indexOf(blockId) + 1 })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
                       onClick={() => { closeHover(); locate(blockId) }}
                     >
-                      {entry === undefined ? <span className="dsh-iui-edit-page-index" aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span> : null}
-                      {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
+                      <span className="dsh-iui-edit-page-index" title={t('edit.pageOrder', { n: session.originalOrder.indexOf(blockId) + 1 })} aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span>
                       <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                       <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
+                      {entry === undefined ? null : <span className="dsh-iui-edit-badge" title={t('edit.requestOrder', { n: entry.order })} aria-hidden="true">{entry.order}</span>}
                       {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                     </button>
                     <StructureActions
@@ -1543,13 +1544,14 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               className="dsh-iui-edit-arrangement-body"
                               data-dsh-iui-edit-nested-body
                               title={t('edit.locate')}
+                              aria-label={`${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: blockId.replace(/^b/, '') })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
                               onClick={() => { closeHover(); locate(blockId) }}
                             >
-                              {entry === undefined ? <span className="dsh-iui-edit-page-index" aria-hidden="true">{blockId.replace(/^b/, '')}</span> : null}
-                              {entry === undefined ? null : <span className="dsh-iui-edit-badge" aria-hidden="true">{entry.order}</span>}
+                              <span className="dsh-iui-edit-page-index" title={t('edit.pageOrder', { n: blockId.replace(/^b/, '') })} aria-hidden="true">{blockId.replace(/^b/, '')}</span>
                               <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
                               <span className="dsh-iui-edit-arrangement-title" title={title}>{title}</span>
                               <span className="dsh-iui-edit-nested-type">{blockKindLabel(block.kind, t)}</span>
+                              {entry === undefined ? null : <span className="dsh-iui-edit-badge" title={t('edit.requestOrder', { n: entry.order })} aria-hidden="true">{entry.order}</span>}
                               {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                             </button>
                             <StructureActions

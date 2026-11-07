@@ -73,7 +73,10 @@ export function InputOrbit(): ReactElement | null {
 
   useEffect(() => {
     let frame = 0
+    let focusOutFrame = 0
     let last: OrbitBox | null = null
+    let until = 0
+    let observer: ResizeObserver | null = null
 
     const same = (a: OrbitBox, b: OrbitBox): boolean =>
       Math.abs(a.left - b.left) < 0.5 &&
@@ -83,19 +86,21 @@ export function InputOrbit(): ReactElement | null {
       Math.abs(a.radius - b.radius) < 0.5
 
     const stop = (): void => {
-      cancelAnimationFrame(frame)
+      if (frame !== 0) cancelAnimationFrame(frame)
       frame = 0
     }
 
     const hide = (): void => {
       stop()
+      observer?.disconnect()
+      observer = null
       current.current?.classList.remove(TARGET_CLASS)
       current.current = null
       last = null
       setBox(null)
     }
 
-    const tick = (): void => {
+    const tick = (now: number): void => {
       frame = 0
       const target = current.current
       if (target === null) return
@@ -112,36 +117,65 @@ export function InputOrbit(): ReactElement | null {
         last = next
         setBox(next)
       }
-      frame = requestAnimationFrame(tick)
+      // The ring only needs frame-level tracking while layout is settling
+      // (panel transition, resize, scroll); otherwise event observers take over.
+      if (now < until) frame = requestAnimationFrame(tick)
+    }
+
+    const kick = (duration = 160): void => {
+      if (current.current === null) return
+      until = Math.max(until, performance.now() + duration)
+      if (frame === 0) frame = requestAnimationFrame(tick)
     }
 
     const focusIn = (event: FocusEvent): void => {
       const target = inputTarget(event.target as Element | null)
-      if (target === null || target === current.current) return
+      if (target === null || target === current.current) {
+        kick()
+        return
+      }
       stop()
+      observer?.disconnect()
       current.current?.classList.remove(TARGET_CLASS)
       current.current = target
       target.classList.add(TARGET_CLASS)
       last = null
-      tick()
+      observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { kick() }) : null
+      observer?.observe(target)
+      until = performance.now() + 700
+      tick(performance.now())
     }
 
     const focusOut = (): void => {
       // The next focusin can land in the same task; let it run first.
-      requestAnimationFrame(() => {
+      if (focusOutFrame !== 0) cancelAnimationFrame(focusOutFrame)
+      focusOutFrame = requestAnimationFrame(() => {
+        focusOutFrame = 0
         const active = document.activeElement
         if (current.current !== null && active !== current.current && !current.current.contains(active)) hide()
       })
     }
 
+    const onLayoutChange = (): void => { kick() }
+
     document.addEventListener('focusin', focusIn, true)
     document.addEventListener('focusout', focusOut, true)
+    window.addEventListener('resize', onLayoutChange)
+    document.addEventListener('scroll', onLayoutChange, true)
+    document.addEventListener('transitionend', onLayoutChange, true)
+    document.addEventListener('animationend', onLayoutChange, true)
 
     return () => {
       stop()
+      if (focusOutFrame !== 0) cancelAnimationFrame(focusOutFrame)
+      observer?.disconnect()
       current.current?.classList.remove(TARGET_CLASS)
       document.removeEventListener('focusin', focusIn, true)
       document.removeEventListener('focusout', focusOut, true)
+      window.removeEventListener('resize', onLayoutChange)
+      document.removeEventListener('scroll', onLayoutChange, true)
+      document.removeEventListener('transitionend', onLayoutChange, true)
+      document.removeEventListener('animationend', onLayoutChange, true)
     }
   }, [])
 

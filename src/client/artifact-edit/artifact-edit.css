@@ -660,6 +660,10 @@
 }
 
 @media (min-width: 1180px) {
+  .dsh-iui-edit-drawer-toggle {
+    display: none;
+  }
+
   .dsh-iui-edit-panel {
     display: flex;
     top: 64px;
