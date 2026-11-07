@@ -479,7 +479,7 @@
 .dsh-iui-block-orbit {
   position: absolute;
   inset: -10px;
-  padding: 1.5px;
+  padding: 2.5px;
   border-radius: 22px;
   background: conic-gradient(
     from var(--dsh-iui-orbit-angle),

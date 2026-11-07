@@ -736,3 +736,8 @@ GPT 评审后新增/收窄、需 owner 确认：
 - P2-7 base_missing：`base_missing` 与 `artifact_missing` 分开文案；`openArtifactBlockEditor`/`openArtifactEditor` 会清掉 `propsFallback`，临时失败可在重开后重试；E2E 覆盖重开清 fallback。
 - P3：InputOrbit 改为“聚焦后 700ms 逐帧跟随 + resize/scroll/transition/animation 事件按需测量”，不再永久每帧强制布局；图标守卫支持 `name={'...'}` / 三元表达式里的静态名并检查 path 非空；≥1180px 隐藏无作用的 drawer toggle；删除未使用的 mode/banner locale key 与 `focus-3-line`。
 - 验证：Node 510/510、artifact-edit **333 checks**、nested 75。
+
+## 0.48 轨道光晕加宽（2026-11-07，工作树）
+
+- 反馈：区块进入编辑时的轨道光晕宽度不够。
+- 修复：`.dsh-iui-block-orbit` 的环宽（mask 用 `padding`）从 1.5px 调到 2.5px；外扩 10px、22px 圆角、动画与 pending 降速不变。
