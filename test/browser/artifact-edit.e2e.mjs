@@ -1104,6 +1104,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await hover(actionRow)
   await new Promise(resolve => setTimeout(resolve, 200))
   check(await read(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(actionSlot)})).opacity)`), 1, 'hovering the row reveals its action group')
+  check(await read(`(() => { const row = document.querySelector(${JSON.stringify(actionRow)}); const body = row.querySelector('.dsh-iui-edit-arrangement-body'); const actions = row.querySelector('.dsh-iui-edit-structure-actions'); return body.getBoundingClientRect().right <= actions.getBoundingClientRect().left + 1; })()`), true, 'row text stops before the action overlay')
   check(Math.abs(await read(`document.querySelector(${JSON.stringify(`${actionRow} [data-dsh-iui-edit-structure-edit]`)}).getBoundingClientRect().x`) - pencilX) < 0.5, true, 'hovering the row does not move the pencil control')
   check(await read(`document.querySelector(${JSON.stringify(deleteTrigger)}).getBoundingClientRect().width > 0`), true, 'structural delete is reachable on row hover')
   await click(deleteTrigger)

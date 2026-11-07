@@ -891,6 +891,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .dsh-iui-edit-draft-dot {
@@ -1446,6 +1447,15 @@
 .dsh-iui-edit-structure-actions .dsh-iui-edit-icon-button {
   width: 24px;
   height: 24px;
+}
+
+.dsh-iui-edit-arrangement-row:hover,
+.dsh-iui-edit-arrangement-row:has(:focus-visible),
+.dsh-iui-edit-nested-row:hover,
+.dsh-iui-edit-nested-row:has(:focus-visible) {
+  /* The actions overlay the tail; stop the title/type before the overlay instead
+     of letting text run underneath the icons. */
+  padding-right: 130px;
 }
 
 .dsh-iui-edit-arrangement-row:hover .dsh-iui-edit-structure-actions,
