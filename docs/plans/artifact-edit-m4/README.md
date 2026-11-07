@@ -638,7 +638,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 自绘控件：新增 `QuickSelect`（button trigger + portaled listbox，`role=listbox/option`，方向键/Home/End/Enter/Escape/Tab、focus return、滚动重定位）与 `QuickSlider`（div track/fill/thumb，pointer capture、方向键/Shift/Home/End、`role=slider` + aria-valuetext、`prefers-reduced-motion`），替换 QuickBlockProps 里的原生 `<select>`；宽度/高度/厚度在数值单位下增加滑块，拖动即更新 `propsPreview`（零模型），Apply 仍负责记录修订。原生 number input 保留为精确输入并隐藏系统 spinner；菜单/滑块使用 `--dsw-alias-*` 主题 token，深色主题一致。
 - 滑块初版在拖动时会把 Divider 宽度变化传给 popover 的 ResizeObserver，导致面板/滑块跟着位移、数值跳变；现在 popover 在打开时固定位置（仅真实用户滚动/缩放/切换区块重锚），滑块改为相对 pointer-down 值拖动（点击轨道不再把 thumb 瞬移）。第二处位移来自切换宽度单位（px ↔ %）时面板内部滚动与浏览器 scroll anchoring：现在忽略 popover 内部滚动，并用「锚点在视口内是否真的移动」过滤布局引发的 scroll。E2E 断言宽度预览与单位切换时 popover 的 left/top 均不变。
 - 交互：portaled 菜单在 BlockPopover 的 outside-pointerdown/Escape 逻辑中被排除，Escape 先关菜单再关 popover；打开快捷面板聚焦第一个自绘控件。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **341 checks**；nested 75；client CSS 215.3 kB；standalone 3.32 MB + 514.4 kB；pack 44 files 4.25 MB / 11.00 MB。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **349 checks**；nested 75；client CSS 215.3 kB；standalone 3.32 MB + 514.4 kB；pack 44 files 4.25 MB / 11.00 MB。
 
 ## 0.35 列表↔画布映射、编辑聚焦与 pending 标记（2026-11-07，工作树）
 
@@ -647,7 +647,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 编辑聚焦：打开任一区块编辑器时，`BlockOverlay` 给非相关区块画 scrim（同祖先链的区块不压暗），当前块保留编辑框；Save/Cancel 关闭后 scrim 消失。
 - pending 状态：`selection` 数据保持不变，但 Save 后不再绘制大选中框/工具；改为「圆点 + 请求序号」的 pending 标记；pending 根层的 orbit glow 降速（5.2s）、变淡（0.3）；无 pending 的根层恢复普通 orbit glow。确定性 Apply/结构操作仍记录修订并退出编辑（1A）。
 - 术语：`marquee` 改为 `orbit glow`（CSS 类 `dsh-iui-block-orbit`，保留 `dsh-iui-block-marquee` 兼容别名；`--dsh-iui-orbit-angle`/`@keyframes dsh-iui-block-orbit`），文档统一称「轨道光晕 / orbit glow」。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **341 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **349 checks**（hover 双向、页面序号、定位按钮、scrim、pending 标记/orbit glow 降速、Save 后退出大框、嵌套序号等）；nested 75。
 
 ## 0.36 编排行 unslop、Locate 图标、模式说明与嵌套映射（2026-11-07，工作树）
 
@@ -657,7 +657,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 工具栏文案：按钮改为「显示嵌套区块 / 仅顶层区块」；banner 分模式说明顶层 vs 嵌套；严格保护提示说明会拒绝未选中顶层区块的改动且请求保持待处理。
 - 嵌套映射：嵌套行 hover ↔ 画布嵌套块双向高亮；嵌套块 hover 时显示 `1.2.1` 形式的页面地址；嵌套行 Locate 按钮与行主体点击都能定位并触发 flash；E2E 覆盖。
 - base_missing：旧卡片（本机 registry 只有 15 条程序，该 Solid 2.0 导览程序不在其中）无法做确定性写入；客户端捕获后把快捷面板切换为指令编辑并显示解释（可改用模型编辑或重新渲染页面）。未实现“把当前页面注册为权威 base”的 adopt 路由。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **341 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **349 checks**；nested 75。
 
 ## 0.37 工具栏模式说明、自定义 tooltip、动作按钮与定位图标修正（2026-11-07，工作树）
 
@@ -667,7 +667,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 动作按钮：显示条件从 `:focus-within` 改为 `:has(:focus-visible)`，所以鼠标点击行主体/定位后即使焦点留在行内，指针离开后动作按钮也会隐藏；键盘 focus 仍会显示。
 - 定位图标：Remix 库确实有 `focus-3-line`，只是插件内联图标子集没有；把真实 path 加入 `REMIX_ICON_PATHS`；根据反馈最终改用 `map-pin-line`（`focus-3-line` 与移动图标太像），E2E 断言定位按钮的 SVG path 非空。新增 `test/client/remix-icon-names.test.mjs`：扫描所有 `<RemixIcon name="...">` 字面量，防止再次出现空图标（client 不走 tsc，esbuild 不校验 union，之前测试只点按钮没检查 glyph）。
 - 旧页面 base_missing：新增 E2E mock（404 `base_missing`）验证快捷面板切换为指令编辑器并显示“权威版本记录之前”的说明；恢复 fetch 后退出。
-- 验证：Node **510/510**；浏览器 9/9；artifact-edit **341 checks**；nested 75。
+- 验证：Node **510/510**；浏览器 9/9；artifact-edit **349 checks**；nested 75。
 
 ## 0.38 统一「退出编辑」按钮（2026-11-07，工作树）
 
@@ -679,14 +679,14 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - 反馈：卡片头部和编辑面板头部都已有退出编辑，工具栏红框里第三个「退出编辑」是重复入口。
 - 修复：移除工具栏按钮；保留卡片头部与面板头部两个入口，继续共用 `.dsh-iui-edit-exit` 中性样式。面板退出按钮额外保留 `data-dsh-iui-edit-exit` 兼容旧流程/测试选择器；工具栏现在只承载层级、严格保护、抽屉和提示。
-- 验证：E2E 断言 `.dsh-iui-edit-exit` 数量为 2，编辑视图内不再有工具栏退出按钮；artifact-edit **341 checks**。
+- 验证：E2E 断言 `.dsh-iui-edit-exit` 数量为 2，编辑视图内不再有工具栏退出按钮；artifact-edit **349 checks**。
 
 ## 0.40 修复面板重复分割线（2026-11-07，工作树）
 
 - 截图：Block arrangement 与 Global instruction 之间出现两条相距很近的横线。
 - 原因：不是嵌套区块未显示导致；面板里同时存在显式 `<div class="dsh-iui-edit-divider">` 和 `.dsh-iui-edit-global { border-top: 1px }`，两套分隔叠加。
 - 修复：删除 `.dsh-iui-edit-global` 的 `border-top`，保留显式分隔线作为唯一横线；不依赖 nested arrangement 是否存在。
-- 验证：E2E 断言面板只有一个 `.dsh-iui-edit-divider`，且 global 的 `borderTopWidth` 为 0；artifact-edit **341 checks**。
+- 验证：E2E 断言面板只有一个 `.dsh-iui-edit-divider`，且 global 的 `borderTopWidth` 为 0；artifact-edit **349 checks**。
 
 ## 0.41 去掉拖拽手柄的焦点外框（误判，已回滚）
 
@@ -710,7 +710,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 
 - 反馈：右侧编辑窗口外圈有一条边框，希望去掉。
 - 修复：`.dsh-iui-edit-panel` 在窄屏 bottom sheet 和 ≥1180px 桌面 rail 两个断点都删除 `border`，保留圆角、`bg-layer-1` 背景与柔和 shadow；内部 header/section 的分隔线不变。
-- 验证：E2E 断言 `.dsh-iui-edit-panel` 的 `borderTopWidth` 为 0；artifact-edit **341 checks**。
+- 验证：E2E 断言 `.dsh-iui-edit-panel` 的 `borderTopWidth` 为 0；artifact-edit **349 checks**。
 
 ## 0.45 所有输入框的焦点高亮改为轨道光晕（2026-11-07，工作树）
 
@@ -728,14 +728,14 @@ GPT 评审后新增/收窄、需 owner 确认：
 - P2 触摸/1180：行操作组改为绝对定位覆盖在行尾（不再占 126px，1180px 嵌套标题恢复可读），按钮 24px；`(hover:none), (pointer:coarse)` 下常显并给行预留右 padding。E2E 覆盖 1180 标题宽度与 coarse pointer。
 - P2 读屏：复制/删除/移动的 aria-label 加区块标题。
 - 没修：pending 行仍用请求 badge 替换页面号（P2-5）；`base_missing` flag 的 artifact_missing 区分/清除（P2-7）；其余 P3。
-- 验证：Node 510/510、artifact-edit **341 checks**、nested 75。
+- 验证：Node 510/510、artifact-edit **349 checks**、nested 75。
 
 ## 0.47 review 后续（P2-5、P2-7、P3 清理，2026-11-07，工作树）
 
 - P2-5 编号语义：pending 行不再用请求 badge 替换页面号；页面号常显，请求 badge 移到标题后并带 “请求 {n}” tooltip；行 body 的 aria-label 同时包含标题、页面号、请求号（根层与嵌套都一样）。
 - P2-7 base_missing：`base_missing` 与 `artifact_missing` 分开文案；`openArtifactBlockEditor`/`openArtifactEditor` 会清掉 `propsFallback`，临时失败可在重开后重试；E2E 覆盖重开清 fallback。
 - P3：InputOrbit 改为“聚焦后 700ms 逐帧跟随 + resize/scroll/transition/animation 事件按需测量”，不再永久每帧强制布局；图标守卫支持 `name={'...'}` / 三元表达式里的静态名并检查 path 非空；≥1180px 隐藏无作用的 drawer toggle；删除未使用的 mode/banner locale key 与 `focus-3-line`。
-- 验证：Node 510/510、artifact-edit **341 checks**、nested 75。
+- 验证：Node 510/510、artifact-edit **349 checks**、nested 75。
 
 ## 0.48 轨道光晕加宽（2026-11-07，工作树）
 
@@ -752,14 +752,14 @@ GPT 评审后新增/收窄、需 owner 确认：
 - 反馈：Nested blocks 展开后，hover 行（如 1.2）的 CTA 按钮覆盖在标题/类型文字上。
 - 原因：行操作组改为绝对定位覆盖行尾来避免 1180px 标题压缩，但行内容仍延伸到覆盖区域。
 - 修复：hover / `:has(:focus-visible)` 时行增加 130px 右侧 padding（coarse pointer 本就有），并给 `.dsh-iui-edit-arrangement-body` 加 `overflow:hidden`；标题/类型在按钮前截断，不再压在图标下面。E2E 断言 body 右缘不超过 action 组左缘。
-- 验证：Node 510/510、artifact-edit **341 checks**、nested 75；CSS 215.3 kB。
+- 验证：Node 510/510、artifact-edit **349 checks**、nested 75；CSS 215.3 kB。
 
 
 ## 0.51 行操作改为单个 overflow menu（2026-11-07，工作树）
 
 - 反馈：绝对定位的五图标覆盖行尾仍会与标题/类型重叠；希望用更彻底的方案。
 - 修复：每行只保留一个 24px「更多」触发器（正常 flow，不再覆盖文字）；点击打开 portal 菜单：定位、编辑、复制、移动到…、删除。删除在菜单内切换为持久 Cancel/Delete 二次确认；菜单支持方向键/Home/End/Escape/Tab、外部 pointerdown 关闭、焦点回触发器（打开预览/浮层时不抢焦点）。原 130px 预留、覆盖层与 hover opacity 逻辑移除。
-- 验证：E2E 改为菜单语义（1 trigger、5 menuitem、首项焦点、删除确认、菜单关闭、coarse pointer 24px、菜单触屏 tap/外部关闭）；artifact-edit **341 checks**。
+- 验证：E2E 改为菜单语义（1 trigger、5 menuitem、首项焦点、删除确认、菜单关闭、coarse pointer 24px、菜单触屏 tap/外部关闭）；artifact-edit **349 checks**。
 
 
 ## 0.52 菜单键盘焦点/焦点可见性/Locate 焦点（2026-11-07，工作树）
@@ -768,7 +768,7 @@ GPT 评审后新增/收窄、需 owner 确认：
 - P2-2 焦点可见性：菜单项与确认按钮使用项目 2px focus ring；`forced-colors` 下用 `2px solid Highlight`。E2E 检查普通与 forced-colors 计算样式。
 - P2-3 Locate：关闭菜单后把焦点还给行触发器（rAF，避免抢滚动）。
 - 清理：移除误加到 `.dsh-iui-edit-draft-open` 的 `overflow:hidden`、重复 `RemixIcon` import、旧 inline 确认选择器；恢复 `.dsh-iui-edit-structure-busy` 样式。
-- 验证：artifact-edit **341 checks**；Node 510/510。
+- 验证：artifact-edit **349 checks**；Node 510/510。
 
 
 ## 0.53 P3 清理（2026-11-07，工作树）
@@ -777,4 +777,13 @@ GPT 评审后新增/收窄、需 owner 确认：
 - InfoTip：hover 关闭延迟 350ms；第二次 click 关闭固定 tooltip；tooltip 自身点击关闭；监听 transitionend/animationend 重新定位。
 - InputOrbit：700ms 后保留 500ms 低频重采样，覆盖只移动不 resize 的异步布局变化。
 - 390 窄屏提示的关闭按钮最小高度 24px。
-- E2E 新增 Escape/role dialog/InfoTip 二次点击/narrow target 检查（341 checks）。
+- E2E 新增 Escape/role dialog/InfoTip 二次点击/narrow target 检查（349 checks）。
+
+
+## 0.54 证据缺口测试（2026-11-07，工作树）
+
+- 真实 shell 1180 fit：harness 动态包一层 `[data-conversation-content][data-conversation-region="chat"]`，设置 `--dsh-chat-content-width:900px`，在 1180 打开 nested 编辑器；断言 content 300–500、panel ≥300、card 右缘与 panel 左缘 ≥20、nested 标题 >20、无横向溢出。
+- `artifact_missing`：复用 404 mock 的 `window.__structureMissingCode` 分支，断言“找不到这张卡片”说明与 fallback。
+- 菜单：portal 边界断言；单开菜单由 `dsh-iui:row-menu-open` 事件切换（选中另一行触发器时旧菜单关闭）。
+- InputOrbit：插入 40px 块移动输入框，断言 500ms 重采样后 orbit 跟随并恢复。
+- 验证：Node 510/510、artifact-edit **349 checks**、nested 75。

@@ -240,6 +240,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await shot('harness-input-orbit.png')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-global]')).outlineStyle`), 'none', 'the field focus outline is replaced by the orbit')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-input-orbit]'), '::before').display`), 'none', 'normal motion keeps the orbit as the only focus ring')
+  await read(`(() => { const marker = document.createElement('div'); marker.id = 'orbit-reflow-marker'; marker.style.height = '40px'; document.querySelector('[data-dsh-iui-edit-view]').prepend(marker); return true; })()`)
+  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit follows a layout shift')
+  check(await read(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`), true, 'orbit follows a position-only layout shift')
+  await read(`document.getElementById('orbit-reflow-marker').remove()`)
+  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit returns after reflow')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   await new Promise(resolve => setTimeout(resolve, 120))
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-input-orbit]'), '::before').display`), 'block', 'reduced motion restores a static focus ring')
@@ -1130,6 +1135,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-edit-row-menu-panel] [role="menuitem"]'), 5, 'the menu carries locate/edit/duplicate/move/delete')
   check(await count('[data-dsh-iui-edit-row-menu-panel] [data-dsh-iui-edit-locate]'), 1, 'locate is in the menu')
   check(await count('[data-dsh-iui-edit-row-menu-panel] [data-dsh-iui-edit-structure-duplicate]'), 1, 'duplicate is in the menu')
+  check(await read(`(() => { const r = document.querySelector('[data-dsh-iui-edit-row-menu-panel]').getBoundingClientRect(); return r.left >= 8 && r.top >= 8 && r.right <= window.innerWidth - 8 && r.bottom <= window.innerHeight - 8; })()`), true, 'the row menu stays inside the viewport')
   check(await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-locate') === true`, 'menu first-item focus').then(() => true), true, 'the menu focuses its first item')
   check(await read(`getComputedStyle(document.activeElement).outlineStyle`), 'solid', 'menu items show the project focus ring')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] })
@@ -1489,7 +1495,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     window.fetch = (input, init) => {
       const url = typeof input === 'string' ? input : String(input?.url ?? '');
       if (url.includes('/api/intelligent-ui/artifact-structure')) {
-        return Promise.resolve(new Response(JSON.stringify({ error: { code: 'base_missing', message: 'missing' } }), { status: 404, headers: { 'content-type': 'application/json' } }));
+        return Promise.resolve(new Response(JSON.stringify({ error: { code: window.__structureMissingCode ?? 'base_missing', message: 'missing' } }), { status: 404, headers: { 'content-type': 'application/json' } }));
       }
       return window.__savedFetch(input, init);
     };
@@ -1505,12 +1511,60 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-structure-edit]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'reopened legacy quick props')
   check(await count('[data-dsh-iui-edit-props-fallback]'), 0, 'reopening clears the previous missing-base fallback')
+  await read(`window.__structureMissingCode = 'artifact_missing'`)
+  await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'info')
+  await click('[data-dsh-iui-edit-props-apply]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-props-fallback]")', 'missing-artifact fallback note')
+  check((await text('[data-dsh-iui-edit-props-fallback]')).includes('找不到这张卡片'), true, 'artifact_missing gets its own explanation')
   await click('[data-dsh-iui-edit-cancel]')
+  await read('delete window.__structureMissingCode')
   await read('window.fetch = window.__savedFetch')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor closed')
 
-  // 37. Touch/coarse-pointer affordances, last because CDP touch emulation can
+  // 37. Real shell width fit at 1180px: wrap main in the shell chat-content
+  // element so applyEditChatContentWidth can run, then check panel/content/card.
+  await read(`(() => {
+    const main = document.querySelector('main');
+    const wrap = document.createElement('div');
+    wrap.setAttribute('data-conversation-content', '');
+    wrap.setAttribute('data-conversation-region', 'chat');
+    wrap.style.setProperty('--dsh-chat-content-width', '900px');
+    main.parentNode.insertBefore(wrap, main);
+    wrap.appendChild(main);
+    return true;
+  })()`)
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'shell-fit editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-row]")', 'shell-fit nested rows')
+  await new Promise(resolve => setTimeout(resolve, 750))
+  const shellFit = await read(`(() => {
+    const content = document.querySelector('[data-conversation-content]');
+    const panel = document.querySelector('.dsh-iui-edit-panel');
+    const card = document.querySelector('[data-dsh-iui-call-id="nested-call-1"]');
+    return {
+      contentWidth: parseFloat(content.style.getPropertyValue('--dsh-chat-content-width')),
+      panelWidth: panel.getBoundingClientRect().width,
+      panelLeft: panel.getBoundingClientRect().left,
+      cardRight: card.getBoundingClientRect().right,
+      titleWidth: document.querySelector('[data-dsh-iui-edit-nested-row] .dsh-iui-edit-arrangement-title').getBoundingClientRect().width,
+      overflow: document.documentElement.scrollWidth > window.innerWidth,
+    };
+  })()`)
+  check(shellFit.contentWidth >= 300 && shellFit.contentWidth <= 500, true, 'real 1180 fit narrows the chat content')
+  check(shellFit.panelWidth >= 300, true, 'real 1180 fit docks a usable panel')
+  check(shellFit.cardRight <= shellFit.panelLeft - 20, true, 'real 1180 card does not overlap the panel')
+  check(shellFit.titleWidth > 20, true, 'real 1180 nested titles remain readable')
+  check(shellFit.overflow, false, 'real 1180 shell fit has no horizontal overflow')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'shell-fit editor closed')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await read(`(() => { const wrap = document.querySelector('[data-conversation-content]'); const main = wrap.querySelector('main'); wrap.replaceWith(main); return true; })()`)
+  await read('window.dispatchEvent(new Event("resize"))')
+
+  // 38. Touch/coarse-pointer affordances, last because CDP touch emulation can
   // suppress later mouse hover events in Chrome.
   await read(`document.querySelector('[data-dsh-iui-edit-entry]').click()`)
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'touch editor')

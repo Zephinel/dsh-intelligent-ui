@@ -468,6 +468,17 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
 
   useEffect(() => {
     if (!open) return
+    const onOtherMenu = (event: Event): void => {
+      const detail = (event as CustomEvent<{ blockId?: string }>).detail
+      if (detail?.blockId === blockId) return
+      dismiss(false)
+    }
+    document.addEventListener('dsh-iui:row-menu-open', onOtherMenu)
+    return () => { document.removeEventListener('dsh-iui:row-menu-open', onOtherMenu) }
+  }, [open, blockId, confirming])
+
+  useEffect(() => {
+    if (!open) return
     const onFocusOut = (event: FocusEvent): void => {
       const next = event.relatedTarget
       if (next instanceof Node && (menuRef.current?.contains(next) || triggerRef.current?.contains(next))) return
@@ -536,7 +547,10 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
         onClick={event => {
           event.stopPropagation()
           if (open) close(true)
-          else setOpen(true)
+          else {
+            document.dispatchEvent(new CustomEvent('dsh-iui:row-menu-open', { detail: { blockId } }))
+            setOpen(true)
+          }
         }}
       >
         <RemixIcon name="more-line" size={15} />
