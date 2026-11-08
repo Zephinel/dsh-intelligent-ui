@@ -576,3 +576,19 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **504 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,253** 字节，解包 **12,885,993** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 保存入口 A 收口（仅新建模板）
+
+- 保存说明改为：创建新模板，不覆盖内置或已有模板，其他页面不受影响。
+- 保存入口条件不变：仅带 theme 的临时样式结果卡显示；内置 Card/Article、已保存模板结果、普通结果、无 theme 临时结果均无保存入口。
+- 不提供“更新原模板”或“复制已保存模板”：当前没有同时具备源 styleId 与完整快照的结果，模板更新接口也只允许 name/description/directives；模板是 live reference，原地更新会影响旧页面，需另立设计。
+- E2E 增加三条负向断言（内置、已保存模板、theme-less 临时结果均无 Save）；保存仍为新建模板且不产生修订。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **625/625** = Host **301** + Client **303** + packaging **21**；build host **837.6 kB**、client **4.04 MB**（js 3.82 / CSS 222.4） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **507 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,281** 字节，解包 **12,885,957** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

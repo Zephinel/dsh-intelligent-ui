@@ -596,3 +596,19 @@ Four structural guards added after the review loop:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **504 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,031,253** bytes packed, **12,885,993** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-08 — Save entry scope A (new template only)
+
+- The Save note now says it creates a new template, does not overwrite built-ins or existing templates, and leaves other pages unaffected.
+- Availability is unchanged: only theme-bearing temporary style result cards show Save; built-in Card/Article, saved-template, plain and theme-less temporary results have no Save entry.
+- No "update original" or "copy saved template" action: no result currently has both a source styleId and a complete snapshot, the template update route only accepts name/description/directives, and templates are live references whose in-place update would affect older pages; that needs a separate design.
+- E2E adds three negative assertions (built-in, saved-template and theme-less temporary results have no Save); saving still creates a new template and no revision.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **625/625** Node tests = Host **301** + Client **303** + packaging **21**; build host **837.6 kB**, client **4.04 MB** (js 3.82 / CSS 222.4) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **507 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,031,281** bytes packed, **12,885,957** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

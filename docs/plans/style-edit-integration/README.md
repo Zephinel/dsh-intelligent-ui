@@ -23,14 +23,15 @@
 - 当前/最新检查：非 branch 的旧修订直接禁用并只显示一条状态；显式 branch 允许切换，绝不自动 branch。
 - 请求复用 `styleSwitchOperationId`：响应丢失后重试同一个 operationId，Host 幂等 ledger 返回已记录结果，不把重试变成 `base_not_latest` 或重复修订。
 
-## 保存
+## 保存（A 收口，2026-11-08）
 
-保存模板是独立动作，不是编辑步骤：
+保存模板是独立动作，不是编辑步骤；当前只做安全的“新建模板”，不做更新/复制入口：
 
 - 只有带完整 theme 的临时样式结果（B1/按需）显示「保存为模板」；当前位于结果/修订卡，不进入编辑器。
-- 样式切换结果不保存：内置本身不可保存，已保存模板已经是模板。
+- 保存创建新模板（新 id、数量 +1），不覆盖内置或已有模板，其他页面不受影响；保存不产生修订。
+- 样式切换结果不保存：内置 Card/Article 没有 StyleTheme（只用 DSH/CSS token），已保存模板已经是模板；普通结果也没有可复制快照。
 - theme-less 临时样式没有可复用主题，不显示保存。
-- 保存不产生修订；应用样式才产生修订。
+- 不提供“更新原模板”：当前没有结果同时拥有源 styleId 与完整快照（已保存结果无快照，B1 临时结果丢 styleId）；更新接口也只允许 name/description/directives。未来若做，需要来源追踪、影响所有 live 引用的确认与预览。
 
 ## UI（本轮可见性收口）
 
@@ -62,4 +63,4 @@
 
 ## 验证
 
-Node **625/625**（Host 301、Client 303、packaging 21）；浏览器 9/9，`artifact-edit` **504 checks**；build host 837.6 kB、client 4.04 MB（js 3.82 / CSS 222.4）；pack 65 files / 6,031,253 packed / 12,885,993 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
+Node **625/625**（Host 301、Client 303、packaging 21）；浏览器 9/9，`artifact-edit` **507 checks**；build host 837.6 kB、client 4.04 MB（js 3.82 / CSS 222.4）；pack 65 files / 6,031,281 packed / 12,885,957 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
