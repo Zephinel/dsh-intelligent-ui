@@ -41,13 +41,13 @@ Structured answers use a card by default; long reading answers can use the Artic
 - One chat keeps several drafts (one active canvas); one send can merge up to 3 artifacts' requests, each producing its own revision.
 - Removing a chip only detaches its draft from the send; re-attach it from the **pending edits** area.
 - An older revision can be **Restored as a new revision** (zero model calls, local revision card); a conflict banner can create a branch from an older revision.
-- Revision history can delete a recorded revision behind an inline confirmation: the initial render cannot be deleted, and an old revision referenced as a newer revision's base must have the newer revision deleted first. Deletion is a real, irreversible Host delete; the matching local revision card is removed, while already-generated model message cards stay.
+- Revision history can delete a recorded revision behind an inline confirmation: the initial render cannot be deleted, the revision rendered by the current card cannot be deleted, and an old revision referenced as a newer revision's base must have the newer revision deleted first; deleting another card's latest revision may leave that card stale. Deletion is a real, irreversible Host delete; the matching local revision card is removed, while already-generated model message cards stay; a `revision_missing` answer (for example after a lost response) is treated as already deleted and refreshes history.
 - Temporary-style results keep their style snapshot through content edits; reorder-only or global-only requests still need a page with a saved/built-in style. Natural-language style adjustment for a temporary-style page happens in the **Style → Change style** section of the edit canvas.
 
 ## On-demand and templates
 
 - Choose **On-demand UI**, then send a normal request; material ambiguity is clarified with structured questions.
-- Use the result immediately; open the card's **Edit** canvas and describe or switch under **Style → Change style** (the Host keeps the layout, only warns about content changes, and records a new temporary-style revision), or use the card footer's **Save as template** to keep the layout, preferences and theme. Old Hosts or non-editable cards keep the footer Adjust style fallback.
+- Use the result immediately; open the card's **Edit** canvas and describe or switch under **Style → Change style** (the Host keeps the layout, only warns about content changes, and records a new temporary-style revision). Only a theme-bearing temporary-style result has the footer **Save as template**; it saves the layout, preferences and theme as a new template. Old Hosts or non-editable cards keep the footer Adjust style fallback.
 - Export/import templates in **Plugins → My styles** or the composer's style panel. Import creates global templates only and requires an explicit acknowledgement.
 
 ## Export

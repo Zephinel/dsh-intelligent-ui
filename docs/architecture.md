@@ -457,7 +457,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 入口三处：卡片头部常显历史图标、`Revision N` 徽标（revision>1）、编辑面板头部历史按钮；均只打开**当前 Artifact** 的历史，不混入其它 Artifact。
 - Host：`ArtifactRevisionStore.listForArtifact()`；`GET /api/intelligent-ui/artifact-history?artifactId=` 返回元数据（新→旧，含 current/source/hasProgram/restorable；合并 program-only 的初始修订）；`GET /api/intelligent-ui/artifact-history/program?...` 按需取 program；现有 restore 路由扩展为支持初始修订（source 记录缺失但 program 仍在时，用 latest 的 style/styleId/temporaryStyle/title 兜底，新修订号 latest+1）。
 - Client：`ArtifactHistory.tsx` 元数据对话框（Revision N、当前、source、时间、样式、改动区块 chips；无整页预览），`hasProgram=false` 时显示不可用，旧修订可恢复；恢复复用零模型本地修订管线并刷新历史。
-- 删除：同一 `GET /api/intelligent-ui/artifact-revisions` 路径接受 `DELETE`（同一认证/`effect`/disposer），`ArtifactRevisionStore.remove()` 拒绝初始渲染（404 `revision_missing`）和仍被其他记录作为 `baseRevisionId` 的修订（409 `revision_referenced`），成功后原子重写注册表并清理保留 program；允许删最新（最新回退上一条），但**当前卡正在渲染的修订禁止删除**，避免卡片指向已删除记录；删除返回 `revision_missing`（例如响应丢失后的重试）视为已收敛：移除匹配本地卡并刷新历史。删除确认聚焦 Cancel，取消回到 Delete，warning 以 status 播报；聊天中已生成的模型卡不删。
+- 删除：同一 `GET /api/intelligent-ui/artifact-revisions` 路径接受 `DELETE`（同一认证/`effect`/disposer），`ArtifactRevisionStore.remove()` 拒绝初始渲染（404 `revision_missing`）和仍被其他记录作为 `baseRevisionId` 的修订（409 `revision_referenced`），成功后原子重写注册表并清理保留 program；允许删最新（最新回退上一条），但**当前卡正在渲染的修订禁止删除**，避免卡片指向已删除记录；删除其他卡仍在渲染的最新修订可能让该卡持续 stale。删除返回 `revision_missing`（例如响应丢失后的重试）视为已收敛：移除匹配本地卡并刷新历史。删除确认聚焦 Cancel，取消回到 Delete，warning 以 status 播报；聊天中已生成的模型卡不删。
 - 限制：初始修订靠 program registry 推断，program 被 LRU 淘汰时该行缺失；初始行自身无 style，借用最早修订记录；历史列表不触碰 LRU，program 仅按需 lookup。
 
 ### 草稿切换条移到输入框上方
