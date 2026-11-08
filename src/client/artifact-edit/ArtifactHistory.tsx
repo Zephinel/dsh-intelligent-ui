@@ -67,13 +67,15 @@ function formatHistoryTime(createdAt: number): string {
 }
 
 /** One revision row's metadata (revision, current, source, blocks). */
-function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
+function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, renderedRevision, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
   readonly t: Translate
   readonly revision: ArtifactHistoryRevision
   readonly blocks: ArtifactHistoryBlocks
   readonly restoring: boolean
   readonly deleting: boolean
   readonly confirmingDelete: boolean
+  /** This revision is the one rendered by the card that opened the dialog. */
+  readonly renderedRevision: boolean
   readonly onRestore: () => void
   readonly onAskDelete: () => void
   readonly onCancelDelete: () => void
@@ -137,7 +139,7 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
           </button>
         </div>
       ) : null}
-      {revision.source === 'initial' ? null : (
+      {revision.source === 'initial' || renderedRevision ? null : (
         <div className="dsh-iui-history-actions dsh-iui-history-delete-actions">
           {confirmingDelete ? (
             <>
@@ -255,6 +257,14 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
     setDeletingId(revision.revisionId)
     const outcome = await deleteArtifactRevision(artifactId, revision.revisionId)
     setDeletingId(null)
+    // `missing` converges: the Host already deleted it (for example a lost
+    // response followed by a retry), so remove the local card and refresh.
+    if (outcome === 'missing') {
+      setConfirmingDeleteId(null)
+      onDeleted(revision.revisionId)
+      setReloadKey(key => key + 1)
+      return
+    }
     if (outcome !== 'deleted') { setDeleteError(outcome); return }
     setConfirmingDeleteId(null)
     onDeleted(revision.revisionId)
@@ -317,6 +327,7 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
                 restoring={restoringId === revision.revisionId}
                 deleting={deletingId === revision.revisionId}
                 confirmingDelete={confirmingDeleteId === revision.revisionId}
+                renderedRevision={revision.revisionId === currentRevisionId}
                 onRestore={() => { void restore(revision) }}
                 onAskDelete={() => { setDeleteError(null); setConfirmingDeleteId(revision.revisionId) }}
                 onCancelDelete={() => { setConfirmingDeleteId(null) }}

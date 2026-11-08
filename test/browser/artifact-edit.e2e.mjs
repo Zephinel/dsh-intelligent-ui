@@ -728,13 +728,18 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-restore]'), 0, 'history offers no restore for unavailable content')
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
+  check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-delete]'), 0, 'the card rendered revision cannot be deleted from its own history')
   // Deletion: delete the current local restore revision (not referenced by any
   // newer one); its local card is removed together with the history row.
   await click('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-delete]')
   await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation')
+  // Simulate a lost delete response: the Host has already removed it, so the
+  // retry answers revision_missing and the UI must converge, not stay stale.
+  await read('window.__deleteMissing = true')
   await click('[data-dsh-iui-history-delete-confirm]')
   await wait('!document.querySelector(\'[data-dsh-iui-history-revision="restore_local1"]\')', 'deleted history row')
   check(await count('[data-dsh-iui-local-revision]'), 0, 'deleting a history revision removes its local card')
+  check(await count('[data-dsh-iui-history-delete-error]'), 0, 'a missing revision converges without an error banner')
   await shot('harness-history.png')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'history dialog closed')
@@ -2087,8 +2092,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'template base editor closed')
 
-  // Mocked Host failures: article_unavailable, then style_missing (catalog refresh),
-  // then the 409 identity-mismatch copy.
+  // Article targets are disabled client-side; the mocked Host failures cover
+  // style_missing (catalog refresh) and the 409 identity-mismatch copy.
   await read(`window.__styleSwitchRevisionId = undefined`)
   await read(`window.__addCard("style-switch-fail-call", "样式切换失败卡片", ${JSON.stringify(DST_PROGRAM)})`)
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-fail-call"]\')', 'switch failure card')

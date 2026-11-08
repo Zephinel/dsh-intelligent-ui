@@ -177,7 +177,7 @@ export interface ArtifactStyleTargetOption {
   readonly layout: RenderLayout
   /** Saved-template theme, used for the palette swatch and the edit-canvas preview. */
   readonly theme?: StyleTheme
-  /** Article targets need the page's Toc+Section invariant; shown as a static hint. */
+  /** Article targets need the page's Toc+Section invariant; invalid targets are disabled with one note. */
   readonly requiresArticleLayout?: boolean
 }
 

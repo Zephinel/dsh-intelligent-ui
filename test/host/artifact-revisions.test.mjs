@@ -656,13 +656,13 @@ test('DELETE refuses a revision that still bases another revision, and the initi
 test('requestRejection runs before method dispatch and preserves 401/403 denial codes', () => {
   for (const rejection of [401, 403]) {
     const { route, checked } = mountRoutes({ rejection })
-    for (const method of ['GET', 'POST']) {
+    for (const method of ['GET', 'POST', 'DELETE']) {
       const result = request(route, { method })
       assert.equal(result.status, rejection)
       assert.equal(result.body, undefined)
       assert.equal(result.headers['cache-control'], 'no-store')
     }
-    assert.equal(checked.length, 2)
+    assert.equal(checked.length, 3)
   }
 })
 

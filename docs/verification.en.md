@@ -612,3 +612,21 @@ Four structural guards added after the review loop:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **507 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,031,281** bytes packed, **12,885,957** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-08 — Fixes from the unreviewed commit batch
+
+Fixes after the independent read-only review of `852e331..HEAD`:
+
+- **Envelope sibling regression**: `programFenceFrom` bounds the search at `nextEnvelopeOpen` and the close fence keeps its line constraint, so a header without a program cannot borrow the next envelope's program. A regression covers "first missing program, second complete".
+- **Deletion idempotency**: a DELETE `revision_missing` answer converges (removes the local card and refreshes); the revision rendered by the opening card cannot be deleted; the DELETE route maps storage failures; the Host auth test covers DELETE.
+- **Late stale answer**: a non-branch `base_not_latest` moves the store to `conflict`, so the status line and disabled Apply agree instead of showing ready.
+- **Docs/tests**: corrected DELETE route, Article predicate location, current-card deletion limit and stale/base_missing wording; E2E adds the missing-program boundary, current-card deletion guard and missing-delete convergence.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **626/626** Node tests = Host **301** + Client **304** + packaging **21**; build host **837.9 kB**, client **4.04 MB** (js 3.83 / CSS 222.4) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **509 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,031,527** bytes packed, **12,886,783** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

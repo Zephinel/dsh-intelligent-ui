@@ -1,10 +1,10 @@
 /**
- * Pure style-switch eligibility rules shared by the edit panel and the store.
+ * Pure style-switch eligibility rules for the edit panel.
  *
  * The UI uses `styleTargetDisableReason` to gray out targets the Host would
  * reject, and `styleSwitchBlocker` to explain the one reason Apply is disabled.
- * Keeping these as pure functions makes the visible state and the guarded action
- * use the same rules.
+ * The store keeps its own request-time safety guards; keeping these calculations
+ * pure lets the panel be unit-tested without React.
  */
 import type { ArtifactStyleTargetOption } from './contracts.ts'
 

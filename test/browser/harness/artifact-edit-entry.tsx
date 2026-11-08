@@ -375,6 +375,12 @@ window.fetch = async (url: string | URL, options?: RequestInit) => {
       const deleted = (w.__deletedRevisions ??= new Set<string>())
       deleted.add(revisionId)
     }
+    if (w.__deleteMissing === true) {
+      w.__deleteMissing = false
+      return new Response(JSON.stringify({ error: { code: 'revision_missing', message: 'already deleted' } }), {
+        status: 404, headers: { 'content-type': 'application/json' },
+      })
+    }
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   if (text.includes('/api/intelligent-ui/artifact-revisions')) {

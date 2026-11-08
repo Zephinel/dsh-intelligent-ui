@@ -2193,6 +2193,13 @@ export async function applyArtifactStyleSwitch(
           sessions.set(key, { ...current, styleSwitchTarget: undefined, styleSwitchTargetLayout: undefined })
         }
       }
+      // A late stale answer must enter the same visual state as a pre-known
+      // stale base; otherwise the single status line still says "ready" while
+      // the error below it says the base is no longer latest.
+      if (code === 'base_not_latest' && session.branch !== true) {
+        const current = sessions.get(key)
+        if (current !== undefined) sessions.set(key, { ...current, status: 'conflict' })
+      }
       fail(styleSwitchFailureMessage(code), code === undefined)
       return
     }

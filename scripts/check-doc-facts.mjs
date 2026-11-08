@@ -18,6 +18,10 @@ const expect = (file, fragment) => {
   if (!read(file).includes(fragment)) failures.push(`${file}: missing ${JSON.stringify(fragment)}`)
 }
 
+if (facts.host + facts.client + facts.packaging !== facts.nodeTotal) {
+  console.error(`doc-facts: host ${facts.host} + client ${facts.client} + packaging ${facts.packaging} != nodeTotal ${facts.nodeTotal}`)
+  process.exit(1)
+}
 const node = `${facts.nodeTotal}/${facts.nodeTotal}`
 for (const file of ['README.md', 'README.en.md']) {
   expect(file, node)
@@ -35,7 +39,7 @@ for (const file of ['docs/architecture.md', 'docs/architecture.en.md']) {
   expect(file, `${facts.clientCssKb.toFixed(1)} kB`)
 }
 for (const file of ['CHANGELOG.md']) {
-  expect(file, node.replace('615', String(facts.nodeTotal)))
+  expect(file, node)
   expect(file, facts.packedBytes.toLocaleString('en-US'))
   expect(file, facts.unpackedBytes.toLocaleString('en-US'))
 }

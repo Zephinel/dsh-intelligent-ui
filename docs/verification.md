@@ -592,3 +592,21 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **507 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,281** 字节，解包 **12,885,957** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 未复审提交批次修复
+
+独立只读复审 `852e331..HEAD` 后修复的 P2/P3：
+
+- **Envelope sibling 回归**：`programFenceFrom` 以 `nextEnvelopeOpen` 为界截断，恢复 close fence 的行尾约束；缺 program 的信封不再借用下一个信封的 program。新增“第一个缺 program、第二个完整”的回归。
+- **修订删除幂等**：DELETE 返回 `revision_missing` 视为已收敛（移除本地卡并刷新）；禁止删除当前卡片正在渲染的修订；DELETE 路由捕获存储失败；Host 认证测试覆盖 DELETE。
+- **晚到 stale**：Host 返回 `base_not_latest` 时（非 branch）store 进入 conflict，状态行与 Apply 禁用一致，不再显示可应用。
+- **文档/测试修正**：DELETE 路由、Article 谓词位置、当前卡删除限制、stale/base_missing 文案；E2E 增加缺 program 边界、当前卡删除保护、missing 收敛断言。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **626/626** = Host **301** + Client **304** + packaging **21**；build host **837.9 kB**、client **4.04 MB**（js 3.83 / CSS 222.4） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **509 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,527** 字节，解包 **12,886,783** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

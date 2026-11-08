@@ -604,7 +604,7 @@ function programFence(text: string): { open: number; close: number; program: str
   const open = openMatch.index + (openMatch[0].startsWith('\n') ? 1 : 0)
   const bodyStart = text.indexOf('\n', open)
   if (bodyStart < 0) return undefined
-  const closePattern = /(?:^|\n)<\/artifact-program>/g
+  const closePattern = /(?:^|\n)<\/artifact-program>[ \t]*(?:\n|$)/g
   closePattern.lastIndex = bodyStart + 1
   const closeMatch = closePattern.exec(text)
   if (closeMatch === null) return undefined
@@ -612,11 +612,19 @@ function programFence(text: string): { open: number; close: number; program: str
   return { open, close, program: text.slice(bodyStart + 1, close).trim() }
 }
 
+/** Whether one offset sits inside an own-line program body. */
+function insideProgramBody(text: string, at: number): boolean {
+  const open = text.lastIndexOf(ARTIFACT_PROGRAM_OPEN, at)
+  if (open < 0) return false
+  const close = text.indexOf(ARTIFACT_PROGRAM_CLOSE, open + ARTIFACT_PROGRAM_OPEN.length)
+  return close < 0 || close > at
+}
+
 /** Find the next real envelope opening at or after one offset. */
 function nextEnvelopeOpen(text: string, from: number): number {
   let at = text.indexOf(ARTIFACT_EDIT_OPEN, from)
   while (at >= 0) {
-    if (isEnvelopeStart(text, at)) return at
+    if (!insideProgramBody(text, at) && isEnvelopeStart(text, at)) return at
     at = text.indexOf(ARTIFACT_EDIT_OPEN, at + ARTIFACT_EDIT_OPEN.length)
   }
   return -1
@@ -629,7 +637,10 @@ function nextEnvelopeOpen(text: string, from: number): number {
  * @returns absolute opening/closing offsets and the program body.
  */
 function programFenceFrom(text: string, from: number): EnvelopeWindow['program'] | undefined {
-  const segment = text.slice(from)
+  // A window ends at the next real envelope: searching the whole tail would
+  // bind a later request's program to a header that has none.
+  const next = nextEnvelopeOpen(text, from)
+  const segment = text.slice(from, next < 0 ? text.length : next)
   const fence = programFence(segment)
   if (fence === undefined || fence.program === '') return undefined
   return { start: from + fence.open, end: from + fence.close, program: fence.program }

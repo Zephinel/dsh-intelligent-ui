@@ -455,7 +455,13 @@ export function registerArtifactRevisionRoutes(ctx: {
             return
           }
           if (req.method === 'DELETE') {
-            const outcome = store.remove({ artifactId, revisionId })
+            let outcome: ReturnType<ArtifactRevisionStore['remove']>
+            try {
+              outcome = store.remove({ artifactId, revisionId })
+            } catch {
+              sendError(res, 500, 'storage', 'Could not delete the revision from the registry; retry after checking storage.')
+              return
+            }
             if (outcome === 'missing') {
               sendError(res, 404, 'revision_missing', 'That revision is not recorded for this artifact (the initial render is not deletable).')
               return

@@ -63,4 +63,4 @@
 
 ## 验证
 
-Node **625/625**（Host 301、Client 303、packaging 21）；浏览器 9/9，`artifact-edit` **507 checks**；build host 837.6 kB、client 4.04 MB（js 3.82 / CSS 222.4）；pack 65 files / 6,031,281 packed / 12,885,957 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
+Node **626/626**（Host 301、Client 304、packaging 21）；浏览器 9/9，`artifact-edit` **509 checks**；build host 837.9 kB、client 4.04 MB（js 3.83 / CSS 222.4）；pack 65 files / 6,031,527 packed / 12,886,783 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
