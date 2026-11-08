@@ -368,6 +368,15 @@ w.__applyBlockEditRevision = (meta: Record<string, unknown>, callId: string = 'd
 
 window.fetch = async (url: string | URL, options?: RequestInit) => {
   const text = String(url)
+  if (text.includes('/api/intelligent-ui/artifact-revisions') && options?.method === 'DELETE') {
+    const query = new URL(text, 'http://localhost').searchParams
+    const revisionId = query.get('revisionId')
+    if (revisionId !== null) {
+      const deleted = (w.__deletedRevisions ??= new Set<string>())
+      deleted.add(revisionId)
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
   if (text.includes('/api/intelligent-ui/artifact-revisions')) {
     const query = new URL(text, 'http://localhost').searchParams
     const artifactId = query.get('artifactId') ?? 'dst-call-1'
@@ -400,8 +409,8 @@ window.fetch = async (url: string | URL, options?: RequestInit) => {
         { revisionId: 'restore_local1', revision: 3, baseRevisionId: 'dst-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1762400000000, current: true, source: 'restore', hasProgram: false, restorable: false },
         { revisionId: 'dst-call-2', revision: 2, baseRevisionId: 'dst-call-1', title: '夏令时与冬令时', style: 'card', styleId: 'cs_e2e123', createdAt: 1762300000000, current: false, source: 'edit', hasProgram: true, restorable: true, editedBlockIds: ['b1'] },
         { revisionId: 'dst-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1762200000000, current: false, source: 'initial', hasProgram: true, restorable: true },
-      ],
-    }), { status: 200, headers: { 'content-type': 'application/json' } })
+      ].filter(revision => !(w.__deletedRevisions as Set<string> | undefined)?.has(revision.revisionId)),
+    }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
   }
   if (text.includes('/api/intelligent-ui/artifact-restore') && options?.method === 'POST') {
     const body = JSON.parse(String(options.body))

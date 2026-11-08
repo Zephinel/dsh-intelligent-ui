@@ -3275,6 +3275,28 @@
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
+.dsh-iui-history-delete-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.dsh-iui-history-restore.is-danger {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, var(--dsw-alias-border-l2));
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-history-restore.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
+
+.dsh-iui-history-delete-warning {
+  flex: 1 1 100%;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
 
 .dsh-iui-revision-button {
   padding: 0 4px;

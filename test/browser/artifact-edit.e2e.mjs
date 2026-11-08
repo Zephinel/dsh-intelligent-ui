@@ -727,6 +727,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-restore]'), 0, 'history offers no restore for unavailable content')
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
+  // Deletion: delete the current local restore revision (not referenced by any
+  // newer one); its local card is removed together with the history row.
+  await click('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait('!document.querySelector(\'[data-dsh-iui-history-revision="restore_local1"]\')', 'deleted history row')
+  check(await count('[data-dsh-iui-local-revision]'), 0, 'deleting a history revision removes its local card')
   await shot('harness-history.png')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'history dialog closed')

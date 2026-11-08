@@ -546,3 +546,20 @@ Four structural guards added after the review loop:
 - Conclusion: the `styleSwitch` capability and projection view are valid under real cordis (the visible picker proves the view schema parsed), and the real structure-route POST succeeded; the B2 zero-model path works in the real GUI.
 - Not covered: real forced-colors hardware, real mixed Host/client deployments, real model (B2 is zero-model by design).
 - Note: this acceptance appended one local style revision (Revision 3, content unchanged) to the 上海两日游 session for verification.
+
+## 2026-11-08 — Revision-history deletion (true Host removal + local-card cleanup)
+
+- **UI**: every recorded revision in the history dialog now has a Delete action behind an inline confirmation; the initial render (Revision 1) is not deletable. The current/latest record may be deleted and the next newest becomes latest. Failures show a clear reason (`409 revision_referenced` / `404 revision_missing`).
+- **Host**: `DELETE /api/intelligent-ui/artifact-revisions?artifactId=&revisionId=` shares authentication, `effect` and the disposer with the GET probe. `ArtifactRevisionStore.remove()` refuses a revision that is still another record's `baseRevisionId` and atomically rewrites the registry; the retained program is removed too (a failed cleanup only leaves an LRU-prunable orphan). No new durable field or `ArtifactHistorySource` enum value.
+- **Client**: after a successful delete, the matching `localStorage` local revision card is removed and the open history refreshes; already-rendered model message cards are not removed (see limitations).
+- **Boundaries**: irreversible; a referenced revision requires deleting the newer one first; after deleting the current revision, other cards' revision badges may keep their old value until the next authoritative action; a deleted base makes still-referenced drafts/branches fail at send with `base_missing`; deletion does not undo the `struct_` idempotency ledger entry (the same operationId must not be replayed).
+- **Verification**: Host artifact-revisions tests 32 (delete success/referenced/initial/program cleanup), client local-revisions 7 (local-card removal + API outcome mapping), browser `artifact-edit` **498 checks** (confirm → delete → local card gone).
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **621/621** Node tests = Host **301** + Client **299** + packaging **21**; build host **837.4 kB**, client **4.03 MB** (js 3.82 / CSS 221.4), standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **498 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,049,571** bytes packed, **12,896,674** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

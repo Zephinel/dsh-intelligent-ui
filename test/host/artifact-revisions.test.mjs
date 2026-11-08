@@ -622,6 +622,37 @@ test('GET answers latest-lineage status with no-store JSON', () => {
   })
 })
 
+test('DELETE removes an unreferenced revision and its retained program', () => {
+  const m = mountRoutes({ revisions: [revision()], programs: [programRecord({ revisionId: 'call-2' })] })
+  const result = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-2` })
+  assert.equal(result.status, 200)
+  assert.deepEqual(JSON.parse(result.body), { ok: true })
+  assert.deepEqual(JSON.parse(readFileSync(m.file, 'utf8')).revisions, [])
+  assert.deepEqual(JSON.parse(readFileSync(m.programFile, 'utf8')).programs, [])
+  assert.equal(createArtifactRevisionStore().get('call-2'), undefined)
+})
+
+test('DELETE refuses a revision that still bases another revision, and the initial render', () => {
+  const m = mountRoutes({
+    revisions: [
+      revision({ revisionId: 'call-2', revision: 2, createdAt: 2 }),
+      revision({ revisionId: 'call-3', revision: 3, baseRevisionId: 'call-2', createdAt: 3 }),
+    ],
+  })
+  const referenced = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-2` })
+  assert.equal(referenced.status, 409)
+  assert.deepEqual(JSON.parse(referenced.body).error.code, 'revision_referenced')
+  assert.equal(createArtifactRevisionStore().listForArtifact('call-1').length, 2)
+  const initial = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-1` })
+  assert.equal(initial.status, 404)
+  assert.deepEqual(JSON.parse(initial.body).error.code, 'revision_missing')
+  const newest = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-3` })
+  assert.equal(newest.status, 200)
+  const thenBase = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-2` })
+  assert.equal(thenBase.status, 200)
+  assert.deepEqual(createArtifactRevisionStore().listForArtifact('call-1'), [])
+})
+
 test('requestRejection runs before method dispatch and preserves 401/403 denial codes', () => {
   for (const rejection of [401, 403]) {
     const { route, checked } = mountRoutes({ rejection })
@@ -635,19 +666,22 @@ test('requestRejection runs before method dispatch and preserves 401/403 denial 
   }
 })
 
-test('only GET is supported and query params must be artifact identities', () => {
+test('only GET and DELETE are supported and query params must be artifact identities', () => {
   const { route } = mountRoutes()
-  for (const method of ['HEAD', 'POST', 'PUT', 'DELETE']) {
+  for (const method of ['HEAD', 'POST', 'PUT']) {
     const result = request(route, { method })
     assert.equal(result.status, 405)
-    assert.equal(result.headers.allow, 'GET')
+    assert.equal(result.headers.allow, 'GET, DELETE')
     assert.equal(result.body, undefined)
   }
-  for (const query of ['', '?artifactId=call-1', '?revisionId=call-2', '?artifactId=call-1&revisionId=',
-    '?artifactId=bad%20id&revisionId=call-2', `?artifactId=${'x'.repeat(201)}&revisionId=call-2`]) {
-    const result = request(route, { url: `${ARTIFACT_REVISION_ROUTE_PATH}${query}` })
-    assert.equal(result.status, 400, query)
-    assert.deepEqual(JSON.parse(result.body).error.code, 'invalid_input')
+  assert.equal(request(route, { method: 'DELETE' }).status, 400)
+  for (const method of ['GET', 'DELETE']) {
+    for (const query of ['', '?artifactId=call-1', '?revisionId=call-2', '?artifactId=call-1&revisionId=',
+      '?artifactId=bad%20id&revisionId=call-2', `?artifactId=${'x'.repeat(201)}&revisionId=call-2`]) {
+      const result = request(route, { method, url: `${ARTIFACT_REVISION_ROUTE_PATH}${query}` })
+      assert.equal(result.status, 400, `${method} ${query}`)
+      assert.deepEqual(JSON.parse(result.body).error.code, 'invalid_input')
+    }
   }
 })
 

@@ -272,7 +272,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - **列表↔画布映射、编辑聚焦与 pending 标记（追加）**：编排/嵌套/请求行 hover 与画布区块双向联动（中性蓝 2px 细框 + 4% 淡底，未选中/未编辑时显示）；根层常显页面顺序索引（嵌套块仅在 hover 时显示）；有 pending 请求的行仍保留页面序号，并在标题后显示带 tooltip 的请求序号 badge；行尾新增「更多」菜单（定位/编辑/复制/移动/删除；定位仍复用 900ms 脉冲），保留点击行主体定位。打开任一区块编辑器时，其余区块被 scrim 压暗，当前区块保留编辑框；Save/Cancel 关闭后 scrim 消失。Save 不再保留大选中框：改为「圆点 + 请求序号」的低调 pending 标记，pending 根层区块的 orbit glow 降速（5.2s）变淡（0.3）；`selection` 数据不变，发送时照常提交。确定性 Apply/结构操作仍按既定行为记录修订并退出编辑（1A 不变）。
 - **状态一致性**：未发送拦截统一用 `hasArtifactEditContent`（包含嵌套排序）；异步结构/属性请求失败只回写当前 session（不会复活已关闭/已提交的编辑器）；嵌套 kind 复用共享映射；快捷面板打开即聚焦、`aria-busy`、`edit.propsUnit`、stale-base/no-change/busy 文案齐全。
 - **限制与预算**：快捷调整只支持 Divider/Spacer 的上述属性；属性修订卡与其他本地修订一样只在 localStorage/触发 Turn 渲染，不参与导出；自定义 CSS 颜色由渲染器 `isSafeCss` 约束，Host 只做保守格式校验；根层 wrapper 已无盒子，依赖 `.dsh-iui-block` 盒子的旧样式/hook 不再存在（测试改为 overlay hit/frame 选择器）。CST 节点预算为 200（此前 60）：长文章页面（如 105 节点的 Solid 2.0 导览）现在可以找到嵌套 Spacer 并使用快捷调整；66 节点 fixture 在浏览器套件中回归。
-- **验证**：Node **617/617**；浏览器 9/9；`artifact-edit` **497 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 220.9 kB；standalone 3.33 MB + 514.4 kB；pack 65 files 6.04 MB / 12.88 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
+- **验证**：Node **621/621**；浏览器 9/9；`artifact-edit` **498 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 221.4 kB；standalone 3.33 MB + 514.4 kB；pack 65 files 6.04 MB / 12.88 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
 
 ### Artifact 权威状态生命周期与基础登记（2026-11-07）
 
@@ -287,7 +287,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - **信任位置**：客户端提交 program 的信任级别与既有 edit envelope / restore 一致（仅用于登记，写一次 + 仅当前 revision + 结构校验）；结构路由仍只读权威 program，绝不信任客户端 program，结构请求也不带 program。
 - **接受并记录的偏差（不修复）**：登记的初始修订 `createdAt` 变成登记时间；未被任何权威操作触达的旧卡保持未登记（无回填）；被 LRU 驱逐的非当前 revision program 客户端无法重建。
 - **旧 Host 混合部署**：登记路由 404 时客户端缓存 `unsupported` 并按非权威路径降级——快捷调整切换为指令编辑、结构操作给出缺失权威程序的可操作提示，页面可重新渲染恢复。
-- **验证**：`test/host/artifact-base.test.mjs`（14 条：含 review 后新增的写盘失败无幽灵记录、raw 超长 400、已记录锚重建等回归：路由注册/disposer、认证先于方法、POST-only/content-type/坏 JSON/>1 MiB、字段与 program 校验、初始锚登记与写一次冲突、unknown revision 与外 artifact 记录、已记录锚解锁结构/历史/restore、无模型端到端升级：登记→preview→apply 201 revision 2→历史含初始与 revision 2→restore 初始 201 revision 3、结构错误语义回归）；`test/client/artifact-base.test.mjs`（7 条：single-flight、成功缓存、404 unsupported 能力缓存、网络错误可重试、畸形 200 可重试、缓存失效后重新登记、失效期间 in-flight 不回填）；`test/client/artifact-edit.test.mjs` 新增 4 条（打开编辑器登记一次并带卡片身份、结构 preview 先 await 登记且不带 program、preview+apply+props 统一缺失 base 文案、success→miss→重开再登记两次）；浏览器 `artifact-edit` 场景 36（旧卡打开登记一次并带权威身份、登记先于结构请求、旧 Host 404 降级、preview 与 props 新文案；review 后改为按 artifactId/status/seq 语义断言），套件 **497 checks**。
+- **验证**：`test/host/artifact-base.test.mjs`（14 条：含 review 后新增的写盘失败无幽灵记录、raw 超长 400、已记录锚重建等回归：路由注册/disposer、认证先于方法、POST-only/content-type/坏 JSON/>1 MiB、字段与 program 校验、初始锚登记与写一次冲突、unknown revision 与外 artifact 记录、已记录锚解锁结构/历史/restore、无模型端到端升级：登记→preview→apply 201 revision 2→历史含初始与 revision 2→restore 初始 201 revision 3、结构错误语义回归）；`test/client/artifact-base.test.mjs`（7 条：single-flight、成功缓存、404 unsupported 能力缓存、网络错误可重试、畸形 200 可重试、缓存失效后重新登记、失效期间 in-flight 不回填）；`test/client/artifact-edit.test.mjs` 新增 4 条（打开编辑器登记一次并带卡片身份、结构 preview 先 await 登记且不带 program、preview+apply+props 统一缺失 base 文案、success→miss→重开再登记两次）；浏览器 `artifact-edit` 场景 36（旧卡打开登记一次并带权威身份、登记先于结构请求、旧 Host 404 降级、preview 与 props 新文案；review 后改为按 artifactId/status/seq 语义断言），套件 **498 checks**。
 
 ### 运行时状态部分保留（B2-6）
 
@@ -296,7 +296,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 接线：`IntelligentUICards` 渲染卡片时恢复快照，并通过 `onRuntimeStateChange` 持续记录；`ArtifactEditView` 的两处渲染传入冻结的 base 快照且不写回（编辑画布冻结）。因此编辑产生的新修订卡可继承渲染器持有的 `$state` 与表单字段初始值；第三方组件内部状态、编辑画布内的交互值不保留。
 - 限制：内存态、刷新丢失；容量 24 artifacts / 5 revisions / 64KiB；首渲染不继承历史；继承要求新修订带 `baseRevisionId`（缺失时仅 latest fallback）；第三方内部状态与画布交互不保留。
 - 真机（ego，隔离实例，参考会话最新 DST Revision 7）：点选「夏令时」→ 打开编辑 → 修改 b2 指令 → Send → 模型记录 **Revision 8**；新卡仍选中「夏令时」并显示 summer clockNote，无错误。
-- 测试：`test/client/runtime-state.test.mjs`（13 条：首渲染 undefined、同修订、base 继承、latest fallback、克隆隔离、非法/超大忽略、callId fallback、容量/淘汰、clear/reset）；浏览器 `artifact-edit` 497 checks 含新修订继承 `$state` 与选中项的用例。
+- 测试：`test/client/runtime-state.test.mjs`（13 条：首渲染 undefined、同修订、base 继承、latest fallback、克隆隔离、非法/超大忽略、callId fallback、容量/淘汰、clear/reset）；浏览器 `artifact-edit` 498 checks 含新修订继承 `$state` 与选中项的用例。
 
 ### 编辑画布 a11y（B1-5）
 
@@ -306,7 +306,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 移动菜单键盘行为：打开时聚焦第一个 target（无 target 时聚焦 `tabIndex=-1` 容器）、ArrowUp/Down 循环、Home/End、Enter/Space 选择、Escape 关闭并把焦点返回触发按钮、Tab 关闭；`role=menu`/`menuitem` 沿用。
 - 其它语义：添加表单 textarea `aria-label` + `aria-describedby` 到可见提示；嵌套组 `role=group` + 可访问名称（父标题 · kind）；菜单 target、添加控件、addition 移除新增 `:focus-visible` 焦点环。
 - 限制：live region 是单个 polite 槽位，快速连续重排会合并播报；指针拖拽只在 drop 时播报；Tab 关闭菜单不强制回焦（Escape 会）；隐藏提示仍在可访问性树中；未做真机 screen-reader/axe 审计；B2-10 提供手动视觉基线，但无自动像素 diff。
-- 测试：浏览器 `artifact-edit` 497 checks（新增 live region 嵌套重排/添加播报、grip `aria-describedby`、移动菜单首焦点与 ArrowDown 焦点变化）；临时 Chrome harness 121 checks 覆盖 live region 语义、hint/describedby、group 语义、根/嵌套键盘播报、添加表单 aria、菜单方向键循环/Home/End/Enter/Escape+焦点返回、空菜单容器焦点、preview open/cancel 播报。
+- 测试：浏览器 `artifact-edit` 498 checks（新增 live region 嵌套重排/添加播报、grip `aria-describedby`、移动菜单首焦点与 ArrowDown 焦点变化）；临时 Chrome harness 121 checks 覆盖 live region 语义、hint/describedby、group 语义、根/嵌套键盘播报、添加表单 aria、菜单方向键循环/Home/End/Enter/Escape+焦点返回、空菜单容器焦点、preview open/cancel 播报。
 
 ### 真机验证与视觉基线（B2-8/B2-9/B2-10）
 
@@ -314,7 +314,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 自由版式（B2-8）：普通 `render_ui` 只接受 card/article；free 必须经 **On-demand UI**（Composer UI 菜单选择 On-demand UI，模型再以 `style=free` + `temporaryStyle` 调用 `render_ui`）生成临时样式自由版式卡（Temporary style，Row 两栏）。编辑该卡（单个根区块，无重排）并填写内容指令后，**Revision 2 仍为 temporary/free**、内容更新、无错误。**普通 `render_ui` 传 `style=free` 会被 Host 拒绝**；free 只能来自 On-demand UI 或授权的 free 模板。
 - 窄屏/移动端（B2-9）：CDP Emulation 390×844 @2x 下文档无横向溢出（`scrollWidth ≤ innerWidth + 1`），卡片正常重排（Row 两栏堆叠）；点「编辑」出现 `[data-dsh-iui-edit-narrow-notice]` 且不进入编辑画布。900×1000 @2x 下编辑画布可打开、无横向溢出、编排行可见。
 - 视觉基线（B2-10）：`test/browser/visual-baselines/` 保存 5 张手动参考截图（`article-card-1440.png`、`free-card-1440.png`、`editor-article-1440.png`、`preview-modal-1440.png`、`narrow-390-viewport.png`）以及 `captures.json`（浏览器/视口/截图时间与方法）、`SHA256SUMS` 与 README。这是**手动视觉基线，不是自动像素 diff 套件**：现有浏览器套件继续负责几何/排版守卫，基线用于 UI 变更后人工对照；环境敏感（macOS、Chrome 156、2× DPR、light），且测试基线目录不进入 npm 包。
-- 验证计数不变：Node 617/617、浏览器 9/9、`artifact-edit` 497 checks、`nested-edit-renderer` 75、`nested-css-contract` 28/28 + 5/5。
+- 验证计数不变：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75、`nested-css-contract` 28/28 + 5/5。
 
 ### 编辑时自动内容宽度适配（用户反馈修复，第二轮）
 
@@ -325,7 +325,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - 真机（ego，最新隔离构建，1800×1000，sidebar 280 / 聊天列 left=280 width=1520）：打开编辑后 inline 内容宽度变为 **752px**；聊天卡片右缘 1412.5、Exit editing 按钮右缘 1382.5，面板左缘 1440 → 按钮可见、无遮挡；编辑中把用户宽度偏好设为 1600，仍保持 752 不重叠；退出后 inline 覆盖移除，父元素偏好保留 1600。
 - 部署：client 插件改动只有**重启 `dsh-web`** 才会加载（页面刷新不够）。用户主 GUI 曾因加载旧 client bundle 仍显示旧行为；排查文档/行为不一致时先确认服务已重启。
 - 限制：仅 ≥1180px docked 模式生效；面板自身 CSS clamp 仍以 748 为 fallback；若 shell 未来迁移 `--dsh-chat-content-width`/`--dsh-chat-user-width` 或 `data-conversation-*` 属性，需要更新集中式 selector/变量常量。
-- 测试：`test/client/panel-width.test.mjs`（10 条：固定点/默认视口/宽视口/断点/已适配/过小视口/minContent/常见视口不重叠/非法值/column-aware sidebar 偏移）；浏览器 `artifact-edit` 497 checks 含自动拟合/恢复、动态跟随用户宽度、真实 1180px shell fit、菜单/轨道光晕与 expand 按钮不存在的用例。
+- 测试：`test/client/panel-width.test.mjs`（10 条：固定点/默认视口/宽视口/断点/已适配/过小视口/minContent/常见视口不重叠/非法值/column-aware sidebar 偏移）；浏览器 `artifact-edit` 498 checks 含自动拟合/恢复、动态跟随用户宽度、真实 1180px shell fit、菜单/轨道光晕与 expand 按钮不存在的用例。
 
 ### 区块片段编辑（Phase 1）
 
@@ -354,14 +354,14 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - `test/client/artifact-style-switch.test.mjs`（7 条）：目标联合与标签校验、单意图规则（target+operations、preview、sessionStyleScope）、结构批次回归。
 - `test/client/programs.test.mjs`（16 条）：render_ui 血缘 meta（含 style edit 的 title/temporaryStyle）、参数标题优先、失败/临时快照防御等。
 - `test/client/artifact-edit-reconcile.test.mjs`（4 条）：未完成的 submitted 草稿恢复为 failed/detached 且重建 requestId、已完成的 submitted 草稿被删除、混合结果逐条独立对账、历史 Turn 不会认领新提交（时间窗口）。
-- `test/client/local-revisions.test.mjs`（5 条）：恢复的本地修订只存本地、按 revisionId 替换并按 `createdAt` 淘汰、超过 20 条上限；本地修订转换为可编辑/可渲染的卡片程序；`restoreRevision` POST 源身份并映射 Host 返回的修订。
+- `test/client/local-revisions.test.mjs`（7 条）：恢复的本地修订只存本地、按 revisionId 替换并按 `createdAt` 淘汰、超过 20 条上限；本地修订转换为可编辑/可渲染的卡片程序；`restoreRevision` POST 源身份并映射 Host 返回的修订。
 - `test/client/program-cst.test.mjs`（18 条）：CST 解析/范围/nodeId/结构操作（replace/reorder/remove/duplicate/move/insert）与失败码，M4-4 新增 `insertNode` 的 editable-index 插入、未触及源码保留与跨容器 `moveNode` 拒绝矩阵。
 - `test/client/edit-tabs.test.mjs`（3 条）：另一标签的 lease 会被看到并阻止静默 claim、takeover 替换 foreign lease 并释放、过期 lease 被忽略。
 - `test/client/nested-blocks.test.mjs`（4 条）：root 保持 `bN`、嵌套为 `parent.N`；path/nodeId 映射与 display blocks 一致；`@Each` 模板不作为嵌套可编辑区块；无可编辑嵌套子节点时 `hasNested` 为 false。
 - `test/client/artifact-edit-batch.test.mjs`（7 条）：v1 批次上限常量、requestId 线格式、信封头携带 requestId 与多信封指引、一条消息按顺序解析多个信封、坏信封不影响兄弟信封、普通消息解析为空、发送摘要范围不跨信封。
 - `test/client/artifact-block-bundle.test.mjs`（11 条）：选中区块表达式与传递冻结依赖/`$state` 切片、单块与双块回填顺序、chrome/根参数/基础语句保持、微程序使用基础 `$state` 或新增辅助语句、块数不匹配、未知/重复 id 与辅助语句重名、`@Each` 循环变量与对象字面量键不算未定义引用、引用组合后不存在的标识符被拒绝。
 - `test/host/artifact-edit.test.mjs`（86 条）：在既有编辑/片段/多 pending 覆盖之外，新增 branch：旧修订 branch=true 记录 `latest+1`、未记录的 revision 1 允许 branch、非 branch 旧修订仍被 stale 拒绝、非法 branch base 被模型可读错误拒绝且不写修订；以及临时样式内容编辑（record/meta/schema 带快照、`render_ui` 回退拒绝、非法/超大快照拒绝）；M4-1 嵌套：单/多嵌套替换、嵌套+根 targetOrder、嵌套 branch/temporaryStyle、非法 node/digest/chrome/祖先冲突拒绝、畸形嵌套片段可重试且保持 pending；M4-2 层级排序：`orderByParent` 完整排列、chrome/跨父/@Each/root 冲突拒绝、最深优先重建、order-only meta 与非消费语义；`edit_ui_blocks` 注册/meta、合成、单/双块回填、保存模板 styleId/title、`render_ui` 拒绝内容修改、无请求/只调顺序拒绝、片段不合身可重试、无效 pending、血缘文案、警告、过期版本、不可读信封、样式不一致、注入消息不武装、确定性排序/归一化 program、超长与非法排列拒绝、no-op、TTL 与 64 会话上限。
-- `test/host/artifact-revisions.test.mjs`（30 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰；GET 路由认证/方法/参数；恢复路由：与 GET 共用 disposer、POST 成功记录 latest+1 并返回本地修订、source 缺失/跨 artifact/already latest 拒绝、body/program/大小校验、非 POST 与认证拒绝，以及临时样式 record 校验与恢复复制快照。
+- `test/host/artifact-revisions.test.mjs`（32 条）：不可变记录与重启读取、`latestFor`/`status`、原子写与损坏文件保留、按时间淘汰；GET 路由认证/方法/参数；恢复路由：与 GET 共用 disposer、POST 成功记录 latest+1 并返回本地修订、source 缺失/跨 artifact/already latest 拒绝、body/program/大小校验、非 POST 与认证拒绝，以及临时样式 record 校验与恢复复制快照。
 - `test/host/style-routes.test.mjs`（13 条）：模板保存/范围校验、程序化快照（local-restore/structure-route）的 session 保存与真实会话拒绝。
 - `test/host/artifact-structure.test.mjs`（47 条）：program 注册表 LRU/大小/损坏恢复与 lookup、幂等 ledger 重放/冲突、结构路由鉴权/方法/body 校验/错误码、CST 身份与父级校验、delete/duplicate/move 批量原子应用、revision/程序入库与 `editedBlockIds`。
 - 浏览器 `test/browser/artifact-edit.e2e.mjs`（497 条检查）：编排面板、请求列表条件显示、画布实时预览、键盘/指针排序、只定位正文点击、重置顺序、内容+顺序+整体说明合并发送（信封指向 `edit_ui_blocks`）、Host 合成修订的渲染与血缘、只调顺序的 `render_ui` 路径、后台静默探测提前显示冲突、720–1179px 抽屉与 <720px 提示、深色；多卡片场景；Turn 关闭对账；M3-2 restore/branch 场景；M3-3 新增——未发送草稿写入 sessionStorage（含 instruction）、刷新后 Composer chip 与请求列表恢复、清理后回到初始态；M3-4 新增——临时样式卡片标记与编辑入口、信封携带 snapshot 且无 styleId、临时样式修订卡片、仅排序被阻止并显示引导；M4-1 新增——嵌套模式 toggle、嵌套 display id `b1.1.1`、信封携带 nodeId/digest/depth；M4-2 新增——同父嵌套重排、重置可用、chip 显示「调整区块顺序」、信封携带 `orderByParent` 且保留 `targetOrder`；M4-3 新增——结构 duplicate 请求（nodeId/sourceDigest/toIndex）、结构操作修订本地卡片标签、操作后编辑器关闭；M4-4 新增——Box/Grid/Section/Carousel 可选子区块与信封携带 Grid 子块 id；additions 表单/行/移除、信封 additions（parent/instruction）、move 菜单候选排除 root/当前 parent/祖先、单次 move 结构请求（目标 nodeId + index）；M4-5 新增——preview dry-run 200、confirm 后 apply、模态 `aria-modal`/初始焦点 Cancel、diff add 行、move 的 preview→apply 两段请求；B2-5 新增——strict toggle 默认关、信封携带 `"strict":true` 与 strict 指令；B2-6 新增——新修订继承 `$state` 与选中项；B1-5 新增——live region 嵌套重排/添加播报、grip `aria-describedby`、移动菜单首焦点与方向键焦点移动；不调用真实模型。
@@ -440,7 +440,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 编排行右侧是一个正常的 24px「更多」触发器 `[data-dsh-iui-edit-row-menu]`，不再有覆盖文字的动作组；它打开 portal 菜单，包含定位、编辑、复制、移动到…、删除五项（`data-dsh-iui-edit-locate` / `-structure-edit` / `-structure-duplicate` / `-move` / `-structure-delete`），菜单项有 role=menuitem、方向键/Home/End、Escape、外部点击和焦点返回；触发器在正常 flow 中，标题不会与按钮重叠。
 - 结构性删除是菜单内的持久两态确认：选择「删除区块」后，同一个菜单切换为 `data-dsh-iui-edit-structure-confirm` 的安静 Cancel 与 danger-tinted Delete 两个按钮（该步骤用 dialog 语义），无行红底/大红 pill；确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消/离开时回到行触发器；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时的轨道光晕也留出了可见余量。
-- 验证：Node **617/617**（Host 299、Client 297、packaging 21）；浏览器 9/9；`artifact-edit` **497 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 836.7 kB、client 4.03 MB（js 3.81 / css 220.0）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node **621/621**（Host 301、Client 299、packaging 21）；浏览器 9/9；`artifact-edit` **498 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 837.4 kB、client 4.03 MB（js 3.82 / css 221.4）；pack 65 files 6.04 / 12.88 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -449,13 +449,14 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 617/617、浏览器 9/9、`artifact-edit` 497 checks、`nested-edit-renderer` 75；构建 host 836.7 kB、client 4.03 MB（js 3.81 / css 220.0）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75；构建 host 837.4 kB、client 4.03 MB（js 3.82 / css 221.4）；pack 65 files 6.04 / 12.88 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 
 - 入口三处：卡片头部常显历史图标、`Revision N` 徽标（revision>1）、编辑面板头部历史按钮；均只打开**当前 Artifact** 的历史，不混入其它 Artifact。
 - Host：`ArtifactRevisionStore.listForArtifact()`；`GET /api/intelligent-ui/artifact-history?artifactId=` 返回元数据（新→旧，含 current/source/hasProgram/restorable；合并 program-only 的初始修订）；`GET /api/intelligent-ui/artifact-history/program?...` 按需取 program；现有 restore 路由扩展为支持初始修订（source 记录缺失但 program 仍在时，用 latest 的 style/styleId/temporaryStyle/title 兜底，新修订号 latest+1）。
 - Client：`ArtifactHistory.tsx` 元数据对话框（Revision N、当前、source、时间、样式、改动区块 chips；无整页预览），`hasProgram=false` 时显示不可用，旧修订可恢复；恢复复用零模型本地修订管线并刷新历史。
+- 删除：同一 `GET /api/intelligent-ui/artifact-revisions` 路径接受 `DELETE`（同一认证/`effect`/disposer），`ArtifactRevisionStore.remove()` 拒绝初始渲染（404 `revision_missing`）和仍被其他记录作为 `baseRevisionId` 的修订（409 `revision_referenced`），成功后原子重写注册表并清理保留 program；允许删当前/最新，删后最新回退上一条。客户端内联确认、成功后移除匹配本地卡并刷新历史；聊天中已生成的模型卡不删。
 - 限制：初始修订靠 program registry 推断，program 被 LRU 淘汰时该行缺失；初始行自身无 style，借用最早修订记录；历史列表不触碰 LRU，program 仅按需 lookup。
 
 ### 草稿切换条移到输入框上方

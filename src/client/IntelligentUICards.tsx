@@ -35,7 +35,7 @@ import { styleActions as defaultStyleActions, type StyleActions } from './style-
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
 import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
 import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
-import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
+import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, removeLocalRevision, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './artifact-edit/contracts.ts'
 import {
   activateDraft as activateArtifactDraft,
@@ -705,6 +705,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             blocks={blocksById}
             onClose={() => { setHistoryOpen(false) }}
             onRestored={revision => { handleHistoryRestored(revision); setHistoryOpen(false) }}
+            onDeleted={revisionId => { removeLocalRevision(sessionId, revisionId) }}
           />
         : null}
     </section>

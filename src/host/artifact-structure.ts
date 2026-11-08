@@ -128,6 +128,8 @@ export interface ArtifactProgramStore {
   totalBytes(): number
   /** Retained metadata for diagnostics/tests (no program body). */
   list(): readonly Omit<ArtifactProgramRecord, 'program'>[]
+  /** Remove one retained program (used when its revision is deleted). */
+  remove(artifactId: string, revisionId: string): void
 }
 
 export interface ProgramStoreOptions {
@@ -220,6 +222,10 @@ export function createArtifactProgramStore(ctx: { logger?: Logger } = {}, option
       const timestamp = now()
       programs = programs.map(record => record === found ? { ...record, lastAccessAt: timestamp } : record)
       return found.program
+    },
+    remove(artifactId, revisionId) {
+      const next = programs.filter(record => !(record.artifactId === artifactId && record.revisionId === revisionId))
+      if (next.length !== programs.length) persist(next)
     },
     size: () => programs.length,
     totalBytes: () => bytesOf(programs),

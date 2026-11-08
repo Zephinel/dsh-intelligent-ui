@@ -58,6 +58,8 @@ export interface ArtifactRevisionStore {
   listForArtifact(artifactId: string): ArtifactRevisionRecord[]
   record(record: ArtifactRevisionRecord): void
   status(input: { readonly artifactId: string; readonly revisionId: string }): ArtifactRevisionStatus
+  /** Delete one recorded revision (never the synthesized initial render). */
+  remove(input: { readonly artifactId: string; readonly revisionId: string }): 'deleted' | 'missing' | 'referenced'
 }
 
 const STYLE_ID_PATTERN = /^cs_[a-z0-9]{6,64}$/i
@@ -150,6 +152,14 @@ export function createArtifactRevisionStore(
     }
     return latest
   }
+  const persist = (next: ArtifactRevisionRecord[]): void => {
+    validate(next)
+    mkdirSync(dirname(file), { recursive: true })
+    if (corrupt) { renameSync(file, `${file}.corrupt-${Date.now()}`); corrupt = false }
+    writeFileSync(`${file}.tmp`, `${JSON.stringify({ version: 1, revisions: next }, null, 2)}\n`, 'utf8')
+    renameSync(`${file}.tmp`, file)
+    revisions = next
+  }
   return {
     get(revisionId) {
       const found = revisions.find(record => record.revisionId === revisionId)
@@ -189,12 +199,14 @@ export function createArtifactRevisionStore(
       const next = [...revisions, structuredClone(record)]
         .sort((a, b) => a.createdAt - b.createdAt)
         .slice(-MAX_ARTIFACT_REVISIONS)
-      validate(next)
-      mkdirSync(dirname(file), { recursive: true })
-      if (corrupt) { renameSync(file, `${file}.corrupt-${Date.now()}`); corrupt = false }
-      writeFileSync(`${file}.tmp`, `${JSON.stringify({ version: 1, revisions: next }, null, 2)}\n`, 'utf8')
-      renameSync(`${file}.tmp`, file)
-      revisions = next
+      persist(next)
+    },
+    remove({ artifactId, revisionId }) {
+      const index = revisions.findIndex(record => record.revisionId === revisionId && record.artifactId === artifactId)
+      if (index < 0) return 'missing'
+      if (revisions.some(record => record.baseRevisionId === revisionId)) return 'referenced'
+      persist(revisions.filter((_, candidate) => candidate !== index))
+      return 'deleted'
     },
     status({ artifactId, revisionId }) {
       const latest = latestRecord(artifactId)
@@ -410,6 +422,8 @@ export interface ArtifactRevisionProgramStore {
     readonly createdAt: number
   }[]
   record?(input: { readonly artifactId: string; readonly revisionId: string; readonly program: string }): void
+  /** Optional cleanup for a deleted revision's retained program. */
+  remove?(artifactId: string, revisionId: string): void
 }
 
 export function registerArtifactRevisionRoutes(ctx: {
@@ -428,8 +442,8 @@ export function registerArtifactRevisionRoutes(ctx: {
             res.end()
             return
           }
-          if (req.method !== 'GET') {
-            res.writeHead(405, { allow: 'GET', 'cache-control': 'no-store' })
+          if (req.method !== 'GET' && req.method !== 'DELETE') {
+            res.writeHead(405, { allow: 'GET, DELETE', 'cache-control': 'no-store' })
             res.end()
             return
           }
@@ -438,6 +452,20 @@ export function registerArtifactRevisionRoutes(ctx: {
           const revisionId = params.get('revisionId')
           if (artifactId === null || !isIdentity(artifactId) || revisionId === null || !isIdentity(revisionId)) {
             sendError(res, 400, 'invalid_input', 'artifactId and revisionId must be artifact identities.')
+            return
+          }
+          if (req.method === 'DELETE') {
+            const outcome = store.remove({ artifactId, revisionId })
+            if (outcome === 'missing') {
+              sendError(res, 404, 'revision_missing', 'That revision is not recorded for this artifact (the initial render is not deletable).')
+              return
+            }
+            if (outcome === 'referenced') {
+              sendError(res, 409, 'revision_referenced', 'That revision is still the base of another recorded revision; delete the newer revision first.')
+              return
+            }
+            try { programs?.remove?.(artifactId, revisionId) } catch { /* orphan program is harmless; LRU prunes it */ }
+            sendJson(res, 200, { ok: true })
             return
           }
           sendJson(res, 200, store.status({ artifactId, revisionId }))

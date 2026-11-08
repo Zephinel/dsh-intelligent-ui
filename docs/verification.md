@@ -526,3 +526,20 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - 结论：真实 cordis 下 `styleSwitch` 能力位/projection view 正常（picker 可见即证明 view schema 通过），结构路由真实 POST 成功；B2 零模型路径在真实 GUI 通过。
 - 未覆盖：强制色彩真机（仅 CDP 模拟）、真实旧/新 Host/Client 混合部署、真实模型（B2 本来零模型）。
 - 注：本次验收在上海两日游会话追加了一条本地样式修订（Revision 3，内容不变，仅用于验证）。
+
+## 2026-11-08 — 修订历史删除（真删 Host 记录 + 本地卡清理）
+
+- **UI**：历史弹窗每条已记录修订新增「删除」，先内联确认再执行；初始渲染（Revision 1）不提供删除；当前/最新修订允许删除，删后最新回退到上一条。删除失败按 `409 revision_referenced` / `404 revision_missing` 显示明确原因。
+- **Host**：`DELETE /api/intelligent-ui/artifact-revisions?artifactId=&revisionId=`，与 GET 探针共用认证、`effect` 和 disposer；`ArtifactRevisionStore.remove()` 拒绝作为其他记录 `baseRevisionId` 的修订，并原子重写注册表；保留的 program 由 `remove()` 清理（失败只留下 LRU 可淘汰的孤儿，不影响删除结果）。不新增 durable 字段或 `ArtifactHistorySource` 枚举值。
+- **客户端**：删除成功后移除匹配的 `localStorage` 本地修订卡并刷新历史；已渲染的模型消息卡不删除（见限制）。
+- **边界**：不可恢复；被其他修订引用时须先删更新的；删除当前修订后其余卡片的 revision 徽标可能停留在旧值，后续权威操作会刷新；删除 base 会让仍在引用的草稿/分支在发送时收到 `base_missing`；删除操作不撤销 `struct_` 操作的幂等 ledger 记录（同一 operationId 不应重放）。
+- **验证**：Host 32 条（新增删除成功/被引用/初始/程序清理）、Client `local-revisions` 7 条（新增本地卡删除与 API 状态映射）、浏览器 `artifact-edit` **498** 条检查（新增确认→删除→本地卡消失流程）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **621/621** = Host **301** + Client **299** + packaging **21**；build host **837.4 kB**、client **4.03 MB**（js 3.82 / css 221.4）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **498 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,049,571** 字节，解包 **12,896,674** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

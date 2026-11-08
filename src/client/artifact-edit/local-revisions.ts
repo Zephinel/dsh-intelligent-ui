@@ -12,6 +12,7 @@ import {
   ARTIFACT_HISTORY_PROGRAM_ROUTE_PATH,
   ARTIFACT_HISTORY_ROUTE_PATH,
   ARTIFACT_RESTORE_ROUTE_PATH,
+  ARTIFACT_REVISION_ROUTE_PATH,
   MAX_ARTIFACT_PROGRAM_CHARS,
   type ArtifactHistoryProgramResponse,
   type ArtifactHistoryResponse,
@@ -130,6 +131,17 @@ export function addLocalRevision(sessionId: string, revision: LocalArtifactRevis
   publish()
 }
 
+/** Remove one local revision card by id (history deletion). */
+export function removeLocalRevision(sessionId: string, revisionId: string): void {
+  load(sessionId)
+  const existing = store.get(sessionId) ?? []
+  const next = existing.filter(revision => revision.revisionId !== revisionId)
+  if (next.length === existing.length) return
+  store.set(sessionId, next)
+  persist(sessionId)
+  publish()
+}
+
 /** Remove every local revision card of one chat session. */
 export function clearLocalRevisions(sessionId: string): void {
   load(sessionId)
@@ -214,6 +226,27 @@ export async function restoreRevision(input: {
   }
 }
 
+/**
+ * Delete one recorded revision from the Host registry.
+ * @param artifactId - root artifact identity.
+ * @param revisionId - recorded revision to delete (the initial render is not recorded).
+ * @returns the mapped outcome; only `deleted` changed Host state.
+ */
+export async function deleteArtifactRevision(artifactId: string, revisionId: string): Promise<'deleted' | 'referenced' | 'missing' | 'failed'> {
+  try {
+    const query = `artifactId=${encodeURIComponent(artifactId)}&revisionId=${encodeURIComponent(revisionId)}`
+    const response = await fetch(`${ARTIFACT_REVISION_ROUTE_PATH}?${query}`, { method: 'DELETE' })
+    if (response.ok) return 'deleted'
+    const value: unknown = await response.json().catch(() => undefined)
+    const code = value !== null && typeof value === 'object' ? (value as { error?: { code?: unknown } }).error?.code : undefined
+    if (code === 'revision_referenced') return 'referenced'
+    if (code === 'revision_missing') return 'missing'
+    return 'failed'
+  } catch {
+    return 'failed'
+  }
+}
+
 /** Validate one untrusted history revision entry. */
 function isHistoryRevision(value: unknown): value is ArtifactHistoryRevision {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
@@ -257,7 +290,7 @@ export function isStyleSwitchRevision(revision: Pick<ArtifactHistoryRevision, 's
  */
 export async function fetchArtifactHistory(artifactId: string): Promise<ArtifactHistoryResponse | undefined> {
   try {
-    const response = await fetch(`${ARTIFACT_HISTORY_ROUTE_PATH}?artifactId=${encodeURIComponent(artifactId)}`)
+    const response = await fetch(`${ARTIFACT_HISTORY_ROUTE_PATH}?artifactId=${encodeURIComponent(artifactId)}`, { cache: 'no-store' })
     if (!response.ok) return undefined
     const value: unknown = await response.json()
     if (value === null || typeof value !== 'object') return undefined

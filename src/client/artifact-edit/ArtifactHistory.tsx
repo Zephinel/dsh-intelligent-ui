@@ -12,7 +12,7 @@ import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision, ArtifactHistorySource } from '../../shared/artifact-edit.ts'
 import type { LocalArtifactRevision } from './local-revisions.ts'
 import { ensureArtifactBase, invalidateArtifactBase } from './artifact-base.ts'
-import { fetchArtifactHistory, fetchArtifactHistoryProgram, isStyleSwitchRevision, restoreRevision } from './local-revisions.ts'
+import { deleteArtifactRevision, fetchArtifactHistory, fetchArtifactHistoryProgram, isStyleSwitchRevision, restoreRevision } from './local-revisions.ts'
 import type { Translate } from '../../shared/locales.ts'
 
 /** Title lookup for edited block ids (display id -> known block). */
@@ -31,6 +31,8 @@ export interface ArtifactHistoryProps {
   readonly onClose: () => void
   /** Called after a successful restore with the restored local revision meta. */
   readonly onRestored: (revision: LocalArtifactRevision) => void
+  /** Called after one recorded revision is deleted (removes its local card). */
+  readonly onDeleted: (revisionId: string) => void
 }
 
 /** Load state of the history request. */
@@ -65,12 +67,17 @@ function formatHistoryTime(createdAt: number): string {
 }
 
 /** One revision row's metadata (revision, current, source, blocks). */
-function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
+function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
   readonly t: Translate
   readonly revision: ArtifactHistoryRevision
   readonly blocks: ArtifactHistoryBlocks
   readonly restoring: boolean
+  readonly deleting: boolean
+  readonly confirmingDelete: boolean
   readonly onRestore: () => void
+  readonly onAskDelete: () => void
+  readonly onCancelDelete: () => void
+  readonly onConfirmDelete: () => void
 }): ReactElement {
   const edited = revision.editedBlockIds ?? []
   const layoutLabel = revision.style === 'article'
@@ -130,6 +137,25 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
           </button>
         </div>
       ) : null}
+      {revision.source === 'initial' ? null : (
+        <div className="dsh-iui-history-actions dsh-iui-history-delete-actions">
+          {confirmingDelete ? (
+            <>
+              <span className="dsh-iui-history-delete-warning" data-dsh-iui-history-delete-warning>{t('edit.historyDeleteWarning')}</span>
+              <button type="button" className="dsh-iui-history-restore" data-dsh-iui-history-delete-cancel onClick={onCancelDelete}>
+                {t('edit.historyDeleteCancel')}
+              </button>
+              <button type="button" className="dsh-iui-history-restore is-danger" data-dsh-iui-history-delete-confirm disabled={deleting} onClick={onConfirmDelete}>
+                {deleting ? t('edit.historyLoading') : t('edit.historyDeleteConfirm')}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="dsh-iui-history-restore is-danger" data-dsh-iui-history-delete disabled={deleting || restoring} onClick={onAskDelete}>
+              {t('edit.historyDelete')}
+            </button>
+          )}
+        </div>
+      )}
     </li>
   )
 }
@@ -139,11 +165,14 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
  * @param props - locale, artifact identity, current blocks and close/restore callbacks.
  * @returns the portaled dialog.
  */
-export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blocks, onClose, onRestored }: ArtifactHistoryProps): ReactElement {
+export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blocks, onClose, onRestored, onDeleted }: ArtifactHistoryProps): ReactElement {
   const [status, setStatus] = useState<HistoryStatus>('loading')
   const [history, setHistory] = useState<ArtifactHistoryResponse | undefined>(undefined)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState(false)
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<'referenced' | 'missing' | 'failed' | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -204,6 +233,18 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
     setReloadKey(key => key + 1)
   }
 
+  const remove = async (revision: ArtifactHistoryRevision): Promise<void> => {
+    if (deletingId !== null || restoringId !== null) return
+    setDeleteError(null)
+    setDeletingId(revision.revisionId)
+    const outcome = await deleteArtifactRevision(artifactId, revision.revisionId)
+    setDeletingId(null)
+    if (outcome !== 'deleted') { setDeleteError(outcome); return }
+    setConfirmingDeleteId(null)
+    onDeleted(revision.revisionId)
+    setReloadKey(key => key + 1)
+  }
+
   const revisions = history?.revisions ?? []
   const artifactTitle = revisions.find(revision => revision.title !== undefined && revision.title.trim() !== '')?.title?.trim()
   const current = revisions.find(revision => revision.current)?.revision
@@ -244,6 +285,11 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
         {status === 'error' ? <p className="dsh-iui-history-status is-error" data-dsh-iui-history-error role="alert">{t('edit.historyLoadFailed')}</p> : null}
         {status === 'ready' && revisions.length === 0 ? <p className="dsh-iui-history-status" data-dsh-iui-history-empty>{t('edit.historyEmpty')}</p> : null}
         {restoreError ? <p className="dsh-iui-history-status is-error" data-dsh-iui-history-restore-error role="alert">{t('edit.restoreFailed')}</p> : null}
+        {deleteError === null ? null : (
+          <p className="dsh-iui-history-status is-error" data-dsh-iui-history-delete-error role="alert">
+            {t(deleteError === 'referenced' ? 'edit.historyDeleteReferenced' : deleteError === 'missing' ? 'edit.historyDeleteMissing' : 'edit.historyDeleteFailed')}
+          </p>
+        )}
         {status === 'ready' && revisions.length > 0 ? (
           <ul className="dsh-iui-history-list" data-dsh-iui-history-list>
             {revisions.map(revision => (
@@ -253,7 +299,12 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
                 revision={revision}
                 blocks={blocks}
                 restoring={restoringId === revision.revisionId}
+                deleting={deletingId === revision.revisionId}
+                confirmingDelete={confirmingDeleteId === revision.revisionId}
                 onRestore={() => { void restore(revision) }}
+                onAskDelete={() => { setDeleteError(null); setConfirmingDeleteId(revision.revisionId) }}
+                onCancelDelete={() => { setConfirmingDeleteId(null) }}
+                onConfirmDelete={() => { void remove(revision) }}
               />
             ))}
           </ul>

@@ -9,9 +9,11 @@ import {
   MAX_LOCAL_REVISIONS,
   addLocalRevision,
   clearLocalRevisions,
+  deleteArtifactRevision,
   isStyleSwitchRevision,
   localRevisionProgram,
   localRevisionsFor,
+  removeLocalRevision,
   restoreRevision,
 } from '../../src/client/artifact-edit/local-revisions.ts'
 
@@ -55,6 +57,33 @@ test('a local revision converts to an editable, exportable card program', () => 
   assert.equal(program.revision, 4)
   assert.equal(program.running, false)
   assert.equal(program.style, 'card')
+})
+
+test('removeLocalRevision deletes one local card only', () => {
+  clearLocalRevisions('chat-remove')
+  addLocalRevision('chat-remove', revision('restore_a', 2))
+  addLocalRevision('chat-remove', revision('restore_b', 3))
+  removeLocalRevision('chat-remove', 'restore_a')
+  assert.deepEqual(localRevisionsFor('chat-remove').map(item => item.revisionId), ['restore_b'])
+  removeLocalRevision('chat-remove', 'missing')
+  assert.equal(localRevisionsFor('chat-remove').length, 1)
+})
+
+test('deleteArtifactRevision sends DELETE and maps the host outcome', async () => {
+  const requests = []
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), method: init.method })
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  }
+  assert.equal(await deleteArtifactRevision('call_1', 'struct_abcdef0123456789'), 'deleted')
+  assert.match(requests[0].url, /artifact-revisions\?artifactId=call_1&revisionId=struct_abcdef0123456789/)
+  assert.equal(requests[0].method, 'DELETE')
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 'revision_referenced' } }), { status: 409 })
+  assert.equal(await deleteArtifactRevision('call_1', 'call_2'), 'referenced')
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 'revision_missing' } }), { status: 404 })
+  assert.equal(await deleteArtifactRevision('call_1', 'call_3'), 'missing')
+  globalThis.fetch = async () => new Response('nope', { status: 500 })
+  assert.equal(await deleteArtifactRevision('call_1', 'call_4'), 'failed')
 })
 
 test('restoreRevision posts the source identity and maps the host revision', async () => {
