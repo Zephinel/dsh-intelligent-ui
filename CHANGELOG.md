@@ -117,6 +117,8 @@ been published yet.
 
 ### Documentation
 
+- Synced the README pair, the shipped Agent Skill (`SKILL.md` and `references/integration.md`) and the docs-maintenance references for the published-vs-main release state, current revision-deletion semantics, style/save guidance, the ~10K prompt size, and the current test/browser counts.
+
 - Synced the README pair, architecture pair, development pair, Agent Skill, browser-suite README and the M3 design/roadmap docs with block-fragment editing, live target-order preview, edit robustness, multi-card parallel editing, partial-failure reconciliation, branch editing, zero-model local restore, draft persistence/cross-tab soft leases, temporary-style content editing, and nested block content editing; the M3 plan marks M3 complete with dated verification records, and the M4 plan records M4-0–M4-5 complete, B2-5 complete (structure diff preview + strict unselected-block protection) and B2-6 complete (partial runtime-state preservation) and B1-5 complete (edit-canvas a11y), with the remaining B2-8/9/10 real-GUI/visual work and release next.
 
 ## [0.5.0] - 2026-10-25

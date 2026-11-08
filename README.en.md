@@ -20,7 +20,7 @@ The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.5.0`** (`latest`). Custom styles, on-demand generation, free layouts and template file import/export, plus the renderer-contract, Host-validation and export-semantics fixes, are all included in 0.5.0.
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.5.0`** (`latest`). Custom styles, on-demand generation, free layouts and template file import/export, plus the renderer-contract, Host-validation and export-semantics fixes, are all included in 0.5.0; the local main branch (not yet pushed) additionally carries unreleased B1/B2 style editing and revision-history deletion, which npm 0.5.0 does not include.
 
 [Quick start](#quick-start) · [Getting the code](#getting-the-code) · [Build, test and deploy](#build-test-and-deploy)
 
@@ -57,7 +57,7 @@ A rendered page stays editable.
 - Click **Edit** in the card header to open the canvas; root blocks show a soft orbit glow.
 - Each row's **More** menu offers Locate/Edit/Duplicate/Move/Delete; Delete confirms inside the menu.
 - Block requests, drag/keyboard reordering, nested editing, Divider/Spacer quick adjust and structure previews all happen in the left panel; the Host records a revision after sending.
-- Revision history (the header history icon or the **Revision N** badge) lists each artifact's revisions and can delete recorded ones behind an inline confirmation; the initial render cannot be deleted, and a revision still used as another revision's base must have its newer revision deleted first.
+- Revision history (the header history icon or the **Revision N** badge) lists each artifact's revisions and can delete recorded ones behind an inline confirmation; the initial render cannot be deleted, the revision rendered by the current card cannot be deleted, and a revision still used as another revision's base must have its newer revision deleted first; deleting another card's latest revision may leave that card stale.
 - The **Style** section at the top of the panel (expand it with **Change style**) does two things: **Switch style** selects and previews a built-in Card/Article or saved template; confirm with **Apply style** (zero model, records a new revision immediately, changing only style identity and theme, not content; Article needs a page with contents and sections and is disabled otherwise), while **Or describe it (model-applied)** (max 2000 chars) asks the model to restyle the page (the Host enforces the layout and only warns about content changes) and records a new temporary-style revision. Temporary results can be restyled here too. Cards on a new Host that are editable no longer show the footer Adjust style button (old Hosts or non-editable cards keep that fallback).
 - See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
 
