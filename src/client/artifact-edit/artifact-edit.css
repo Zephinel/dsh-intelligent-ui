@@ -1032,6 +1032,10 @@
   /* A color chip, not a round control: square corners let both theme colors
      fill the whole tile instead of leaving transparent clipped corners. */
   border-radius: 0;
+  /* The gradient's default origin is the padding box; on an 18px chip the 1px
+     border then frames an unpainted 1px seam at every edge/corner. */
+  background-origin: border-box;
+  background-clip: border-box;
   background: linear-gradient(
     135deg,
     var(--swatch-canvas, var(--dsw-alias-bg-layer-2)) 55%,
