@@ -212,7 +212,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - **请求契约**：既有认证 struct 路由 `POST /api/intelligent-ui/artifact-structure` 增加请求级 `targetStyle`（判别联合：`{kind:'builtin', layout:'card'|'article'}` 或 `{kind:'template', styleId:'cs_…'}`）与 `sessionStyleScope`（session 模板的解析作用域，选择器而非鉴权）。单意图规则：带 `targetStyle` 时 `operations` 必须为空（`style_with_operations`）、不支持 `preview`（`preview_not_supported`）；不带 target 时保持原有非空 operations 语义。目标只允许 durable 身份——内置布局或可见的已保存模板；不接收客户端快照/directives/theme，内置 `free` 直接拒绝（free 只能经已保存 free 模板）。
 - **Host 执行**：目标身份由 Host 解析（builtin → 布局；template → `styles.resolve(styleId, sessionStyleScope)`，不可见/已删除 → 404 `style_missing`）；Article 目标复用与 render_ui 完全一致的 Toc/Section + anchor 判定（`src/host/program-validation.ts::describeArticleLayoutProblem`，判定逻辑从 index.ts 原样抽取）→ 400 `article_unavailable`；记录修订时，对已有修订记录（revision ≥ 2）的 base，要求客户端声明的 `style`/`styleId` 与权威记录一致（否则 409 `base_style_mismatch` 且不落盘；这些 struct 请求都校验，修复此前对已记录 base 直接信任 body 身份的问题）；初始 revision 1 没有存储记录，身份仍来自请求/登记；若 base 无临时样式且目标与 base 身份相同 → 400 `no_change`；临时样式 base + 任意 durable 目标总是变化（快照被丢弃）。成功后 program 与 base **逐字节相同**，`style`/`styleId` 来自解析后的目标，不写 `temporaryStyle`/`editedBlockIds`，沿用 `struct_` revision id、`latest+1`、branch、幂等 ledger、program registry 与响应结构。
 - **历史/兼容**：不新增 durable revision 字段或 `ArtifactHistorySource` 值。`struct_` 修订且没有 `editedBlockIds` 即确定性样式切换信号：Host `historySource` 仍为 `structure`（旧客户端按"结构操作"显示并可正常 restore/branch），新客户端按该约定显示"样式切换"标签。旧 Host + 新客户端：能力位缺失 → 隐藏 picker；新 Host + 旧客户端：无变化可见。
-- **客户端/UI**：编辑画布样式区新增「样式切换」单意图 radio picker（内置 Card/Article；已保存模板带色板与布局；Article 静态提示需 Toc/Section），悬停/聚焦即本地预览主题与 Article 外壳，显式「应用样式」才发请求（展开时的程序化聚焦不触发预览）；与 B1 的"描述式调整"分开展示（一个零模型立即应用，一个进入发送队列）。成功记录本地样式修订卡（`kind:'style'`）、关闭编辑器、不产生 composer chip；失败按 `style_missing`/`article_unavailable`/`base_not_latest`/`base_style_mismatch`/`no_change` 映射内联文案；脏草稿/忙碌阻止应用；`style_missing` 后刷新模板目录。
+- **客户端/UI**：编辑画布样式区新增「样式切换」单意图 radio picker，目标按「内置样式」与「已保存样式」两组展示并以分割线区分（同一 radiogroup，单选互斥；内置 Card/Article，已保存模板带色板与布局；Article 静态提示需 Toc/Section），悬停/聚焦即本地预览主题与 Article 外壳，显式「应用样式」才发请求（展开时的程序化聚焦不触发预览）；与 B1 的"描述式调整"分开展示（一个零模型立即应用，一个进入发送队列）。成功记录本地样式修订卡（`kind:'style'`）、关闭编辑器、不产生 composer chip；失败按 `style_missing`/`article_unavailable`/`base_not_latest`/`base_style_mismatch`/`no_change` 映射内联文案；脏草稿/忙碌阻止应用；`style_missing` 后刷新模板目录。
 - **限制**：这是"身份 + 外壳 + 主题"的切换，模板 `directives` 不会重排既有内容（需要模型重绘）；确定性样式修订是本地修订卡，不进入助理消息、transcript replay、图片/交互页面导出或其他设备（与结构/属性修订一致）；H4 已修——pending block edit 使用 artifact 记录样式/模板，`render_ui` 的 order-only/global-only 编辑不再按会话当前样式拒绝；`sessionStyleScope` 只是模板可见性作用域，不构成授权边界。
 - **验证**：见对应 host/client/browser 测试与最终门禁记录（contract 单测、struct 路由矩阵与 mutation 检查、客户端 POST/dirty/本地修订/历史标签、E2E 场景 40）。
 
@@ -272,7 +272,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 - **列表↔画布映射、编辑聚焦与 pending 标记（追加）**：编排/嵌套/请求行 hover 与画布区块双向联动（中性蓝 2px 细框 + 4% 淡底，未选中/未编辑时显示）；根层常显页面顺序索引（嵌套块仅在 hover 时显示）；有 pending 请求的行仍保留页面序号，并在标题后显示带 tooltip 的请求序号 badge；行尾新增「更多」菜单（定位/编辑/复制/移动/删除；定位仍复用 900ms 脉冲），保留点击行主体定位。打开任一区块编辑器时，其余区块被 scrim 压暗，当前区块保留编辑框；Save/Cancel 关闭后 scrim 消失。Save 不再保留大选中框：改为「圆点 + 请求序号」的低调 pending 标记，pending 根层区块的 orbit glow 降速（5.2s）变淡（0.3）；`selection` 数据不变，发送时照常提交。确定性 Apply/结构操作仍按既定行为记录修订并退出编辑（1A 不变）。
 - **状态一致性**：未发送拦截统一用 `hasArtifactEditContent`（包含嵌套排序）；异步结构/属性请求失败只回写当前 session（不会复活已关闭/已提交的编辑器）；嵌套 kind 复用共享映射；快捷面板打开即聚焦、`aria-busy`、`edit.propsUnit`、stale-base/no-change/busy 文案齐全。
 - **限制与预算**：快捷调整只支持 Divider/Spacer 的上述属性；属性修订卡与其他本地修订一样只在 localStorage/触发 Turn 渲染，不参与导出；自定义 CSS 颜色由渲染器 `isSafeCss` 约束，Host 只做保守格式校验；根层 wrapper 已无盒子，依赖 `.dsh-iui-block` 盒子的旧样式/hook 不再存在（测试改为 overlay hit/frame 选择器）。CST 节点预算为 200（此前 60）：长文章页面（如 105 节点的 Solid 2.0 导览）现在可以找到嵌套 Spacer 并使用快捷调整；66 节点 fixture 在浏览器套件中回归。
-- **验证**：Node **621/621**；浏览器 9/9；`artifact-edit` **498 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 221.5 kB；standalone 3.33 MB + 514.4 kB；pack 65 files 6.04 MB / 12.88 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
+- **验证**：Node **621/621**；浏览器 9/9；`artifact-edit` **498 checks**（布局 parity、嵌套 preview、快捷面板、自绘下拉/滑块、滑块即时预览、popover 固定/单位切换不位移、大页面嵌套、确定性请求体、属性修订卡、dirty 拦截、动态回退、apply 禁用/焦点），`nested-edit-renderer` 75；CSS 客户端 221.7 kB；standalone 3.33 MB + 514.4 kB；pack 65 files 6.04 MB / 12.88 MB；harness 截图 `.tmp-report/harness-quick-props.png`、`.tmp-report/harness-pending-block.png`。
 
 ### Artifact 权威状态生命周期与基础登记（2026-11-07）
 
@@ -440,7 +440,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 编排行右侧是一个正常的 24px「更多」触发器 `[data-dsh-iui-edit-row-menu]`，不再有覆盖文字的动作组；它打开 portal 菜单，包含定位、编辑、复制、移动到…、删除五项（`data-dsh-iui-edit-locate` / `-structure-edit` / `-structure-duplicate` / `-move` / `-structure-delete`），菜单项有 role=menuitem、方向键/Home/End、Escape、外部点击和焦点返回；触发器在正常 flow 中，标题不会与按钮重叠。
 - 结构性删除是菜单内的持久两态确认：选择「删除区块」后，同一个菜单切换为 `data-dsh-iui-edit-structure-confirm` 的安静 Cancel 与 danger-tinted Delete 两个按钮（该步骤用 dialog 语义），无行红底/大红 pill；确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消/离开时回到行触发器；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时的轨道光晕也留出了可见余量。
-- 验证：Node **621/621**（Host 301、Client 299、packaging 21）；浏览器 9/9；`artifact-edit` **498 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node **621/621**（Host 301、Client 299、packaging 21）；浏览器 9/9；`artifact-edit` **498 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.7）；pack 65 files 6.04 / 12.88 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -449,7 +449,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75；构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75；构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.7）；pack 65 files 6.04 / 12.88 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 

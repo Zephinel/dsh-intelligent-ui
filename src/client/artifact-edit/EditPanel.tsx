@@ -1548,7 +1548,14 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                           : option.layout === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
                         return (
                           <div className="dsh-iui-edit-style-target-group" key={`${option.target.kind}:${option.target.kind === 'template' ? option.target.styleId : option.layout}`}>
-                            {firstSaved ? <span className="dsh-iui-edit-style-saved-group" data-dsh-iui-edit-style-saved-group>{t('edit.styleSavedGroup')}</span> : null}
+                            {index === 0 && !saved ? (
+                              <span className="dsh-iui-edit-style-group-label" data-dsh-iui-edit-style-builtin-group>{t('edit.styleBuiltinGroup')}</span>
+                            ) : null}
+                            {firstSaved ? (
+                              <div className="dsh-iui-edit-style-group-separator" role="presentation">
+                                <span className="dsh-iui-edit-style-group-label" data-dsh-iui-edit-style-saved-group>{t('edit.styleSavedGroup')}</span>
+                              </div>
+                            ) : null}
                             <label
                               className={`dsh-iui-edit-style-target${checked ? ' is-checked' : ''}${current ? ' is-current' : ''}`}
                               onPointerEnter={() => { previewSwitchOption(option) }}
