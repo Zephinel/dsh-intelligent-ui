@@ -1029,9 +1029,9 @@
   width: 18px;
   height: 18px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
-  /* The shell theme's superellipse would render a squircle; swatches are round. */
-  corner-shape: round;
+  /* A color chip, not a round control: square corners let both theme colors
+     fill the whole tile instead of leaving transparent clipped corners. */
+  border-radius: 0;
   background: linear-gradient(
     135deg,
     var(--swatch-canvas, var(--dsw-alias-bg-layer-2)) 55%,
@@ -1039,10 +1039,10 @@
   );
 }
 
-/* The swatch is a color preview, not an icon: circular so the diagonal
-   canvas/accent split never meets a clipped rounded-square corner. */
+/* Layout no longer changes the color-chip shape; the square keeps all four
+   corners filled by the canvas/accent gradient. */
 .dsh-iui-edit-style-swatch[data-layout="article"] {
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .dsh-iui-edit-style-target-name {

@@ -437,7 +437,7 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 - Structural delete is a persistent two-step flow inside the same menu: choosing Delete switches the menu to a dialog-semantics `data-dsh-iui-edit-structure-confirm` panel with quiet Cancel and danger-tinted Delete buttons, with no row tint or large pill. The confirmation only ends on Cancel, Delete, outside pointerdown, Escape, another structure action, preview opening, busy or unmount. Focus starts on Cancel and returns to the row trigger on cancel/leave; the live region announces once.
 - The input focus orbit applies only to text inputs, textareas and contenteditable fields; native selects and the quick-adjust dropdown triggers keep their normal menu focus treatment.
 - The block instruction popover now computes a preferred top and clamps it into `[12, viewportHeight - 12 - measuredHeight]` (left was already clamped), so anchors scrolled out of view can no longer place the textarea offscreen. The popover scroll box reserves 4px of bottom padding inside its `overflow-y: auto` padding box, so the focused textarea focus cue also keeps visible room.
-- Verification: 621/621 Node tests (Host 301, Client 299, packaging 21), 9/9 browser suites, `artifact-edit` 498 checks (menu keyboard/focus/Tab/forced-colors, input orbit, rounded/inset geometry, enter/exit animation names, `data-closing`, persistent delete confirmation, Cancel/Delete preview, popover clamps and the real 1180px shell fit), `nested-edit-renderer` 75, nested CSS contract 28/28 + 5/5. Build: host 837.4 kB, client 4.04 MB (js 3.82/CSS 221.5), pack 65 files 6.04/12.88 MB.
+- Verification: 621/621 Node tests (Host 301, Client 299, packaging 21), 9/9 browser suites, `artifact-edit` 498 checks (menu keyboard/focus/Tab/forced-colors, input orbit, rounded/inset geometry, enter/exit animation names, `data-closing`, persistent delete confirmation, Cancel/Delete preview, popover clamps and the real 1180px shell fit), `nested-edit-renderer` 75, nested CSS contract 28/28 + 5/5. Build: host 837.4 kB, client 4.03 MB (js 3.82/CSS 221.5), pack 65 files 6.04/12.88 MB.
 - Deployment: client-plugin changes require restarting `dsh-web`; a page refresh is not enough.
 
 ### Icon system: one Remix Icon family
@@ -446,7 +446,7 @@ The skill files also ship with the package as an ordinary directory (`skills/`),
 - The previous hand-drawn stroke set (16px-viewBox pencil, trash, duplicate, move, drag grip, refresh, close and type glyphs, plus the `✎` and `✦` characters) is gone, and the DSH primitives sparkle/chevron icons are no longer used for icons.
 - **Exception:** `Icon("…")` inside generated OpenUI programs is still resolved lazily by `src/lib/components/glyph.tsx` through `lucide-react/dynamic.mjs`, because those names are program data written by the model (existing programs use lucide names) rather than plugin chrome; switching them would break older programs.
 - Licensing: Remix Icon License v1.0 (see `licenses/remix-icon-LICENSE` and `NOTICE`).
-- Verification: 621/621 Node tests, 9/9 browser suites, `artifact-edit` 498 checks, `nested-edit-renderer` 75; build host 837.4 kB, client 4.04 MB (js 3.82 / CSS 221.5); pack 65 files 6.04 / 12.88 MB.
+- Verification: 621/621 Node tests, 9/9 browser suites, `artifact-edit` 498 checks, `nested-edit-renderer` 75; build host 837.4 kB, client 4.03 MB (js 3.82 / CSS 221.5); pack 65 files 6.04 / 12.88 MB.
 
 ### Per-artifact revision history (user feedback)
 

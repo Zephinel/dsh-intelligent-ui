@@ -46,7 +46,7 @@ This is a delta documentation/screenshot sync of an uncommitted worktree, not re
 | --- | --- |
 | `npm run check` | PASS; 179/179 Node tests = Host 77 + Client 81 + packaging 21; 0 failed, 0 skipped |
 | Renderer (inside check) | Parse 41/41, SSR 41/41 (existing `/tmp/oiui/src/app/gallery` fixtures); contrast OK; i18n 4 programs (zh/en fallback); typography 22/22 actually executed in Chrome |
-| `npm run pack:check` | PASS; 43 files; tarball **4,036,061 bytes** (4.04 MB), unpacked **10,216,623 bytes** (10.22 MB) |
+| `npm run pack:check` | PASS; 43 files; tarball **4,036,061 bytes** (4.03 MB), unpacked **10,216,623 bytes** (10.22 MB) |
 | Build artifacts | `lib/index.js` 637,813 bytes; `lib/client.js` 3,763,748 bytes; `lib/standalone.js` 3,426,892 bytes; `lib/standalone.css` 511,833 bytes |
 | `npm run test:browser` | PASS, 7/7 suites: on-demand (85 assertions), style-panel, style-theme, export-image, standalone-page, article-layout, settings-picker; none skipped |
 | `node --test test/packaging/*.test.mjs` | PASS, 21/21; manifest 9 + references 6 + guardrails 6; all 13 assets referenced by both READMEs, locale meta key parity |
@@ -449,7 +449,7 @@ This record covers the implementation and gate for B2 in-editor deterministic st
 | `npm run check` | PASS; `tsc --noEmit` + build; **603/603** Node tests = Host **292** + Client **290** + packaging **21**; renderer parse/render **42/42** each, contrast OK, i18n **4**, typography **22/22**, media-row **17/17**, pressable **9/9**, CSS contract **50/50**, prop contract **63/63**, nested-css **28/28 direct + 5/5 scoped** |
 | `npm run test:browser` | PASS; **9/9** suites; `artifact-edit` **497 checks** (scenario 40 plus review-fix assertions), `nested-edit-renderer` **75**, on-demand **114**, settings **101** assertions, etc. |
 | `npm run pack:check` | PASS; **65** files, **6,036,654** bytes packed, **12,874,349** bytes unpacked |
-| Build | host **835.9 kB**, client **4.04 MB** (js 3.81 / CSS 220.0), standalone 3.33 MB + 514.4 kB |
+| Build | host **835.9 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 MB + 514.4 kB |
 | Docs/structure checks | bilingual README and five doc pairs keep matching heading levels; local links/anchors, screenshot references and changelog links pass; `git diff --check` PASS |
 
 ### Coverage and gaps
@@ -472,7 +472,7 @@ Follow-up record after a second independent read-only review (one code/security,
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **603/603** Node tests = Host **292** + Client **290** + packaging **21**; renderer/contracts green; build host **835.9 kB**, client **4.04 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
+| `npm run check` | PASS; **603/603** Node tests = Host **292** + Client **290** + packaging **21**; renderer/contracts green; build host **835.9 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75, on-demand 114, settings 101 |
 | `npm run pack:check` | PASS; **65** files, **6,036,654** bytes packed, **12,874,349** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
@@ -493,7 +493,7 @@ Record of the fixes after the third independent read-only review (code/security 
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; renderer/contracts green; build host **836.7 kB**, client **4.04 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
+| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; renderer/contracts green; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75, on-demand 114, settings 101 |
 | `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
@@ -514,7 +514,7 @@ The fourth review found that the route-derived `styleSwitch` returned false sync
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.04 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
+| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75, on-demand 114, settings 101 |
 | `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
@@ -532,7 +532,7 @@ Four structural guards added after the review loop:
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.04 MB** (js 3.81 / CSS 220.0); includes capture-token and doc-facts checks |
+| `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0); includes capture-token and doc-facts checks |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
@@ -559,7 +559,7 @@ Four structural guards added after the review loop:
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **621/621** Node tests = Host **301** + Client **299** + packaging **21**; build host **837.4 kB**, client **4.04 MB** (js 3.82 / CSS 221.5), standalone 3.33 + 514.4 |
+| `npm run check` | PASS; **621/621** Node tests = Host **301** + Client **299** + packaging **21**; build host **837.4 kB**, client **4.03 MB** (js 3.82 / CSS 221.5), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **498 checks**, `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,051,078** bytes packed, **12,897,841** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,049,866** bytes packed, **12,896,440** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
