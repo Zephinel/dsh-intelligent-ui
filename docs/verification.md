@@ -642,5 +642,5 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | --- | --- |
 | `npm run check` | PASS；Node **628/628** = Host **302** + Client **305** + packaging **21**；build host **837.9 kB**、client **4.04 MB**（js 3.83 / CSS 222.4） |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **519 checks**、`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,502** 字节，解包 **12,886,230** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,830** 字节，解包 **12,887,088** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

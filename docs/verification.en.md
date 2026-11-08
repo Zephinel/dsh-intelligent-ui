@@ -662,5 +662,5 @@ Fixes after the independent read-only review of `852e331..HEAD`:
 | --- | --- |
 | `npm run check` | PASS; **628/628** Node tests = Host **302** + Client **305** + packaging **21**; build host **837.9 kB**, client **4.04 MB** (js 3.83 / CSS 222.4) |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **519 checks**, `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,031,502** bytes packed, **12,886,230** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,031,830** bytes packed, **12,887,088** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
