@@ -536,3 +536,13 @@ Four structural guards added after the review loop:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,042,172** bytes packed, **12,880,636** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-08 — B2 real-GUI acceptance after restart
+
+- Source gate for this tree: Node **617/617** = Host **299** + Client **297** + packaging **21**; `artifact-edit` **497 checks**; build host **836.7 kB**, CSS **220.0** kB; pack **6,042,172** / **12,880,636** bytes.
+
+- dsh-web restarted to pid **15525** (launchd loaded, port 3080 owned by it, unauthenticated root 401, clean startup log); the real GUI was opened with the new URL.
+- In the 上海两日游 session (already carrying the B1 Revision 2): opened the card editor → expanded the style section; the **B2 switch group appeared** (built-in Card/Article; the page is a temporary-style base, so no current row and the temporary note was shown); selecting built-in Card enabled **Apply style**; applying closed the editor with no alert and added a local revision card labelled **"Style revision" / Revision 3**, with unchanged content/layout.
+- Conclusion: the `styleSwitch` capability and projection view are valid under real cordis (the visible picker proves the view schema parsed), and the real structure-route POST succeeded; the B2 zero-model path works in the real GUI.
+- Not covered: real forced-colors hardware, real mixed Host/client deployments, real model (B2 is zero-model by design).
+- Note: this acceptance appended one local style revision (Revision 3, content unchanged) to the 上海两日游 session for verification.

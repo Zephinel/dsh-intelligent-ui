@@ -516,3 +516,13 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,172** 字节，解包 **12,880,636** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — B2 真机验收（重启后，真实 GUI）
+
+- 同树门禁（本记录引用）：Node **617/617** = Host **299** + Client **297** + packaging **21**；`artifact-edit` **497 checks**；build host **836.7 kB**、CSS **220.0** kB；pack **6,042,172** / **12,880,636** 字节。
+
+- dsh-web 重启后 pid **15525**（launchd loaded、3080 归该 pid、未认证根页面 401、启动日志无异常）；用新 URL 打开真实 GUI。
+- 上海两日游会话（已有 B1 产生的 Revision 2）：打开卡片编辑 → 展开样式区，**B2 样式切换组出现**（内置 Card/Article；该页为临时样式 base，无 current 行并显示 temporary 说明）；选择内置 Card 后 **Apply style** 可点；点击应用后编辑器关闭、无 alert，聊天中出现本地修订卡 **“Style revision” / Revision 3**，页面内容与布局保持不变。
+- 结论：真实 cordis 下 `styleSwitch` 能力位/projection view 正常（picker 可见即证明 view schema 通过），结构路由真实 POST 成功；B2 零模型路径在真实 GUI 通过。
+- 未覆盖：强制色彩真机（仅 CDP 模拟）、真实旧/新 Host/Client 混合部署、真实模型（B2 本来零模型）。
+- 注：本次验收在上海两日游会话追加了一条本地样式修订（Revision 3，内容不变，仅用于验证）。
