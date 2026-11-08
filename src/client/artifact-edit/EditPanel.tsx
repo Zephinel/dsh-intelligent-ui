@@ -32,6 +32,8 @@ import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './contracts.ts'
 import type { ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
 import { isCurrentStyleTarget } from './store.ts'
+import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
+import { styleSwitchBlocker as describeStyleSwitchBlocker, styleTargetDisableReason } from './style-targets.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
@@ -872,9 +874,42 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const styleSwitchCurrent = styleSwitchChosen !== undefined && isCurrentStyleTarget(session, styleSwitchChosen, styleSwitchChosenLayout)
   // A pending natural-language style instruction owns the section's send path:
   // disabling Apply up front explains the conflict instead of failing after click.
-  const styleSwitchBlockedByInstruction = styleHasContent
-  const styleSwitchCanApply = styleSwitchChosen !== undefined && !styleSwitchCurrent && session.styleSwitchBusy !== true && !styleSwitchBlockedByInstruction
-  const styleSwitchBlockedId = `${stylePanelId}-switch-blocked`
+  // One predicate shared with the Host: an Article target is disabled before
+  // selection when the current program cannot become an article page.
+  const articleProblem = useMemo(
+    () => styleSwitchAvailable && styleTargets.some(option => option.requiresArticleLayout === true)
+      ? describeArticleLayoutProblem(session.program)
+      : undefined,
+    [session.program, styleSwitchAvailable, styleTargets],
+  )
+  const styleChosenOption = styleSwitchChosen === undefined
+    ? undefined
+    : styleTargets.find(option => sameStyleTarget(option.target, styleSwitchChosen) && option.layout === styleSwitchChosenLayout)
+  const styleChosenDisabled = styleChosenOption === undefined ? undefined : styleTargetDisableReason(styleChosenOption, articleProblem)
+  const styleBlockDirty = styleBlockContent || session.activeDirty === true || session.activeDraft.trim() !== ''
+  const styleBlocker = describeStyleSwitchBlocker({
+    status: session.status,
+    branch: session.branch === true,
+    busy: session.styleSwitchBusy === true,
+    hasTarget: styleSwitchChosen !== undefined,
+    targetDisabled: styleChosenDisabled !== undefined,
+    current: styleSwitchCurrent,
+    dirty: styleBlockDirty,
+    instruction: styleHasContent,
+  })
+  const styleSwitchCanApply = styleSwitchChosen !== undefined && styleBlocker === undefined
+  const styleStatusId = `${stylePanelId}-switch-status`
+  const styleStatusKey = styleBlocker === 'checking' ? 'edit.styleStatusChecking'
+    : styleBlocker === 'stale' ? 'edit.styleStatusStale'
+    : styleBlocker === 'busy' ? 'edit.styleSwitchBusy'
+    : styleBlocker === 'dirty' ? 'edit.styleStatusDirty'
+    : styleBlocker === 'instruction' ? 'edit.styleStatusInstruction'
+    : styleBlocker === 'no_target' ? 'edit.styleStatusNoTarget'
+    : styleBlocker === 'unavailable' ? 'edit.styleStatusUnavailable'
+    : styleBlocker === 'current' ? 'edit.styleStatusCurrent'
+    : session.branch === true ? 'edit.styleStatusBranch'
+    : session.temporaryStyle !== undefined ? 'edit.styleStatusTemporary'
+    : 'edit.styleStatusReady'
   const collapseStyleSection = (): void => {
     onPreviewStyleTarget?.(undefined)
     setStyleOpen(false)
@@ -1543,6 +1578,8 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                         const current = isCurrentStyleTarget(session, option.target, option.layout)
                         const saved = option.target.kind === 'template'
                         const firstSaved = saved && styleTargets.findIndex(candidate => candidate.target.kind === 'template') === index
+                        const disabledReason = styleTargetDisableReason(option, articleProblem)
+                        const reasonId = `${stylePanelId}-target-${index}-reason`
                         const layoutLabel = option.layout === 'card'
                           ? t('edit.historyStyleCard')
                           : option.layout === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
@@ -1557,10 +1594,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               </div>
                             ) : null}
                             <label
-                              className={`dsh-iui-edit-style-target${checked ? ' is-checked' : ''}${current ? ' is-current' : ''}`}
-                              onPointerEnter={() => { previewSwitchOption(option) }}
+                              className={`dsh-iui-edit-style-target${checked ? ' is-checked' : ''}${current ? ' is-current' : ''}${disabledReason === undefined ? '' : ' is-disabled'}`}
+                              onPointerEnter={() => { if (disabledReason === undefined) previewSwitchOption(option) }}
                               onFocus={() => {
-                                if (suppressSwitchPreview.current) return
+                                if (disabledReason !== undefined || suppressSwitchPreview.current) return
                                 previewSwitchOption(option)
                               }}
                               onBlur={previewSelectedSwitch}
@@ -1575,8 +1612,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                                 data-target-style-id={option.target.kind === 'template' ? option.target.styleId : undefined}
                                 data-current={current ? 'true' : undefined}
                                 checked={checked}
-                                aria-describedby={styleSwitchBlockedByInstruction ? styleSwitchBlockedId : undefined}
+                                disabled={disabledReason !== undefined}
+                                aria-describedby={disabledReason === undefined ? undefined : reasonId}
                                 onChange={() => {
+                                  if (disabledReason !== undefined) return
                                   actions.selectStyleTarget(option.target, option.layout)
                                   if (!suppressSwitchPreview.current) previewSwitchOption(option)
                                 }}
@@ -1593,29 +1632,23 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               <span className="dsh-iui-edit-style-target-name">{option.name}</span>
                               <span className="dsh-iui-edit-style-target-meta">{layoutLabel}</span>
                               {current ? <span className="dsh-iui-edit-style-current-badge" data-dsh-iui-edit-style-current-badge>{t('edit.styleSwitchCurrentBadge')}</span> : null}
+                              {disabledReason === undefined ? null : (
+                                <span id={reasonId} className="dsh-iui-edit-style-target-reason" data-dsh-iui-edit-style-target-reason>{t('edit.styleTargetArticle')}</span>
+                              )}
                             </label>
                           </div>
                         )
                       })}
                     </div>
-                    {styleTargets.some(option => option.requiresArticleLayout) ? (
-                      <p className="dsh-iui-edit-style-hint" data-dsh-iui-edit-style-article-hint>{t('edit.styleSwitchArticle')}</p>
-                    ) : null}
-                    {session.temporaryStyle === undefined ? null : (
-                      <p className="dsh-iui-edit-style-note" data-dsh-iui-edit-style-from-temporary>{t('edit.styleFromTemporary')}</p>
-                    )}
-                    <p className="dsh-iui-edit-style-hint" data-dsh-iui-edit-style-switch-note>{t('edit.styleSwitchNote')}</p>
-                    {styleSwitchBlockedByInstruction ? (
-                      <p id={styleSwitchBlockedId} className="dsh-iui-edit-style-hint" role="note" data-dsh-iui-edit-style-switch-blocked>{t('edit.styleSwitchBlockedByInstruction')}</p>
-                    ) : null}
+                    <p id={styleStatusId} className="dsh-iui-edit-style-status" role="status" data-dsh-iui-edit-style-status>{t(styleStatusKey)}</p>
                     <div className="dsh-iui-edit-style-switch-foot">
                       <button
                         type="button"
                         className="dsh-iui-edit-style-apply"
                         data-dsh-iui-edit-style-apply
                         disabled={!styleSwitchCanApply}
-                        aria-describedby={styleSwitchBlockedByInstruction ? styleSwitchBlockedId : undefined}
-                        title={styleSwitchBlockedByInstruction ? t('edit.styleSwitchBlockedByInstruction') : undefined}
+                        aria-describedby={styleStatusId}
+                        title={styleBlocker === undefined ? undefined : t(styleStatusKey)}
                         onClick={() => { onPreviewStyleTarget?.(undefined); actions.applyStyleSwitch() }}
                       >
                         {session.styleSwitchBusy === true ? t('edit.styleSwitchBusy') : t('edit.styleSwitchApply')}

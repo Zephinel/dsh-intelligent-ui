@@ -998,6 +998,33 @@
 .dsh-iui-edit-style-target.is-checked {
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
 }
+.dsh-iui-edit-style-target.is-disabled {
+  cursor: default;
+}
+
+.dsh-iui-edit-style-target.is-disabled:hover {
+  background: transparent;
+}
+
+.dsh-iui-edit-style-target.is-disabled .dsh-iui-edit-style-radio {
+  opacity: 0.45;
+}
+
+.dsh-iui-edit-style-target-reason {
+  flex: none;
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-style-status {
+  margin: 6px 0 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
 
 .dsh-iui-edit-style-radio {
   flex: none;

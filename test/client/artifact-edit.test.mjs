@@ -1704,6 +1704,7 @@ function stubStyleSwitch(options = {}) {
     }
     if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
       calls.structure.push(body)
+      if (options.networkFailureOnce === true && calls.structure.length === 1) throw new Error('network down')
       if (options.fail !== undefined) {
         return new Response(JSON.stringify({ error: { code: options.fail, message: 'host failure' } }), {
           status: options.status ?? 409, headers: { 'content-type': 'application/json' },
@@ -1741,8 +1742,8 @@ test('store: a deterministic style switch posts one empty-operation batch', asyn
   assert.deepEqual(openArtifactEditor('sw1', programFor('call_style_a')), { ok: true })
   await settleRoute()
   const key = editKey('sw1', 'call_style_a')
-  setArtifactStyleSwitchTarget(key, { kind: 'builtin', layout: 'article' }, 'article')
-  assert.deepEqual(draftSessionFor(key).styleSwitchTargetLayout, 'article')
+  setArtifactStyleSwitchTarget(key, { kind: 'template', styleId: 'cs_ocean01' }, 'card')
+  assert.equal(draftSessionFor(key).styleSwitchTargetLayout, 'card')
   await applyArtifactStyleSwitch(key, undefined, 7)
 
   assert.equal(calls.structure.length, 1, 'one structure request carries the switch')
@@ -1754,7 +1755,7 @@ test('store: a deterministic style switch posts one empty-operation batch', asyn
     baseRevisionId: 'call_style_a',
     operationId: '<generated>',
     operations: [],
-    targetStyle: { kind: 'builtin', layout: 'article' },
+    targetStyle: { kind: 'template', styleId: 'cs_ocean01' },
     sessionStyleScope: 'sw1',
     title: DST_TITLE,
     style: 'card',
@@ -1766,7 +1767,8 @@ test('store: a deterministic style switch posts one empty-operation batch', asyn
   assert.equal(revisions.length, 1, 'the switch records one local revision')
   assert.equal(revisions[0].kind, 'style')
   assert.equal(revisions[0].revisionId, 'style_rev_2')
-  assert.equal(revisions[0].style, 'article')
+  assert.equal(revisions[0].style, 'card')
+  assert.equal(revisions[0].styleId, 'cs_ocean01')
   const submitted = draftSessionFor(key)
   assert.equal(submitted.status, 'submitted', 'the draft is consumed by the switch')
   // Submitting clears the transient switch UI state (markSubmitted resets it).
@@ -1782,6 +1784,37 @@ test('store: a deterministic style switch posts one empty-operation batch', asyn
   closeArtifactEditor(key)
   // A style switch is not a composer request: no chip/envelope is ever produced.
   assert.equal(chip.upserts.filter(upsert => upsert.sessionId === 'sw1').length, chipsBefore, 'the switch never upserts a composer chip')
+})
+
+test('store: an Article target is refused before the request when the program cannot be an article', async () => {
+  const calls = stubStyleSwitch({ cardId: 'call_style_article' })
+  assert.deepEqual(openArtifactEditor('sw-article', programFor('call_style_article')), { ok: true })
+  await settleRoute()
+  const key = editKey('sw-article', 'call_style_article')
+  setArtifactStyleSwitchTarget(key, { kind: 'builtin', layout: 'article' }, 'article')
+  await applyArtifactStyleSwitch(key, undefined, 2)
+  assert.equal(calls.structure.length, 0, 'the Host is never asked to reject an impossible Article switch')
+  assert.equal(draftSessionFor(key).styleSwitchError, en['edit.styleSwitchArticle'])
+  closeArtifactEditor(key)
+})
+
+test('store: a lost switch response keeps the operation id and a retry converges', async () => {
+  const calls = stubStyleSwitch({ cardId: 'call_style_retry', networkFailureOnce: true })
+  assert.deepEqual(openArtifactEditor('sw-retry', programFor('call_style_retry')), { ok: true })
+  await settleRoute()
+  const key = editKey('sw-retry', 'call_style_retry')
+  setArtifactStyleSwitchTarget(key, { kind: 'template', styleId: 'cs_ocean01' }, 'card')
+  await applyArtifactStyleSwitch(key, undefined, 2)
+  assert.equal(calls.structure.length, 1)
+  const first = draftSessionFor(key)
+  assert.equal(first.styleSwitchBusy, false)
+  assert.equal(typeof first.styleSwitchOperationId, 'string', 'the operation id survives an unknown failure')
+  await applyArtifactStyleSwitch(key, undefined, 2)
+  assert.equal(calls.structure.length, 2, 'the retry reaches the Host')
+  assert.equal(calls.structure[1].operationId, calls.structure[0].operationId, 'the retry reuses the operation id')
+  assert.equal(draftSessionFor(key).status, 'submitted', 'the retry converges on the recorded revision')
+  assert.equal(localRevisionsFor('sw-retry').length, 1)
+  closeArtifactEditor(key)
 })
 
 test('store: a template switch keeps its saved identity and drops the temporary base skin', async () => {
@@ -1895,10 +1928,10 @@ test('store: the style switch is single-flight and maps every Host failure code'
   assert.deepEqual(openArtifactEditor('sw7', programFor('call_style_busy')), { ok: true })
   await settleRoute()
   const busyKey = editKey('sw7', 'call_style_busy')
-  const first = applyArtifactStyleSwitch(busyKey, { kind: 'builtin', layout: 'article' }, 1)
+  const first = applyArtifactStyleSwitch(busyKey, { kind: 'template', styleId: 'cs_ocean01' }, 1)
   await settleRoute()
   assert.equal(draftSessionFor(busyKey).styleSwitchBusy, true)
-  await applyArtifactStyleSwitch(busyKey, { kind: 'builtin', layout: 'article' }, 1)
+  await applyArtifactStyleSwitch(busyKey, { kind: 'template', styleId: 'cs_ocean01' }, 1)
   assert.equal(posts, 1, 'a busy switch never posts again')
   release()
   await first
@@ -1922,7 +1955,7 @@ test('store: the style switch is single-flight and maps every Host failure code'
     assert.deepEqual(openArtifactEditor(sessionId, programFor(cardId)), { ok: true })
     await settleRoute()
     let missingStyleRefreshes = 0
-    await applyArtifactStyleSwitch(editKey(sessionId, cardId), { kind: 'builtin', layout: 'article' }, 1, () => { missingStyleRefreshes += 1 })
+    await applyArtifactStyleSwitch(editKey(sessionId, cardId), { kind: 'template', styleId: 'cs_ocean01' }, 1, () => { missingStyleRefreshes += 1 })
     assert.equal(calls.structure.length, 1, `${code} reached the Host`)
     assert.equal(draftSessionFor(editKey(sessionId, cardId)).styleSwitchError, en[key], `${code} maps to ${key}`)
     assert.equal(draftSessionFor(editKey(sessionId, cardId)).status, 'ready', `${code} keeps the draft open`)
@@ -1937,7 +1970,7 @@ test('store: the style switch is single-flight and maps every Host failure code'
   assert.deepEqual(openArtifactEditor(missingSession, programFor(missingCard)), { ok: true })
   await settleRoute()
   const missingKey = editKey(missingSession, missingCard)
-  setArtifactStyleSwitchTarget(missingKey, { kind: 'builtin', layout: 'article' }, 'article')
+  setArtifactStyleSwitchTarget(missingKey, { kind: 'template', styleId: 'cs_ocean01' }, 'card')
   let refreshes = 0
   await applyArtifactStyleSwitch(missingKey, undefined, 1, () => { refreshes += 1 })
   assert.equal(refreshes, 1)
@@ -1958,7 +1991,7 @@ test('store: a malformed style result fails without recording a local card', asy
   const sessionId = 'sw-malformed'
   assert.deepEqual(openArtifactEditor(sessionId, programFor(cardId)), { ok: true })
   await settleRoute()
-  await applyArtifactStyleSwitch(editKey(sessionId, cardId), { kind: 'builtin', layout: 'article' }, 1)
+  await applyArtifactStyleSwitch(editKey(sessionId, cardId), { kind: 'template', styleId: 'cs_ocean01' }, 1)
   assert.equal(draftSessionFor(editKey(sessionId, cardId)).styleSwitchError, en['edit.styleSwitchFailed'])
   assert.equal(localRevisionsFor(sessionId).length, 0)
 })

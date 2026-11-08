@@ -543,3 +543,20 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **498 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,032,790** 字节，解包 **12,879,500** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 样式与编辑整合（可用性预判、单状态行、幂等重试、保存边界）
+
+- **边界**：统一点是「一个 Artifact、一条修订线、一个样式入口」，并把样式切换、样式说明都作为 Artifact 编辑的操作类型；区块/结构编辑仍改 program，样式切换零模型、program 逐字节不变，样式说明由模型产出 temporaryStyle。保存模板不是编辑，也不产生修订。
+- **可用性预判**：Article 谓词抽到 `src/shared/article-layout.ts`，客户端与 Host 共用；页面不满足 Toc/Section/anchor 时 Article 行直接禁用并显示一行原因。新增纯函数 `style-targets.ts` 统一计算 Apply blocker：检查中／非最新（非 branch）／忙碌／草稿／样式说明／无目标／目标不适用／当前已选；样式区只显示一条状态行，移除了常驻的多段说明。
+- **版本与重试**：非 branch 旧修订禁用 Apply；显式 branch 允许并说明。请求带上可复用的 `styleSwitchOperationId`，响应丢失后用同一 id 重试，由 Host 幂等 ledger 返回已记录结果，避免变成 `base_not_latest` 或重复修订。
+- **保存**：保存为模板仍只出现在带 theme 的临时样式结果（B1/按需），位于结果/修订卡而不进编辑器；样式切换结果不保存；保存不产生修订。模板仍是 live reference，改主题/删模板会影响旧切换修订，已在 limitations 记录；branch 不自动创建。
+- **测试**：新增 client `style-targets` 2 条纯函数测试与 store 2 条测试（Article 前置拒绝、丢失响应后同 operationId 重试收敛）；E2E 更新为 Article 置灰、单状态行、键盘跳过禁用项、脏草稿预禁用等场景，`artifact-edit` 500 checks。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **625/625** = Host **301** + Client **303** + packaging **21**；build host **837.6 kB**、client **4.04 MB**（js 3.82 / CSS 222.0）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **500 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,033,850** 字节，解包 **12,886,996** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

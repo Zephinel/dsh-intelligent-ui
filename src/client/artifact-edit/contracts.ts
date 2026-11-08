@@ -159,6 +159,8 @@ export interface ArtifactEditSession {
   readonly removable?: { readonly blockId: string; readonly order: number; readonly instruction: string; readonly title?: string }
   /** Deterministic style switch selected in the picker (pending until Apply). */
   readonly styleSwitchTarget?: ArtifactStyleTarget
+  /** Stable operation id so a retried switch after a lost response is idempotent. */
+  readonly styleSwitchOperationId?: string
   /** Resolved layout of the selected template target (Host identity compare). */
   readonly styleSwitchTargetLayout?: RenderLayout
   /** Deterministic style switch request in flight. */

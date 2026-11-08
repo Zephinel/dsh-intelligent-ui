@@ -57,6 +57,9 @@ test('style switching copy exists in both languages', () => {
     'edit.styleSwitchCurrentBadge', 'edit.styleSwitchNoChange', 'edit.styleSwitchDirty', 'edit.styleSwitchMissing',
     'edit.styleSwitchArticle', 'edit.styleSwitchStale', 'edit.styleSwitchMismatch', 'edit.styleSwitchBlockedByInstruction',
     'edit.styleSwitchFailed', 'edit.styleFromTemporary',
+    'edit.styleTargetArticle', 'edit.styleStatusChecking', 'edit.styleStatusStale', 'edit.styleStatusDirty',
+    'edit.styleStatusInstruction', 'edit.styleStatusNoTarget', 'edit.styleStatusUnavailable', 'edit.styleStatusCurrent',
+    'edit.styleStatusReady', 'edit.styleStatusTemporary', 'edit.styleStatusBranch',
     'edit.styleSavedGroup', 'edit.styleRevision', 'edit.historyStyleSwitch',
   ]
   for (const key of keys) {

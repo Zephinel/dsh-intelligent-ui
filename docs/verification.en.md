@@ -563,3 +563,20 @@ Four structural guards added after the review loop:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **498 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,032,790** bytes packed, **12,879,500** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-08 — Style/edit integration (eligibility, one status line, idempotent retry, save boundary)
+
+- **Boundary**: the unification point is "one Artifact, one revision line, one style entry", making style switch and style instruction operation types of Artifact editing. Block/structure edits still change the program; a style switch is zero-model and keeps the program byte-identical; a style instruction produces a temporaryStyle through the model. Saving a template is not an edit and creates no revision.
+- **Eligibility**: the Article predicate moved to `src/shared/article-layout.ts` and is shared by the Host and client; when the page has no usable Toc/Section/anchors, the Article row is disabled with a one-line reason. A new pure `style-targets.ts` computes the Apply blocker (checking / non-branch stale / busy / dirty / instruction / no target / unavailable / current); the style section shows one status line instead of the previous permanent notes.
+- **Revision and retry**: a non-branch older revision disables Apply; an explicit branch is allowed and explained. The request carries a reusable `styleSwitchOperationId`: after a lost response the retry reuses it and the Host idempotency ledger returns the recorded result, avoiding `base_not_latest` or a duplicate revision.
+- **Save**: Save-as-template remains available only for theme-bearing temporary results (B1/on-demand), on the result/revision card rather than inside the editor; switch results are not saved and saving creates no revision. Templates remain live references: theme changes/deletion affect older switch revisions, documented in limitations; branches are never automatic.
+- **Tests**: two new client `style-targets` pure-function tests and two store tests (Article pre-rejection; lost response retrying with the same operation id); the E2E now covers Article disabled, one status line, keyboard skipping disabled targets and dirty pre-disable, with `artifact-edit` at 500 checks.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **625/625** Node tests = Host **301** + Client **303** + packaging **21**; build host **837.6 kB**, client **4.04 MB** (js 3.82 / CSS 222.0), standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **500 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,033,850** bytes packed, **12,886,996** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

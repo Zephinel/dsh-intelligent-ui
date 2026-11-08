@@ -17,6 +17,7 @@
  * it again from the panel or the card badge.
  */
 import { useEffect, useSyncExternalStore } from 'react'
+import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_REVISION_ROUTE_PATH,
@@ -2046,6 +2047,20 @@ export function isCurrentStyleTarget(
   return session.styleId === target.styleId && (templateLayout === undefined || session.style === templateLayout)
 }
 
+/** Whether two switch selections name the same built-in/template identity. */
+function sameArtifactStyleTarget(
+  left: ArtifactStyleTarget | undefined,
+  leftLayout: 'card' | 'article' | 'free' | undefined,
+  right: ArtifactStyleTarget | undefined,
+  rightLayout: 'card' | 'article' | 'free' | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right
+  if (leftLayout !== rightLayout) return false
+  return left.kind === 'builtin'
+    ? right.kind === 'builtin' && left.layout === right.layout
+    : right.kind === 'template' && left.styleId === right.styleId
+}
+
 /**
  * Select (or clear) the pending deterministic style switch target of one draft.
  * Selection only moves the picker; the request is sent on the explicit Apply.
@@ -2062,7 +2077,15 @@ export function setArtifactStyleSwitchTarget(
   if (target !== undefined && describeStyleTargetProblem(target) !== undefined) return
   const nextLayout = target === undefined ? undefined : layout
   if (session.styleSwitchTarget === target && session.styleSwitchTargetLayout === nextLayout && session.styleSwitchError === undefined) return
-  sessions.set(key, { ...session, styleSwitchTarget: target, styleSwitchTargetLayout: nextLayout, styleSwitchError: undefined })
+  const targetChanged = session.styleSwitchTarget === undefined || nextLayout === undefined
+    || !sameArtifactStyleTarget(session.styleSwitchTarget, session.styleSwitchTargetLayout, target, nextLayout)
+  sessions.set(key, {
+    ...session,
+    styleSwitchTarget: target,
+    styleSwitchTargetLayout: nextLayout,
+    styleSwitchError: undefined,
+    ...targetChanged ? { styleSwitchOperationId: undefined } : {},
+  })
   publish()
 }
 
@@ -2102,11 +2125,27 @@ export async function applyArtifactStyleSwitch(
   if (session === undefined || session.status === 'submitted' || session.styleSwitchBusy === true) return
   const chosen = target ?? session.styleSwitchTarget
   if (chosen === undefined || describeStyleTargetProblem(chosen) !== undefined) return
-  const fail = (message: string): void => {
+  const fail = (message: string, keepOperationId = false): void => {
     const current = sessions.get(key)
     if (current === undefined) return
-    sessions.set(key, { ...current, styleSwitchBusy: false, styleSwitchError: message })
+    sessions.set(key, {
+      ...current,
+      styleSwitchBusy: false,
+      styleSwitchError: message,
+      ...keepOperationId ? {} : { styleSwitchOperationId: undefined },
+    })
     publish()
+  }
+  // The edit canvas shows the older-revision banner; an explicit branch is the
+  // only path that may record on top of an old base. Skip the request otherwise.
+  if (session.status === 'conflict' && session.branch !== true) {
+    fail(translate('edit.styleSwitchStale'))
+    return
+  }
+  if (session.styleSwitchTargetLayout === 'article'
+    && describeArticleLayoutProblem(session.program) !== undefined) {
+    fail(translate('edit.styleSwitchArticle'))
+    return
   }
   if (hasArtifactEditContent(session) || session.activeDirty === true || session.activeDraft.trim() !== '') {
     fail(translate('edit.styleSwitchDirty'))
@@ -2116,7 +2155,10 @@ export async function applyArtifactStyleSwitch(
     fail(translate('edit.styleSwitchNoChange'))
     return
   }
-  sessions.set(key, { ...session, styleSwitchBusy: true, styleSwitchError: undefined })
+  // Reuse the operation id after a lost response: the Host idempotency ledger
+  // returns the recorded result instead of turning the retry into base_not_latest.
+  const operationId = session.styleSwitchOperationId ?? newRequestId()
+  sessions.set(key, { ...session, styleSwitchBusy: true, styleSwitchError: undefined, styleSwitchOperationId: operationId })
   publish()
   await ensureBaseForSession(session)
   try {
@@ -2127,7 +2169,7 @@ export async function applyArtifactStyleSwitch(
         schemaVersion: 1,
         artifactId: session.artifactId,
         baseRevisionId: session.baseRevisionId,
-        operationId: newRequestId(),
+        operationId,
         operations: [],
         targetStyle: chosen,
         sessionStyleScope: session.sessionId,
@@ -2151,7 +2193,7 @@ export async function applyArtifactStyleSwitch(
           sessions.set(key, { ...current, styleSwitchTarget: undefined, styleSwitchTargetLayout: undefined })
         }
       }
-      fail(styleSwitchFailureMessage(code))
+      fail(styleSwitchFailureMessage(code), code === undefined)
       return
     }
     const value: unknown = await response.json()
@@ -2178,9 +2220,9 @@ export async function applyArtifactStyleSwitch(
       markSubmitted(key)
       return
     }
-    fail(translate('edit.styleSwitchFailed'))
+    fail(translate('edit.styleSwitchFailed'), true)
   } catch {
-    fail(translate('edit.styleSwitchFailed'))
+    fail(translate('edit.styleSwitchFailed'), true)
   }
 }
 
