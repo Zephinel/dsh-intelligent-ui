@@ -1085,13 +1085,6 @@
   line-height: 16px;
 }
 
-.dsh-iui-edit-style-target-hint {
-  margin: 0 0 2px 34px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 15px;
-}
-
 .dsh-iui-edit-style-switch-foot {
   display: flex;
   justify-content: flex-end;

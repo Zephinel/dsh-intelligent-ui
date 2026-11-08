@@ -1968,7 +1968,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-edit-style-current-badge]'), 1, 'the current built-in style carries the current badge')
   check((await text('[data-dsh-iui-edit-style-saved-group]')), '已保存样式', 'saved templates sit in their own group')
   check(await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled`), true, 'Apply stays disabled until a target is selected')
-  check(await read(`document.querySelector('[data-dsh-iui-edit-style-switch-note]').textContent.includes('不需要模型')`), true, 'the group note explains the zero-model apply')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-switch-note]').textContent.includes('不调用模型')`), true, 'the group note explains the zero-model apply')
 
   // Preview on focus swaps the edit-canvas skin with no request at all.
   const editRootStyle = () => read(`(() => {
@@ -2097,7 +2097,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read(`window.__styleSwitchFail = { code: 'article_unavailable', status: 400 }`)
   await click('[data-dsh-iui-edit-style-apply]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch-error]")', 'article unavailable copy')
-  check((await text('[data-dsh-iui-edit-style-switch-error]')).includes('目录与分区'), true, 'article_unavailable explains the Toc/Section requirement')
+  check((await text('[data-dsh-iui-edit-style-switch-error]')).includes('目录和章节'), true, 'article_unavailable explains the Toc/Section requirement')
   const catalogFetchesBefore = await read('window.__styleCatalogFetches.length')
   await read(`window.__styleSwitchFail = { code: 'style_missing', status: 404 }`)
   await click('[data-dsh-iui-edit-style-apply]')

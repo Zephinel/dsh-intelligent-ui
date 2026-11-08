@@ -1594,11 +1594,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               <span className="dsh-iui-edit-style-target-meta">{layoutLabel}</span>
                               {current ? <span className="dsh-iui-edit-style-current-badge" data-dsh-iui-edit-style-current-badge>{t('edit.styleSwitchCurrentBadge')}</span> : null}
                             </label>
-                            {option.requiresArticleLayout ? <span className="dsh-iui-edit-style-target-hint">{t('edit.styleSwitchArticle')}</span> : null}
                           </div>
                         )
                       })}
                     </div>
+                    {styleTargets.some(option => option.requiresArticleLayout) ? (
+                      <p className="dsh-iui-edit-style-hint" data-dsh-iui-edit-style-article-hint>{t('edit.styleSwitchArticle')}</p>
+                    ) : null}
                     {session.temporaryStyle === undefined ? null : (
                       <p className="dsh-iui-edit-style-note" data-dsh-iui-edit-style-from-temporary>{t('edit.styleFromTemporary')}</p>
                     )}
