@@ -198,11 +198,23 @@ Everyday checks and packaging:
 | `npm run pack:check` | Preview the final npm package file list without publishing |
 | `npm run test:browser` | Run 9 browser suites after a build; Chrome required. `test/browser/visual-baselines/` holds manual visual baselines (5 PNGs + `captures.json` + `SHA256SUMS`) with no automated pixel comparison |
 
-- Current working-tree verification record (B1 committed; B1 review fixes and B2 pending): **617/617** Node tests (Host 299, Client 297, packaging 21; covering block editing/arrangement/multi-card/branch/restore/draft persistence/temporary style/nested editing/hierarchical order/structure operations/container expansion/model additions/cross-container moves/structure preview/strict protection/runtime state/panel animation and width fit); renderer parse/render **42/42** each, CSS/prop contract **50/50** and **63/63**, typography **22/22**, i18n **4** programs, nested CSS-compensation contract **28/28 direct + 5/5 scoped**; **9/9** browser suites passed, including **101** settings template-exchange, **114** on-demand, **46** interactive-page and **65** image-export assertions, plus **497** checks in the Artifact block-editing suite and **75** checks in the nested edit-renderer suite. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
+- Current working-tree verification record (B1/B2 and review fixes committed locally, not pushed): **617/617** Node tests (Host 299, Client 297, packaging 21; covering block editing/arrangement/multi-card/branch/restore/draft persistence/temporary style/nested editing/hierarchical order/structure operations/container expansion/model additions/cross-container moves/structure preview/strict protection/runtime state/panel animation and width fit); renderer parse/render **42/42** each, CSS/prop contract **50/50** and **63/63**, typography **22/22**, i18n **4** programs, nested CSS-compensation contract **28/28 direct + 5/5 scoped**; **9/9** browser suites passed, including **101** settings template-exchange, **114** on-demand, **46** interactive-page and **65** image-export assertions, plus **497** checks in the Artifact block-editing suite and **75** checks in the nested edit-renderer suite. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
 - `node scripts/capture-screenshots.mjs` rebuilds panel, hint, temporary-result and settings captures at 2x in Chrome using fixed DSH tokens, production components and fake services. English UI; shell card glyphs use lucide stand-ins.
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run. Use `CHROME_BIN` for a non-default Chrome executable location (also used by the browser suites).
 
 The published artifact is a DSH bundle; deploying means installing the plugin into the target DSH profile. See [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) for uninstall and version notes.
+
+## Publication and listing
+
+The extension is published to npm and GitHub and indexed by these DSH community markets (DSH has no built-in official marketplace; Discover only reads user-added index sources):
+
+- **awesome-dsh-plugin / dsh-market**: [awesome entry](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/Zephinel__dsh-intelligent-ui.yml) · [listing page](https://awesome-dsh-plugin.com/p/Zephinel/dsh-intelligent-ui/); dsh-market's catalog comes from awesome and syncs with it.
+- **Open Plugin Market**: [index entry](https://dshopen.org/plugins/@zephinel/dsh-intelligent-ui/) ([dshopen.org](https://dshopen.org/)).
+- **bradeGithub/DSH-Plugins-Marketplace**: auto-indexed from the GitHub `dsh-plugin` topic.
+
+npm package: [`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephinel/dsh-intelligent-ui) (default `latest`); GitHub repository: [Zephinel/dsh-intelligent-ui](https://github.com/Zephinel/dsh-intelligent-ui) (topics: `dsh-plugin`, `dsh-bundle`, `deepseek-harness`, `intelligent-ui`, `agent-skills`).
+
+Market versions follow npm `latest`; after publishing a new version and pushing the repository, the markets refresh on their own schedule without a new submission. Screenshots come from this repository's `screenshots.json`; maintenance details are in [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#community-marketplace-maintenance).
 
 ## Contributing
 
