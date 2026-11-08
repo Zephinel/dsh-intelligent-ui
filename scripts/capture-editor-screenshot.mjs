@@ -118,11 +118,11 @@ const HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><link r
 :root { color-scheme:light;
   --dsw-alias-bg-base:#fff; --dsw-alias-bg-layer-1:#fff; --dsw-alias-bg-layer-2:#f5f6f7; --dsw-alias-bg-layer-3:#eceef1;
   --dsw-alias-bg-module-platform:#f5f6f7; --dsw-alias-label-primary:#171717; --dsw-alias-label-secondary:#555;
-  --dsw-alias-label-tertiary:#888; --dsw-alias-label-caption:#999;
+  --dsw-alias-label-tertiary:#888; --dsw-alias-label-caption:#999; --dsw-alias-label-dimmed:#a3a3a3;
   --dsw-alias-border-l1:#e4e4e4; --dsw-alias-border-l2:#d4d4d4; --dsw-alias-border-l3:#c4c4c4;
   --dsw-alias-interactive-bg-hover:#eee; --dsw-alias-interactive-bg-hover-solid:#e8e8e8;
-  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-brand-primary:#1265bb; --dsw-alias-label-primary-foreground:#fff; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708;
-  --dsw-alias-button-floating-fill:#fff; --dsw-alias-button-floating-hover:#f2f2f2;
+  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-brand-primary:#1265bb; --dsw-alias-label-primary-foreground:#fff; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708; --dsw-alias-state-warning-primary:#b54708; --dsw-alias-state-success-primary:#0f7b3f;
+  --dsw-alias-button-floating-fill:#fff; --dsw-alias-switch-thumb:#fff; --dsw-alias-button-floating-hover:#f2f2f2;
   --dsw-specific-menu:#fff; --dsw-specific-bubble:#eef2f7; --dsw-specific-input-major:#fff;
   --dsw-radius-sm:6px; --dsw-radius-md:10px; --dsw-radius-lg:14px; --dsw-radius-xl:18px;
   --dsw-focus-ring-color:#1265bb; --dsw-focus-ring-width:2px; --dsw-font-family:system-ui;

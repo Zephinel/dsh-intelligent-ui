@@ -577,26 +577,16 @@ function isEnvelopeStart(text: string, at: number): boolean {
 }
 
 /**
- * Find the next real envelope opening at or after one offset, skipping marker
- * text inside instructions/programs.
- * @param text - message body.
- * @param from - inclusive search start.
- * @returns the offset, or -1 when no further envelope exists.
+ * One parsed envelope window: the real opener, header end, optional own-line
+ * program fence and the last byte of this envelope. The parser, the
+ * sent-message summary and the single-envelope parser all consume these
+ * windows, so fence handling lives in exactly one place.
  */
-function insideProgramBody(text: string, at: number): boolean {
-  const open = text.lastIndexOf(ARTIFACT_PROGRAM_OPEN, at)
-  if (open < 0) return false
-  const close = text.indexOf(ARTIFACT_PROGRAM_CLOSE, open + ARTIFACT_PROGRAM_OPEN.length)
-  return close < 0 || close > at
-}
-
-function nextEnvelopeOpen(text: string, from: number): number {
-  let at = text.indexOf(ARTIFACT_EDIT_OPEN, from)
-  while (at >= 0) {
-    if (!insideProgramBody(text, at) && isEnvelopeStart(text, at)) return at
-    at = text.indexOf(ARTIFACT_EDIT_OPEN, at + ARTIFACT_EDIT_OPEN.length)
-  }
-  return -1
+interface EnvelopeWindow {
+  readonly open: number
+  readonly headerEnd: number
+  readonly end: number
+  readonly program?: { readonly start: number; readonly end: number; readonly program: string }
 }
 
 /**
@@ -604,7 +594,7 @@ function nextEnvelopeOpen(text: string, from: number): number {
  *
  * The serializer puts `<artifact-program>` and `</artifact-program>` on their
  * own lines, so a literal marker inside a model-authored Text string can never
- * truncate the program (the old last-index scan could).
+ * truncate the program.
  * @param text - one user message body.
  * @returns the opening/closing offsets and the program body.
  */
@@ -614,7 +604,7 @@ function programFence(text: string): { open: number; close: number; program: str
   const open = openMatch.index + (openMatch[0].startsWith('\n') ? 1 : 0)
   const bodyStart = text.indexOf('\n', open)
   if (bodyStart < 0) return undefined
-  const closePattern = /(?:^|\n)<\/artifact-program>[ \t]*(?:\n|$)/g
+  const closePattern = /(?:^|\n)<\/artifact-program>/g
   closePattern.lastIndex = bodyStart + 1
   const closeMatch = closePattern.exec(text)
   if (closeMatch === null) return undefined
@@ -622,24 +612,63 @@ function programFence(text: string): { open: number; close: number; program: str
   return { open, close, program: text.slice(bodyStart + 1, close).trim() }
 }
 
+/** Find the next real envelope opening at or after one offset. */
+function nextEnvelopeOpen(text: string, from: number): number {
+  let at = text.indexOf(ARTIFACT_EDIT_OPEN, from)
+  while (at >= 0) {
+    if (isEnvelopeStart(text, at)) return at
+    at = text.indexOf(ARTIFACT_EDIT_OPEN, at + ARTIFACT_EDIT_OPEN.length)
+  }
+  return -1
+}
+
 /**
- * Split an envelope text into its JSON header and the original program.
- * The program section is located by its own-line fences, so a marker-like
- * string inside a model-authored Text literal cannot truncate it.
- * @param text - one user message body.
- * @returns the raw JSON string and program body, or undefined.
+ * Find the line-fenced program section after one offset.
+ * @param text - message body.
+ * @param from - offset to start searching from.
+ * @returns absolute opening/closing offsets and the program body.
  */
-function splitEnvelope(text: string): { json: string; program: string; rest: string } | undefined {
-  const open = text.indexOf(ARTIFACT_EDIT_OPEN)
-  const close = text.indexOf(ARTIFACT_EDIT_CLOSE)
-  if (open < 0 || close < 0 || close < open) return undefined
-  const json = text.slice(open + ARTIFACT_EDIT_OPEN.length, close).trim()
-  if (json === '' || !json.startsWith('{') || !json.endsWith('}')) return undefined
-  const fence = programFence(text)
+function programFenceFrom(text: string, from: number): EnvelopeWindow['program'] | undefined {
+  const segment = text.slice(from)
+  const fence = programFence(segment)
   if (fence === undefined || fence.program === '') return undefined
-  const { open: programOpen, close: programClose, program } = fence
-  const rest = `${text.slice(0, open)}${text.slice(close + ARTIFACT_EDIT_CLOSE.length, programOpen >= 0 ? programOpen : undefined)}`
-  return { json, program, rest }
+  return { start: from + fence.open, end: from + fence.close, program: fence.program }
+}
+
+/**
+ * Split a message into its envelope windows (one per request).
+ * @param text - one user message body.
+ * @param from - inclusive search start.
+ * @returns the windows in message order.
+ */
+function scanEnvelopeWindows(text: string, from = 0): EnvelopeWindow[] {
+  const windows: EnvelopeWindow[] = []
+  let cursor = from
+  while (cursor < text.length) {
+    const open = nextEnvelopeOpen(text, cursor)
+    if (open < 0) break
+    const close = text.indexOf(ARTIFACT_EDIT_CLOSE, open + ARTIFACT_EDIT_OPEN.length)
+    if (close < 0) break
+    const headerEnd = close + ARTIFACT_EDIT_CLOSE.length
+    const program = programFenceFrom(text, headerEnd)
+    const end = program === undefined ? headerEnd : program.end + ARTIFACT_PROGRAM_CLOSE.length
+    windows.push({ open, headerEnd, end, ...program === undefined ? {} : { program } })
+    cursor = end
+  }
+  return windows
+}
+
+/** Parse one envelope window into a request. */
+function parseEnvelopeWindow(text: string, window: EnvelopeWindow): ArtifactEditRequest | undefined {
+  const json = text.slice(window.open + ARTIFACT_EDIT_OPEN.length, window.headerEnd - ARTIFACT_EDIT_CLOSE.length).trim()
+  if (json === '' || !json.startsWith('{') || !json.endsWith('}')) return undefined
+  let value: unknown
+  try { value = JSON.parse(json) } catch { return undefined }
+  const program = window.program?.program
+  if (program === undefined || program === '') return undefined
+  const candidate = { ...(isRecord(value) ? value : {}), program }
+  if (describeEditRequestProblem(candidate) !== undefined) return undefined
+  return candidate as unknown as ArtifactEditRequest
 }
 
 /**
@@ -1052,18 +1081,9 @@ export function isNoOpEditRequest(request: ArtifactBlockEditRequest, baseBlockId
 export function parseEditRequestTexts(text: string): ArtifactEditRequest[] {
   if (!text.includes(ARTIFACT_EDIT_OPEN)) return []
   const requests: ArtifactEditRequest[] = []
-  let cursor = 0
-  while (cursor < text.length) {
-    const open = nextEnvelopeOpen(text, cursor)
-    if (open < 0) break
-    // The next real envelope bounds this segment; marker text inside the
-    // current instruction/program belongs to this envelope, not a new one.
-    const next = nextEnvelopeOpen(text, open + ARTIFACT_EDIT_OPEN.length)
-    const segment = next < 0 ? text.slice(open) : text.slice(open, next)
-    const parsed = parseEditRequestText(segment)
+  for (const window of scanEnvelopeWindows(text)) {
+    const parsed = parseEnvelopeWindow(text, window)
     if (parsed !== undefined) requests.push(parsed)
-    if (next < 0) break
-    cursor = next
   }
   return requests
 }
@@ -1078,15 +1098,8 @@ export function parseEditRequestTexts(text: string): ArtifactEditRequest[] {
  */
 export function parseEditRequestText(text: string): ArtifactEditRequest | undefined {
   if (!text.includes(ARTIFACT_EDIT_OPEN)) return undefined
-  const open = nextEnvelopeOpen(text, 0)
-  if (open < 0) return undefined
-  const parts = splitEnvelope(open === 0 ? text : text.slice(open))
-  if (parts === undefined) return undefined
-  let value: unknown
-  try { value = JSON.parse(parts.json) } catch { return undefined }
-  const candidate = { ...(isRecord(value) ? value : {}), program: parts.program }
-  if (describeEditRequestProblem(candidate) !== undefined) return undefined
-  return candidate as unknown as ArtifactEditRequest
+  const [window] = scanEnvelopeWindows(text)
+  return window === undefined ? undefined : parseEnvelopeWindow(text, window)
 }
 
 /**
@@ -1108,17 +1121,11 @@ export function isArtifactEditRequest(value: unknown): value is ArtifactEditRequ
  * @returns the covered range and summary facts, or undefined.
  */
 export function nextEditRequestSummary(text: string, from: number): { start: number; end: number; count: number; globalOnly: boolean; reordered: boolean; hasGlobal: boolean; style: boolean } | undefined {
-  const start = nextEnvelopeOpen(text, from)
-  if (start < 0) return undefined
-  const close = text.indexOf(ARTIFACT_EDIT_CLOSE, start + ARTIFACT_EDIT_OPEN.length)
-  if (close < 0) return undefined
-  const headerEnd = close + ARTIFACT_EDIT_CLOSE.length
-  // Each envelope owns the own-line program section after its header and
-  // before the next envelope; program-body markers can never truncate it.
-  const nextOpen = nextEnvelopeOpen(text, headerEnd)
-  const segment = nextOpen < 0 ? text.slice(headerEnd) : text.slice(headerEnd, nextOpen)
-  const fence = programFence(segment)
-  const end = fence === undefined ? headerEnd : headerEnd + fence.close + ARTIFACT_PROGRAM_CLOSE.length
+  const [window] = scanEnvelopeWindows(text, from)
+  if (window === undefined) return undefined
+  const start = window.open
+  const close = window.headerEnd - ARTIFACT_EDIT_CLOSE.length
+  const end = window.end
   let count = 0
   let globalOnly = false
   let reordered = false

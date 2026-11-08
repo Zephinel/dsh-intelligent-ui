@@ -409,7 +409,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - 本记录中的“编辑器截图包含新样式区”在写作时不成立：capture harness 当时未注入 `styleEdit` 能力；后续已注入并重拍 `assets/intelligent-ui-editing-{zh,en}.webp` 与 overview 组合图，现截图确实包含「样式 / 更改样式 / 样式切换 / 应用样式」与已保存 Article 提示。
 - 本记录中的“block 序列化字节不变”在后续契约强化后不再成立：block 信封的 header 与 program 正文保持兼容，但 prose 改由 `blockEditToolContract` 生成并新增 `Tool-call contract:` 行，整段文本不再保证字节不变。
 - B1 真实 GUI 冒烟已做（2026-11-08，上海两日游会话：真实模型返回 Revision 2，样式生效、Save 对话框打开、历史可见、footer Adjust 隐藏）；证据仅为会话转录，未留存截图，不作为自动门禁。
-- 当前工作树门禁已推进到 Node 615/615（Host 298 + Client 296 + packaging 21）、`artifact-edit` 497 checks；本记录的 558/447 仍是当时的门禁数。
+- 当前工作树门禁已推进到 Node 617/617（Host 299 + Client 297 + packaging 21）、`artifact-edit` 497 checks；本记录的 558/447 仍是当时的门禁数。
 
 ## 2026-11-08 — 确定性样式切换（零模型，B2）最终验证（未提交工作树）
 
@@ -473,9 +473,9 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；renderer/契约全绿；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；renderer/契约全绿；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,179** 字节，解包 **12,880,571** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,172** 字节，解包 **12,880,636** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
 
 ## 2026-11-08 — 第四轮复审修复（路由能力位异步、标题转义、summary fence；未提交工作树）
@@ -494,7 +494,25 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,179** 字节，解包 **12,880,571** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,172** 字节，解包 **12,880,636** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 稳定化守卫（统一 envelope 扫描、截图 token 契约、延迟注入、文档事实源；未提交工作树）
+
+复审收口后补的四类结构守卫：
+
+- **统一 envelope 解析**：`scanEnvelopeWindows()` 成为 parse/summary/split 的唯一窗口来源；修正 program close 在“两个信封直接拼接、无尾随换行”时被跳过的问题，新增直接拼接信封的 parse/summary 回归。
+- **截图 token 契约**：`test/renderer/capture-token-contract-check.mjs` 扫描 `src/**/*.css` 用到的 `--dsw-alias-*`，要求 capture fixture 的 `:root` 全部定义；已补缺失 token 并重拍编辑/overview 截图（Apply style 可见）。
+- **plugin 级延迟注入测试**：`test/host/mode.test.mjs` 增加 `deferInject` mount，异步 drain cordis 注入回调后校验 projection view 能被 schema parse 且 `styleSwitch: true`。
+- **文档事实源**：`docs/current-facts.json` 记录当前 gate 数字，新增 `scripts/check-doc-facts.mjs` 并接入 `npm run check`，校验 README/architecture/latest verification/CHANGELOG 的当前值；历史记录保持历史数字。局限：JSON 仍需门禁后人工更新，但所有“当前值”只有一个来源，检查会让漏改变红。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）；含 capture-token 契约与 doc-facts 检查 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,172** 字节，解包 **12,880,636** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

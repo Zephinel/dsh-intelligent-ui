@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+/**
+ * Check the current-state facts quoted by the README, architecture docs,
+ * verification record and CHANGELOG against docs/current-facts.json.
+ *
+ * Historical verification records intentionally keep their own numbers; this
+ * checker only looks at the current README/architecture lines, the last
+ * (newest) verification section and the CHANGELOG's current gate values.
+ */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const root = resolve(new URL('..', import.meta.url).pathname)
+const facts = JSON.parse(readFileSync(resolve(root, 'docs/current-facts.json'), 'utf8'))
+const read = file => readFileSync(resolve(root, file), 'utf8')
+const failures = []
+const expect = (file, fragment) => {
+  if (!read(file).includes(fragment)) failures.push(`${file}: missing ${JSON.stringify(fragment)}`)
+}
+
+const node = `${facts.nodeTotal}/${facts.nodeTotal}`
+for (const file of ['README.md', 'README.en.md']) {
+  expect(file, node)
+  expect(file, `${facts.host}`)
+  expect(file, `${facts.client}`)
+  expect(file, `**${facts.artifactEditChecks}**`)
+  expect(file, `**${facts.nestedRendererChecks}**`)
+}
+for (const file of ['docs/architecture.md', 'docs/architecture.en.md']) {
+  expect(file, node)
+  expect(file, `${facts.host}`)
+  expect(file, `${facts.client}`)
+  expect(file, `${facts.artifactEditChecks} checks`)
+  expect(file, `${facts.buildHostKb} kB`)
+  expect(file, `${facts.clientCssKb.toFixed(1)} kB`)
+}
+for (const file of ['CHANGELOG.md']) {
+  expect(file, node.replace('615', String(facts.nodeTotal)))
+  expect(file, facts.packedBytes.toLocaleString('en-US'))
+  expect(file, facts.unpackedBytes.toLocaleString('en-US'))
+}
+for (const file of ['docs/verification.md', 'docs/verification.en.md']) {
+  // Only the newest appended record must quote the current gate values.
+  const text = read(file)
+  const heading = text.lastIndexOf('\n## 2026-11-08')
+  const latest = heading < 0 ? text : text.slice(heading)
+  const required = [
+    node,
+    `${facts.host}`,
+    `${facts.client}`,
+    `${facts.artifactEditChecks} checks`,
+    `${facts.buildHostKb} kB`,
+    `${facts.clientCssKb.toFixed(1)}`,
+    facts.packedBytes.toLocaleString('en-US'),
+    facts.unpackedBytes.toLocaleString('en-US'),
+  ]
+  for (const fragment of required) {
+    if (!latest.includes(fragment)) failures.push(`${file} (latest record): missing ${JSON.stringify(fragment)}`)
+  }
+}
+if (failures.length > 0) {
+  console.error(`doc-facts: ${failures.length} mismatch(es); update docs/current-facts.json only from a real gate run:`)
+  for (const failure of failures) console.error(`  - ${failure}`)
+  process.exit(1)
+}
+console.log(`doc-facts: ok (Node ${node}; artifact-edit ${facts.artifactEditChecks}; pack ${facts.packedBytes}/${facts.unpackedBytes})`)

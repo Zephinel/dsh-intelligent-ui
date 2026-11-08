@@ -26,7 +26,7 @@ const VALID = 'root = Col([title])\ntitle = Title("Hello")'
 const ARTICLE = 'root = Col([toc, section])\ntoc = Toc(["一、Intro"])\nsection = Section("一、Intro", [Markdown("Body.")])'
 
 /** Mount the plugin with optional switch services, a fake settings document, and a private DSH_HOME. */
-function mount({ modeServices = true, persisted, settings, useConfig = settings !== undefined, templates = [] } = {}) {
+function mount({ modeServices = true, persisted, settings, useConfig = settings !== undefined, templates = [], deferInject = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'iui-mode-'))
   homes.push(home)
   process.env.DSH_HOME = home
@@ -48,6 +48,34 @@ function mount({ modeServices = true, persisted, settings, useConfig = settings 
     answerStyle: settings?.answerStyle ?? 'auto',
     freeComposition: settings?.freeComposition ?? false,
   }
+  const dispatchInject = (dependencies, callback) => {
+    const list = [...dependencies]
+    if (list.includes('webServer') && list.includes('connection')) {
+      callback({
+        webServer: { register() { return () => {} } },
+        connection: { requestRejection() { return undefined } },
+        effect(fn) { return fn() },
+      })
+      return
+    }
+    if (list.includes('skills')) {
+      callback({ skills: { register(skill) { rec.skill = skill } } })
+      return
+    }
+    if (!modeServices) return
+    if (list.includes('agents')) {
+      callback({ agents: { list: () => agents } })
+      return
+    }
+    if (!list.includes('sessionProjections') || !list.includes('commands')) return
+    callback({
+      sessionProjections: {
+        register(definition) { rec.projection = definition },
+      },
+      commands: { register(definition) { rec.command = definition } },
+    })
+  }
+  const deferred = []
   const ctx = {
     tools: { register(definition) { rec.tool = definition } },
     systemPrompt: { section(section) { rec.sections.push(section) } },
@@ -58,31 +86,11 @@ function mount({ modeServices = true, persisted, settings, useConfig = settings 
       return () => {}
     },
     inject(dependencies, callback) {
-      const list = [...dependencies]
-      if (list.includes('webServer') && list.includes('connection')) {
-        callback({
-          webServer: { register() { return () => {} } },
-          connection: { requestRejection() { return undefined } },
-          effect(fn) { return fn() },
-        })
+      if (deferInject) {
+        deferred.push([dependencies, callback])
         return
       }
-      if (list.includes('skills')) {
-        callback({ skills: { register(skill) { rec.skill = skill } } })
-        return
-      }
-      if (!modeServices) return
-      if (list.includes('agents')) {
-        callback({ agents: { list: () => agents } })
-        return
-      }
-      if (!list.includes('sessionProjections') || !list.includes('commands')) return
-      callback({
-        sessionProjections: {
-          register(definition) { rec.projection = definition },
-        },
-        commands: { register(definition) { rec.command = definition } },
-      })
+      dispatchInject(dependencies, callback)
     },
   }
   const config = useConfig
@@ -93,7 +101,14 @@ function mount({ modeServices = true, persisted, settings, useConfig = settings 
       }
     : undefined
   plugin.apply(ctx, config)
-  return { rec, home, agents, settings: values }
+  return {
+    rec, home, agents, settings: values,
+    async drainDeferred() {
+      // cordis queues injected callbacks; drain them in registration order.
+      await new Promise(resolve => setTimeout(resolve, 0))
+      for (const [dependencies, callback] of deferred.splice(0)) dispatchInject(dependencies, callback)
+    },
+  }
 }
 
 after(() => {
@@ -451,4 +466,14 @@ test('the wire view accepts a false or absent styleSwitch capability', () => {
   assert.equal(modeViewSchema.safeParse({ ...base, styleSwitch: true }).success, true)
   assert.equal(modeViewSchema.safeParse({ ...base, styleSwitch: false }).success, true)
   assert.equal(modeViewSchema.safeParse(base).success, true)
+})
+
+test('deferred cordis inject publishes a parseable capability view', async () => {
+  const mounted = mount({ deferInject: true })
+  assert.equal(mounted.rec.projection, undefined, 'nothing is registered synchronously')
+  await mounted.drainDeferred()
+  assert.ok(mounted.rec.projection, 'the projection registers after the deferred callback')
+  const view = viewOf(mounted.rec, 's1')
+  assert.equal(modeViewSchema.safeParse(view).success, true, 'the deferred view parses')
+  assert.equal(view.styleSwitch, true, 'the mounted structure route publishes the picker capability')
 })
