@@ -2112,10 +2112,14 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // Apply with an accessible reason instead of failing after the click.
   await typeInto('[data-dsh-iui-edit-style]', '换成更冷静的配色')
   await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === true`, 'a pending NL style instruction disables Apply')
-  check((await text('[data-dsh-iui-edit-style-status]')).includes('样式要求'), true, 'the status line explains the pending style instruction')
+  check((await text('[data-dsh-iui-edit-style-status]')).includes('样式说明'), true, 'the status line explains the pending style instruction')
+  check((await text('[data-dsh-iui-edit-style-pending-note]')).includes('样式说明待发送'), true, 'the collapsed style row flags the pending style description')
+  check((await text('[data-dsh-iui-edit-summary-style]')).includes('样式说明'), true, 'the send summary lists the style description')
   check((await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').getAttribute('aria-describedby') ?? ''`)).length > 0, true, 'the Apply button names the blocked reason')
   await typeInto('[data-dsh-iui-edit-style]', '')
   await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'clearing the NL instruction re-arms Apply')
+  check(await count('[data-dsh-iui-edit-style-pending-note]'), 0, 'clearing the instruction removes the row flag')
+  check(await count('[data-dsh-iui-edit-summary-style]'), 0, 'clearing the instruction removes the summary row')
 
   await read(`window.__styleSwitchFail = { code: 'base_style_mismatch', status: 409 }`)
   await click('[data-dsh-iui-edit-style-apply]')

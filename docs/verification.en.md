@@ -580,3 +580,19 @@ Four structural guards added after the review loop:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **500 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,025,580** bytes packed, **12,879,400** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-08 — Style-row visibility closeout
+
+- The style section stays collapsed to one row with the current style; a small swatch appears when the current style carries a theme.
+- A filled style description adds a "Style note pending" marker to the collapsed row and a style-description row to the send summary (not counted as block edits); DraftDock no longer labels a pure style draft as "global instruction".
+- The target group is labelled "Switch now" and the description field "Or describe it (model-applied)" so the zero-model switch and model-applied description remain distinct.
+- No popover, pending page-operation queue or in-editor save entry was added: a switch still records a revision immediately, the description still uses the composer/model path, and saving stays limited to theme-bearing temporary result cards.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **625/625** Node tests = Host **301** + Client **303** + packaging **21**; build host **837.6 kB**, client **4.04 MB** (js 3.82 / CSS 222.4), standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **504 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,031,253** bytes packed, **12,885,993** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

@@ -31,6 +31,9 @@ export interface DraftDockInjected {
 
 /** Short request summary for one draft chip. */
 function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
+  // A pure style-instruction draft has no block selection; label it as a style
+  // description instead of falling through to "global instruction".
+  if (draft.styleInstruction.trim() !== '') return t('edit.summaryStyle')
   const count = draft.selection.length
   if (count > 0) return t('edit.requestsCount', { count })
   if (draft.orderChanged) return t('edit.summaryOrderChanged')

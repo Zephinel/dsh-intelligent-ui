@@ -863,6 +863,8 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     ? t('edit.historyStyleCard')
     : session.style === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
   const styleCurrentLabel = `${styleSkinLabel} · ${styleLayoutLabel}`
+  const styleCurrentOption = styleTargets.find(option => isCurrentStyleTarget(session, option.target, option.layout))
+  const styleHeaderTheme = session.temporaryStyle?.theme ?? styleCurrentOption?.theme
   const styleNewResultHint = session.temporaryStyle !== undefined
     ? t('edit.styleNewResultTemporary')
     : t('edit.styleNewResult')
@@ -1535,7 +1537,19 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           <section className="dsh-iui-edit-style" aria-label={t('edit.styleSection')} data-dsh-iui-edit-style-section>
             <div className="dsh-iui-edit-style-head">
               <span className="dsh-iui-edit-section-title">{t('edit.styleSection')}</span>
+              {styleHeaderTheme === undefined ? null : (
+                <span
+                  className="dsh-iui-edit-style-head-swatch"
+                  aria-hidden="true"
+                  data-dsh-iui-edit-style-head-swatch
+                  style={{
+                    '--swatch-canvas': styleHeaderTheme.light.canvas,
+                    '--swatch-accent': styleHeaderTheme.light.accent,
+                  } as CSSProperties}
+                />
+              )}
               <span className="dsh-iui-edit-style-current" data-dsh-iui-edit-style-current>{t('edit.styleCurrent', { style: styleCurrentLabel })}</span>
+              {styleHasContent ? <span className="dsh-iui-edit-style-head-pending" data-dsh-iui-edit-style-pending-note>{t('edit.styleInstructionPending')}</span> : null}
               <span className="dsh-iui-edit-section-spacer" />
               <button
                 ref={styleToggleRef}
@@ -2111,6 +2125,12 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               <dt>{t('edit.summaryGlobal')}</dt>
               <dd>{session.globalInstruction.trim() !== '' ? t('edit.summaryFilled') : t('edit.summaryEmpty')}</dd>
             </div>
+            {styleHasContent ? (
+              <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-summary-style>
+                <dt>{t('edit.summaryStyle')}</dt>
+                <dd>{t('edit.summaryFilled')}</dd>
+              </div>
+            ) : null}
           </dl>
           <p className="dsh-iui-edit-info-note">{t('edit.sendInfoNote')}</p>
         </div>

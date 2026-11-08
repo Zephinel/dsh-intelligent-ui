@@ -560,3 +560,19 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **500 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,025,580** 字节，解包 **12,879,400** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 样式区可见性收口
+
+- 样式区默认折叠行保留当前样式；当前样式带 theme 时显示小色板。
+- 已填样式说明时，折叠行显示「样式说明待发送」，发送摘要增加「样式说明」行（不计入区块编辑数）；DraftDock 不再把纯样式草稿显示成「整体说明」。
+- 目标组文案改为「立即切换样式」，文字输入标签改为「或用文字描述（由模型修改）」，明确零模型切换与模型描述两条路径。
+- 本轮没有新增 popover、页面操作待发送队列或编辑器内保存入口；样式切换仍立即产生修订，样式说明仍走 composer/model 路径，保存仍只适用于带 theme 的临时样式结果卡。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **625/625** = Host **301** + Client **303** + packaging **21**；build host **837.6 kB**、client **4.04 MB**（js 3.82 / CSS 222.4）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **504 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,253** 字节，解包 **12,885,993** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
