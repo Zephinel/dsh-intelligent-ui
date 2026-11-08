@@ -45,6 +45,9 @@ export function ArtifactEditView({
   closing = false,
   onOpenHistory,
   styleEditSupported = false,
+  styleSwitchSupported = false,
+  styleTargets,
+  onPreviewStyleTarget,
 }: ArtifactEditViewClosingProps): ReactElement {
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null)
@@ -333,6 +336,9 @@ export function ArtifactEditView({
         hoveredBlockId={hoveredBlockId}
         onHoverBlock={setHoveredBlockId}
         styleEditSupported={styleEditSupported}
+        styleSwitchSupported={styleSwitchSupported}
+        styleTargets={styleTargets}
+        onPreviewStyleTarget={onPreviewStyleTarget}
       />
       {session.activeBlockId === undefined
         ? null

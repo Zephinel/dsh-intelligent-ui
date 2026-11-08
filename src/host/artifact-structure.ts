@@ -45,6 +45,8 @@ import { isStyleSnapshot, type StyleSnapshot } from '../shared/style-templates.t
 import type { RenderLayout } from '../shared/intelligent-ui.ts'
 import type { ArtifactRevisionRecord, ArtifactRevisionStore } from './artifact-revisions.ts'
 import { resolveArtifactBase } from './artifact-base.ts'
+import { describeArticleLayoutProblem } from './program-validation.ts'
+import type { StyleStore } from './style-store.ts'
 
 /** Bound on authoritative programs kept on disk (LRU by last access). */
 export const MAX_PROGRAM_RECORDS = 200
@@ -662,6 +664,12 @@ export interface ArtifactStructureServices {
   readonly revisions: ArtifactRevisionStore
   readonly programs: ArtifactProgramStore
   readonly operations: ArtifactStructureOperationStore
+  /** Saved-template resolver used only by a deterministic style switch. */
+  readonly styles: Pick<StyleStore, 'resolve'>
+  /** Called after the authenticated route is actually mounted (cordis inject is deferred). */
+  readonly onMounted?: () => void
+  /** Called when the webServer/connection injection is unavailable or invalid. */
+  readonly onUnavailable?: () => void
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown): void {
@@ -745,6 +753,15 @@ function structureRequestDigest(request: ArtifactStructureRequest): string {
     style: request.style,
     styleId: request.styleId ?? null,
     temporaryStyle: request.temporaryStyle ?? null,
+    // B2: the resolved target identity and the session scope that resolved it
+    // are part of the idempotency contract: replaying the same operationId with
+    // a different style switch must be rejected.
+    targetStyle: request.targetStyle === undefined
+      ? null
+      : request.targetStyle.kind === 'builtin'
+        ? { kind: 'builtin', layout: request.targetStyle.layout }
+        : { kind: 'template', styleId: request.targetStyle.styleId },
+    sessionStyleScope: request.sessionStyleScope ?? null,
     operations: request.operations.map(operation => ({
       op: operation.op,
       nodeId: operation.nodeId,
@@ -788,6 +805,153 @@ function resultFromRecord(record: ArtifactStructureOperationRecord, program: str
   }
 }
 
+/** One durable style identity resolved from a style-switch target. */
+interface ResolvedStyleTarget {
+  readonly style: RenderLayout
+  readonly styleId?: string
+}
+
+/**
+ * Resolve one deterministic style target against Host state.
+ *
+ * A built-in target is the layout itself (Free is never built-in; it needs a
+ * saved template). A template target must resolve for the request's session
+ * scope — global templates resolve everywhere, session templates only for their
+ * own chat session — or the switch fails 404 `style_missing`.
+ * @param services - Host registries, including the saved-template store.
+ * @param request - validated style-switch request carrying `targetStyle`.
+ * @returns the durable style identity, or a route failure.
+ */
+function resolveStyleTarget(
+  services: ArtifactStructureServices,
+  request: ArtifactStructureRequest,
+): { readonly ok: true; readonly target: ResolvedStyleTarget } | StructureBatchFailure {
+  const target = request.targetStyle
+  if (target === undefined) throw new Error('resolveStyleTarget requires a style target')
+  if (target.kind === 'builtin') return { ok: true, target: { style: target.layout } }
+  const template = services.styles.resolve(target.styleId, request.sessionStyleScope)
+  if (template === undefined) {
+    return batchFailure(404, 'style_missing', `the selected style template ${JSON.stringify(target.styleId)} is not available in this session; choose another style or reload the page.`)
+  }
+  return { ok: true, target: { style: template.baseLayout, styleId: template.id } }
+}
+
+/**
+ * Whether one style switch would keep the already-recorded base presentation.
+ *
+ * A temporary-style base always changes: even a durable target equal to its
+ * layout removes the result-owned snapshot. An unrecorded initial revision has
+ * no durable identity of its own, so the request's claimed base identity is used.
+ */
+function isStyleSwitchNoOp(
+  body: ArtifactStructureRequest,
+  baseRecord: ArtifactRevisionRecord | undefined,
+  target: ResolvedStyleTarget,
+): boolean {
+  const effectiveStyle = baseRecord === undefined ? body.style : baseRecord.style
+  const effectiveStyleId = baseRecord === undefined ? body.styleId : baseRecord.styleId
+  const temporaryBase = baseRecord === undefined
+    ? body.temporaryStyle !== undefined
+    : baseRecord.temporaryStyle !== undefined
+  if (temporaryBase) return false
+  return target.style === effectiveStyle && (target.styleId ?? null) === (effectiveStyleId ?? null)
+}
+
+/**
+ * Execute one deterministic style switch: the same program, a durable
+ * presentation, no model and no block edits.
+ *
+ * This branch is deliberately separate from `applyStructureBatch`: it never
+ * touches the CST, never applies operations and never records `editedBlockIds`,
+ * so a `struct_` revision without block ids is the durable style-switch
+ * signature (H5). The program registry, idempotency ledger and revision
+ * numbering/branch semantics match every other structure result.
+ * @param services - revision/program/ledger registries plus the template store.
+ * @param body - validated request whose `targetStyle` is present.
+ * @param latest - latest recorded revision of the artifact, when one exists.
+ * @returns the wrapped 201 result, or a route failure.
+ */
+function executeStyleSwitch(
+  services: ArtifactStructureServices,
+  body: ArtifactStructureRequest,
+  latest: ArtifactRevisionRecord | undefined,
+): { readonly ok: true; readonly status: 201; readonly body: { ok: true; result: ArtifactStructureResult } } | StructureBatchFailure {
+  const { revisions, programs, operations } = services
+  const resolved = resolveStyleTarget(services, body)
+  if (resolved.ok === false) return resolved
+  const target = resolved.target
+  const base = resolveArtifactBase({ revisions, programs }, { artifactId: body.artifactId, baseRevisionId: body.baseRevisionId })
+  if (base.ok === false) {
+    return base.kind === 'artifact_missing'
+      ? batchFailure(404, 'artifact_missing', 'no authoritative program is recorded for this artifact; render the page again before switching its style.')
+      : batchFailure(404, 'base_missing', 'the authoritative program for the base revision is not available; reload the page and retry.')
+  }
+  if (latest !== undefined && latest.revisionId !== body.baseRevisionId && body.branch !== true) {
+    return batchFailure(409, 'base_not_latest', 'the base revision is no longer the latest; reload the page or resend the style switch with branch: true.')
+  }
+  if (target.style === 'article') {
+    const articleProblem = describeArticleLayoutProblem(base.program)
+    if (articleProblem !== undefined) {
+      return batchFailure(400, 'article_unavailable', articleProblem.replace(/^render_ui: /, ''))
+    }
+  }
+  const baseRecord = revisions.get(body.baseRevisionId)
+  if (isStyleSwitchNoOp(body, baseRecord, target)) {
+    return batchFailure(400, 'no_change', 'the page already uses that style; choose a different style to record a switch.')
+  }
+  const revision = (latest === undefined ? 1 : latest.revision) + 1
+  const revisionId = structureRevisionId(revisions)
+  const record: ArtifactRevisionRecord = {
+    revisionId,
+    artifactId: body.artifactId,
+    baseRevisionId: body.baseRevisionId,
+    revision,
+    sessionId: STRUCTURE_SESSION_ID,
+    style: target.style,
+    ...target.styleId === undefined ? {} : { styleId: target.styleId },
+    ...body.title === undefined ? {} : { title: body.title },
+    // H5: no editedBlockIds — a struct_ revision without block ids is the
+    // deterministic style-switch signature; the program is copied byte-identical.
+    createdAt: Date.now(),
+  }
+  try {
+    programs.record({ artifactId: body.artifactId, revisionId, program: base.program })
+    revisions.record(record)
+    operations.record({
+      operationId: body.operationId,
+      artifactId: body.artifactId,
+      requestDigest: structureRequestDigest(body),
+      revisionId,
+      revision,
+      baseRevisionId: body.baseRevisionId,
+      ...body.title === undefined ? {} : { title: body.title },
+      style: target.style,
+      ...target.styleId === undefined ? {} : { styleId: target.styleId },
+      createdAt: Date.now(),
+    })
+  } catch (cause) {
+    return batchFailure(500, 'storage', `the style switch result could not be stored${cause instanceof Error ? `: ${cause.message}` : '.'}`)
+  }
+  return {
+    ok: true,
+    status: 201,
+    body: {
+      ok: true,
+      result: {
+        artifactId: body.artifactId,
+        revisionId,
+        baseRevisionId: body.baseRevisionId,
+        revision,
+        operationId: body.operationId,
+        program: base.program,
+        ...body.title === undefined ? {} : { title: body.title },
+        style: target.style,
+        ...target.styleId === undefined ? {} : { styleId: target.styleId },
+      },
+    },
+  }
+}
+
 /**
  * Execute one structure request against the authoritative registry.
  * @returns the wrapped result plus the HTTP status, or a failure.
@@ -809,6 +973,19 @@ function executeStructureRequest(
     }
   }
   const latest = revisions.latestFor(body.artifactId)
+  // H1: the client names the base revision's style identity. A recorded base
+  // must match it for every structure request, so a stale or forged claim can
+  // never apply a switch (or a structural batch) against the wrong presentation.
+  // Initial revision 1 has no record; its identity travels only in the request.
+  const baseRecord = revisions.get(body.baseRevisionId)
+  if (baseRecord !== undefined
+    && (baseRecord.style !== body.style || (baseRecord.styleId ?? null) !== (body.styleId ?? null))) {
+    return batchFailure(409, 'base_style_mismatch', 'the recorded base revision uses a different style than this request claims; reload the page and retry.')
+  }
+  // The registry is authoritative for a recorded base's result-owned snapshot:
+  // a client can never drop or forge it on a structural batch.
+  const authoritativeTemporaryStyle = baseRecord?.temporaryStyle ?? body.temporaryStyle
+  if (body.targetStyle !== undefined) return executeStyleSwitch(services, body, latest)
   const base = resolveArtifactBase({ revisions, programs }, { artifactId: body.artifactId, baseRevisionId: body.baseRevisionId })
   if (base.ok === false) {
     return base.kind === 'artifact_missing'
@@ -846,7 +1023,7 @@ function executeStructureRequest(
     style: body.style,
     ...body.styleId === undefined ? {} : { styleId: body.styleId },
     ...body.title === undefined ? {} : { title: body.title },
-    ...body.temporaryStyle === undefined ? {} : { temporaryStyle: body.temporaryStyle },
+    ...authoritativeTemporaryStyle === undefined ? {} : { temporaryStyle: authoritativeTemporaryStyle },
     ...applied.affectedRootBlockIds.length === 0 ? {} : { editedBlockIds: [...applied.affectedRootBlockIds] },
     createdAt: Date.now(),
   }
@@ -863,7 +1040,7 @@ function executeStructureRequest(
       ...body.title === undefined ? {} : { title: body.title },
       style: body.style,
       ...body.styleId === undefined ? {} : { styleId: body.styleId },
-      ...body.temporaryStyle === undefined ? {} : { temporaryStyle: body.temporaryStyle },
+      ...authoritativeTemporaryStyle === undefined ? {} : { temporaryStyle: authoritativeTemporaryStyle },
       createdAt: Date.now(),
     })
   } catch (cause) {
@@ -884,7 +1061,7 @@ function executeStructureRequest(
         ...body.title === undefined ? {} : { title: body.title },
         style: body.style,
         ...body.styleId === undefined ? {} : { styleId: body.styleId },
-        ...body.temporaryStyle === undefined ? {} : { temporaryStyle: body.temporaryStyle },
+        ...authoritativeTemporaryStyle === undefined ? {} : { temporaryStyle: authoritativeTemporaryStyle },
       },
     },
   }
@@ -898,10 +1075,20 @@ function executeStructureRequest(
 export function registerArtifactStructureRoute(
   ctx: { inject?: (dependencies: readonly string[], callback: (scoped: StructureRouteServices) => void) => unknown },
   services: ArtifactStructureServices,
-): void {
-  ctx.inject?.(['webServer', 'connection'], scoped => {
+): boolean {
+  let mounted = false
+  if (ctx.inject === undefined) {
+    services.onUnavailable?.()
+    return false
+  }
+  ctx.inject(['webServer', 'connection'], scoped => {
     const { webServer, connection } = scoped
-    if (typeof webServer?.register !== 'function' || typeof connection?.requestRejection !== 'function') return
+    if (typeof webServer?.register !== 'function' || typeof connection?.requestRejection !== 'function') {
+      services.onUnavailable?.()
+      return
+    }
+    mounted = true
+    services.onMounted?.()
     scoped.effect?.(() => {
       const dispose = webServer.register({
       kind: 'exact', path: ARTIFACT_STRUCTURE_ROUTE_PATH,
@@ -947,5 +1134,5 @@ export function registerArtifactStructureRoute(
       return () => { dispose() }
     })
   })
+  return mounted
 }
-

@@ -24,6 +24,24 @@ export const MAX_ARTIFACT_STRUCTURE_OPERATIONS = 20
 /** Operation kinds: structural edits plus deterministic property overrides. */
 export const ARTIFACT_STRUCTURE_OPS = ['delete', 'duplicate', 'move', 'props'] as const
 
+/**
+ * One durable style identity a deterministic style switch may apply.
+ *
+ * Only durable targets are accepted: a built-in base layout or a saved template
+ * id the Host can resolve. Client-authored snapshots are never a target (B2
+ * records a zero-model revision that keeps the program untouched).
+ */
+export type ArtifactStyleTarget =
+  | { readonly kind: 'builtin'; readonly layout: 'card' | 'article' }
+  | { readonly kind: 'template'; readonly styleId: string }
+
+/** Saved-template ids accepted as a style target (`cs_` prefix). */
+const TARGET_TEMPLATE_ID_PATTERN = /^cs_[a-z0-9]{6,32}$/
+
+/** Built-in base layouts a style switch may select (Free needs a saved template). */
+const TARGET_BUILTIN_LAYOUTS = ['card', 'article'] as const
+
+
 /** One structural operation against a revision-scoped node. */
 export interface ArtifactStructureOperation {
   readonly op: (typeof ARTIFACT_STRUCTURE_OPS)[number]
@@ -46,13 +64,31 @@ export interface ArtifactStructureRequest {
   readonly baseRevisionId: string
   /** Idempotency key: a retried batch returns the already recorded revision. */
   readonly operationId: string
+  /**
+   * Structural operations. A deterministic style switch is a single-intent
+   * request instead: `targetStyle` is present and this array is empty.
+   */
   readonly operations: readonly ArtifactStructureOperation[]
+  /**
+   * Deterministic style switch target (B2). When present the Host records a
+   * zero-model revision with the same program and the resolved durable style;
+   * `operations` must be empty and `preview` is not supported.
+   */
+  readonly targetStyle?: ArtifactStyleTarget
+  /**
+   * Chat session used to resolve session-owned saved templates. Only valid on a
+   * style switch (`targetStyle` present).
+   */
+  readonly sessionStyleScope?: string
   readonly branch?: boolean
   /** Dry-run: validate and compute the resulting program without recording a revision. */
   readonly preview?: boolean
   readonly title?: string
+  /** Recorded base layout of the revision being switched. */
   readonly style: RenderLayout
+  /** Recorded saved-template id of the base revision, when it used one. */
   readonly styleId?: string
+  /** Result-owned temporary skin of the base revision; a switch drops it. */
   readonly temporaryStyle?: StyleSnapshot
 }
 
@@ -107,24 +143,66 @@ export function describeStructureOperationProblem(value: unknown): string | unde
   return undefined
 }
 
-/** Describe why one untrusted structure request is unusable, or undefined. */
+/**
+ * Describe why one deterministic style target is unusable, or undefined.
+ *
+ * Only durable identities pass: built-in Card/Article (Free requires a saved
+ * free template) or a well-formed saved-template id. Extra fields per kind are
+ * rejected so the Host never guesses which identity wins.
+ * @param value - untrusted style target value.
+ * @returns a short machine-readable problem label.
+ */
+export function describeStyleTargetProblem(value: unknown): string | undefined {
+  if (!isRecord(value)) return 'invalid_target_style'
+  if (value.kind === 'builtin') {
+    if (Object.keys(value).some(key => key !== 'kind' && key !== 'layout')) return 'invalid_target_fields'
+    if (!TARGET_BUILTIN_LAYOUTS.some(layout => layout === value.layout)) return 'invalid_target_layout'
+    return undefined
+  }
+  if (value.kind === 'template') {
+    if (Object.keys(value).some(key => key !== 'kind' && key !== 'styleId')) return 'invalid_target_fields'
+    if (typeof value.styleId !== 'string' || !TARGET_TEMPLATE_ID_PATTERN.test(value.styleId)) return 'invalid_target_style_id'
+    return undefined
+  }
+  return 'invalid_target_style'
+}
+
+/**
+ * Describe why one untrusted structure request is unusable, or undefined.
+ *
+ * Single-intent rules keep the two apply models apart: a request either carries
+ * structural operations (1..MAX, optional preview) or a style target (empty
+ * operations, no preview, session scope allowed). Mixing them is rejected.
+ */
 export function describeStructureRequestProblem(value: unknown): string | undefined {
   if (!isRecord(value)) return 'not_an_object'
   const keys = Object.keys(value)
   if (keys.some(key => ![
     'schemaVersion', 'artifactId', 'baseRevisionId', 'operationId', 'operations',
+    'targetStyle', 'sessionStyleScope',
     'branch', 'preview', 'title', 'style', 'styleId', 'temporaryStyle',
   ].includes(key))) return 'unknown_field'
   if (value.schemaVersion !== 1) return 'unsupported_version'
   if (typeof value.artifactId !== 'string' || !ARTIFACT_ID_PATTERN.test(value.artifactId)) return 'invalid_artifact_id'
   if (typeof value.baseRevisionId !== 'string' || !ARTIFACT_ID_PATTERN.test(value.baseRevisionId)) return 'invalid_base_revision_id'
   if (!isRequestId(value.operationId)) return 'invalid_operation_id'
-  if (!Array.isArray(value.operations) || value.operations.length === 0 || value.operations.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
-    return 'invalid_operations'
-  }
-  for (const operation of value.operations) {
-    const problem = describeStructureOperationProblem(operation)
-    if (problem !== undefined) return problem
+  const hasTarget = 'targetStyle' in value
+  if (hasTarget) {
+    const targetProblem = describeStyleTargetProblem(value.targetStyle)
+    if (targetProblem !== undefined) return targetProblem
+    if (value.preview === true) return 'preview_not_supported'
+    if (!Array.isArray(value.operations)) return 'invalid_operations'
+    if (value.operations.length > 0) return 'style_with_operations'
+    if ('sessionStyleScope' in value && !isBoundedText(value.sessionStyleScope, 1, 200)) return 'invalid_session_scope'
+  } else {
+    if (!Array.isArray(value.operations) || value.operations.length === 0 || value.operations.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
+      return 'invalid_operations'
+    }
+    for (const operation of value.operations) {
+      const problem = describeStructureOperationProblem(operation)
+      if (problem !== undefined) return problem
+    }
+    if ('sessionStyleScope' in value) return 'unexpected_session_scope'
   }
   if ('branch' in value && typeof value.branch !== 'boolean') return 'invalid_branch'
   if ('preview' in value && typeof value.preview !== 'boolean') return 'invalid_preview'

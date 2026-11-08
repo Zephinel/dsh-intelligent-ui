@@ -79,7 +79,7 @@ const modeStateSchema = z.object({
 }).strict()
 
 /** Wire shape of the `intelligent-ui` projection view. */
-const modeViewSchema = z.object({
+export const modeViewSchema = z.object({
   sessionEnable: z.enum(['inherit', 'on', 'off']),
   sessionStyle: z.string().max(64),
   globalEnabled: z.boolean(),
@@ -99,6 +99,9 @@ const modeViewSchema = z.object({
   // Capability bit: the Host can apply revision-bound natural-language style
   // edits from the editor. Optional so an older Host's view still validates.
   styleEdit: z.literal(true).optional(),
+  // Capability bit: deterministic zero-model style switching is available.
+  // Optional boolean so a deployment without the route can publish false.
+  styleSwitch: z.boolean().optional(),
 }).strict()
 
 /** One parsed `/iui` invocation. */
@@ -239,6 +242,8 @@ export interface IntelligentUIState {
   styleFor(sessionId?: string): StyleId
   /** Return the selected custom template only when it is visible in this session. */
   templateFor(sessionId?: string): StyleTemplate | undefined
+  /** Publish whether the deterministic style-switch route is mounted. */
+  setStyleSwitchSupported(supported: boolean): void
 }
 
 /** Persisted session overrides, with legacy global shapes accepted on read. */
@@ -270,6 +275,7 @@ export function installSessionControls(ctx: ModeHostContext, config: Intelligent
   let sessionOff = new Set<string>()
   let sessionStyles = new Map<string, string>()
   let switchReady = false
+  let styleSwitchSupported = true
   let agents: { list?: () => Iterable<unknown> } | undefined
   const restrictions = new WeakMap<object, () => void>()
   const warned = new WeakSet<object>()
@@ -346,6 +352,7 @@ export function installSessionControls(ctx: ModeHostContext, config: Intelligent
       style: styleFor(sessionId),
       onDemand: onDemand.projection(sessionId),
       styleEdit: true,
+      styleSwitch: styleSwitchSupported,
     }
   }
 
@@ -546,5 +553,6 @@ export function installSessionControls(ctx: ModeHostContext, config: Intelligent
     enabledFor: effectiveEnabled,
     styleFor,
     templateFor,
+    setStyleSwitchSupported(supported) { styleSwitchSupported = supported },
   }
 }

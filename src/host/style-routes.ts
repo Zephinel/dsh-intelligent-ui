@@ -122,6 +122,21 @@ function saveFailure(res: ServerResponse, cause: unknown): void {
   else error(res, 400, 'save_failed', 'Could not save the style. Check its name, scope and theme, then retry.')
 }
 
+/**
+ * Synthetic session ids the revision registry uses for snapshots created without
+ * a model turn: `local-restore` for zero-model restores (artifact-revisions.ts)
+ * and `structure-route` for deterministic structure/style revisions
+ * (artifact-structure.ts). They never name a chat session, so a session-scoped
+ * save from such a snapshot must accept the authenticated caller's session id.
+ *
+ * Trust boundary: this route is connection-authenticated but does not own chat
+ * session authorization; a session-scoped template is visibility UX, not an
+ * authz boundary (the GET catalog already trusts a bounded `sessionId` query).
+ * Only these known programmatic ids are lifted — a snapshot that carries a real
+ * chat session id must still match it exactly.
+ */
+const PROGRAMMATIC_RESULT_SESSION_IDS: ReadonlySet<string> = new Set(['local-restore', 'structure-route'])
+
 /** Expose catalog/save only with the existing connection authentication. */
 export function registerStyleRoutes(ctx: {
   inject?: (dependencies: readonly string[], callback: (scoped: StyleRouteServices) => void) => unknown
@@ -150,7 +165,8 @@ export function registerStyleRoutes(ctx: {
             }
             const result = results.get(body.resultId)
             if (result === undefined) { error(res, 404, 'result_missing', 'This result snapshot is no longer available.'); return }
-            if (body.scope === 'session' && body.sessionId !== result.sessionId) {
+            if (body.scope === 'session' && body.sessionId !== result.sessionId
+              && !PROGRAMMATIC_RESULT_SESSION_IDS.has(result.sessionId)) {
               error(res, 400, 'invalid_input', 'The session must match the result.'); return
             }
             const { baseLayout, directives, theme } = result.snapshot

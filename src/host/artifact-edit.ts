@@ -619,6 +619,49 @@ interface SessionState {
   readonly entries: Map<string, Entry>
 }
 
+/**
+ * Stable identity used to compare top-level blocks across a style-only revision.
+ *
+ * A named statement is the strongest signal; an inline block falls back to its
+ * component type plus title (the same precedence block recognition uses).
+ */
+function topLevelBlockIdentity(block: { readonly statementId?: string; readonly componentType: string; readonly title?: string }): string {
+  return block.statementId === undefined
+    ? `type:${block.componentType}:${block.title ?? ''}`
+    : `statement:${block.statementId}`
+}
+
+/**
+ * Warnings specific to a style-only revision: the top-level block set and order
+ * must stay identical. `artifactEditWarnings` only walks base nodes, so an added
+ * or reordered top-level block would otherwise pass silently and weaken the
+ * "style editing only" guarantee.
+ * @param baseBlocks - recognized top-level blocks of the rendered page.
+ * @param updatedBlocks - recognized top-level blocks of the style-edited page.
+ * @returns model-readable warnings for added/removed/reordered blocks.
+ */
+function styleEditStructureWarnings(
+  baseBlocks: readonly { readonly statementId?: string; readonly componentType: string; readonly title?: string }[],
+  updatedBlocks: readonly { readonly statementId?: string; readonly componentType: string; readonly title?: string }[],
+): string[] {
+  if (baseBlocks.length === 0 || updatedBlocks.length === 0) return []
+  if (baseBlocks.length !== updatedBlocks.length) {
+    return [`Top-level blocks changed: the page now has ${updatedBlocks.length} top-level blocks instead of ${baseBlocks.length}; a style edit must keep every block and change only its presentation.`]
+  }
+  const baseKeys = baseBlocks.map(topLevelBlockIdentity)
+  const updatedKeys = updatedBlocks.map(topLevelBlockIdentity)
+  const balance = new Map<string, number>()
+  for (const key of baseKeys) balance.set(key, (balance.get(key) ?? 0) + 1)
+  for (const key of updatedKeys) balance.set(key, (balance.get(key) ?? 0) - 1)
+  if ([...balance.values()].some(count => count !== 0)) {
+    return ['Top-level blocks changed: the page no longer contains the same blocks; a style edit must keep every block and change only its presentation.']
+  }
+  if (baseKeys.some((key, index) => key !== updatedKeys[index])) {
+    return ['Top-level block order changed; a style edit must keep the page structure and change only its presentation.']
+  }
+  return []
+}
+
 const RELOAD = 'Ask the user to reload the rendered page and make the edit again.'
 
 const UNREADABLE_MESSAGE = `render_ui: the block edit request in this user message could not be read, so the page was not updated. ${RELOAD}`
@@ -1033,9 +1076,12 @@ export function createArtifactEditController(
         if (program === request.program.trim() && JSON.stringify(snapshot) === JSON.stringify(request.temporaryStyle)) {
           throw new Error(STYLE_NO_OP_MESSAGE)
         }
-        const warnings = artifactEditWarnings(request.program, program, [])
-        // H4: warn when a style-only revision returns a page with no editable blocks.
         const baseExtraction = extractArtifactBlocks(request.program)
+        const warnings = artifactEditWarnings(request.program, program, [])
+        // The top-level structure must also stay intact: per-block source checks
+        // above cannot see added or reordered blocks.
+        warnings.push(...styleEditStructureWarnings(baseExtraction.blocks, updated.blocks))
+        // H4: warn when a style-only revision returns a page with no editable blocks.
         if (baseExtraction.blocks.length > 0 && updated.blocks.length === 0) warnings.push(STYLE_EMPTY_BLOCKS_WARNING)
         const styleRecord: ArtifactRevisionRecord = {
           revisionId: callId,
@@ -1125,6 +1171,9 @@ export function createArtifactEditController(
           throw new Error(`${composed ? 'edit_ui_blocks' : 'render_ui'}: strict mode is on; unselected block(s) changed: ${summary} Keep every unselected top-level block unchanged and try again; this edit request stays pending.`)
         }
       }
+      // The registry is authoritative for a recorded base's result-owned
+      // snapshot: a client can never drop or forge it on a content edit.
+      const authoritativeTemporaryStyle = revisions.get(request.baseRevisionId)?.temporaryStyle ?? request.temporaryStyle
       const record: ArtifactRevisionRecord = {
         revisionId: callId,
         artifactId: request.artifactId,
@@ -1133,7 +1182,7 @@ export function createArtifactEditController(
         sessionId,
         style: request.style,
         ...request.styleId === undefined ? {} : { styleId: request.styleId },
-        ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
+        ...authoritativeTemporaryStyle === undefined ? {} : { temporaryStyle: authoritativeTemporaryStyle },
         ...request.title === undefined ? {} : { title: request.title },
         editedBlockIds,
         createdAt: now(),
@@ -1149,7 +1198,9 @@ export function createArtifactEditController(
           revision: record.revision,
           editedBlockIds,
           ...normalizedProgram === undefined ? {} : { program: normalizedProgram },
-          ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
+          ...request.styleId === undefined ? {} : { styleId: request.styleId },
+          ...request.title === undefined ? {} : { title: request.title },
+          ...authoritativeTemporaryStyle === undefined ? {} : { temporaryStyle: authoritativeTemporaryStyle },
         },
         warnings,
       }

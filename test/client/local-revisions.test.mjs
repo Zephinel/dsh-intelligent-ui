@@ -9,6 +9,7 @@ import {
   MAX_LOCAL_REVISIONS,
   addLocalRevision,
   clearLocalRevisions,
+  isStyleSwitchRevision,
   localRevisionProgram,
   localRevisionsFor,
   restoreRevision,
@@ -85,4 +86,23 @@ test('restoreRevision posts the source identity and maps the host revision', asy
 
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 'already_latest' } }), { status: 409 })
   assert.equal(await restoreRevision({ artifactId: 'call_1', sourceRevisionId: 'call_new', program: 'x' }), undefined)
+})
+
+test('a style-switch revision is recognized for the history label', () => {
+  // B2 switches are `struct_` revisions that change no block.
+  assert.equal(isStyleSwitchRevision({ source: 'structure', revisionId: 'struct_abcdef0123456789' }), true)
+  assert.equal(isStyleSwitchRevision({ source: 'structure', revisionId: 'struct_abcdef0123456789', editedBlockIds: [] }), true)
+  assert.equal(isStyleSwitchRevision({ source: 'structure', revisionId: 'struct_abcdef0123456789', editedBlockIds: ['b2'] }), false)
+  // A render_ui order-only/global-only revision is also source 'structure' with
+  // no edited blocks, but its id is the model call id: not a style switch.
+  assert.equal(isStyleSwitchRevision({ source: 'structure', revisionId: 'call_order_only', editedBlockIds: [] }), false)
+  assert.equal(isStyleSwitchRevision({ source: 'edit', revisionId: 'call_edit_2' }), false)
+  assert.equal(isStyleSwitchRevision({ source: 'initial', revisionId: 'call_1' }), false)
+})
+
+test('a local style revision converts to the style revision kind', () => {
+  const program = localRevisionProgram(revision('style_rev', 2, { kind: 'style', style: 'article' }))
+  assert.equal(program.localRevisionKind, 'style')
+  assert.equal(program.style, 'article')
+  assert.equal(program.revision, 2)
 })

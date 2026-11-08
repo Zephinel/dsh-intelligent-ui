@@ -12,7 +12,7 @@ import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision, ArtifactHistorySource } from '../../shared/artifact-edit.ts'
 import type { LocalArtifactRevision } from './local-revisions.ts'
 import { ensureArtifactBase, invalidateArtifactBase } from './artifact-base.ts'
-import { fetchArtifactHistory, fetchArtifactHistoryProgram, restoreRevision } from './local-revisions.ts'
+import { fetchArtifactHistory, fetchArtifactHistoryProgram, isStyleSwitchRevision, restoreRevision } from './local-revisions.ts'
 import type { Translate } from '../../shared/locales.ts'
 
 /** Title lookup for edited block ids (display id -> known block). */
@@ -42,6 +42,16 @@ function sourceLabelKey(source: ArtifactHistorySource): 'edit.historyInitial' | 
   if (source === 'edit') return 'edit.historyEdit'
   if (source === 'structure') return 'edit.historyStructure'
   return 'edit.historyRestore'
+}
+
+/**
+ * Localized source label for one revision.
+ *
+ * A deterministic style switch is recorded as a structure revision with no
+ * edited blocks, so it gets its own label instead of the operation one.
+ */
+function sourceLabel(t: Translate, revision: ArtifactHistoryRevision): string {
+  return t(isStyleSwitchRevision(revision) ? 'edit.historyStyleSwitch' : sourceLabelKey(revision.source))
 }
 
 /** Short local date/time for one revision timestamp. */
@@ -81,7 +91,7 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
       <div className="dsh-iui-history-row-head">
         <span className="dsh-iui-history-revision">{t('edit.revision', { n: revision.revision })}</span>
         {revision.current ? <span className="dsh-iui-history-current">{t('edit.historyCurrent')}</span> : null}
-        <span className="dsh-iui-history-source">{t(sourceLabelKey(revision.source))}</span>
+        <span className="dsh-iui-history-source">{sourceLabel(t, revision)}</span>
         <span className="dsh-iui-history-spacer" />
         <span className="dsh-iui-history-time">{formatHistoryTime(revision.createdAt)}</span>
       </div>
@@ -102,7 +112,7 @@ function HistoryRow({ t, revision, blocks, restoring, onRestore }: {
           </ul>
         </div>
       ) : (
-        <p className="dsh-iui-history-note">{t(sourceLabelKey(revision.source))}</p>
+        <p className="dsh-iui-history-note">{sourceLabel(t, revision)}</p>
       )}
       {revision.hasProgram ? null : <p className="dsh-iui-history-unavailable">{t('edit.historyUnavailable')}</p>}
       {revision.restorable && !revision.current ? (

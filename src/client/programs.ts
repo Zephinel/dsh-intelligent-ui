@@ -129,10 +129,13 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean, meta
   // Replayed model arguments are data too. Do not render a conflicting or invalid snapshot.
   if ('temporaryStyle' in args && (!isStyleSnapshot(temporaryStyle) || temporaryStyle.baseLayout !== style || 'styleId' in args)) return undefined
   if (style === 'free' && !isStyleSnapshot(temporaryStyle) && !isCustomStyleId(styleId)) return undefined
+  // A style revision is recorded by the Host from result meta; the model may
+  // omit args.title, so the recorded title is the fallback for the card header.
+  const recordedTitle = metaTitle(meta)
   const base = {
     callId,
     program,
-    ...typeof title === 'string' ? { title } : {},
+    ...typeof title === 'string' ? { title } : recordedTitle === undefined ? {} : { title: recordedTitle },
     ...isRenderLayout(style) ? { style } : {},
     ...isCustomStyleId(styleId) ? { styleId } : {},
     ...isStyleSnapshot(temporaryStyle) ? { temporaryStyle, styleSource: 'temporary' as const }
@@ -145,6 +148,12 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean, meta
   // is the record the user sees, so render/export/edit from that program.
   const normalized = normalizedProgram(meta)
   return normalized === undefined ? base : { ...base, program: normalized }
+}
+
+/** Card title recorded on an edited-result meta projection, when present. */
+function metaTitle(meta: unknown): string | undefined {
+  if (!isArtifactRevisionMeta(meta)) return undefined
+  return meta.title
 }
 
 /** Host-normalized program carried by an arrangement result, when present. */

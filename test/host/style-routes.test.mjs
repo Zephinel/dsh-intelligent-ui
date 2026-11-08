@@ -292,3 +292,23 @@ test('update/delete restrict editable fields, preserve snapshot history, and ret
   assert.equal((await post(route, { ...saveResult, name: 'Saved after delete' })).status, 201)
 })
 
+
+test('saveFromResult accepts the caller session for local/programmatic snapshots only', async () => {
+  const restoreSnapshot = { ...snapshot }
+  const restoreResult = { resultId: 'restore_0123456789abcdef', sessionId: 'local-restore', snapshot: restoreSnapshot, createdAt: 2 }
+  const switchResult = { resultId: 'struct_0123456789abcdef', sessionId: 'structure-route', snapshot: { ...snapshot, baseLayout: 'card' }, createdAt: 3 }
+  const { route } = mount({ results: [restoreResult, switchResult] })
+  for (const [resultId, name] of [['restore_0123456789abcdef', 'Restored card'], ['struct_0123456789abcdef', 'Switched card']]) {
+    const response = await post(route, { op: 'saveFromResult', resultId, name, scope: 'session', sessionId: 'chat-session-1' })
+    assert.equal(response.status, 201, JSON.stringify(JSON.parse(response.body)))
+    assert.equal(JSON.parse(response.body).template.sessionId, 'chat-session-1')
+  }
+  // A snapshot that carries a real chat session id still requires an exact match.
+  const realResult = { resultId: 'real-result-1', sessionId: 's1', snapshot, createdAt: 4 }
+  const { route: real } = mount({ results: [realResult] })
+  const mismatch = await post(real, { op: 'saveFromResult', resultId: 'real-result-1', name: 'Wrong session', scope: 'session', sessionId: 's2' })
+  assert.equal(mismatch.status, 400)
+  assert.equal(JSON.parse(mismatch.body).error.code, 'invalid_input')
+  const matching = await post(real, { op: 'saveFromResult', resultId: 'real-result-1', name: 'Right session', scope: 'session', sessionId: 's1' })
+  assert.equal(matching.status, 201)
+})

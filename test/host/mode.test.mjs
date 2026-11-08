@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { installSessionControls } from '../../src/host/mode.ts'
 import { createStyleStore } from '../../src/host/style-store.ts'
+import { modeViewSchema } from '../../src/host/mode.ts'
 import { styleInput, template } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
@@ -58,6 +59,14 @@ function mount({ modeServices = true, persisted, settings, useConfig = settings 
     },
     inject(dependencies, callback) {
       const list = [...dependencies]
+      if (list.includes('webServer') && list.includes('connection')) {
+        callback({
+          webServer: { register() { return () => {} } },
+          connection: { requestRejection() { return undefined } },
+          effect(fn) { return fn() },
+        })
+        return
+      }
       if (list.includes('skills')) {
         callback({ skills: { register(skill) { rec.skill = skill } } })
         return
@@ -139,12 +148,13 @@ test('the projection folds valid commands and exposes the live settings', () => 
     pending: false,
     onDemand: null,
     styleEdit: true,
+    styleSwitch: true,
   })
 
   state = fold(state, { type: 'command/run', data: { name: 'iui', args: 'on', commandId: 'c1' } })
   assert.deepEqual(state.command, { commandId: 'c1', kind: 'scope' })
   assert.deepEqual(rec.projection.wire.view(state), {
-    sessionEnable: 'inherit', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'card', enabled: false, style: 'card', pending: true, onDemand: null, styleEdit: true,
+    sessionEnable: 'inherit', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'card', enabled: false, style: 'card', pending: true, onDemand: null, styleEdit: true, styleSwitch: true,
   })
   state = fold(state, { type: 'command/done', data: { commandId: 'c1', kind: 'success' } })
   assert.equal(rec.projection.wire.view(state).pending, false)
@@ -183,7 +193,7 @@ test('the session switch gates prompt and tool visibility', async () => {
   assert.match(on.text, /on for this session/)
   assert.ok(rec.sections[0].text(promptContext('s1')).length > 10_000)
   assert.deepEqual(viewOf(rec, 's1'), {
-    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null, styleEdit: true,
+    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null, styleEdit: true, styleSwitch: true,
   })
   assert.equal(rec.disposed.length, 1)
   const value = await rec.tool.execute({ program: VALID, style: 'card' }, { agent: s1 })
@@ -431,4 +441,14 @@ test('adjust command projects its parent; explicit style choices and scope off c
     assert.equal(invoke(command).kind, 'success')
     assert.equal(viewOf(rec, 's1').onDemand.status, 'cancelled', command)
   }
+})
+
+test('the wire view accepts a false or absent styleSwitch capability', () => {
+  const base = {
+    sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: false, globalStyle: 'auto',
+    enabled: true, style: 'auto', pending: false, onDemand: null, styleEdit: true,
+  }
+  assert.equal(modeViewSchema.safeParse({ ...base, styleSwitch: true }).success, true)
+  assert.equal(modeViewSchema.safeParse({ ...base, styleSwitch: false }).success, true)
+  assert.equal(modeViewSchema.safeParse(base).success, true)
 })

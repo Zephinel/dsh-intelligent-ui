@@ -52,12 +52,12 @@ See the [usage guide](docs/usage.en.md) for switches, styles, templates and on-d
 
 A rendered page stays editable.
 
-![Editing canvas: orbit glow, row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
+![Editing canvas: orbit glow, style section (Switch style + style instruction), row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
 
 - Click **Edit** in the card header to open the canvas; root blocks show a soft orbit glow.
 - Each row's **More** menu offers Locate/Edit/Duplicate/Move/Delete; Delete confirms inside the menu.
 - Block requests, drag/keyboard reordering, nested editing, Divider/Spacer quick adjust and structure previews all happen in the left panel; the Host records a revision after sending.
-- The **Adjust style** section at the top of the panel takes a one-sentence visual instruction (max 2000 chars): after sending, the model keeps the content and layout, updates only the style, and records a new temporary-style revision. Temporary results can be restyled here too. Cards on a new Host that are editable no longer show the footer Adjust style button (old Hosts or non-editable cards keep that fallback).
+- The **Style** section at the top of the panel (expand it with **Change style**) does two things: **Switch style** selects and previews a built-in Card/Article or saved template; confirm with **Apply style** (zero model, records a new revision immediately, changing only style identity and theme, not content), while a natural-language **style instruction** (max 2000 chars) asks the model to restyle the page (the Host enforces the layout and only warns about content changes) and records a new temporary-style revision. Temporary results can be restyled here too. Cards on a new Host that are editable no longer show the footer Adjust style button (old Hosts or non-editable cards keep that fallback).
 - See the [usage guide](docs/usage.en.md#edit-a-rendered-page) for the full flow.
 
 ## Component tour
@@ -66,7 +66,7 @@ Generated pages are built from the components below. The renderer is not a chat 
 
 ![Component and example overview: layout, text, inputs, media, data, interaction, drawing and real examples](assets/intelligent-ui-readme-components.webp)
 
-Ten real examples (sales dashboard, brewing quiz, narrow calculator and more) are in the same image; on narrow screens cards reflow to one column and long chart labels truncate instead of overflowing.
+Three real examples (sales dashboard, coffee brewing quiz, pour-over calculator in the narrow capture) are in the same image; on narrow screens cards reflow to one column and long chart labels truncate instead of overflowing.
 
 ## Capabilities
 
@@ -172,7 +172,7 @@ Structured answers use a card by default; to force one (or when the model still 
 
 ![Temporary results: temporary-style badge, save as template and the fixed dark version](assets/intelligent-ui-readme-temporary.webp)
 
-Temporary results are usable immediately; style adjustment happens inside the card's **Edit** canvas (send a style instruction; the content and layout are kept and a new temporary-style revision is recorded), while **Save as template** asks for a name and scope. Saving reuses the validated style snapshot and does not select the template or change the global default. Old Hosts or non-editable temporary cards keep the footer Adjust style fallback.
+Temporary results are usable immediately; style adjustment happens inside the card's **Edit** canvas (**Style → Change style**: describe the change or switch to a built-in/saved style; the Host keeps the layout and only warns about content changes), while **Save as template** asks for a name and scope. Saving reuses the validated style snapshot and does not select the template or change the global default. Old Hosts or non-editable temporary cards keep the footer Adjust style fallback.
 
 ## Build, test and deploy
 
@@ -198,7 +198,7 @@ Everyday checks and packaging:
 | `npm run pack:check` | Preview the final npm package file list without publishing |
 | `npm run test:browser` | Run 9 browser suites after a build; Chrome required. `test/browser/visual-baselines/` holds manual visual baselines (5 PNGs + `captures.json` + `SHA256SUMS`) with no automated pixel comparison |
 
-- Current main-branch verification record: **558/558** Node tests (Host 269, Client 268, packaging 21; covering block editing/arrangement/multi-card/branch/restore/draft persistence/temporary style/nested editing/hierarchical order/structure operations/container expansion/model additions/cross-container moves/structure preview/strict protection/runtime state/panel animation and width fit); renderer parse/render **42/42** each, CSS/prop contract **50/50** and **63/63**, typography **22/22**, i18n **4** programs, nested CSS-compensation contract **28/28 direct + 5/5 scoped**; **9/9** browser suites passed, including **101** settings template-exchange, **114** on-demand, **46** interactive-page and **65** image-export assertions, plus **447** checks in the Artifact block-editing suite and **75** checks in the nested edit-renderer suite. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
+- Current working-tree verification record (B1 committed; B1 review fixes and B2 pending): **615/615** Node tests (Host 298, Client 296, packaging 21; covering block editing/arrangement/multi-card/branch/restore/draft persistence/temporary style/nested editing/hierarchical order/structure operations/container expansion/model additions/cross-container moves/structure preview/strict protection/runtime state/panel animation and width fit); renderer parse/render **42/42** each, CSS/prop contract **50/50** and **63/63**, typography **22/22**, i18n **4** programs, nested CSS-compensation contract **28/28 direct + 5/5 scoped**; **9/9** browser suites passed, including **101** settings template-exchange, **114** on-demand, **46** interactive-page and **65** image-export assertions, plus **496** checks in the Artifact block-editing suite and **75** checks in the nested edit-renderer suite. Browser tests cover components/contracts; real-model validation scope and remaining scenarios are in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) (historical evidence).
 - `node scripts/capture-screenshots.mjs` rebuilds panel, hint, temporary-result and settings captures at 2x in Chrome using fixed DSH tokens, production components and fake services. English UI; shell card glyphs use lucide stand-ins.
 - The typography check inside `npm run check` needs a local Chrome; without one that check is skipped and the remaining tests still run. Use `CHROME_BIN` for a non-default Chrome executable location (also used by the browser suites).
 
@@ -224,7 +224,7 @@ Cards appear at the end of the turn; full boundaries for model validation, netwo
 
 **Must I create a template, preview or name it first?** No. Choose On-demand UI and chat normally; use the result immediately. A name is needed only when you choose Save as template. Temporary results do not replace the selected session style.
 
-**Can I save later or keep adjusting?** Yes. Open the card's **Edit** canvas and describe the visual change under **Adjust style**; Save as template stays on the card footer. Saving uses the clicked result's version, not a later result. If the registry has evicted it, saving reports an unavailable snapshot.
+**Can I save later or keep adjusting?** Yes. Open the card's **Edit** canvas and either describe the visual change under **Style → Change style** or switch directly with **Switch style**; Save as template stays on the card footer. Saving uses the clicked result's version, not a later result. If the registry has evicted it, saving reports an unavailable snapshot.
 
 **Why did clarification not continue generation?** A structured `ask_user_question` answer resumes the same operation; after a text question, the next message automatically continues it. Only expiry, restart, failure or interruption needs a re-arm/retry. Concurrent messages in multiple tabs may also consume the same intent.
 

@@ -24,7 +24,7 @@ import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-template
 /** One locally recorded revision restored or structurally derived without a model turn. */
 export interface LocalArtifactRevision {
   /** How the revision was produced; absent in older restore records. */
-  readonly kind?: 'restore' | 'structure' | 'props'
+  readonly kind?: 'restore' | 'structure' | 'props' | 'style'
   readonly artifactId: string
   readonly sourceRevisionId: string
   readonly revisionId: string
@@ -155,6 +155,7 @@ export function localRevisionProgram(revision: LocalArtifactRevision): Intellige
     localRevision: true,
     ...revision.kind === 'structure' ? { localRevisionKind: 'structure' as const } : {},
     ...revision.kind === 'props' ? { localRevisionKind: 'props' as const } : {},
+    ...revision.kind === 'style' ? { localRevisionKind: 'style' as const } : {},
     running: false,
   }
 }
@@ -229,6 +230,22 @@ function isHistoryRevision(value: unknown): value is ArtifactHistoryRevision {
     && (record.styleId === undefined || typeof record.styleId === 'string')
     && (record.baseRevisionId === undefined || typeof record.baseRevisionId === 'string')
     && (record.editedBlockIds === undefined || (Array.isArray(record.editedBlockIds) && record.editedBlockIds.every(id => typeof id === 'string')))
+}
+
+/**
+ * Whether one recorded structure revision came from a deterministic style
+ * switch (B2). Such revisions keep the program and record no edited blocks, so
+ * the history labels them "style switch" instead of "structure operation".
+ * @param revision - history row with its source and edited blocks.
+ * @returns true for a style-switch revision.
+ */
+export function isStyleSwitchRevision(revision: Pick<ArtifactHistoryRevision, 'source' | 'editedBlockIds' | 'revisionId'>): boolean {
+  // The Host's H5 signature is a `struct_` revision without edited blocks. A
+  // render_ui order-only/global-only revision also reports source 'structure'
+  // with no edited blocks, so the id prefix is required to keep them apart.
+  return revision.source === 'structure'
+    && revision.revisionId.startsWith('struct_')
+    && (revision.editedBlockIds === undefined || revision.editedBlockIds.length === 0)
 }
 
 /**

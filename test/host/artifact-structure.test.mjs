@@ -19,9 +19,10 @@ import {
   MAX_PROGRAM_RECORDS,
   createArtifactProgramStore,
   createArtifactStructureOperationStore,
+  registerArtifactStructureRoute,
 } from '../../src/host/artifact-structure.ts'
-import { createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
-import { THEME } from './style-fixtures.mjs'
+import { buildArtifactHistory, createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
+import { template, THEME } from './style-fixtures.mjs'
 
 const plugin = await import('../../lib/index.js')
 const originalHome = process.env.DSH_HOME
@@ -65,6 +66,15 @@ const ledgerFile = (home) => join(home, 'dsh-intelligent-ui-structure-operations
 /** Full plugin harness with captured HTTP routes and tools. */
 function mount(options = {}) {
   const home = tempHome('iui-artifact-structure-')
+  if (options.templates !== undefined) {
+    writeFileSync(join(home, 'dsh-intelligent-ui-styles.json'), JSON.stringify({ version: 1, templates: options.templates }))
+  }
+  if (options.revisions !== undefined) {
+    writeFileSync(join(home, 'dsh-intelligent-ui-artifacts.json'), JSON.stringify({ version: 1, revisions: options.revisions }))
+  }
+  if (options.programs !== undefined) {
+    writeFileSync(join(home, 'dsh-intelligent-ui-programs.json'), JSON.stringify({ version: 1, programs: options.programs }))
+  }
   const registered = { tools: [], sessionEvents: [] }
   const routes = []
   const disposed = []
@@ -151,6 +161,39 @@ function structureBody(overrides = {}) {
     operationId: operationId('structure'),
     operations: [],
     style: 'card',
+    ...overrides,
+  }
+}
+
+/** A card-style program that also satisfies the article layout predicate. */
+const ARTICLE_PROGRAM = 'root = Col([toc, section])\ntoc = Toc(["Intro"])\nsection = Section("Intro", [Markdown("Body.")])'
+
+/** One durable revision record for preseeded base-style tests. */
+function revisionRecord(overrides = {}) {
+  return {
+    revisionId: 'call-2', artifactId: 'call-original', baseRevisionId: 'call-original', revision: 2,
+    sessionId: 's1', style: 'card', createdAt: 10, ...overrides,
+  }
+}
+
+/** One authoritative program registry entry for preseeded base-style tests. */
+function programRecord(overrides = {}) {
+  return {
+    artifactId: 'call-original', revisionId: 'call-2', program: NESTED_PROGRAM,
+    createdAt: 10, lastAccessAt: 10, ...overrides,
+  }
+}
+
+/** One deterministic style-switch body for the seeded artifact. */
+function styleSwitchBody(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    artifactId: 'call-original',
+    baseRevisionId: 'call-original',
+    operationId: operationId('style'),
+    operations: [],
+    style: 'card',
+    targetStyle: { kind: 'builtin', layout: 'article' },
     ...overrides,
   }
 }
@@ -841,4 +884,387 @@ test('the operation digest binds the property bag and rejects one node twice', a
   })
   assert.equal(duplicate.status, 400, JSON.stringify(duplicate.body))
   assert.equal(duplicate.body.error.code, 'operation_conflict')
+})
+
+test('a style switch records the same program with the target layout and no block ids (H5)', async () => {
+  const m = mount()
+  await seed(m, ARTICLE_PROGRAM)
+  const response = await postStructure(m.structureRoute(), { body: styleSwitchBody() })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.equal(isArtifactStructureResult(response.body.result), true)
+  const result = response.body.result
+  assert.equal(result.style, 'article')
+  assert.equal(Object.hasOwn(result, 'styleId'), false)
+  assert.equal(Object.hasOwn(result, 'temporaryStyle'), false)
+  assert.equal(result.program, ARTICLE_PROGRAM, 'the program is copied byte-identical')
+  assert.equal(result.baseRevisionId, 'call-original')
+  assert.equal(result.revision, 2)
+  assert.match(result.revisionId, /^struct_[0-9a-f]{16}$/)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.revisionId, result.revisionId)
+  assert.equal(record.style, 'article')
+  assert.equal(Object.hasOwn(record, 'editedBlockIds'), false, 'H5: a style switch has no block ids')
+  assert.equal(Object.hasOwn(record, 'temporaryStyle'), false)
+  assert.equal(createArtifactProgramStore().lookup('call-original', result.revisionId), ARTICLE_PROGRAM)
+  // H5 signature: the recorded struct_ revision without block ids is a style switch.
+  const history = buildArtifactHistory(createArtifactRevisionStore(), createArtifactProgramStore(), 'call-original')
+  const switchRow = history.revisions.find(entry => entry.revisionId === result.revisionId)
+  assert.equal(switchRow.source, 'structure')
+  assert.equal(Object.hasOwn(switchRow, 'editedBlockIds'), false)
+  assert.equal(switchRow.hasProgram, true)
+  assert.equal(existsSync(ledgerFile(m.home)), true, 'the idempotency ledger records the switch')
+})
+
+test('a switch to article without Toc/Section fails article_unavailable with zero writes', async () => {
+  const m = mount()
+  await seed(m)
+  const response = await postStructure(m.structureRoute(), { body: styleSwitchBody() })
+  assert.equal(response.status, 400)
+  assert.equal(response.body.error.code, 'article_unavailable')
+  assert.match(response.body.error.message, /article style needs a Toc and at least one Section/)
+  assert.equal(existsSync(m.file), false, 'no revision is written')
+  assert.equal(existsSync(ledgerFile(m.home)), false, 'no ledger entry is written')
+  assert.equal(createArtifactProgramStore().size(), 1, 'only the seeded initial program exists')
+})
+
+test('an article page switches back to card with the program unchanged', async () => {
+  const m = mount()
+  await seed(m, ARTICLE_PROGRAM)
+  const first = await postStructure(m.structureRoute(), { body: styleSwitchBody() })
+  assert.equal(first.status, 201)
+  const second = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({
+      baseRevisionId: first.body.result.revisionId,
+      style: 'article',
+      targetStyle: { kind: 'builtin', layout: 'card' },
+    }),
+  })
+  assert.equal(second.status, 201, JSON.stringify(second.body))
+  assert.equal(second.body.result.style, 'card')
+  assert.equal(second.body.result.program, ARTICLE_PROGRAM)
+  assert.equal(second.body.result.revision, 3)
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(records.map(record => record.style), ['article', 'card'])
+})
+
+test('a template switch resolves global templates and records their id', async () => {
+  const custom = template()
+  const m = mount({ templates: [custom] })
+  await seed(m)
+  const response = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'template', styleId: custom.id } }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.equal(response.body.result.style, custom.baseLayout)
+  assert.equal(response.body.result.styleId, custom.id)
+  assert.equal(Object.hasOwn(response.body.result, 'temporaryStyle'), false)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(record.styleId, custom.id)
+  assert.equal(record.style, custom.baseLayout)
+})
+
+test('a free saved template is a valid target while a built-in free is not', async () => {
+  const free = template({ id: 'cs_freestyle01', name: 'Free notes', baseLayout: 'free' })
+  const m = mount({ templates: [free] })
+  await seed(m)
+  const switched = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'template', styleId: free.id } }),
+  })
+  assert.equal(switched.status, 201, JSON.stringify(switched.body))
+  assert.equal(switched.body.result.style, 'free')
+  assert.equal(switched.body.result.styleId, free.id)
+  const builtinFree = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'builtin', layout: 'free' } }),
+  })
+  assert.equal(builtinFree.status, 400)
+  assert.match(builtinFree.body.error.message, /invalid_target_layout/)
+})
+
+test('session-scoped templates resolve only for their own session', async () => {
+  const scoped = template({ id: 'cs_sessionscope01', name: 'Session notes', scope: 'session', sessionId: 's1' })
+  const m = mount({ templates: [scoped] })
+  await seed(m)
+  const wrongScope = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'template', styleId: scoped.id }, sessionStyleScope: 's2' }),
+  })
+  assert.equal(wrongScope.status, 404)
+  assert.equal(wrongScope.body.error.code, 'style_missing')
+  assert.equal(existsSync(m.file), false, 'a missing template writes nothing')
+  const unknown = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'template', styleId: 'cs_unknown01' }, sessionStyleScope: 's1' }),
+  })
+  assert.equal(unknown.status, 404)
+  assert.equal(unknown.body.error.code, 'style_missing')
+  const matching = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ targetStyle: { kind: 'template', styleId: scoped.id }, sessionStyleScope: 's1' }),
+  })
+  assert.equal(matching.status, 201, JSON.stringify(matching.body))
+  assert.equal(matching.body.result.styleId, scoped.id)
+})
+
+test('a durable switch drops a temporary base snapshot', async () => {
+  const m = mount({
+    revisions: [revisionRecord({ temporaryStyle: TEMPORARY_STYLE })],
+    programs: [programRecord({ program: ARTICLE_PROGRAM })],
+  })
+  const response = await postStructure(m.structureRoute(), {
+    // The client names the temporary base identity it saw; the switch drops it.
+    body: styleSwitchBody({ baseRevisionId: 'call-2', temporaryStyle: TEMPORARY_STYLE }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.equal(Object.hasOwn(response.body.result, 'temporaryStyle'), false)
+  assert.equal(response.body.result.program, ARTICLE_PROGRAM)
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  const switched = records.find(record => record.revisionId === response.body.result.revisionId)
+  assert.equal(switched.style, 'article')
+  assert.equal(Object.hasOwn(switched, 'temporaryStyle'), false, 'the switch drops the result-owned snapshot')
+  assert.equal(Object.hasOwn(switched, 'editedBlockIds'), false)
+})
+
+test('a switch equal to the durable base identity is a no_change with zero writes', async () => {
+  const custom = template()
+  const builtin = mount({ revisions: [revisionRecord()], programs: [programRecord()] })
+  const beforeRevisions = readFileSync(builtin.file, 'utf8')
+  const beforePrograms = readFileSync(builtin.programFile, 'utf8')
+  const builtinNoop = await postStructure(builtin.structureRoute(), {
+    body: styleSwitchBody({ baseRevisionId: 'call-2', targetStyle: { kind: 'builtin', layout: 'card' } }),
+  })
+  assert.equal(builtinNoop.status, 400)
+  assert.equal(builtinNoop.body.error.code, 'no_change')
+  assert.equal(readFileSync(builtin.file, 'utf8'), beforeRevisions)
+  assert.equal(readFileSync(builtin.programFile, 'utf8'), beforePrograms)
+  assert.equal(existsSync(ledgerFile(builtin.home)), false)
+  const templated = mount({
+    templates: [custom],
+    revisions: [revisionRecord({ styleId: custom.id })],
+    programs: [programRecord()],
+  })
+  const templateNoop = await postStructure(templated.structureRoute(), {
+    body: styleSwitchBody({ baseRevisionId: 'call-2', styleId: custom.id, targetStyle: { kind: 'template', styleId: custom.id } }),
+  })
+  assert.equal(templateNoop.status, 400)
+  assert.equal(templateNoop.body.error.code, 'no_change')
+  assert.equal(existsSync(ledgerFile(templated.home)), false)
+})
+
+test('a mismatched base style claim is rejected for operations and switches (H1)', async () => {
+  const m = mount({ revisions: [revisionRecord()], programs: [programRecord()] })
+  const beforeRevisions = readFileSync(m.file, 'utf8')
+  const operationsMismatch = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: 'call-2',
+      style: 'article',
+      operations: [duplicateOp(NESTED_TREE, 'n5', 1)],
+    }),
+  })
+  assert.equal(operationsMismatch.status, 409)
+  assert.equal(operationsMismatch.body.error.code, 'base_style_mismatch')
+  assert.equal(readFileSync(m.file, 'utf8'), beforeRevisions, 'H1 writes nothing')
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+  const switchMismatch = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ baseRevisionId: 'call-2', style: 'article' }),
+  })
+  assert.equal(switchMismatch.status, 409)
+  assert.equal(switchMismatch.body.error.code, 'base_style_mismatch')
+  assert.equal(readFileSync(m.file, 'utf8'), beforeRevisions, 'H1 rejects the switch before any write')
+  // The matching claim still proceeds.
+  const matching = await postStructure(m.structureRoute(), {
+    body: structureBody({ baseRevisionId: 'call-2', operations: [duplicateOp(NESTED_TREE, 'n5', 1)] }),
+  })
+  assert.equal(matching.status, 201, JSON.stringify(matching.body))
+})
+
+test('style-switch request-shape rules are validated before any write', async () => {
+  const m = mount()
+  const expectations = [
+    [styleSwitchBody({ operations: [duplicateOp(NESTED_TREE, 'n5', 1)] }), 'style_with_operations'],
+    [styleSwitchBody({ preview: true }), 'preview_not_supported'],
+    [structureBody({ operations: [] }), 'invalid_operations'],
+    [structureBody({ operations: [duplicateOp(NESTED_TREE, 'n5', 1)], sessionStyleScope: 's1' }), 'unexpected_session_scope'],
+    [styleSwitchBody({ targetStyle: { kind: 'builtin', layout: 'free' } }), 'invalid_target_layout'],
+    [styleSwitchBody({ targetStyle: { kind: 'template', styleId: 'bad' } }), 'invalid_target_style_id'],
+    [styleSwitchBody({ targetStyle: { kind: 'template', styleId: 'cs_abcdef123456', extra: true } }), 'invalid_target_fields'],
+    [styleSwitchBody({ targetStyle: 'card' }), 'invalid_target_style'],
+    [styleSwitchBody({ sessionStyleScope: 'x'.repeat(201) }), 'invalid_session_scope'],
+  ]
+  for (const [body, problem] of expectations) {
+    const response = await postStructure(m.structureRoute(), { body })
+    assert.equal(response.status, 400, problem)
+    assert.equal(response.body.error.code, 'invalid_input', problem)
+    assert.match(response.body.error.message, new RegExp(problem), problem)
+  }
+  assert.equal(existsSync(m.file), false)
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+})
+
+test('stale style switches need branch and record latest+1', async () => {
+  const custom = template()
+  const m = mount({
+    templates: [custom],
+    revisions: [
+      revisionRecord({ revisionId: 'rev-old', revision: 2, createdAt: 5 }),
+      revisionRecord({ revisionId: 'rev-new', baseRevisionId: 'rev-old', revision: 3, createdAt: 6 }),
+    ],
+    programs: [programRecord({ revisionId: 'rev-old' })],
+  })
+  const stale = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ baseRevisionId: 'rev-old', targetStyle: { kind: 'template', styleId: custom.id } }),
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(stale.body.error.code, 'base_not_latest')
+  assert.match(stale.body.error.message, /resend the style switch with branch: true/)
+  const branched = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({ baseRevisionId: 'rev-old', branch: true, targetStyle: { kind: 'template', styleId: custom.id } }),
+  })
+  assert.equal(branched.status, 201, JSON.stringify(branched.body))
+  assert.equal(branched.body.result.revision, 4)
+  assert.equal(branched.body.result.baseRevisionId, 'rev-old')
+  assert.equal(branched.body.result.styleId, custom.id)
+})
+
+test('replaying one operationId returns the recorded switch and rejects a different target', async () => {
+  const custom = template()
+  const m = mount({ templates: [custom] })
+  await seed(m)
+  const body = styleSwitchBody({ targetStyle: { kind: 'template', styleId: custom.id } })
+  const first = await postStructure(m.structureRoute(), { body })
+  assert.equal(first.status, 201)
+  const replay = await postStructure(m.structureRoute(), { body })
+  assert.equal(replay.status, 200)
+  assert.equal(replay.body.result.revisionId, first.body.result.revisionId)
+  assert.equal(replay.body.result.styleId, custom.id)
+  const differentTarget = await postStructure(m.structureRoute(), {
+    body: { ...body, targetStyle: { kind: 'builtin', layout: 'article' } },
+  })
+  assert.equal(differentTarget.status, 409)
+  assert.equal(differentTarget.body.error.code, 'operation_replayed')
+  const differentScope = await postStructure(m.structureRoute(), {
+    body: { ...body, sessionStyleScope: 's1' },
+  })
+  assert.equal(differentScope.status, 409)
+  assert.equal(differentScope.body.error.code, 'operation_replayed')
+})
+
+test('a style switch keeps the route auth and method contract', async () => {
+  const denied = mount({ rejection: 403 })
+  const forbidden = await postStructure(denied.structureRoute(), { body: styleSwitchBody() })
+  assert.equal(forbidden.status, 403)
+  assert.equal(forbidden.body, undefined)
+  const m = mount()
+  const wrongMethod = await postStructure(m.structureRoute(), { method: 'GET', body: styleSwitchBody() })
+  assert.equal(wrongMethod.status, 405)
+})
+
+test('H1 rejects a styleId claim that does not match the recorded base (zero writes)', async () => {
+  const custom = template()
+  const m = mount({
+    revisions: [revisionRecord({ style: custom.baseLayout, styleId: custom.id })],
+    programs: [programRecord()],
+  })
+  const beforeRevisions = readFileSync(m.file, 'utf8')
+  for (const styleId of [undefined, 'cs_other00001']) {
+    const response = await postStructure(m.structureRoute(), {
+      body: styleSwitchBody({
+        baseRevisionId: 'call-2',
+        style: custom.baseLayout,
+        ...styleId === undefined ? {} : { styleId },
+        targetStyle: { kind: 'builtin', layout: 'card' },
+      }),
+    })
+    assert.equal(response.status, 409, styleId)
+    assert.equal(response.body.error.code, 'base_style_mismatch')
+  }
+  assert.equal(readFileSync(m.file, 'utf8'), beforeRevisions, 'H1 writes nothing')
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+  assert.equal(createArtifactProgramStore().size(), 1)
+  // The matching claim still applies a structural batch.
+  const matching = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: 'call-2',
+      style: custom.baseLayout,
+      styleId: custom.id,
+      operations: [duplicateOp(NESTED_TREE, 'n5', 1)],
+    }),
+  })
+  assert.equal(matching.status, 201, JSON.stringify(matching.body))
+})
+
+test('H1 also guards a preview request with a mismatched base claim (zero writes)', async () => {
+  const m = mount({ revisions: [revisionRecord()], programs: [programRecord()] })
+  const beforeRevisions = readFileSync(m.file, 'utf8')
+  const mismatch = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: 'call-2',
+      style: 'article',
+      preview: true,
+      operations: [duplicateOp(NESTED_TREE, 'n5', 1)],
+    }),
+  })
+  assert.equal(mismatch.status, 409)
+  assert.equal(mismatch.body.error.code, 'base_style_mismatch')
+  assert.equal(readFileSync(m.file, 'utf8'), beforeRevisions, 'a rejected preview writes nothing')
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+  // A matching claim still produces the dry-run preview and records nothing.
+  const preview = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: 'call-2',
+      preview: true,
+      operations: [duplicateOp(NESTED_TREE, 'n5', 1)],
+    }),
+  })
+  assert.equal(preview.status, 200, JSON.stringify(preview.body))
+  assert.equal(isArtifactStructurePreview(preview.body), true)
+  assert.equal(readFileSync(m.file, 'utf8'), beforeRevisions)
+  assert.equal(existsSync(ledgerFile(m.home)), false)
+})
+
+test('a temporary card base switching to builtin Card still records a revision', async () => {
+  const m = mount({
+    revisions: [revisionRecord({ temporaryStyle: TEMPORARY_STYLE })],
+    programs: [programRecord()],
+  })
+  const response = await postStructure(m.structureRoute(), {
+    body: styleSwitchBody({
+      baseRevisionId: 'call-2',
+      style: 'card',
+      temporaryStyle: TEMPORARY_STYLE,
+      targetStyle: { kind: 'builtin', layout: 'card' },
+    }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  assert.equal(response.body.result.revision, 3)
+  assert.equal(response.body.result.style, 'card')
+  assert.equal(Object.hasOwn(response.body.result, 'styleId'), false)
+  assert.equal(Object.hasOwn(response.body.result, 'temporaryStyle'), false)
+  const records = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.equal(records.length, 2, 'a temporary base always changes, even to the same layout')
+  const switched = records.find(record => record.revisionId === response.body.result.revisionId)
+  assert.equal(switched.style, 'card')
+  assert.equal(Object.hasOwn(switched, 'temporaryStyle'), false)
+  assert.equal(Object.hasOwn(switched, 'editedBlockIds'), false)
+  assert.equal(response.body.result.program, NESTED_PROGRAM)
+})
+
+test('the structure route signals mount from the deferred cordis inject callback', async () => {
+  let callback
+  let mounted = 0
+  let unavailable = 0
+  const services = { onMounted() { mounted += 1 }, onUnavailable() { unavailable += 1 } }
+  registerArtifactStructureRoute({ inject(_dependencies, cb) { callback = cb } }, services)
+  assert.equal(mounted, 0, 'a synchronous return cannot know the deferred mount')
+  assert.equal(unavailable, 0)
+  await Promise.resolve()
+  callback({
+    webServer: { register() { return () => {} } },
+    connection: { requestRejection() { return undefined } },
+    effect(fn) { return fn() },
+  })
+  assert.equal(mounted, 1, 'the capability flips only when the route actually mounts')
+  assert.equal(unavailable, 0)
+})
+
+test('the structure route signals unavailable when the inject service is absent', () => {
+  let unavailable = 0
+  registerArtifactStructureRoute({}, { onUnavailable() { unavailable += 1 } })
+  assert.equal(unavailable, 1)
 })

@@ -19,6 +19,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS } from '../shared/artifact-edit.ts'
 import { MODE_PROJECTION_KEY, type IntelligentUIModeView, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import type { ArtifactStyleTarget } from '../shared/artifact-structure.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { OpenUIRenderer } from '../lib/render.tsx'
 import { resolveStyleThemeVars } from '../lib/style-theme.ts'
@@ -35,7 +36,7 @@ import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
 import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
 import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
 import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
-import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession } from './artifact-edit/contracts.ts'
+import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './artifact-edit/contracts.ts'
 import {
   activateDraft as activateArtifactDraft,
   attachDraft as attachArtifactDraft,
@@ -54,6 +55,8 @@ import {
   moveArtifactNestedBlockBy,
   moveArtifactBlockTo,
   applyArtifactBlockProps,
+  applyArtifactStyleSwitch,
+  setArtifactStyleSwitchTarget,
   clearArtifactBlockPropsPreview,
   previewArtifactBlockProps,
   cancelArtifactStructurePreview,
@@ -159,6 +162,30 @@ export function IntelligentUICards({
   useEffect(() => {
     if (styleEditKnown) setArtifactStyleEditSupported(styleEditSupported)
   }, [styleEditKnown, styleEditSupported])
+  // B2 capability: deterministic style switching uses the same edit-panel style
+  // section but a separate apply model (zero model turn, explicit Apply).
+  const styleSwitchSupported = modeView?.styleSwitch === true
+  // Durable targets: built-in Card/Article first, then the visible saved
+  // templates (global plus this session's own).
+  const styleSwitchTargets = useMemo<readonly ArtifactStyleTargetOption[]>(() => {
+    if (!styleSwitchSupported) return []
+    const builtins: ArtifactStyleTargetOption[] = [
+      { target: { kind: 'builtin', layout: 'card' }, name: t('edit.historyStyleCard'), layout: 'card' },
+      { target: { kind: 'builtin', layout: 'article' }, name: t('edit.historyStyleArticle'), layout: 'article', requiresArticleLayout: true },
+    ]
+    const templates = catalog.status === 'unavailable' ? [] : catalog.templates
+    return [
+      ...builtins,
+      ...templates.map(template => ({
+        target: { kind: 'template', styleId: template.id } as const,
+        name: template.name,
+        layout: template.baseLayout,
+        ...(template.baseLayout === 'article' ? { requiresArticleLayout: true } : {}),
+        theme: template.theme,
+      })),
+    ]
+  }, [styleSwitchSupported, catalog, t])
+  const refreshStyleCatalog = useCallback((): void => { void styles.refresh() }, [styles])
   useEffect(() => { void styles.ensure(sessionId) }, [styles, sessionId])
   // The renderer calls this when an in-card action should continue in the
   // composer: seed the draft with the model-authored message and submit it.
@@ -197,6 +224,9 @@ export function IntelligentUICards({
             scheme={scheme}
             onAdjust={adjustStyle === undefined ? undefined : adjust}
             styleEditSupported={styleEditSupported}
+            styleSwitchSupported={styleSwitchSupported}
+            styleTargets={styleSwitchTargets}
+            refreshStyleCatalog={refreshStyleCatalog}
             // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
             saveAction={program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={program.callId}
               snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
@@ -227,6 +257,13 @@ function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
   return `${t('edit.pendingDrafts')} · ${t('edit.summaryGlobal')}`
 }
 
+/** Whether two durable style targets name the same identity. */
+function isSameStyleTarget(left: ArtifactStyleTarget, right: ArtifactStyleTarget): boolean {
+  if (left.kind !== right.kind) return false
+  if (left.kind === 'builtin') return right.kind === 'builtin' && left.layout === right.layout
+  return right.kind === 'template' && left.styleId === right.styleId
+}
+
 interface IntelligentUICardProps {
   readonly program: IntelligentUIProgram
   readonly sessionId: string
@@ -240,6 +277,12 @@ interface IntelligentUICardProps {
   readonly saveAction?: ReactNode
   /** Host supports revision-bound style editing inside the edit canvas. */
   readonly styleEditSupported?: boolean
+  /** Host supports deterministic zero-model style switching. */
+  readonly styleSwitchSupported?: boolean
+  /** Durable targets offered by the switch picker. */
+  readonly styleTargets?: readonly ArtifactStyleTargetOption[]
+  /** Catalog refresh hook used when the Host reports a missing style. */
+  readonly refreshStyleCatalog?: () => void
 }
 
 /**
@@ -249,7 +292,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -261,6 +304,8 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const [restoreState, setRestoreState] = useState<'checking' | 'available' | 'busy' | 'done' | 'error' | 'hidden'>('checking')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [restoredRevision, setRestoredRevision] = useState<number | undefined>()
+  /** Transient switch preview target; swaps the edit-canvas skin with no request. */
+  const [stylePreview, setStylePreview] = useState<ArtifactStyleTarget | undefined>(undefined)
   const cardRef = useRef<HTMLElement>(null)
   const skipActivationScroll = useRef(false)
   const adjust = async (): Promise<void> => {
@@ -342,6 +387,17 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const blocks = useMemo(() => blocksForProgram(program.program).blocks, [program.program])
   const blocksById = useMemo(() => new Map(blocks.map(block => [block.blockId, block])), [blocks])
   const editable = !program.running && blocks.length > 0 && supportsBlockEditing(program)
+  // A hovered/focused/selected switch row previews its durable skin in the edit
+  // canvas only; nothing is posted until the explicit Apply.
+  const stylePreviewOption = stylePreview === undefined
+    ? undefined
+    : styleTargets?.find(option => isSameStyleTarget(option.target, stylePreview))
+  const editorLayout = editing && stylePreview !== undefined
+    ? (stylePreviewOption?.layout ?? (stylePreview.kind === 'builtin' ? stylePreview.layout : style))
+    : style
+  const editorThemeStyle = editing && stylePreview !== undefined
+    ? (stylePreviewOption?.theme === undefined ? undefined : resolveStyleThemeVars(stylePreviewOption.theme, scheme) as CSSProperties)
+    : themeStyle
   const editActions = useMemo<ArtifactEditActions>(() => ({
     openBlockEditor: blockId => { openArtifactBlockEditor(editKey, blockId) },
     closeBlockEditor: () => { closeArtifactBlockEditor(editKey) },
@@ -359,6 +415,11 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     clearAllEdits: () => { clearAllArtifactEdits(editKey) },
     setGlobalInstruction: text => { setArtifactGlobalInstruction(editKey, text) },
     setStyleInstruction: text => { setArtifactStyleInstruction(editKey, text) },
+    selectStyleTarget: (target, layout) => { setArtifactStyleSwitchTarget(editKey, target, layout) },
+    applyStyleSwitch: () => {
+      setStylePreview(undefined)
+      void applyArtifactStyleSwitch(editKey, undefined, turnNumber, refreshStyleCatalog)
+    },
     closeEditor: () => { closeArtifactEditor(editKey) },
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
@@ -379,7 +440,12 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     activateDraft: key => { activateArtifactDraft(key) },
     attachDraft: key => { attachArtifactDraft(key) },
     discardDraft: key => { discardArtifactDraft(key) },
-  }), [editKey])
+  }), [editKey, turnNumber, refreshStyleCatalog])
+
+  // Leaving edit mode always drops a transient switch preview.
+  useEffect(() => {
+    if (!editing) setStylePreview(undefined)
+  }, [editing])
 
   // Switching the active draft (from this card or the panel switcher) brings
   // the newly active card back into view. Opening the canvas from this card's
@@ -491,7 +557,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               >{t('edit.attachDraft')}</button>
             : null}
           {program.localRevision === true
-            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t(program.localRevisionKind === 'structure' ? 'edit.structureRevision' : program.localRevisionKind === 'props' ? 'edit.propsRevision' : 'edit.localRevision')}</span>
+            ? <span className="dsh-iui-revision" data-dsh-iui-local-revision>{t(program.localRevisionKind === 'structure' ? 'edit.structureRevision' : program.localRevisionKind === 'props' ? 'edit.propsRevision' : program.localRevisionKind === 'style' ? 'edit.styleRevision' : 'edit.localRevision')}</span>
             : null}
           {restoreState === 'available'
             ? <button
@@ -586,15 +652,18 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
         : null}
       <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed && !editing}>
         {editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
-          <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
+          <div className={editorLayout === 'article' ? 'dsh-iui-article' : undefined}>
             <ArtifactEditView
               t={t}
               session={(editSession ?? lastEditSessionRef.current) as ArtifactEditSession}
               actions={editActions}
-              themeStyle={themeStyle}
+              themeStyle={editorThemeStyle}
               scheme={scheme}
               onToAssistant={onToAssistant}
               styleEditSupported={styleEditSupported}
+              styleSwitchSupported={styleSwitchSupported}
+              styleTargets={styleTargets}
+              onPreviewStyleTarget={setStylePreview}
               closing={editorClosing && !editing}
               onOpenHistory={() => { setHistoryOpen(true) }}
             />

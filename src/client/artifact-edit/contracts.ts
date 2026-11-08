@@ -7,8 +7,9 @@ import type { CSSProperties } from 'react'
 import type { Translate } from '../../shared/locales.ts'
 import type { ArtifactBlockPropComponent, ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
+import type { ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
 import type { RenderLayout } from '../../shared/intelligent-ui.ts'
-import type { StyleSnapshot } from '../../shared/style-templates.ts'
+import type { StyleSnapshot, StyleTheme } from '../../shared/style-templates.ts'
 
 /**
  * Smallest viewport width that can host the edit canvas and the request panel.
@@ -156,6 +157,26 @@ export interface ArtifactEditSession {
   readonly structureError?: string
   /** Most recent removal, offered as an inline undo in the panel. */
   readonly removable?: { readonly blockId: string; readonly order: number; readonly instruction: string; readonly title?: string }
+  /** Deterministic style switch selected in the picker (pending until Apply). */
+  readonly styleSwitchTarget?: ArtifactStyleTarget
+  /** Resolved layout of the selected template target (Host identity compare). */
+  readonly styleSwitchTargetLayout?: RenderLayout
+  /** Deterministic style switch request in flight. */
+  readonly styleSwitchBusy?: boolean
+  /** Last deterministic style switch failure, shown inline in the style section. */
+  readonly styleSwitchError?: string
+}
+
+/** One selectable durable style target resolved for the picker. */
+export interface ArtifactStyleTargetOption {
+  readonly target: ArtifactStyleTarget
+  /** Display name: built-in layout label or the saved template's name. */
+  readonly name: string
+  readonly layout: RenderLayout
+  /** Saved-template theme, used for the palette swatch and the edit-canvas preview. */
+  readonly theme?: StyleTheme
+  /** Article targets need the page's Toc+Section invariant; shown as a static hint. */
+  readonly requiresArticleLayout?: boolean
 }
 
 /** Canvas-only preview of one quick-adjustable block's pending properties. */
@@ -240,6 +261,10 @@ export interface ArtifactEditActions {
   attachDraft(key: string): void
   /** Discard one draft of this chat for good. */
   discardDraft(key: string): void
+  /** Select (or clear) the deterministic style switch target of the active draft. */
+  selectStyleTarget(target: ArtifactStyleTarget | undefined, layout?: RenderLayout): void
+  /** Apply the selected deterministic style switch (zero model turn). */
+  applyStyleSwitch(): void
 }
 
 /** Full props of the edit view. */
@@ -257,6 +282,15 @@ export interface ArtifactEditViewProps {
    * the legacy on-demand style fallback and hides the style section.
    */
   readonly styleEditSupported?: boolean
+  /** Host capability for deterministic style switching (B2). */
+  readonly styleSwitchSupported?: boolean
+  /** Durable style targets offered by the picker (built-ins, then saved templates). */
+  readonly styleTargets?: readonly ArtifactStyleTargetOption[]
+  /**
+   * Reports the transiently previewed target (hover/focus/checked choice) so the
+   * parent card can swap the edit-canvas skin without any request.
+   */
+  readonly onPreviewStyleTarget?: (target: ArtifactStyleTarget | undefined) => void
 }
 
 /** Localized label for one block kind. */

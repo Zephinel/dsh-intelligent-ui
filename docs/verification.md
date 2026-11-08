@@ -403,3 +403,98 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 - 覆盖：style 信封/校验/序列化、Host mint/apply/授权、H1/H3/H4/双写变异验证、修订快照边界、history 推断、能力位与 footer 回退、编辑面板样式区/焦点/Escape/清除/chip、scope 切换 E2E、截图与文档同步。
 - 未覆盖：真实模型/真实 GUI 的 style 调整（浏览器 E2E 用 mock Host）；新 Host + 旧客户端或旧 Host + 新客户端的真实混合部署运行；确定性内置/模板样式切换（B2，按裁定不在本增量）。
+
+### 更正与后续（2026-11-08 第三轮复审后追加）
+
+- 本记录中的“编辑器截图包含新样式区”在写作时不成立：capture harness 当时未注入 `styleEdit` 能力；后续已注入并重拍 `assets/intelligent-ui-editing-{zh,en}.webp` 与 overview 组合图，现截图确实包含「样式 / 更改样式 / 样式切换 / 应用样式」与已保存 Article 提示。
+- 本记录中的“block 序列化字节不变”在后续契约强化后不再成立：block 信封的 header 与 program 正文保持兼容，但 prose 改由 `blockEditToolContract` 生成并新增 `Tool-call contract:` 行，整段文本不再保证字节不变。
+- B1 真实 GUI 冒烟已做（2026-11-08，上海两日游会话：真实模型返回 Revision 2，样式生效、Save 对话框打开、历史可见、footer Adjust 隐藏）；证据仅为会话转录，未留存截图，不作为自动门禁。
+- 当前工作树门禁已推进到 Node 615/615（Host 298 + Client 296 + packaging 21）、`artifact-edit` 497 checks；本记录的 558/447 仍是当时的门禁数。
+
+## 2026-11-08 — 确定性样式切换（零模型，B2）最终验证（未提交工作树）
+
+本条记录 B2"编辑内确定性样式切换"的实现与门禁；不是发布验收；npm `latest` 仍为 `0.5.0`；写作时未提交、未推送、未重启 `dsh-web`（B2 客户端 bundle 需下次重启/刷新后才在真实 GUI 可见）。
+
+### 实现与边界
+
+- 契约：既有认证 `POST /api/intelligent-ui/artifact-structure` 增加请求级 `targetStyle`（builtin card/article 或已保存 `cs_` 模板）与 `sessionStyleScope`；单意图规则（带 target 时 operations 必须为空、无 preview；无 target 时旧 1..20 ops/preview 不变）。目标只接受 durable 身份，不接收客户端快照/directives/theme；Free 仅经已保存 free 模板。
+- Host：目标 Host 侧解析（`styles.resolve(styleId, sessionStyleScope)`，不可见/删除 → `style_missing`）；Article 复用与 render_ui 同一 Toc/Section+anchor 谓词（`program-validation.ts`）；对已有修订记录（revision ≥ 2）的 base 校验客户端声明的 base style/styleId 与权威记录（409 `base_style_mismatch`，零写入，H1 根因修复）；初始 revision 1 无记录、身份仍取请求/登记；no-op 规则（临时样式 base + 任意 durable 目标总是变化，快照被丢弃）；`struct_` 修订记录同程序、目标 style/styleId、无 `temporaryStyle`/`editedBlockIds`（H5 样式切换签名），latest+1/branch/ledger/registry/响应保持；digest 绑定 target+scope；`styleSwitch` 投影能力位。
+- 客户端：编辑面板样式区新增单意图 radio picker（内置 Card/Article + 可见已保存模板，带 color swatch/layout meta、current badge、Article Toc/Section 提示、temporary 说明），悬停/聚焦本地预览主题与 Article 外壳（零 POST），显式「应用样式」走零模型 struct 请求；成功记录本地 `kind:'style'` 修订卡并关闭编辑器、不产生 composer chip；dirty/busy/current/no_change 守卫与 `style_missing`/`article_unavailable`/`base_not_latest`/`base_style_mismatch`/`no_change` 文案映射；历史里 `struct_` 前缀且无 `editedBlockIds` 的修订显示为样式切换（旧客户端仍显示结构操作，无新 durable 字段/枚举）。
+- 限制：仅换身份/外壳/主题，模板 directives 不重排内容；本地修订卡不进入助理消息/导出/replay/其他设备；H4（render_ui 的 order-only/global-only 编辑按会话样式校验）当时记录为限制（注：H4 已在第三轮复审修复，pending block edit 使用 artifact 记录样式）；`sessionStyleScope` 是模板可见性选择器，不是授权边界。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；`tsc --noEmit` + build；Node **603/603** = Host **292** + Client **290** + packaging **21**；renderer 解析/渲染各 **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
+| `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **497 checks**（场景 40 + review 修复断言）、`nested-edit-renderer` **75**、on-demand **114**、settings **101** 条断言等 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,036,654** 字节，解包 **12,874,349** 字节 |
+| 构建 | host **835.9 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 MB + 514.4 kB |
+| 文档/结构检查 | README 与五组双语文档标题层级一致；本地链接/锚点、截图引用、CHANGELOG 链接通过；`git diff --check` PASS |
+
+### 覆盖与未覆盖
+
+- 覆盖：contract 单测、Host struct 路由矩阵（article 谓词/目标解析/scope/临时快照丢弃/no-op/H1/请求形状/stale/branch/replay/零写）与 5 项 mutation 验证、客户端 POST 精确体/dirty-busy-current 守卫/错误映射/本地修订/历史标签、E2E 场景 40（picker/preview 零 POST/apply/本地卡/无 chip/temporary 行为/错误文案/键盘 a11y/能力关闭回归）。
+- 未覆盖：真实 GUI 中的 B2 picker 与真实 GUI/DOM 组合（零模型；当前运行进程仍是 B1 bundle，需用户许可重启后复验）；真实混合部署；H4 修复（已在第三轮修复）；B2 的本地修订卡导出/replay 语义（既有结构/属性限制）。
+
+## 2026-11-08 — 二次复审修复与模型调用契约强化（未提交工作树）
+
+二次独立复审（1 路代码/安全 + 1 路文档/证据，均只读）后追加的修复记录。
+
+### 复审发现与修复
+
+- **代码 HIGH**：saved-template 与 temporary-style 两类 base 的 style 信封在上一轮修复中误删了 `Pass style` 指令；Host 要求 `args.style === request.style` 且 `temporaryStyle.baseLayout === args.style`，因此这两类页面的 B1 样式编辑首次调用必被拒。第一版按文案补回后，复审指出这仍是“补丁式”修复——根因是模型可读 prose 与 Host 接受参数是两个独立事实源，测试只断言文案片段。
+- **系统性修复**：新增 `styleEditToolContract`/`buildStyleEditToolArgs` 与 `blockEditToolContract`/`buildBlockEditToolArgs` 作为单一契约源；block/style 序列化器的 `Tool-call contract:` 行由 helper 生成，不再手写各分支参数说明；新增 Host 耦合测试，分别对 style（builtin/saved/temporary 三种 base）与 block（`edit_ui_blocks` fragments / `render_ui` order-only）执行 helper 产出的真实参数并要求 Host 记录 revision 2。任一侧参数或序列化器漂移都会让测试失败。
+- **同批复审修复**：saved Article 模板行补 `requiresArticleLayout` 提示；解析器在 `<artifact-program>` 区间内跳过 marker（新增合法 JSON 假 marker 回归测试）；删除“Host 会校验 styleId”的虚假文案；`local-revisions` 测试计数 3→5；英文 architecture 的旧计数/旧 pack 数、CHANGELOG 指向、README 提交状态与“选中后点应用样式”等文档残留全部修正；重拍编辑/overview 截图。
+- 记录后边界：block-edit 与 style-edit 两条模型契约已用 helper + Host 耦合测试固化；branch/其他工具文案仍为手写 prose，未做同样的契约化。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **603/603** = Host **292** + Client **290** + packaging **21**；renderer/契约全绿；build host **835.9 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,036,654** 字节，解包 **12,874,349** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 第三轮复审修复（契约强化、解析与边界路径；未提交工作树）
+
+第三轮独立复审（代码/安全 + 文档/证据）后的修复记录；复审对契约 helper 的结论为“测试空心”，本轮把耦合测试收紧并修复了复审列出的边界路径。
+
+### 修复
+
+- **工具参数契约收紧**：Host 耦合测试现在使用带 `requestId`/`artifactId` 的 fragment 请求与带 `styleId`/`editRequestId` 的 order-only 请求，断言 helper 产出的完整 key 集与 contract 的 required/optional/forbidden 字段；新增双 pending selector、order-only title/styleId、session 模板与 artifact 模板不一致（H4）、伪造快照（记录以 registry 为准）等测试。
+- **解析加固**：block prose 的 instruction/addition/global 文本统一转义 `<`；envelope 仅在 marker 后换行 JSON header 时成立；`<artifact-program>`/`</artifact-program>` 按独立行围栏截取，program body 内的字面 marker 不再截断；新增合法 JSON 假 marker、程序内字面 program marker 回归测试。
+- **边界路径**：order-only/global-only 结果回传记录 title/styleId 与 `presentationMeta`；临时样式 additions-only 不再被客户端误判 `temporary_order`；pending block edit 使用 artifact 记录样式而非会话模板（消除 H4 deadlock）；内容编辑以 registry 的 temporaryStyle 为准；未保存的 block draft 阻止 style switch；Article hint/dirty 文案校准。
+- **能力与无障碍**：`styleSwitch` 现在由 `registerArtifactStructureRoute` 的挂载结果派生（路由缺失时不发布）；branch 指令行由 `branchEnvelopeLine` 单一来源生成；forced-colors 下新增 radio 键盘焦点环（E2E 断言），并修正“E2E 覆盖 struct_ 历史标签”的文档表述（实际由单元测试覆盖）。
+- 剩余已记录 LOW：可见但未选中的全局模板仍会给模型侧 “not available” 提示（模型本不应传未选中模板 id）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；renderer/契约全绿；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,179** 字节，解包 **12,880,571** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-08 — 第四轮复审修复（路由能力位异步、标题转义、summary fence；未提交工作树）
+
+第四轮独立复审发现：route 派生 `styleSwitch` 在真实 cordis 下立即返回 false，而 view schema 只接受 `true`，导致 projection view 非法、picker 隐藏；block title 未转义可注入 program fence；`nextEditRequestSummary` 仍按子串扫描 program fence；以及若干文档/测试覆盖问题。
+
+### 修复
+
+- **能力位**：`registerArtifactStructureRoute` 不再依赖同步返回值，而是在 deferred inject 回调真正挂载时调用 `onMounted`（或 `onUnavailable`）；`modeViewSchema` 的 `styleSwitch` 改为可选 boolean；新增 deferred-inject 与 false/absent view parse 测试。
+- **解析**：block target prose 的 title 统一转义；`nextEditRequestSummary` 改用 `programFence` 定位终边界（不再被 inline close marker 截断），单测改为断言精确 end。
+- **测试真实性**：forced-colors E2E 断言 2px focus ring（不再被 checked-row 1px outline 满足）；E2E 成功切换改用可达的 saved card template（Article 目标对 DST program 会被真实 Host 拒绝）；style contract 增加 required/optional 数组；新增临时样式 additions-only Host 测试、order-only branch 单测、presentationMeta styleId 断言。
+- **文档/截图**：limitations 的 H4 过期限制改为已修；B2 历史记录加 H4 已修注记；README 示例名与图一致（pour-over calculator）；contract prose 措辞收窄为“只有 Tool-call contract 行由 helper 生成”；截图补 `--dsw-alias-brand-primary` / `--dsw-alias-label-primary-foreground` 后重拍，Apply 按钮现可见；doc-map/CSS/pack 数字同步。
+- 剩余：structure-route 的 authoritative-snapshot 分支仍只有 apply 侧测试（route 侧代码同策略，未单测）；真实 Windows 高对比度/真实 GUI 未测。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,179** 字节，解包 **12,880,571** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

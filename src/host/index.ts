@@ -64,7 +64,7 @@ import {
   type PendingArtifactEdit, type PendingArtifactEditSummary, type PendingArtifactSelector,
 } from './artifact-edit.ts'
 import { MAX_CLARIFICATION_ROUNDS, MAX_RENDER_CALLS, createOnDemandController } from './on-demand.ts'
-import { articleAnchorError, collectArticleAnchors, collectComponentTypes, layoutWarnings } from './program-validation.ts'
+import { articleAnchorError, describeArticleLayoutProblem, inspectProgram } from './program-validation.ts'
 import { assertDshToolSchema } from './tool-schema.ts'
 
 export const name = 'intelligent-ui'
@@ -382,51 +382,6 @@ function countStatements(program: string): number {
   }
 }
 
-interface ParseFinding {
-  readonly message: string
-  readonly fatal: boolean
-}
-
-/** Parse one complete program; returns model-readable findings plus statement count. */
-function inspectProgram(program: string, options: { readonly free?: boolean } = {}): {
-  statements: number
-  findings: ParseFinding[]
-  types: ReadonlySet<string>
-  anchors: { section: string[]; toc: string[]; issues: string[]; dynamicSection: boolean; dynamicToc: boolean }
-} {
-  let result: ReturnType<typeof parser.parse>
-  try {
-    result = parser.parse(program)
-  } catch (error) {
-    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }], types: new Set(), anchors: { section: [], toc: [], issues: [], dynamicSection: false, dynamicToc: false } }
-  }
-  const meta = result.meta as {
-    readonly incomplete?: boolean
-    readonly unresolved?: readonly unknown[]
-    readonly orphaned?: readonly unknown[]
-    readonly statementCount?: number
-    readonly errors?: readonly unknown[]
-  }
-  const findings: ParseFinding[] = []
-  for (const error of meta.errors ?? []) {
-    findings.push({ message: String((error as { message?: string }).message ?? error), fatal: true })
-  }
-  if (meta.incomplete === true) findings.push({ message: 'The program is incomplete.', fatal: true })
-  if (result.root == null && findings.length === 0) findings.push({ message: 'No root statement could be resolved.', fatal: true })
-  for (const unresolved of meta.unresolved ?? []) {
-    findings.push({ message: `Unresolved reference: ${String(unresolved)}`, fatal: false })
-  }
-  for (const orphaned of meta.orphaned ?? []) {
-    findings.push({ message: `Unreferenced statement (will not render): ${String(orphaned)}`, fatal: false })
-  }
-  const types = new Set<string>()
-  collectComponentTypes(result.root, types)
-  const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[], dynamicSection: false, dynamicToc: false }
-  collectArticleAnchors(result.root, anchors)
-  for (const message of layoutWarnings(result.root, options)) findings.push({ message, fatal: false })
-  return { statements: meta.statementCount ?? 0, findings, types, anchors }
-}
-
 /**
  * Sentence prepended to the generation prompt while the switch admits the
  * session. The generation prompt itself is static; this line makes the user's
@@ -609,6 +564,12 @@ export function apply(ctx: {
     revisions,
     programs: artifactPrograms,
     operations: artifactStructureOperations,
+    // Saved templates are resolved Host-side for a deterministic style switch.
+    styles: store,
+    // cordis defers injected callbacks: update the capability when the route
+    // actually mounts (or is unavailable), never from a synchronous return.
+    onMounted: () => mode.setStyleSwitchSupported(true),
+    onUnavailable: () => mode.setStyleSwitchSupported(false),
   })
   // The extension ships its own configuration on the Plugins detail page, so ask
   // the Host settings service to suppress its generated form. Optional: minimal deployments without the
@@ -878,6 +839,7 @@ ${section}`
         editedBlockIds?: readonly string[]
         program?: string
         style?: RenderLayout
+        styleId?: string
         styleEdit?: boolean
         temporaryStyle?: unknown
         title?: string
@@ -891,6 +853,7 @@ ${section}`
             revision: value.revision,
             ...value.editedBlockIds === undefined ? {} : { editedBlockIds: [...value.editedBlockIds] },
             ...value.program === undefined ? {} : { program: value.program },
+            ...value.styleId === undefined ? {} : { styleId: value.styleId },
             ...value.title === undefined ? {} : { title: value.title },
             // A result-owned snapshot only validates against its layout, so the
             // revision meta must carry the recorded style alongside it.
@@ -917,6 +880,10 @@ ${section}`
         throw pendingSelectionError('render_ui', 'editRequestId', editSelector, peekedEdit, artifactEdits.listPending(sessionId))
       }
       const peekedStyle = peekedEdit?.request !== undefined && isStyleEditRequest(peekedEdit.request) ? peekedEdit.request : undefined
+      // A pending block edit (order-only/global-only) renders the artifact's
+      // recorded style, not the session's current style/template: the artifact
+      // identity is authoritative for an edit of that page.
+      const peekedBlockEdit = peekedEdit?.request !== undefined && !isStyleEditRequest(peekedEdit.request) ? peekedEdit.request : undefined
       // H1: a style edit is explicit-only. A single pending style request must
       // never auto-apply just because the model omitted editRequestId.
       if (peekedStyle !== undefined && editSelector === undefined) {
@@ -967,26 +934,29 @@ ${section}`
           if (args.style !== layout) throw new Error(`render_ui: on-demand adjustment must preserve the parent result layout; pass style: "${layout}" and temporaryStyle.baseLayout: "${layout}".`)
         }
       }
-      const template = temporary ? undefined : mode.templateFor(sessionId)
-      const effective = temporary ? args.style : template?.baseLayout ?? mode.styleFor(sessionId)
-      if (template !== undefined && args.styleId !== template.id) {
+      // A pending block edit applies the artifact's recorded style/template; the
+      // session's current style only governs ordinary renders.
+      const applyingBlockEdit = peekedBlockEdit !== undefined
+      const template = temporary || applyingBlockEdit ? undefined : mode.templateFor(sessionId)
+      const effective = temporary || applyingBlockEdit ? args.style : template?.baseLayout ?? mode.styleFor(sessionId)
+      if (!applyingBlockEdit && template !== undefined && args.styleId !== template.id) {
         throw new Error(`render_ui: this session uses custom style ${quotePromptText(template.name)}; pass styleId: "${template.id}" and style: "${template.baseLayout}".`)
       }
       // No selected template: a styleId is either malformed (a model mistake) or
       // names a template this session cannot see. Never silently ignore either.
-      if (!temporary && template === undefined && 'styleId' in args) {
+      if (!temporary && !applyingBlockEdit && template === undefined && 'styleId' in args) {
         if (!isCustomStyleId(args.styleId)) {
           throw new Error('render_ui: styleId must be a custom style id such as "cs_abcdef123456" from the session prompt, or be omitted for a built-in style; the model cannot invent one.')
         }
         warnings.push(`Style template ${JSON.stringify(args.styleId)} is not available in this session; using the built-in theme.`)
       }
-      if (!isRenderLayout(args.style) || (!temporary && template === undefined && !isPageStyle(args.style))) {
+      if (!isRenderLayout(args.style) || (!temporary && !applyingBlockEdit && template === undefined && !isPageStyle(args.style))) {
         const expected = effective === 'auto' ? '"card" or "article"' : `"${effective}"`
         throw new Error(`render_ui: pass style ${expected} for this session.`)
       }
       // Forced styles are enforced on the Host: a stale or guessed style must be
       // retried, so the recorded page chrome cannot disagree with the setting.
-      if (effective !== 'auto' && args.style !== effective) {
+      if (!applyingBlockEdit && effective !== 'auto' && args.style !== effective) {
         throw new Error(`render_ui: this session's answer style is "${effective}"; pass style: "${effective}".`)
       }
       const requestedStyle: RenderLayout = args.style
@@ -1000,11 +970,9 @@ ${section}`
           + fatal.map(finding => finding.message).join('; '),
         )
       }
-      if (requestedStyle === 'article' && (!types.has('Toc') || !types.has('Section'))) {
-        throw new Error(
-          'render_ui: the article style needs a Toc and at least one Section. '
-          + 'Use Toc(["..."]) and Section("...", [Markdown("...")]) for every major part; a plain Markdown program is the card style.',
-        )
+      if (requestedStyle === 'article') {
+        const articleProblem = describeArticleLayoutProblem(program)
+        if (articleProblem !== undefined) throw new Error(articleProblem)
       }
       // Validate anchors whenever Section/Toc appear, not only for Article: a
       // duplicate id is invalid DOM regardless of the card chrome.
@@ -1020,6 +988,7 @@ ${section}`
         revision: number
         editedBlockIds?: readonly string[]
         program?: string
+        styleId?: string
         temporaryStyle?: StyleSnapshot
         title?: string
       } | undefined
@@ -1062,8 +1031,16 @@ ${section}`
         if (!onDemand.complete(sessionId!, { resultId: exec!.callId! })) throw new Error('render_ui: on-demand operation was cancelled or replaced before completion.')
       }
       warnings.push(...findings.map(finding => finding.message))
-      const rendered = { statements, style: requestedStyle, styleSource: temporary ? 'temporary' : template === undefined ? 'builtin' : 'template',
-        ...template === undefined ? {} : { styleId: template.id }, ...warnings.length === 0 ? {} : { warnings },
+      // An artifact edit keeps the artifact's recorded style identity; a normal
+      // render uses the session template resolution.
+      const renderedStyleSource = temporary
+        ? 'temporary'
+        : lineage !== undefined
+          ? lineage.temporaryStyle !== undefined ? 'temporary' : lineage.styleId !== undefined ? 'template' : 'builtin'
+          : template === undefined ? 'builtin' : 'template'
+      const renderedStyleId = lineage?.styleId ?? (temporary || applyingBlockEdit ? undefined : template?.id)
+      const rendered = { statements, style: requestedStyle, styleSource: renderedStyleSource,
+        ...renderedStyleId === undefined ? {} : { styleId: renderedStyleId }, ...warnings.length === 0 ? {} : { warnings },
         ...lineage === undefined ? {} : {
           artifactId: lineage.artifactId,
           revisionId: lineage.revisionId,
@@ -1072,12 +1049,10 @@ ${section}`
           revision: lineage.revision,
           ...lineage.editedBlockIds === undefined ? {} : { editedBlockIds: [...lineage.editedBlockIds] },
           ...lineage.program === undefined ? {} : { program: lineage.program },
-        },
-        ...styleEditApplied && lineage !== undefined ? {
-          styleEdit: true,
-          ...args.temporaryStyle === undefined ? {} : { temporaryStyle: args.temporaryStyle },
           ...lineage.title === undefined ? {} : { title: lineage.title },
-        } : {},
+          ...lineage.temporaryStyle === undefined ? {} : { temporaryStyle: lineage.temporaryStyle },
+        },
+        ...styleEditApplied && lineage !== undefined ? { styleEdit: true } : {},
       }
       const callId = exec?.callId
       if (callId !== undefined) {

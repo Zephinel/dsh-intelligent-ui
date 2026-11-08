@@ -59,7 +59,7 @@ export interface IntelligentUIProgram {
   /** Client-owned revision card that was restored without a model turn. */
   readonly localRevision?: boolean
   /** Provenance of a local revision card, when produced by a structural operation. */
-  readonly localRevisionKind?: 'restore' | 'structure' | 'props'
+  readonly localRevisionKind?: 'restore' | 'structure' | 'props' | 'style'
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
 }
@@ -231,6 +231,8 @@ export interface IntelligentUIModeView {
   readonly pending: boolean
   /** Host supports revision-bound natural-language style editing (B1 capability bit). */
   readonly styleEdit?: boolean
+  /** Host supports deterministic zero-model style switching (B2 capability bit). */
+  readonly styleSwitch?: boolean
   readonly onDemand: OnDemandView | null
 }
 

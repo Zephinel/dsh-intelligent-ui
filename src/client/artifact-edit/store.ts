@@ -51,7 +51,13 @@ import {
 } from '../../shared/artifact-block-props.ts'
 import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
-import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../shared/artifact-structure.ts'
+import {
+  ARTIFACT_STRUCTURE_ROUTE_PATH,
+  describeStyleTargetProblem,
+  isArtifactStructurePreview,
+  isArtifactStructureResult,
+  type ArtifactStyleTarget,
+} from '../../shared/artifact-structure.ts'
 import { ensureArtifactBase, invalidateArtifactBase, type ArtifactBaseOutcome } from './artifact-base.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
@@ -1038,6 +1044,10 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
     removable: undefined,
     globalInstruction: '',
     styleInstruction: '',
+    styleSwitchTarget: undefined,
+    styleSwitchTargetLayout: undefined,
+    styleSwitchBusy: false,
+    styleSwitchError: undefined,
     targetOrder: extraction.blocks.map(block => block.blockId),
     orderChanged: false,
     nestedMode: false,
@@ -2015,6 +2025,165 @@ export async function moveArtifactBlockTo(key: string, blockId: string, targetPa
   }, turn, 'edit.moveBlockFailed')
 }
 
+/**
+ * Whether one deterministic style target is already the revision's identity.
+ *
+ * Mirrors the Host's no-op rule: a temporary skin never matches a durable
+ * target (a switch drops it), a built-in target matches only a revision without
+ * a saved template, and a template target matches the recorded styleId.
+ * @param session - draft holding the base revision's recorded style identity.
+ * @param target - candidate durable target.
+ * @returns true when applying the target would record no change.
+ */
+export function isCurrentStyleTarget(
+  session: Pick<ArtifactEditSession, 'style' | 'styleId' | 'temporaryStyle'>,
+  target: ArtifactStyleTarget,
+  templateLayout?: 'card' | 'article' | 'free',
+): boolean {
+  if (session.temporaryStyle !== undefined) return false
+  if (target.kind === 'builtin') return session.styleId === undefined && session.style === target.layout
+  // The Host compares the target's resolved layout AND styleId, not the id alone.
+  return session.styleId === target.styleId && (templateLayout === undefined || session.style === templateLayout)
+}
+
+/**
+ * Select (or clear) the pending deterministic style switch target of one draft.
+ * Selection only moves the picker; the request is sent on the explicit Apply.
+ * @param key - edit-session key.
+ * @param target - durable target, or undefined to clear the selection.
+ */
+export function setArtifactStyleSwitchTarget(
+  key: string,
+  target: ArtifactStyleTarget | undefined,
+  layout?: 'card' | 'article' | 'free',
+): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || session.styleSwitchBusy === true) return
+  if (target !== undefined && describeStyleTargetProblem(target) !== undefined) return
+  const nextLayout = target === undefined ? undefined : layout
+  if (session.styleSwitchTarget === target && session.styleSwitchTargetLayout === nextLayout && session.styleSwitchError === undefined) return
+  sessions.set(key, { ...session, styleSwitchTarget: target, styleSwitchTargetLayout: nextLayout, styleSwitchError: undefined })
+  publish()
+}
+
+/** Localized message for one deterministic style switch failure code. */
+function styleSwitchFailureMessage(code: string | undefined): string {
+  switch (code) {
+    case 'style_missing': return translate('edit.styleSwitchMissing')
+    case 'article_unavailable': return translate('edit.styleSwitchArticle')
+    case 'base_not_latest': return translate('edit.styleSwitchStale')
+    case 'base_style_mismatch': return translate('edit.styleSwitchMismatch')
+    case 'no_change': return translate('edit.styleSwitchNoChange')
+    case 'artifact_missing': return translate('edit.propsMissingArtifact')
+    case 'base_missing': return translate('edit.propsNoBase')
+    default: return translate('edit.styleSwitchFailed')
+  }
+}
+
+/**
+ * Apply the selected deterministic style switch through the Host's structure
+ * route: zero model turn, the same program, and a new recorded style identity.
+ *
+ * Dirty drafts are refused before any request (block edits and a style switch
+ * cannot be combined in one revision). Success adds a local revision card of
+ * kind `style` in the current Turn and consumes the draft.
+ * @param key - edit-session key.
+ * @param target - durable target; falls back to the selected target when omitted.
+ * @param turn - latest loaded Turn, used to place the local card.
+ * @param onMissingStyle - catalog refresh hook for a `style_missing` answer.
+ */
+export async function applyArtifactStyleSwitch(
+  key: string,
+  target: ArtifactStyleTarget | undefined,
+  turn?: number,
+  onMissingStyle?: () => void,
+): Promise<void> {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || session.styleSwitchBusy === true) return
+  const chosen = target ?? session.styleSwitchTarget
+  if (chosen === undefined || describeStyleTargetProblem(chosen) !== undefined) return
+  const fail = (message: string): void => {
+    const current = sessions.get(key)
+    if (current === undefined) return
+    sessions.set(key, { ...current, styleSwitchBusy: false, styleSwitchError: message })
+    publish()
+  }
+  if (hasArtifactEditContent(session) || session.activeDirty === true || session.activeDraft.trim() !== '') {
+    fail(translate('edit.styleSwitchDirty'))
+    return
+  }
+  if (isCurrentStyleTarget(session, chosen, session.styleSwitchTargetLayout)) {
+    fail(translate('edit.styleSwitchNoChange'))
+    return
+  }
+  sessions.set(key, { ...session, styleSwitchBusy: true, styleSwitchError: undefined })
+  publish()
+  await ensureBaseForSession(session)
+  try {
+    const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        artifactId: session.artifactId,
+        baseRevisionId: session.baseRevisionId,
+        operationId: newRequestId(),
+        operations: [],
+        targetStyle: chosen,
+        sessionStyleScope: session.sessionId,
+        ...session.branch === true ? { branch: true } : {},
+        ...session.title === undefined ? {} : { title: session.title },
+        style: session.style,
+        ...session.styleId === undefined || session.temporaryStyle !== undefined ? {} : { styleId: session.styleId },
+        ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+      }),
+    })
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => undefined)
+      const code = failureCodeOf(body)
+      invalidateBaseAfterMiss(session, code)
+      if (code === 'style_missing') {
+        onMissingStyle?.()
+        // The catalog is refreshing: drop the vanished selection so Apply is
+        // not immediately repeatable against a style that no longer exists.
+        const current = sessions.get(key)
+        if (current !== undefined) {
+          sessions.set(key, { ...current, styleSwitchTarget: undefined, styleSwitchTargetLayout: undefined })
+        }
+      }
+      fail(styleSwitchFailureMessage(code))
+      return
+    }
+    const value: unknown = await response.json()
+    const result = value !== null && typeof value === 'object' && (value as { ok?: unknown }).ok === true
+      ? (value as { result?: unknown }).result
+      : undefined
+    if (isArtifactStructureResult(result)) {
+      addLocalRevision(session.sessionId, {
+        kind: 'style',
+        artifactId: result.artifactId,
+        sourceRevisionId: result.baseRevisionId,
+        revisionId: result.revisionId,
+        revision: result.revision,
+        program: result.program,
+        ...result.title === undefined ? {} : { title: result.title },
+        style: result.style,
+        ...result.styleId === undefined ? {} : { styleId: result.styleId },
+        ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
+        ...turn === undefined ? {} : { turn },
+        createdAt: Date.now(),
+      })
+      const current = sessions.get(key)
+      if (current !== undefined) sessions.set(key, { ...current, styleSwitchBusy: false })
+      markSubmitted(key)
+      return
+    }
+    fail(translate('edit.styleSwitchFailed'))
+  } catch {
+    fail(translate('edit.styleSwitchFailed'))
+  }
+}
+
 /** Save (or replace) a model-generated addition for one nested container. */
 export function saveArtifactBlockAddition(key: string, parentBlockId: string, instruction: string): void {
   const session = sessions.get(key)
@@ -2119,6 +2288,10 @@ function markSubmitted(key: string): void {
     activeDraft: '',
     activeDirty: false,
     drawerOpen: false,
+    styleSwitchTarget: undefined,
+    styleSwitchTargetLayout: undefined,
+    styleSwitchBusy: false,
+    styleSwitchError: undefined,
   })
   if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
   pruneSubmitted(session.sessionId)
@@ -2289,7 +2462,7 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
   // A temporary-style artifact cannot fall back to the full-program render_ui
   // path (it would need on-demand authorization), so reorder/global-only
   // requests are rejected before any probe.
-  if (session.temporaryStyle !== undefined && edits.length === 0) return { ok: false, problem: 'temporary_order' }
+  if (session.temporaryStyle !== undefined && edits.length === 0 && (session.additions?.length ?? 0) === 0) return { ok: false, problem: 'temporary_order' }
   const orderByParent: Record<string, string[]> = {}
   if (session.nestedOrderChanged === true && session.nestedOrder !== undefined && session.nestedOriginalOrder !== undefined) {
     const nested = nestedBlocksForProgram(session.program)

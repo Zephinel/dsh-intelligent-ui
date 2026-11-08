@@ -1870,7 +1870,12 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(styleEnvelope.includes('"edits"'), false, 'style envelope has no block edits')
   check(styleEnvelope.includes('"targetOrder"'), false, 'style envelope has no target order')
   check(styleEnvelope.includes('editRequestId'), true, 'style envelope asks the model for editRequestId')
-  check(styleEnvelope.includes('pass style: "card"'), true, 'style envelope keeps the recorded layout')
+  const stylePassLine = styleEnvelope.split('\n').find(line => line.startsWith('Pass editRequestId:')) ?? ''
+  check(stylePassLine.includes('editRequestId'), true, 'the pass line names editRequestId')
+  check(stylePassLine.includes('artifactId'), false, 'the pass line never mentions artifactId (render_ui has no such argument)')
+  check(styleEnvelope.includes('COMPLETE temporaryStyle'), true, 'style envelope instructs a complete result-owned temporaryStyle')
+  check(styleEnvelope.includes('never pass styleId or artifactId'), true, 'style envelope forbids the saved-template identity arguments')
+  check(styleEnvelope.includes('Tool-call contract: pass style: "card"'), true, 'style envelope instructs the recorded style argument')
   check(styleEnvelope.includes('warns when blocks change'), true, 'style envelope tells the model the Host warns about changed blocks')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'style send closes the editor')
   await wait('!!document.querySelector("[data-sent-summary] [data-reference-chip]")', 'style sent summary chip')
@@ -1902,6 +1907,252 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy style editor closed')
   check(await count('[data-dsh-iui-call-id="props-style-2"] .dsh-iui-result-actions button:not([data-dsh-iui-save-result])'), 1, 'capability-off keeps the legacy adjust action')
+
+
+  // 40. B2 deterministic style switching: durable target picker, zero-POST
+  // preview, explicit Apply -> one style revision (no composer envelope),
+  // dirty/temporary/failure paths and the B1 regression without the capability.
+  await read('window.__project({ styleEdit: true, styleSwitch: true })')
+  await read(`(() => {
+    window.__styleSwitchCalls = [];
+    window.__styleCatalogFetches = [];
+    window.__styleSwitchFail = undefined;
+    window.__styleSwitchRevisionId = undefined;
+    window.__styleSwitchOriginalFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/styles')) window.__styleCatalogFetches.push(url);
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__styleSwitchCalls.push(body);
+        if (window.__styleSwitchFail !== undefined) {
+          const fail = window.__styleSwitchFail;
+          return Promise.resolve(new Response(JSON.stringify({ error: { code: fail.code, message: 'host failure' } }), { status: fail.status, headers: { 'content-type': 'application/json' } }));
+        }
+        const target = body.targetStyle;
+        const result = {
+          artifactId: body.artifactId,
+          revisionId: window.__styleSwitchRevisionId ?? 'style-switch-rev-2',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify(DST_PROGRAM)},
+          title: '样式切换卡片',
+          style: target.kind === 'builtin' ? target.layout : 'card',
+          ...target.kind === 'template' ? { styleId: target.styleId } : {},
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__styleSwitchOriginalFetch(input, init);
+    };
+    return true;
+  })()`)
+  await read(`window.__addCard("style-switch-call-1", "样式切换卡片", ${JSON.stringify(DST_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-call-1"]\')', 'style switch card')
+  await click('[data-dsh-iui-call-id="style-switch-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'style switch editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-toggle]")', 'style switch section')
+  check((await text('[data-dsh-iui-edit-style-current]')).includes('内置'), true, 'current style row keeps the built-in skin identity')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'style switch group with capability')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-style-target') === true`, 'switch expansion focuses a radio')
+  check(await read(`document.activeElement.getAttribute('data-target-layout')`), 'card', 'the first built-in radio receives focus by default')
+  check(await count('[data-dsh-iui-edit-style-target]'), 6, 'two built-ins and four visible saved templates are offered')
+  check(await count('[data-dsh-iui-edit-style-current-badge]'), 1, 'the current built-in style carries the current badge')
+  check((await text('[data-dsh-iui-edit-style-saved-group]')), '已保存样式', 'saved templates sit in their own group')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled`), true, 'Apply stays disabled until a target is selected')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-switch-note]').textContent.includes('不需要模型')`), true, 'the group note explains the zero-model apply')
+
+  // Preview on focus swaps the edit-canvas skin with no request at all.
+  const editRootStyle = () => read(`(() => {
+    const card = document.querySelector('[data-dsh-iui-call-id="style-switch-call-1"]');
+    const wrapper = card.querySelector('[data-dsh-iui-edit-view]')?.parentElement;
+    const root = card.querySelector('[data-dsh-iui-edit-view] .dsh-iui-root');
+    return { article: wrapper?.classList.contains('dsh-iui-article') === true, accent: root?.style.getPropertyValue('--iui-chart-1') ?? '' };
+  })()`)
+  check((await editRootStyle()).article, false, 'the edit canvas starts in the recorded card layout')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_field02"]').focus()`)
+  await wait(`document.querySelector('[data-dsh-iui-call-id="style-switch-call-1"] [data-dsh-iui-edit-view]')?.parentElement?.classList.contains('dsh-iui-article') === true`, 'article preview wrapper')
+  // The themed accent follows the active light/dark scheme.
+  await wait(`['#237744', '#66cc99'].includes(document.querySelector('[data-dsh-iui-call-id="style-switch-call-1"] [data-dsh-iui-edit-view] .dsh-iui-root')?.style.getPropertyValue('--iui-chart-1'))`, 'template preview theme vars')
+  check(['#237744', '#66cc99'].includes((await editRootStyle()).accent), true, 'a focused saved template previews its own accent')
+  check(await read('window.__styleSwitchCalls.length'), 0, 'previewing never posts a structure request')
+
+  // Selecting a target arms Apply; Escape collapses and returns focus.
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_field02"]').click()`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'Apply armed after selecting a target')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_field02"]').checked`), true, 'the selected radio is checked')
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-toggle]').getAttribute('aria-expanded') === 'false'`, 'Escape collapses the style section')
+  check(await read(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style-toggle]')`), true, 'Escape returns focus to the disclosure button')
+
+  // Reopen, switch to a saved card template and apply: exactly one empty-operation POST.
+  // (Article targets on this DST program are rejected by the real Host's article predicate, so the E2E applies a reachable card template.)
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.activeElement?.getAttribute('data-target-style-id') === 'cs_field02'`, 'the checked radio regains focus')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_ocean01"]').click()`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'Apply armed for the saved card template')
+  check(await read('window.__styleSwitchCalls.length'), 0, 'arming Apply never posts')
+  const chipCountBeforeSwitch = await count('[data-chip="artifact-edit"]')
+  const draftBeforeSwitch = await read('window.__input().draft')
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait('window.__styleSwitchCalls.length === 1', 'one switch request')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'switch closes the editor')
+  const switchBody = await read('window.__styleSwitchCalls[0]')
+  check(switchBody.operations, [], 'the switch posts an empty operation list')
+  check(switchBody.targetStyle, { kind: 'template', styleId: 'cs_ocean01' }, 'the switch posts the reachable saved template target')
+  check(switchBody.sessionStyleScope, 'e2e-session', 'the switch posts the chat scope for session templates')
+  check(switchBody.baseRevisionId, 'style-switch-call-1', 'the switch names the base revision')
+  check(switchBody.style, 'card', 'the switch carries the base style identity claim')
+  check(typeof switchBody.operationId === 'string' && /^req_/.test(switchBody.operationId), true, 'the switch carries a fresh operation id')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-rev-2"]\')', 'style revision card')
+  check((await text('[data-dsh-iui-call-id="style-switch-rev-2"] [data-dsh-iui-local-revision]')), '样式修订', 'the local card is labelled as a style revision')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="style-switch-rev-2"]').getAttribute('data-dsh-iui-style')`), 'card', 'the style revision card keeps the reachable saved template layout')
+  check(await count('[data-chip="artifact-edit"]'), chipCountBeforeSwitch, 'a style switch never creates a composer chip')
+  check((await read('window.__input().draft')), draftBeforeSwitch, 'a style switch never writes the composer draft')
+
+  // Dirty block content refuses the switch with inline copy and zero POSTs.
+  await click('[data-dsh-iui-call-id="style-switch-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty switch editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'dirty switch group')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').click()`)
+  await openArrangementEditor('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'dirty block popover')
+  await saveInstruction('把时钟换成数字读数')
+  const postsBeforeDirtyApply = await read('window.__styleSwitchCalls.length')
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch-error]")', 'dirty switch error')
+  check((await text('[data-dsh-iui-edit-style-switch-error]')).includes('请先发送或清除'), true, 'a dirty draft explains the block-change guard')
+  check(await read('window.__styleSwitchCalls.length'), postsBeforeDirtyApply, 'a dirty draft never posts the switch')
+  await click('[data-dsh-iui-edit-clear-all]')
+
+  // A temporary-style base has no current row; applying drops the temporary badge.
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty switch editor closed')
+  await read(`window.__styleSwitchRevisionId = 'style-switch-temp-rev-2'`)
+  await read('window.__addTempCard("style-switch-temp-call", "样式切换临时卡片")')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-temp-call"]\')', 'temporary switch card')
+  await click('[data-dsh-iui-call-id="style-switch-temp-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'temporary switch editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'temporary switch group')
+  check(await count('[data-dsh-iui-edit-style-current-badge]'), 0, 'a temporary base never matches a durable current style')
+  check(await count('[data-dsh-iui-edit-style-from-temporary]'), 1, 'the switch explains that it removes the temporary skin')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_ocean01"]').click()`)
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-temp-rev-2"]\')', 'temporary switch revision card')
+  check(await count('[data-dsh-iui-call-id="style-switch-temp-rev-2"] .dsh-iui-temporary-badge'), 0, 'the switch revision drops the temporary badge')
+  check(await count('[data-dsh-iui-call-id="style-switch-temp-call"] .dsh-iui-temporary-badge'), 1, 'the original temporary card keeps its badge')
+
+  // Opening the section on a template/Article base must not preview the first
+  // (built-in Card) radio: the recorded canvas stays until the user interacts.
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'style-article-call', revisionId: 'style-article-rev', baseRevisionId: 'style-article-call', revision: 2,
+    editedBlockIds: ['b3'], program: DST_PROGRAM, title: '文章底版卡片', style: 'article',
+  })}, 'style-article-call')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-article-call"]\')', 'article base card')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="style-article-call"]').getAttribute('data-dsh-iui-style')`), 'article', 'the article-base card records the article layout')
+  await click('[data-dsh-iui-call-id="style-article-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'article base editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.activeElement?.getAttribute('data-target-layout') === 'article'`, 'the current article radio receives the open focus')
+  await wait(`document.querySelector('[data-dsh-iui-call-id="style-article-call"] [data-dsh-iui-edit-view]')?.parentElement?.classList.contains('dsh-iui-article') === true`, 'the article canvas stays during the open focus')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="style-article-call"] [data-dsh-iui-edit-view] .dsh-iui-root')?.style.getPropertyValue('--iui-chart-1')`), '', 'the open focus does not apply a template preview')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'article base editor closed')
+
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'style-template-call', revisionId: 'style-template-rev', baseRevisionId: 'style-template-call', revision: 2,
+    editedBlockIds: ['b3'], program: DST_PROGRAM, title: '模板底版卡片', style: 'card', styleId: 'cs_ocean01',
+  })}, 'style-template-call')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-template-call"]\')', 'template base card')
+  await click('[data-dsh-iui-call-id="style-template-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'template base editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.activeElement?.getAttribute('data-target-kind') === 'template'`, 'the current saved-template radio receives the open focus')
+  check(['#3366cc', '#66aaff'].includes(await read(`document.querySelector('[data-dsh-iui-call-id="style-template-call"] [data-dsh-iui-edit-view] .dsh-iui-root')?.style.getPropertyValue('--iui-chart-1')`)), true, 'the open focus keeps the recorded template theme')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="style-template-call"] [data-dsh-iui-edit-view]')?.parentElement?.classList.contains('dsh-iui-article')`), false, 'the open focus keeps the recorded layout')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'template base editor closed')
+
+  // Mocked Host failures: article_unavailable, then style_missing (catalog refresh),
+  // then the 409 identity-mismatch copy.
+  await read(`window.__styleSwitchRevisionId = undefined`)
+  await read(`window.__addCard("style-switch-fail-call", "样式切换失败卡片", ${JSON.stringify(DST_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-fail-call"]\')', 'switch failure card')
+  await click('[data-dsh-iui-call-id="style-switch-fail-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'switch failure editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'failure switch group')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').click()`)
+  await read(`window.__styleSwitchFail = { code: 'article_unavailable', status: 400 }`)
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch-error]")', 'article unavailable copy')
+  check((await text('[data-dsh-iui-edit-style-switch-error]')).includes('目录与分区'), true, 'article_unavailable explains the Toc/Section requirement')
+  const catalogFetchesBefore = await read('window.__styleCatalogFetches.length')
+  await read(`window.__styleSwitchFail = { code: 'style_missing', status: 404 }`)
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-switch-error]')?.textContent.includes('已不存在') === true`, 'style missing copy')
+  await wait(`window.__styleCatalogFetches.length > ${catalogFetchesBefore}`, 'style_missing refreshes the catalog')
+  check(await read('window.__styleCatalogFetches.length > 0'), true, 'a missing style retriggers the visible style catalog load')
+  // The vanished target is cleared after the refresh: Apply is not repeatable.
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').checked`), false, 'style_missing clears the vanished selection')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled`), true, 'Apply waits for a new selection after style_missing')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').click()`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'reselecting re-arms Apply')
+
+  // A pending natural-language style instruction disables the deterministic
+  // Apply with an accessible reason instead of failing after the click.
+  await typeInto('[data-dsh-iui-edit-style]', '换成更冷静的配色')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === true`, 'a pending NL style instruction disables Apply')
+  check(await count('[data-dsh-iui-edit-style-switch-blocked]'), 1, 'the disabled Apply explains the pending style instruction')
+  check((await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').getAttribute('aria-describedby') ?? ''`)).length > 0, true, 'the Apply button names the blocked reason')
+  await typeInto('[data-dsh-iui-edit-style]', '')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'clearing the NL instruction re-arms Apply')
+
+  await read(`window.__styleSwitchFail = { code: 'base_style_mismatch', status: 409 }`)
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-switch-error]')?.textContent.includes('不一致') === true`, 'stale identity copy')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').checked`), true, 'a failed switch keeps the selection for retry')
+  await read('window.__styleSwitchFail = undefined')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'failure editor closed')
+
+  // Keyboard radios, forced colors, and the B1 regression without the switch bit.
+  await read(`window.__styleSwitchRevisionId = 'style-switch-rev-3'`)
+  await click('[data-dsh-iui-call-id="style-switch-fail-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'keyboard switch editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-style-target') === true`, 'keyboard radio focus')
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40 })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40 })
+  await wait(`document.activeElement?.getAttribute('data-target-layout') === 'article'`, 'arrow keys move inside the radio group')
+  check(await read(`document.activeElement.getAttribute('data-target-kind')`), 'builtin', 'native radios keep one tab stop and arrow navigation')
+  await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'forced-colors', value: 'active' }] })
+  await wait(`matchMedia('(forced-colors: active)').matches`, 'forced colors emulation')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-style-target]:checked').closest('.dsh-iui-edit-style-target')).outlineStyle`), 'solid', 'forced colors keeps a visible checked-row outline')
+  check(await read(`getComputedStyle(document.activeElement.closest('.dsh-iui-edit-style-target')).outlineStyle`), 'solid', 'forced colors keeps a visible keyboard focus ring')
+  check(await read(`getComputedStyle(document.activeElement.closest('.dsh-iui-edit-style-target')).outlineWidth`), '2px', 'forced colors focus ring is the 2px rule, not the checked-row outline')
+  await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'forced-colors', value: 'none' }] })
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'keyboard switch editor closed')
+
+  // Without the switch bit the B1 natural-language field keeps the whole section.
+  await read('window.__project({ styleEdit: true, styleSwitch: false })')
+  await click('[data-dsh-iui-call-id="style-switch-fail-call"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nl regression editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style]")', 'nl regression field')
+  check(await count('[data-dsh-iui-edit-style-switch]'), 0, 'without the switch bit no picker is rendered')
+  await wait(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style]')`, 'NL field focused without the switch bit')
+  check(await read(`document.activeElement === document.querySelector('[data-dsh-iui-edit-style]')`), true, 'without the switch bit expansion focuses the NL textarea')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'nl regression editor closed')
+  await read('window.fetch = window.__styleSwitchOriginalFetch')
+  await read('delete window.__styleSwitchFail; delete window.__styleSwitchRevisionId; delete window.__styleSwitchCalls; delete window.__styleCatalogFetches; delete window.__styleSwitchOriginalFetch')
+  await read('window.__project({ styleEdit: false, styleSwitch: false })')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

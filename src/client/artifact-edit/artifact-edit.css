@@ -931,6 +931,180 @@
 }
 
 /*
+ * B2 deterministic style switch: durable target radios and an explicit Apply,
+ * rendered above the natural-language style field (single section, two apply
+ * models, never mixed).
+ */
+.dsh-iui-edit-style-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-style-switch-title {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.dsh-iui-edit-style-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-style-target-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-style-saved-group {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 30px;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.dsh-iui-edit-style-target:hover {
+  background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
+}
+
+.dsh-iui-edit-style-target.is-checked {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+}
+
+.dsh-iui-edit-style-radio {
+  flex: none;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+}
+
+.dsh-iui-edit-style-swatch {
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 5px;
+  background: linear-gradient(
+    135deg,
+    var(--swatch-canvas, var(--dsw-alias-bg-layer-2)) 55%,
+    var(--swatch-accent, var(--dsw-alias-label-tertiary)) 55%
+  );
+}
+
+.dsh-iui-edit-style-swatch[data-layout="article"] {
+  border-radius: 3px;
+}
+
+.dsh-iui-edit-style-target-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-style-target-meta {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style-current-badge {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent);
+  color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style-target-hint {
+  margin: 0 0 2px 34px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.dsh-iui-edit-style-switch-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dsh-iui-edit-style-apply {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary-foreground, #fff);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-style-apply:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 86%, var(--dsw-alias-label-primary));
+}
+
+.dsh-iui-edit-style-apply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-edit-style-apply:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-edit-style-switch-error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-style-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--dsw-alias-border-l1);
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-edit-style-target.is-checked {
+    outline: 1px solid Highlight;
+  }
+  /* Native radio focus must stay visible when the painted ring is gone. */
+  .dsh-iui-edit-style-target:has(.dsh-iui-edit-style-radio:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+/*
  * Multi-draft switcher: every retained draft of the chat, in creation order.
  * Same quiet editorial language as the request list: hairline separators, a
  * brand tick on the active canvas, and inline attach/discard affordances.

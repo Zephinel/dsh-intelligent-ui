@@ -544,8 +544,87 @@ function describeStyleEditRequestProblem(value: Record<string, unknown>): string
 }
 
 /**
+ * Whether one `<artifact-edit-request>` occurrence starts a real envelope.
+ *
+ * A real envelope always carries its JSON header directly after the marker
+ * (only whitespace between). Marker text that merely appears inside a user
+ * instruction or program body is content, not a new envelope, so the parser
+ * cannot be tricked into splitting or truncating a request.
+ * @param text - message body.
+ * @param at - offset of one `<artifact-edit-request>` occurrence.
+ * @returns whether the JSON header follows the marker.
+ */
+function isEnvelopeStart(text: string, at: number): boolean {
+  // A real envelope puts the JSON header on the next line; marker text embedded
+  // inline in prose/instructions (even valid JSON) therefore never matches.
+  // Serializers also escape `<` in instruction prose, and program-body markers
+  // are skipped by nextEnvelopeOpen.
+  let cursor = at + ARTIFACT_EDIT_OPEN.length
+  if (text[cursor] !== '\n') return false
+  cursor += 1
+  while (cursor < text.length && (text[cursor] === ' ' || text[cursor] === '\t')) cursor += 1
+  if (text[cursor] !== '{') return false
+  const close = text.indexOf(ARTIFACT_EDIT_CLOSE, cursor)
+  if (close < 0) return false
+  const json = text.slice(cursor, close).trim()
+  if (!json.endsWith('}')) return false
+  try {
+    const value: unknown = JSON.parse(json)
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Find the next real envelope opening at or after one offset, skipping marker
+ * text inside instructions/programs.
+ * @param text - message body.
+ * @param from - inclusive search start.
+ * @returns the offset, or -1 when no further envelope exists.
+ */
+function insideProgramBody(text: string, at: number): boolean {
+  const open = text.lastIndexOf(ARTIFACT_PROGRAM_OPEN, at)
+  if (open < 0) return false
+  const close = text.indexOf(ARTIFACT_PROGRAM_CLOSE, open + ARTIFACT_PROGRAM_OPEN.length)
+  return close < 0 || close > at
+}
+
+function nextEnvelopeOpen(text: string, from: number): number {
+  let at = text.indexOf(ARTIFACT_EDIT_OPEN, from)
+  while (at >= 0) {
+    if (!insideProgramBody(text, at) && isEnvelopeStart(text, at)) return at
+    at = text.indexOf(ARTIFACT_EDIT_OPEN, at + ARTIFACT_EDIT_OPEN.length)
+  }
+  return -1
+}
+
+/**
+ * Find the line-fenced program section of one envelope.
+ *
+ * The serializer puts `<artifact-program>` and `</artifact-program>` on their
+ * own lines, so a literal marker inside a model-authored Text string can never
+ * truncate the program (the old last-index scan could).
+ * @param text - one user message body.
+ * @returns the opening/closing offsets and the program body.
+ */
+function programFence(text: string): { open: number; close: number; program: string } | undefined {
+  const openMatch = /(?:^|\n)<artifact-program>[ \t]*(?:\n|$)/.exec(text)
+  if (openMatch === null) return undefined
+  const open = openMatch.index + (openMatch[0].startsWith('\n') ? 1 : 0)
+  const bodyStart = text.indexOf('\n', open)
+  if (bodyStart < 0) return undefined
+  const closePattern = /(?:^|\n)<\/artifact-program>[ \t]*(?:\n|$)/g
+  closePattern.lastIndex = bodyStart + 1
+  const closeMatch = closePattern.exec(text)
+  if (closeMatch === null) return undefined
+  const close = closeMatch.index + (closeMatch[0].startsWith('\n') ? 1 : 0)
+  return { open, close, program: text.slice(bodyStart + 1, close).trim() }
+}
+
+/**
  * Split an envelope text into its JSON header and the original program.
- * The program is the last fenced section, so a `<artifact-program>`-like
+ * The program section is located by its own-line fences, so a marker-like
  * string inside a model-authored Text literal cannot truncate it.
  * @param text - one user message body.
  * @returns the raw JSON string and program body, or undefined.
@@ -556,12 +635,9 @@ function splitEnvelope(text: string): { json: string; program: string; rest: str
   if (open < 0 || close < 0 || close < open) return undefined
   const json = text.slice(open + ARTIFACT_EDIT_OPEN.length, close).trim()
   if (json === '' || !json.startsWith('{') || !json.endsWith('}')) return undefined
-  const programOpen = text.lastIndexOf(ARTIFACT_PROGRAM_OPEN)
-  const programClose = text.lastIndexOf(ARTIFACT_PROGRAM_CLOSE)
-  const program = programOpen >= 0 && programClose > programOpen
-    ? text.slice(programOpen + ARTIFACT_PROGRAM_OPEN.length, programClose).trim()
-    : ''
-  if (program === '') return undefined
+  const fence = programFence(text)
+  if (fence === undefined || fence.program === '') return undefined
+  const { open: programOpen, close: programClose, program } = fence
   const rest = `${text.slice(0, open)}${text.slice(close + ARTIFACT_EDIT_CLOSE.length, programOpen >= 0 ? programOpen : undefined)}`
   return { json, program, rest }
 }
@@ -576,6 +652,77 @@ function splitEnvelope(text: string): { json: string; program: string; rest: str
  */
 export function buildEditRequestText(request: ArtifactEditRequest): string {
   return isStyleEditRequest(request) ? buildStyleEditRequestText(request) : buildBlockEditRequestText(request)
+}
+
+/**
+ * Machine-readable tool-call contract for one block/arrangement edit request.
+ *
+ * Content edits (including additions and mixed order changes) are applied with
+ * edit_ui_blocks fragments; order-only/global-only requests are applied with a
+ * complete render_ui program. The serializer prose and the Host coupling test
+ * both derive from this helper so the model-facing envelope cannot drift from
+ * the arguments the Host tools accept.
+ * @param request - validated block edit request.
+ * @returns the tool, required/optional/forbidden argument names.
+ */
+export interface BlockEditToolContract {
+  readonly tool: typeof BLOCK_EDIT_TOOL | 'render_ui'
+  readonly requiredArguments: readonly string[]
+  readonly optionalArguments: readonly string[]
+  readonly forbiddenArguments: readonly string[]
+}
+export function blockEditToolContract(request: ArtifactBlockEditRequest): BlockEditToolContract {
+  const contentEdits = request.edits.length > 0 || (request.additions?.length ?? 0) > 0
+  if (contentEdits) {
+    return {
+      tool: BLOCK_EDIT_TOOL,
+      requiredArguments: ['program'],
+      optionalArguments: request.requestId === undefined ? [] : ['requestId', 'artifactId'],
+      forbiddenArguments: ['style', 'styleId', 'temporaryStyle'],
+    }
+  }
+  return {
+    tool: 'render_ui',
+    requiredArguments: ['program', 'style'],
+    optionalArguments: [
+      ...request.styleId === undefined ? [] : ['styleId'],
+      ...request.requestId === undefined ? [] : ['editRequestId'],
+    ],
+    forbiddenArguments: ['temporaryStyle', 'requestId', 'artifactId'],
+  }
+}
+
+/**
+ * The one branch-edit instruction line shared by every envelope serializer.
+ * @param request - envelope request carrying an optional branch flag.
+ * @returns the model-facing branch line, or undefined for a normal edit.
+ */
+export function branchEnvelopeLine(request: { readonly branch?: boolean; readonly baseRevision: number }): string | undefined {
+  if (request.branch !== true) return undefined
+  return `- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`
+}
+
+/**
+ * The complete tool arguments a model call must send for a block edit request.
+ * Host tests execute exactly these args to keep envelope and Host coupled.
+ * @param request - validated block edit request.
+ * @param program - mini program for edit_ui_blocks or complete program for render_ui.
+ * @returns the host-accepted tool arguments.
+ */
+export function buildBlockEditToolArgs(request: ArtifactBlockEditRequest, program: string): Record<string, unknown> {
+  const contract = blockEditToolContract(request)
+  if (contract.tool === BLOCK_EDIT_TOOL) {
+    return {
+      program,
+      ...request.requestId === undefined ? {} : { requestId: request.requestId, artifactId: request.artifactId },
+    }
+  }
+  return {
+    program,
+    style: request.style,
+    ...request.styleId === undefined ? {} : { styleId: request.styleId },
+    ...request.requestId === undefined ? {} : { editRequestId: request.requestId },
+  }
 }
 
 /**
@@ -622,22 +769,19 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
   }).replace(/</g, '\\u003c')
 
   const targets = request.edits.map(edit => {
-    const name = edit.title === undefined ? edit.componentType : edit.title
-    return `${edit.selectionOrder}. ${name} — blockId "${edit.blockId}", nodePath "${edit.nodePath}", originalIndex ${edit.originalIndex}, componentType ${edit.componentType}\n   Instruction: ${edit.instruction}`
+    const name = edit.title === undefined ? edit.componentType : escapeEnvelopeText(edit.title)
+    return `${edit.selectionOrder}. ${name} — blockId "${edit.blockId}", nodePath "${edit.nodePath}", originalIndex ${edit.originalIndex}, componentType ${edit.componentType}\n   Instruction: ${escapeEnvelopeText(edit.instruction)}`
   }).join('\n')
 
   const additionLines = (request.additions ?? []).map((addition, index) =>
-    `${index + 1}. Insert into container blockId "${addition.parentBlockId}" (parentNodeId "${addition.parentNodeId}") at position ${addition.index}\n   Instruction: ${addition.instruction}`,
+    `${index + 1}. Insert into container blockId "${addition.parentBlockId}" (parentNodeId "${addition.parentNodeId}") at position ${addition.index}\n   Instruction: ${escapeEnvelopeText(addition.instruction)}`,
   ).join('\n')
   const additionCount = request.additions?.length ?? 0
   const contentEdits = request.edits.length > 0 || additionCount > 0
-  const styleLine = contentEdits
-    ? request.temporaryStyle !== undefined
-      ? `- Keep the recorded result-owned temporary style (${JSON.stringify(request.style)}); the Host reuses its snapshot, do not pass style or styleId arguments to ${BLOCK_EDIT_TOOL}.`
-      : `- Keep the recorded page style (${JSON.stringify(request.style)}${request.styleId === undefined ? '' : `, styleId ${JSON.stringify(request.styleId)}`}); the Host reuses it, do not pass style arguments to ${BLOCK_EDIT_TOOL}.`
-    : request.styleId === undefined
-      ? `- Keep the recorded page style: pass style: ${JSON.stringify(request.style)} to render_ui.`
-      : `- Keep the recorded page style: pass style: ${JSON.stringify(request.style)} and styleId: ${JSON.stringify(request.styleId)} to render_ui.`
+  const contract = blockEditToolContract(request)
+  const callLine = contract.tool === BLOCK_EDIT_TOOL
+    ? `Tool-call contract: call ${contract.tool} exactly once with the mini program described below${contract.optionalArguments.includes('requestId') ? `, passing requestId: ${JSON.stringify(request.requestId)} and artifactId: ${JSON.stringify(request.artifactId)}` : ''}; never pass ${contract.forbiddenArguments.join(', ')}.`
+    : `Tool-call contract: call render_ui exactly once with the complete updated program and style: ${JSON.stringify(request.style)}${contract.optionalArguments.includes('styleId') ? `, styleId: ${JSON.stringify(request.styleId)}` : ''}${contract.optionalArguments.includes('editRequestId') ? `, selecting the request with editRequestId: ${JSON.stringify(request.requestId)}` : ''}; never pass ${contract.forbiddenArguments.join(', ')}.`
 
   const lines = contentEdits
     ? [
@@ -647,9 +791,7 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
         '',
         'This message is a targeted edit request for one existing rendered page (an artifact the user is looking at).',
         `Call the ${BLOCK_EDIT_TOOL} tool exactly once with a mini openui-lang program. Do not call render_ui for this request, do not answer in prose, do not return a diff, and do not redesign the page.`,
-        ...request.requestId === undefined ? [] : [
-          `Pass requestId: ${JSON.stringify(request.requestId)} and artifactId: ${JSON.stringify(request.artifactId)} in the tool arguments so the Host applies exactly this request.`,
-        ],
+        callLine,
         '',
         'Output contract for that tool:',
         `- Return one mini program \`root = Col([...])\` with exactly ${request.edits.length + additionCount} direct children.`,
@@ -663,8 +805,7 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
         '- Change only the target blocks listed below, plus the minimum directly related parts needed to complete those changes.',
         '- Keep every unselected block and every part of the page the request does not mention unchanged, including its content, structure and interactive behavior.',
         '- Reuse the existing theme and layout; do not add unrelated sections, restyle the page, or drop existing data.',
-        styleLine,
-        ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
+        ...branchEnvelopeLine(request) === undefined ? [] : [branchEnvelopeLine(request)!],
         '- Apply all block instructions in the mini program, together with the global instruction below.',
         '- If a block instruction depends on shared state or data, update the minimum related parts consistently.',
         '- Do not reorder the page or the target blocks: the Host applies the requested block order after merging your fragments.',
@@ -685,7 +826,7 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
         '',
         ...request.strict === true ? ['- Strict mode is on: do not change any block that is not listed as a target; the Host rejects the edit if an unselected block changes.'] : [],
         'Global instruction (applies across blocks, may be empty):',
-        request.globalInstruction === undefined ? '(none)' : request.globalInstruction,
+        request.globalInstruction === undefined ? '(none)' : escapeEnvelopeText(request.globalInstruction),
         '',
         `The current page is revision ${request.baseRevision} of its artifact. It is reference context only; do not return it. The blockId, nodePath and originalIndex values above refer to this program:`,
         ARTIFACT_PROGRAM_OPEN,
@@ -699,15 +840,12 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
         '',
         'This message is a targeted request for one existing rendered page (an artifact the user is looking at). It contains no block content edits.',
         'Call the render_ui tool exactly once with the complete updated program. Do not answer in prose, do not return a diff, and do not redesign the page.',
-        ...request.requestId === undefined ? [] : [
-          `Pass editRequestId: ${JSON.stringify(request.requestId)} in the tool arguments so the Host applies exactly this request.`,
-        ],
+        callLine,
         '',
         'Editing rules:',
         '- Keep every block unchanged unless the global instruction below requires a change.',
         '- Reuse the existing theme and layout; do not add unrelated sections, restyle the page, or drop existing data.',
-        styleLine,
-        ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
+        ...branchEnvelopeLine(request) === undefined ? [] : [branchEnvelopeLine(request)!],
         '- Reorder the top-level blocks (the root Col children) to exactly the target order below. Reordering never deletes, duplicates, merges or regenerates a block: keep the same set of top-level blocks and only move them.',
         '- Do not treat the target order as content edits; blocks that are only reordered keep their original body, component identity and interactions.',
         '- The program must be a complete, valid openui-lang program in the same style; the Host rejects an invalid program.',
@@ -720,7 +858,7 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
         '',
         ...request.strict === true ? ['- Strict mode is on: do not change any block that is not listed as a target; the Host rejects the edit if an unselected block changes.'] : [],
         'Global instruction (applies across blocks, may be empty):',
-        request.globalInstruction === undefined ? '(none)' : request.globalInstruction,
+        request.globalInstruction === undefined ? '(none)' : escapeEnvelopeText(request.globalInstruction),
         '',
         `The current page is revision ${request.baseRevision} of its artifact. The blockId, nodePath and originalIndex values refer to this program:`,
         ARTIFACT_PROGRAM_OPEN,
@@ -731,12 +869,74 @@ export function buildBlockEditRequestText(request: ArtifactBlockEditRequest): st
 }
 
 /**
+ * Serialized instruction text safe for the envelope prose.
+ *
+ * A literal `<` would let the instruction spell our delimiter markers and split
+ * or truncate the request when the Host parses it back. The JSON header already
+ * escapes `<`; the prose repeat uses the same neutral spelling so the visible
+ * request stays one envelope.
+ * @param text - validated style instruction.
+ * @returns the instruction with `<` escaped.
+ */
+function escapeEnvelopeText(text: string): string {
+  return text.replace(/</g, '\\u003c')
+}
+
+/**
+ * Machine-readable render_ui argument contract for one style edit.
+ *
+ * The serializer prose, the Host coupling test and the model instructions all
+ * derive from this helper so the model-facing envelope cannot drift from the
+ * arguments the Host accepts (style + explicit editRequestId + complete
+ * temporaryStyle; styleId/artifactId are never tool arguments).
+ * @param request - validated style edit request.
+ * @returns required tool arguments and forbidden identity fields.
+ */
+export interface StyleEditToolContract {
+  readonly style: ArtifactStyleEditRequest['style']
+  readonly editRequestId: string
+  readonly requiresTemporaryStyle: true
+  readonly requiredArguments: readonly string[]
+  readonly optionalArguments: readonly string[]
+  readonly forbiddenArguments: readonly string[]
+}
+export function styleEditToolContract(request: ArtifactStyleEditRequest): StyleEditToolContract {
+  return {
+    style: request.style,
+    editRequestId: request.requestId,
+    requiresTemporaryStyle: true,
+    requiredArguments: ['program', 'style', 'editRequestId', 'temporaryStyle'],
+    optionalArguments: [],
+    forbiddenArguments: ['styleId', 'artifactId'],
+  }
+}
+
+/**
+ * The complete render_ui arguments a model call must send for a style edit.
+ * Host tests execute exactly these args to keep envelope and Host coupled.
+ * @param request - validated style edit request.
+ * @param program - complete updated program returned by the model.
+ * @param temporaryStyle - complete approved snapshot for the returned program.
+ * @returns the host-accepted render_ui arguments.
+ */
+export function buildStyleEditToolArgs(
+  request: ArtifactStyleEditRequest,
+  program: string,
+  temporaryStyle: StyleSnapshot,
+): { program: string; style: ArtifactStyleEditRequest['style']; editRequestId: string; temporaryStyle: StyleSnapshot } {
+  const contract = styleEditToolContract(request)
+  return { program, style: contract.style, editRequestId: contract.editRequestId, temporaryStyle }
+}
+
+/**
  * Serialize the model-facing user message for one natural-language style edit.
  *
- * Unlike block edits this request returns a complete program: the header tells
- * the Host which revision and skin to keep, and the prose asks the model to
- * change presentation only. JSON strings escape `<` so the instruction cannot
- * close the header.
+ * Unlike block edits this request returns a complete program and always records
+ * a result-owned temporary style: built-in, saved-template and temporary bases
+ * all instruct a COMPLETE `temporaryStyle` and never a `styleId`. The header
+ * carries the base artifact/revision identity for the Host (its `styleId` is
+ * identity only). `render_ui` receives `editRequestId`, the recorded `style`
+ * and the complete `temporaryStyle`, never `styleId` or `artifactId`.
  * @param request - complete, validated style edit request.
  * @returns the envelope text.
  */
@@ -750,17 +950,19 @@ export function buildStyleEditRequestText(request: ArtifactStyleEditRequest): st
     baseRevision: request.baseRevision,
     ...request.title === undefined ? {} : { title: request.title },
     style: request.style,
+    // Identity only: records the base revision's saved template; the model must
+    // never pass this to render_ui.
     ...request.styleId === undefined ? {} : { styleId: request.styleId },
     ...request.temporaryStyle === undefined ? {} : { temporaryStyle: request.temporaryStyle },
     ...request.branch === true ? { branch: true } : {},
     styleInstruction: request.styleInstruction,
   }).replace(/</g, '\\u003c')
 
-  const styleTarget = request.temporaryStyle !== undefined
-    ? `- Keep the recorded result-owned temporary skin: pass the complete temporaryStyle ${JSON.stringify(request.temporaryStyle)} to render_ui and omit styleId.`
+  const recordedSkin = request.temporaryStyle !== undefined
+    ? `- The base revision uses a result-owned temporary skin. Extend the recorded temporaryStyle ${escapeEnvelopeText(JSON.stringify(request.temporaryStyle))} with the applied skin, keeping baseLayout ${JSON.stringify(request.style)}.`
     : request.styleId === undefined
-      ? `- Keep the recorded page layout: pass style: ${JSON.stringify(request.style)} to render_ui.`
-      : `- Keep the recorded page layout and saved template: pass style: ${JSON.stringify(request.style)} and styleId: ${JSON.stringify(request.styleId)} to render_ui.`
+      ? `- The base revision uses the built-in ${JSON.stringify(request.style)} layout. Add a COMPLETE temporaryStyle for the returned program: schemaVersion 1, baseLayout ${JSON.stringify(request.style)}, non-empty directives (max 2000 characters) describing the applied skin, and optionally a complete theme object ({light, dark, font, radius, density, shadow}).`
+      : `- The base revision uses the saved template ${JSON.stringify(request.styleId)} (layout ${JSON.stringify(request.style)}). Materialize that template's skin as a COMPLETE temporaryStyle on the returned program: schemaVersion 1, baseLayout ${JSON.stringify(request.style)}, non-empty directives (max 2000 characters) describing the applied skin, and optionally a complete theme object copied from the saved template. The edit records a result-owned temporary-style revision and does not modify the saved template.`
 
   const lines = [
     ARTIFACT_EDIT_OPEN,
@@ -769,21 +971,22 @@ export function buildStyleEditRequestText(request: ArtifactStyleEditRequest): st
     '',
     'This message is a targeted style edit request for one existing rendered page (an artifact the user is looking at). It changes presentation, not the content the page carries.',
     'Call the render_ui tool exactly once with the complete updated program. Do not answer in prose, do not return a diff, and do not switch to another page layout.',
-    `Pass editRequestId: ${JSON.stringify(request.requestId)} and artifactId: ${JSON.stringify(request.artifactId)} in the tool arguments so the Host applies exactly this request.`,
+    `Pass editRequestId: ${JSON.stringify(styleEditToolContract(request).editRequestId)} in the tool arguments so the Host applies exactly this request.`,
+    `Tool-call contract: pass style: ${JSON.stringify(styleEditToolContract(request).style)} and the complete temporaryStyle; never pass ${styleEditToolContract(request).forbiddenArguments.join(' or ')}. The Host reads the page and base revision identity from the envelope header.`,
     '',
     'Style contract for that call:',
     '- Apply the style instruction below to the visual presentation: colour palette, typography, spacing, surfaces, borders, radii, shadows and other decoration.',
-    styleTarget,
+    recordedSkin,
     '- Return the complete page program, not only the parts that look different; keep every block and statement identifiable by its statement name or title.',
     '- Preserve every block\'s content, structure, data and interactive behaviour unless the style instruction explicitly asks to change it. The Host validates the returned program and warns when blocks change unexpectedly.',
     '- Do not reorder, add or remove blocks unless the style instruction explicitly asks for it.',
     '- If the instruction is materially ambiguous, ask one focused question with ask_user_question instead of guessing; otherwise produce the update directly.',
-    ...request.branch === true ? [`- This is a branch edit: base revision ${request.baseRevision} is not the current head. Apply only this request; the Host records a new revision based on it and does not overwrite the head.`] : [],
+    ...branchEnvelopeLine(request) === undefined ? [] : [branchEnvelopeLine(request)!],
     '',
     'Style instruction:',
-    request.styleInstruction,
+    escapeEnvelopeText(request.styleInstruction),
     '',
-    `The current page is revision ${request.baseRevision} of its artifact. It is reference context: return the same page with only the requested presentation changes.`,
+    `The current page is revision ${request.baseRevision} of its artifact. It is reference context: return the same page with only the requested presentation changes. The envelope header above is machine-readable identity for the Host; its styleId (when present) is the base revision's saved template and must not be passed to render_ui.`,
     ARTIFACT_PROGRAM_OPEN,
     request.program,
     ARTIFACT_PROGRAM_CLOSE,
@@ -851,10 +1054,12 @@ export function parseEditRequestTexts(text: string): ArtifactEditRequest[] {
   const requests: ArtifactEditRequest[] = []
   let cursor = 0
   while (cursor < text.length) {
-    const open = text.indexOf(ARTIFACT_EDIT_OPEN, cursor)
+    const open = nextEnvelopeOpen(text, cursor)
     if (open < 0) break
-    const next = text.indexOf(ARTIFACT_EDIT_OPEN, open + ARTIFACT_EDIT_OPEN.length)
-    const segment = next < 0 ? text.slice( Math.max(0, open)) : text.slice(open, next)
+    // The next real envelope bounds this segment; marker text inside the
+    // current instruction/program belongs to this envelope, not a new one.
+    const next = nextEnvelopeOpen(text, open + ARTIFACT_EDIT_OPEN.length)
+    const segment = next < 0 ? text.slice(open) : text.slice(open, next)
     const parsed = parseEditRequestText(segment)
     if (parsed !== undefined) requests.push(parsed)
     if (next < 0) break
@@ -873,7 +1078,9 @@ export function parseEditRequestTexts(text: string): ArtifactEditRequest[] {
  */
 export function parseEditRequestText(text: string): ArtifactEditRequest | undefined {
   if (!text.includes(ARTIFACT_EDIT_OPEN)) return undefined
-  const parts = splitEnvelope(text)
+  const open = nextEnvelopeOpen(text, 0)
+  if (open < 0) return undefined
+  const parts = splitEnvelope(open === 0 ? text : text.slice(open))
   if (parts === undefined) return undefined
   let value: unknown
   try { value = JSON.parse(parts.json) } catch { return undefined }
@@ -901,19 +1108,17 @@ export function isArtifactEditRequest(value: unknown): value is ArtifactEditRequ
  * @returns the covered range and summary facts, or undefined.
  */
 export function nextEditRequestSummary(text: string, from: number): { start: number; end: number; count: number; globalOnly: boolean; reordered: boolean; hasGlobal: boolean; style: boolean } | undefined {
-  const start = text.indexOf(ARTIFACT_EDIT_OPEN, from)
+  const start = nextEnvelopeOpen(text, from)
   if (start < 0) return undefined
   const close = text.indexOf(ARTIFACT_EDIT_CLOSE, start + ARTIFACT_EDIT_OPEN.length)
   if (close < 0) return undefined
   const headerEnd = close + ARTIFACT_EDIT_CLOSE.length
-  // Each envelope owns the first program section that follows its header and
-  // precedes the next envelope; a batch concatenates several of them.
-  const nextOpen = text.indexOf(ARTIFACT_EDIT_OPEN, headerEnd)
-  const programOpen = text.indexOf(ARTIFACT_PROGRAM_OPEN, headerEnd)
-  const programClose = programOpen < 0 ? -1 : text.indexOf(ARTIFACT_PROGRAM_CLOSE, programOpen)
-  const ownsProgram = programOpen >= 0 && programClose > programOpen
-    && (nextOpen < 0 || programOpen < nextOpen)
-  const end = ownsProgram ? programClose + ARTIFACT_PROGRAM_CLOSE.length : headerEnd
+  // Each envelope owns the own-line program section after its header and
+  // before the next envelope; program-body markers can never truncate it.
+  const nextOpen = nextEnvelopeOpen(text, headerEnd)
+  const segment = nextOpen < 0 ? text.slice(headerEnd) : text.slice(headerEnd, nextOpen)
+  const fence = programFence(segment)
+  const end = fence === undefined ? headerEnd : headerEnd + fence.close + ARTIFACT_PROGRAM_CLOSE.length
   let count = 0
   let globalOnly = false
   let reordered = false

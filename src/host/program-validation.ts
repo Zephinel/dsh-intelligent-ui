@@ -4,6 +4,8 @@
  * Kept out of the Host entry so tool registration, prompt copy and structural
  * validation can change independently.
  */
+import { createParser } from '@openuidev/lang-core'
+import librarySpec from '../../vendor/spec.json' with { type: 'json' }
 import { anchorSlug } from '../shared/anchor.ts'
 
 /** Section and Toc targets collected from one parsed program. */
@@ -313,4 +315,89 @@ export function layoutWarnings(root: unknown, options: { readonly free?: boolean
   }
   walk(root, undefined)
   return [...warnings]
+}
+
+/**
+ * The same OpenUI parser instance the Host uses for every render. Created here
+ * because program inspection (findings, component types, article anchors, layout
+ * warnings) is now owned by this module.
+ */
+const parser = createParser((librarySpec as { readonly schema: unknown }).schema as never, 'Col')
+
+/** One model-readable parser or layout finding; a fatal finding blocks the render. */
+export interface ParseFinding {
+  readonly message: string
+  readonly fatal: boolean
+}
+
+/** Full inspection of one complete program: findings, statement count and article metadata. */
+export interface ProgramInspection {
+  statements: number
+  findings: ParseFinding[]
+  types: ReadonlySet<string>
+  anchors: { section: string[]; toc: string[]; issues: string[]; dynamicSection: boolean; dynamicToc: boolean }
+}
+
+/**
+ * Parse one complete program; returns model-readable findings plus statement count.
+ *
+ * Moved verbatim from the Host entry: message text, finding order and the
+ * parser instance composition are unchanged, so render_ui behavior is identical.
+ * @param program - complete openui-lang program.
+ * @param options - page context; a free layout treats the page rhythm as advisory.
+ * @returns the findings, statement count, reachable component types and article anchors.
+ */
+export function inspectProgram(program: string, options: { readonly free?: boolean } = {}): ProgramInspection {
+  let result: ReturnType<typeof parser.parse>
+  try {
+    result = parser.parse(program)
+  } catch (error) {
+    return { statements: 0, findings: [{ message: error instanceof Error ? error.message : String(error), fatal: true }], types: new Set(), anchors: { section: [], toc: [], issues: [], dynamicSection: false, dynamicToc: false } }
+  }
+  const meta = result.meta as {
+    readonly incomplete?: boolean
+    readonly unresolved?: readonly unknown[]
+    readonly orphaned?: readonly unknown[]
+    readonly statementCount?: number
+    readonly errors?: readonly unknown[]
+  }
+  const findings: ParseFinding[] = []
+  for (const error of meta.errors ?? []) {
+    findings.push({ message: String((error as { message?: string }).message ?? error), fatal: true })
+  }
+  if (meta.incomplete === true) findings.push({ message: 'The program is incomplete.', fatal: true })
+  if (result.root == null && findings.length === 0) findings.push({ message: 'No root statement could be resolved.', fatal: true })
+  for (const unresolved of meta.unresolved ?? []) {
+    findings.push({ message: `Unresolved reference: ${String(unresolved)}`, fatal: false })
+  }
+  for (const orphaned of meta.orphaned ?? []) {
+    findings.push({ message: `Unreferenced statement (will not render): ${String(orphaned)}`, fatal: false })
+  }
+  const types = new Set<string>()
+  collectComponentTypes(result.root, types)
+  const anchors = { section: [] as string[], toc: [] as string[], issues: [] as string[], dynamicSection: false, dynamicToc: false }
+  collectArticleAnchors(result.root, anchors)
+  for (const message of layoutWarnings(result.root, options)) findings.push({ message, fatal: false })
+  return { statements: meta.statementCount ?? 0, findings, types, anchors }
+}
+
+/**
+ * Describe why one program cannot be shown in the article layout, or undefined
+ * when it can.
+ *
+ * This is the exact predicate render_ui applied inline: an article page needs a
+ * Toc and at least one Section, and Section/Toc anchors must validate. The
+ * returned string is the model-readable message render_ui throws (including its
+ * `render_ui: ` prefix), so render_ui's behavior stays byte-identical; other
+ * callers may strip the prefix for non-tool errors.
+ * @param program - complete candidate program.
+ * @returns the first article problem, or undefined for a displayable article page.
+ */
+export function describeArticleLayoutProblem(program: string): string | undefined {
+  const { types, anchors } = inspectProgram(program)
+  if (!types.has('Toc') || !types.has('Section')) {
+    return 'render_ui: the article style needs a Toc and at least one Section. '
+      + 'Use Toc(["..."]) and Section("...", [Markdown("...")]) for every major part; a plain Markdown program is the card style.'
+  }
+  return articleAnchorError(anchors, types)
 }

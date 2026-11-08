@@ -13,11 +13,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ARTIFACT_EDIT_CLOSE, ARTIFACT_EDIT_OPEN, ARTIFACT_PROGRAM_CLOSE, ARTIFACT_PROGRAM_OPEN,
-  buildEditRequestText, buildStyleEditRequestText, isArtifactRevisionMeta,
+  blockEditToolContract, buildBlockEditToolArgs, buildEditRequestText, buildStyleEditRequestText, buildStyleEditToolArgs, isArtifactRevisionMeta, styleEditToolContract,
 } from '../../src/shared/artifact-edit.ts'
 import { extractArtifactBlocks, readRootLayout, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
 import { extractBlockBundle } from '../../src/shared/artifact-block-bundle.ts'
 import { ARTIFACT_EDIT_TTL, createArtifactEditController } from '../../src/host/artifact-edit.ts'
+import { describeArticleLayoutProblem, inspectProgram } from '../../src/host/program-validation.ts'
 import { createArtifactRevisionStore } from '../../src/host/artifact-revisions.ts'
 import { assertDshToolSchema } from '../../src/host/tool-schema.ts'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
@@ -419,7 +420,7 @@ test('an order-only request applies deterministic reordering and records the nor
   assert.equal(value.warnings, undefined)
   assert.deepEqual(m.tool.output.presentationMeta({}, value), {
     artifactId: 'call-original', revisionId: 'call-order-1', baseRevisionId: 'call-original', revision: 2,
-    editedBlockIds: [], program: expected,
+    editedBlockIds: [], program: expected, title: DST_TITLE,
   })
   assert.equal(m.tool.output.render({}, value)[0].text, 'Interactive UI updated for the user (revision 2 of the artifact, block order adjusted).')
   const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
@@ -1279,6 +1280,20 @@ test('additions-only requests insert model-authored blocks into a nested parent'
   assert.equal(record.revisionId, 'call-add-only-1')
 })
 
+test('additions-only requests work on a temporary-style base and keep the snapshot', async () => {
+  const m = mount()
+  const request = nestedRequest([], {
+    requestId: 'req_add_temp_1',
+    additions: [nestedAddition('n4', 3, 'add a temp-style callout')],
+    temporaryStyle: { ...TEMPORARY_STYLE },
+  })
+  m.send(buildEditRequestText(request))
+  const value = await m.blockTool.execute({ program: nestedFragment('Text("temp callout", "sm")'), requestId: 'req_add_temp_1' }, { agent: m.agent, callId: 'call-add-temp-1' })
+  assert.equal(value.revision, 2)
+  const [record] = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  assert.deepEqual(record.temporaryStyle, TEMPORARY_STYLE, 'the temporary snapshot is retained')
+})
+
 test('additions-only requests can target the root and insert several blocks in request order', async () => {
   const m = mount()
   m.send(buildEditRequestText(nestedRequest([], {
@@ -1660,6 +1675,107 @@ test('style edits are explicit, snapshot-bound and never mix with block or on-de
   )
 })
 
+test('the documented style-edit tool args are accepted by the Host for every base kind', async () => {
+  // Couples the envelope contract (built-in / saved-template / temporary base)
+  // to the Host's accepted render_ui arguments: serializer/Host drift fails here.
+  const cases = [
+    { label: 'builtin', request: styleRequest() },
+    { label: 'saved', request: (() => { const r = styleRequest(); delete r.temporaryStyle; r.styleId = 'cs_abcdef123456'; return r })() },
+    { label: 'temporary', request: styleRequest({ temporaryStyle: { ...TEMPORARY_STYLE } }) },
+  ]
+  for (const [index, entry] of cases.entries()) {
+    const contract = styleEditToolContract(entry.request)
+    assert.equal(contract.style, entry.request.style)
+    assert.equal(contract.editRequestId, entry.request.requestId)
+    assert.equal(contract.requiresTemporaryStyle, true)
+    assert.deepEqual([...contract.requiredArguments], ['program', 'style', 'editRequestId', 'temporaryStyle'])
+    assert.deepEqual([...contract.optionalArguments], [])
+    assert.deepEqual([...contract.forbiddenArguments], ['styleId', 'artifactId'])
+    const args = buildStyleEditToolArgs(entry.request, DST_PROGRAM, STYLE_SNAPSHOT)
+    assert.deepEqual(Object.keys(args).sort(), ['editRequestId', 'program', 'style', 'temporaryStyle'])
+    const m = mount()
+    m.send(buildEditRequestText(entry.request))
+    const value = await m.tool.execute(
+      args,
+      { agent: m.agent, callId: 'call-contract-style-' + index },
+    )
+    assert.equal(value.styleEdit, true, entry.label + ' base: the documented args are accepted')
+    assert.equal(value.revision, 2, entry.label + ' base: one revision recorded')
+  }
+})
+test('the documented block-edit tool args match the contract and are accepted by the Host', async () => {
+  // Couples both block envelope modes to the Host tools and pins the generated
+  // argument sets: content edits use edit_ui_blocks fragments (selector included),
+  // order-only requests use render_ui with the recorded style/styleId.
+  const fragmentRequest = editRequest({ requestId: 'req_block_contract1' })
+  const fragmentContract = blockEditToolContract(fragmentRequest)
+  assert.equal(fragmentContract.tool, 'edit_ui_blocks')
+  assert.deepEqual([...fragmentContract.requiredArguments], ['program'])
+  assert.deepEqual([...fragmentContract.optionalArguments], ['requestId', 'artifactId'])
+  assert.deepEqual([...fragmentContract.forbiddenArguments], ['style', 'styleId', 'temporaryStyle'])
+  const fragment = blockFragment(['b4'], { b4: UPDATED_MONTH })
+  const fragmentArgs = buildBlockEditToolArgs(fragmentRequest, fragment)
+  assert.deepEqual(Object.keys(fragmentArgs).sort(), ['artifactId', 'program', 'requestId'])
+  const fragmentMount = mount()
+  fragmentMount.send(buildEditRequestText(fragmentRequest))
+  fragmentMount.send(buildEditRequestText(editRequest({ requestId: 'req_block_contract2' })))
+  const fragmentValue = await fragmentMount.blockTool.execute(fragmentArgs, { agent: fragmentMount.agent, callId: 'call-contract-block-fragment' })
+  assert.equal(fragmentValue.revision, 2, 'fragment contract args are accepted with two pending requests')
+  assert.equal(fragmentValue.requestId, 'req_block_contract1', 'the contract selector picks the right request')
+
+  const renderRequest = orderOnlyRequest({ targetOrder: TARGET_ORDER, requestId: 'req_render_contract1', styleId: 'cs_abcdef123456', title: DST_TITLE })
+  const renderContract = blockEditToolContract(renderRequest)
+  assert.equal(renderContract.tool, 'render_ui')
+  assert.deepEqual([...renderContract.requiredArguments], ['program', 'style'])
+  assert.deepEqual([...renderContract.optionalArguments], ['styleId', 'editRequestId'])
+  assert.deepEqual([...renderContract.forbiddenArguments], ['temporaryStyle', 'requestId', 'artifactId'])
+  const reordered = reorderProgramToTargetOrder(DST_PROGRAM, TARGET_ORDER, extractArtifactBlocks(DST_PROGRAM))
+  const renderArgs = buildBlockEditToolArgs(renderRequest, reordered)
+  assert.deepEqual(Object.keys(renderArgs).sort(), ['editRequestId', 'program', 'style', 'styleId'])
+  const renderMount = mount()
+  renderMount.send(buildEditRequestText(renderRequest))
+  const renderValue = await renderMount.tool.execute(renderArgs, { agent: renderMount.agent, callId: 'call-contract-block-render' })
+  assert.equal(renderValue.revision, 2, 'render contract args are accepted')
+  assert.equal(renderValue.title, DST_TITLE, 'the recorded title survives an order-only edit')
+  assert.equal(renderValue.styleId, 'cs_abcdef123456', 'the recorded template identity survives an order-only edit')
+  const renderMeta = renderMount.tool.output.presentationMeta({}, renderValue)
+  assert.equal(renderMeta.title, DST_TITLE, 'presentationMeta carries the recorded title')
+  assert.equal(renderMeta.styleId, 'cs_abcdef123456', 'presentationMeta carries the recorded template id')
+})
+
+test('an order-only edit uses the artifact recorded style when the session template differs', async () => {
+  // H4: a pending block edit renders the artifact identity, not the session's
+  // current template; the generated contract must not deadlock this state.
+  const m = mount({ answerStyle: 'article' })
+  const request = orderOnlyRequest({ targetOrder: TARGET_ORDER })
+  const reordered = reorderProgramToTargetOrder(DST_PROGRAM, TARGET_ORDER, extractArtifactBlocks(DST_PROGRAM))
+  m.send(buildEditRequestText(request))
+  const value = await m.tool.execute(buildBlockEditToolArgs(request, reordered), { agent: m.agent, callId: 'call-contract-artifact-style' })
+  assert.equal(value.revision, 2)
+  assert.equal(value.style, 'card')
+})
+
+test('a recorded result-owned snapshot is authoritative for content edits', async () => {
+  const authoritative = { schemaVersion: 1, baseLayout: 'card', directives: 'Authoritative skin kept by the registry.' }
+  const forged = { ...authoritative, directives: 'Forged skin from the client request.' }
+  const m = mount()
+  const first = editRequest({ requestId: 'req_temp_snapshot_a', temporaryStyle: authoritative })
+  m.send(buildEditRequestText(first))
+  await m.blockTool.execute(buildBlockEditToolArgs(first, blockFragment(['b4'], { b4: UPDATED_MONTH })), { agent: m.agent, callId: 'call-temp-first' })
+  const second = editRequest({
+    requestId: 'req_temp_snapshot_b',
+    baseRevisionId: 'call-temp-first',
+    baseRevision: 2,
+    temporaryStyle: forged,
+  })
+  m.send(buildEditRequestText(second))
+  const value = await m.blockTool.execute(buildBlockEditToolArgs(second, blockFragment(['b4'], { b4: UPDATED_MONTH })), { agent: m.agent, callId: 'call-temp-second' })
+  assert.equal(value.revision, 3)
+  const revisions = JSON.parse(readFileSync(m.file, 'utf8')).revisions
+  const recorded = revisions.find(entry => entry.revisionId === 'call-temp-second')
+  assert.deepEqual(recorded.temporaryStyle, authoritative, 'the forged snapshot is ignored')
+})
+
 test('an armed on-demand turn cannot absorb a pending style edit (H3)', async () => {
   const m = mount()
   const armed = m.command('on-demand')
@@ -1701,4 +1817,81 @@ test('a style edit that returns no editable blocks warns once (H4)', async () =>
   assert.ok(value.warnings.includes('The updated page no longer exposes any editable blocks; a style-only revision should keep the original blocks and change only their presentation.'))
   const rendered = m.tool.output.render({}, value)[0].text
   assert.match(rendered, /Interactive UI style updated for the user \(revision 2 of the artifact, card layout\)\. Notes: .*editable blocks/)
+})
+
+test('program inspection and the article predicate keep their exact render_ui messages', async () => {
+  // Valid programs inspect with no fatal finding and a positive statement count.
+  const dst = inspectProgram(DST_PROGRAM)
+  assert.equal(dst.findings.filter(finding => finding.fatal).length, 0)
+  assert.ok(dst.statements > 0)
+  assert.ok(dst.types.has('Card'))
+  const valid = inspectProgram(ARTICLE)
+  assert.equal(valid.findings.filter(finding => finding.fatal).length, 0)
+  // A valid article page passes the shared predicate.
+  assert.equal(describeArticleLayoutProblem(ARTICLE), undefined)
+  // The predicate returns the exact inline message render_ui has always thrown.
+  assert.equal(
+    describeArticleLayoutProblem(DST_PROGRAM),
+    'render_ui: the article style needs a Toc and at least one Section. '
+      + 'Use Toc(["..."]) and Section("...", [Markdown("...")]) for every major part; a plain Markdown program is the card style.',
+  )
+  // Anchor problems are the same messages articleAnchorError produced inline.
+  const duplicateSections = 'root = Col([toc, a, b])\ntoc = Toc(["Intro", "Intro"])\na = Section("Intro", [Markdown("A.")])\nb = Section("Intro", [Markdown("B.")])'
+  assert.match(describeArticleLayoutProblem(duplicateSections), /Section anchors must be unique/)
+  const missingTarget = 'root = Col([toc, section])\ntoc = Toc(["Missing"])\nsection = Section("Intro", [Markdown("Body.")])'
+  assert.match(describeArticleLayoutProblem(missingTarget), /every Toc entry must target a Section anchor/)
+  // render_ui throws exactly those messages (the built Host still calls the same path).
+  const m = mount()
+  await assert.rejects(
+    () => m.tool.execute({ program: DST_PROGRAM, style: 'article' }, { agent: m.agent, callId: 'call-article-missing' }),
+    /render_ui: the article style needs a Toc and at least one Section\. Use Toc\(\["\.\.\."\]\)/,
+  )
+  await assert.rejects(
+    () => m.tool.execute({ program: duplicateSections, style: 'article' }, { agent: m.agent, callId: 'call-article-anchor' }),
+    /Section anchors must be unique/,
+  )
+  const article = await m.tool.execute({ program: ARTICLE, style: 'article' }, { agent: m.agent, callId: 'call-article-ok' })
+  assert.equal(article.style, 'article')
+  assert.equal(existsSync(m.file), false)
+})
+
+test('a style edit that adds a top-level block warns and keeps the style-only guarantee', async () => {
+  const base = 'root = Col([a, b])\na = Title("A")\nb = Text("B")'
+  const added = 'root = Col([a, b, c])\na = Title("A")\nb = Text("B")\nc = Text("C")'
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest({ program: base, title: undefined })))
+  const value = await m.tool.execute(styleArgs({ program: added }), { agent: m.agent, callId: 'call-style-added' })
+  assert.equal(value.styleEdit, true)
+  assert.ok(
+    value.warnings.some(warning => /Top-level blocks changed: the page now has 3 top-level blocks instead of 2/.test(warning)),
+    'adding a top-level block is warned about',
+  )
+  assert.match(m.tool.output.render({}, value)[0].text, /Top-level blocks changed/)
+})
+
+test('a style edit that reorders top-level blocks warns and keeps the style-only guarantee', async () => {
+  const base = 'root = Col([a, b])\na = Title("A")\nb = Text("B")'
+  const reordered = 'root = Col([b, a])\na = Title("A")\nb = Text("B")'
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest({ program: base, title: undefined })))
+  const value = await m.tool.execute(styleArgs({ program: reordered }), { agent: m.agent, callId: 'call-style-reordered' })
+  assert.equal(value.styleEdit, true)
+  assert.ok(
+    value.warnings.some(warning => /Top-level block order changed; a style edit must keep the page structure/.test(warning)),
+    'reordering top-level blocks is warned about',
+  )
+})
+
+test('a style edit that keeps the top-level blocks and order produces no structure warning', async () => {
+  const base = 'root = Col([a, b])\na = Title("A")\nb = Text("B")'
+  const m = mount()
+  m.send(buildEditRequestText(styleRequest({ program: base, title: undefined })))
+  const value = await m.tool.execute(styleArgs({ program: base }), { agent: m.agent, callId: 'call-style-unchanged' })
+  assert.equal(value.styleEdit, true)
+  assert.equal(
+    (value.warnings ?? []).some(warning => /Top-level block(?:s changed| order changed)/.test(warning)),
+    false,
+    'an unchanged structure produces no structure warning',
+  )
+  assert.equal(value.warnings, undefined, 'the only allowed warning is none here')
 })

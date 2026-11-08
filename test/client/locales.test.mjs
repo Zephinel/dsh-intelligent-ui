@@ -50,3 +50,21 @@ test('English fallback keeps the pre-i18n copy', () => {
   assert.equal(fallbackT('chip.label', { scope: 'Off' }), 'UI: Off')
   assert.equal(fallbackT('map.action.expand'), 'Expand')
 })
+
+test('style switching copy exists in both languages', () => {
+  const keys = [
+    'edit.styleSwitchGroup', 'edit.styleSwitchNote', 'edit.styleSwitchApply', 'edit.styleSwitchBusy',
+    'edit.styleSwitchCurrentBadge', 'edit.styleSwitchNoChange', 'edit.styleSwitchDirty', 'edit.styleSwitchMissing',
+    'edit.styleSwitchArticle', 'edit.styleSwitchStale', 'edit.styleSwitchMismatch', 'edit.styleSwitchBlockedByInstruction',
+    'edit.styleSwitchFailed', 'edit.styleFromTemporary',
+    'edit.styleSavedGroup', 'edit.styleRevision', 'edit.historyStyleSwitch',
+  ]
+  for (const key of keys) {
+    assert.equal(typeof zh[key], 'string', `zh ${key} exists`)
+    assert.ok(zh[key].length > 0, `zh ${key} is not empty`)
+    assert.ok(en[key].length > 0, `en ${key} is not empty`)
+  }
+  // B1's natural-language disclosure is distinct from the deterministic picker.
+  assert.equal(zh['edit.styleAdjustAction'], '更改样式')
+  assert.equal(en['edit.styleAdjustAction'], 'Change style')
+})

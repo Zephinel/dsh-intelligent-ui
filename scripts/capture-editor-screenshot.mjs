@@ -121,7 +121,7 @@ const HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><link r
   --dsw-alias-label-tertiary:#888; --dsw-alias-label-caption:#999;
   --dsw-alias-border-l1:#e4e4e4; --dsw-alias-border-l2:#d4d4d4; --dsw-alias-border-l3:#c4c4c4;
   --dsw-alias-interactive-bg-hover:#eee; --dsw-alias-interactive-bg-hover-solid:#e8e8e8;
-  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708;
+  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-brand-primary:#1265bb; --dsw-alias-label-primary-foreground:#fff; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708;
   --dsw-alias-button-floating-fill:#fff; --dsw-alias-button-floating-hover:#f2f2f2;
   --dsw-specific-menu:#fff; --dsw-specific-bubble:#eef2f7; --dsw-specific-input-major:#fff;
   --dsw-radius-sm:6px; --dsw-radius-md:10px; --dsw-radius-lg:14px; --dsw-radius-xl:18px;
@@ -160,6 +160,7 @@ try {
   await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'edit entry')
   await read(`window.__language(${JSON.stringify(lang)})`)
   await read(`window.__resetCards()`)
+  await read('window.__project({ styleEdit: true, styleSwitch: true })')
   const spec = PROGRAMS[cardKind ?? 'itinerary']
   const program = spec.program[lang]
   const title = spec.title[lang]
@@ -190,6 +191,9 @@ try {
   await read(`document.querySelector('[data-dsh-iui-call-id="editor-shot"] [data-dsh-iui-edit-entry]').click()`)
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'edit view')
   await sleep(600)
+  await read(`document.querySelector('[data-dsh-iui-edit-style-toggle]')?.click()`)
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-toggle][aria-expanded=true]") || !document.querySelector("[data-dsh-iui-edit-style-toggle][aria-expanded=false]")', 'style section expanded')
+  await sleep(300)
   await read(`document.querySelector('[data-dsh-iui-edit-row-menu]')?.click()`)
   await wait('!!document.querySelector("[data-dsh-iui-edit-row-menu-panel]")', 'row menu')
   await sleep(200)

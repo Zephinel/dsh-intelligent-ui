@@ -198,3 +198,32 @@ test('block-level edit results render from result meta', () => {
   assert.deepEqual(programsFromToolNodes([{ root: { ...nodes[0].root, isError: true } }]), [])
   assert.deepEqual(programsFromToolNodes([{ root: { ...nodes[0].root, meta: undefined } }]), [])
 })
+
+test('a render_ui style revision falls back to the Host-recorded meta title', () => {
+  const snapshot = {
+    schemaVersion: 1,
+    baseLayout: 'article',
+    directives: 'Cool editorial palette.',
+  }
+  const node = settled('style-call-7', { program: PROGRAM })
+  node.root.meta = {
+    artifactId: 'call-1',
+    revisionId: 'call-7',
+    baseRevisionId: 'call-2',
+    revision: 3,
+    title: '样式修订标题',
+    style: 'article',
+    temporaryStyle: snapshot,
+  }
+  const [program] = programsFromToolNodes([node])
+  assert.ok(program)
+  assert.equal(program.title, '样式修订标题', 'the recorded title survives a missing args.title')
+  assert.equal(program.program, PROGRAM)
+  assert.equal(program.revision, 3)
+  assert.equal(program.artifactId, 'call-1')
+  assert.deepEqual(program.temporaryStyle, snapshot)
+  // Explicit model arguments still win over the recorded fallback.
+  const explicit = settled('style-call-8', { program: PROGRAM, title: 'Model title' })
+  explicit.root.meta = { artifactId: 'call-1', revisionId: 'call-8', revision: 4, title: 'Meta title' }
+  assert.equal(programsFromToolNodes([explicit])[0].title, 'Model title')
+})

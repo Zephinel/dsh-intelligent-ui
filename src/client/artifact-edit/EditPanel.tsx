@@ -29,13 +29,22 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
+import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './contracts.ts'
+import type { ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
+import { isCurrentStyleTarget } from './store.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { Translate } from '../../shared/locales.ts'
 import { RemixIcon, type RemixIconName } from '../../lib/components/remix-icon.tsx'
 import { applyEditChatContentWidth, type ChatContentWidthController } from './panel-width.ts'
 import { blockAnchorElement } from './block-geometry.ts'
+
+/** Whether two durable style targets name the same identity. */
+function sameStyleTarget(left: ArtifactStyleTarget, right: ArtifactStyleTarget): boolean {
+  if (left.kind !== right.kind) return false
+  if (left.kind === 'builtin') return right.kind === 'builtin' && left.layout === right.layout
+  return right.kind === 'template' && left.styleId === right.styleId
+}
 
 /** Props of the edit panel; the card supplies both the snapshot and actions. */
 export interface EditPanelProps {
@@ -52,6 +61,12 @@ export interface EditPanelProps {
   readonly onHoverBlock?: (blockId: string | null) => void
   /** Host supports revision-bound style editing; the style section is hidden otherwise. */
   readonly styleEditSupported?: boolean
+  /** Host supports deterministic (zero-model) style switching. */
+  readonly styleSwitchSupported?: boolean
+  /** Durable switch targets resolved by the card (built-ins first, saved after). */
+  readonly styleTargets?: readonly ArtifactStyleTargetOption[]
+  /** Reports the transiently previewed target so the card can swap the canvas skin. */
+  readonly onPreviewStyleTarget?: (target: ArtifactStyleTarget | undefined) => void
 }
 
 /** Number of hues in the shared selection palette. */
@@ -664,13 +679,16 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
 }
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
-export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false }: EditPanelProps): ReactElement {
+export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false, styleSwitchSupported = false, styleTargets = [], onPreviewStyleTarget }: EditPanelProps): ReactElement {
   const globalId = useId()
   const stylePanelId = useId()
   const previewTitleId = useId()
   const [styleOpen, setStyleOpen] = useState(false)
   const styleToggleRef = useRef<HTMLButtonElement>(null)
   const styleTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const styleSwitchRef = useRef<HTMLDivElement>(null)
+  /** Suppresses the preview fired by the programmatic focus when the section opens. */
+  const suppressSwitchPreview = useRef(false)
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null)
   const [dragBlockId, setDragBlockId] = useState<string | null>(null)
   const [dragParentId, setDragParentId] = useState<string | null>(null)
@@ -846,19 +864,55 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const styleNewResultHint = session.temporaryStyle !== undefined
     ? t('edit.styleNewResultTemporary')
     : t('edit.styleNewResult')
+  // B2 switch facts: capability + resolved targets, the pending selection and
+  // the Host's current-identity no-op rule.
+  const styleSwitchAvailable = styleSwitchSupported && styleTargets.length > 0
+  const styleSwitchChosen = session.styleSwitchTarget
+  const styleSwitchChosenLayout = session.styleSwitchTargetLayout
+  const styleSwitchCurrent = styleSwitchChosen !== undefined && isCurrentStyleTarget(session, styleSwitchChosen, styleSwitchChosenLayout)
+  // A pending natural-language style instruction owns the section's send path:
+  // disabling Apply up front explains the conflict instead of failing after click.
+  const styleSwitchBlockedByInstruction = styleHasContent
+  const styleSwitchCanApply = styleSwitchChosen !== undefined && !styleSwitchCurrent && session.styleSwitchBusy !== true && !styleSwitchBlockedByInstruction
+  const styleSwitchBlockedId = `${stylePanelId}-switch-blocked`
   const collapseStyleSection = (): void => {
+    onPreviewStyleTarget?.(undefined)
     setStyleOpen(false)
     styleToggleRef.current?.focus()
   }
-  // Expanding moves focus into the instruction field; collapsing returns it to
-  // the disclosure button (Escape from the textarea calls the same helper).
+  const previewSwitchOption = (option: ArtifactStyleTargetOption): void => { onPreviewStyleTarget?.(option.target) }
+  const previewSelectedSwitch = (): void => { onPreviewStyleTarget?.(styleSwitchChosen) }
+  // Expanding moves focus into the primary control: the switch radios when the
+  // Host supports deterministic switching, otherwise the natural-language field.
+  // Collapsing returns focus to the disclosure button (Escape uses the helper).
   useEffect(() => {
     if (!styleOpen) return
+    let release: number | undefined
     const frame = window.requestAnimationFrame(() => {
+      if (styleSwitchAvailable) {
+        // Opening the section focuses a radio, but that programmatic focus must
+        // not preview a different skin: keep the recorded canvas until the user
+        // hovers, focuses by keyboard or selects. A macrotask release is used
+        // because reduced-motion/background tabs may throttle rAF.
+        suppressSwitchPreview.current = true
+        const radios = styleSwitchRef.current?.querySelectorAll<HTMLInputElement>('[data-dsh-iui-edit-style-target]')
+        const options = radios === undefined ? [] : [...radios]
+        const target = options.find(radio => radio.checked)
+          ?? options.find(radio => radio.getAttribute('data-current') === 'true')
+          ?? options[0]
+        target?.focus({ preventScroll: true })
+        release = window.setTimeout(() => { suppressSwitchPreview.current = false }, 0)
+        return
+      }
       styleTextareaRef.current?.focus({ preventScroll: true })
     })
-    return () => { window.cancelAnimationFrame(frame) }
-  }, [styleOpen])
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (release !== undefined) window.clearTimeout(release)
+    }
+  }, [styleOpen, styleSwitchAvailable])
+  // A transient preview never survives leaving the section.
+  useEffect(() => () => { onPreviewStyleTarget?.(undefined) }, [onPreviewStyleTarget])
 
   const clearHoverTimers = (): void => {
     if (showTimer.current !== null) { window.clearTimeout(showTimer.current); showTimer.current = null }
@@ -1461,7 +1515,109 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               </button>
             </div>
             {styleOpen ? (
-              <div className="dsh-iui-edit-style-body" id={stylePanelId} data-dsh-iui-edit-style-panel>
+              <div
+                className="dsh-iui-edit-style-body"
+                id={stylePanelId}
+                data-dsh-iui-edit-style-panel
+                onKeyDown={event => {
+                  suppressSwitchPreview.current = false
+                  if (!styleSwitchAvailable || event.key !== 'Escape') return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  collapseStyleSection()
+                }}
+              >
+                {!styleSwitchAvailable ? null : (
+                  <div
+                    ref={styleSwitchRef}
+                    className="dsh-iui-edit-style-switch"
+                    data-dsh-iui-edit-style-switch
+                    aria-busy={session.styleSwitchBusy === true ? true : undefined}
+                    onPointerDown={() => { suppressSwitchPreview.current = false }}
+                    onPointerLeave={previewSelectedSwitch}
+                  >
+                    <span className="dsh-iui-edit-style-switch-title">{t('edit.styleSwitchGroup')}</span>
+                    <div className="dsh-iui-edit-style-targets" role="radiogroup" aria-label={t('edit.styleSwitchGroup')}>
+                      {styleTargets.map((option, index) => {
+                        const checked = styleSwitchChosen !== undefined && sameStyleTarget(option.target, styleSwitchChosen)
+                        const current = isCurrentStyleTarget(session, option.target, option.layout)
+                        const saved = option.target.kind === 'template'
+                        const firstSaved = saved && styleTargets.findIndex(candidate => candidate.target.kind === 'template') === index
+                        const layoutLabel = option.layout === 'card'
+                          ? t('edit.historyStyleCard')
+                          : option.layout === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
+                        return (
+                          <div className="dsh-iui-edit-style-target-group" key={`${option.target.kind}:${option.target.kind === 'template' ? option.target.styleId : option.layout}`}>
+                            {firstSaved ? <span className="dsh-iui-edit-style-saved-group" data-dsh-iui-edit-style-saved-group>{t('edit.styleSavedGroup')}</span> : null}
+                            <label
+                              className={`dsh-iui-edit-style-target${checked ? ' is-checked' : ''}${current ? ' is-current' : ''}`}
+                              onPointerEnter={() => { previewSwitchOption(option) }}
+                              onFocus={() => {
+                                if (suppressSwitchPreview.current) return
+                                previewSwitchOption(option)
+                              }}
+                              onBlur={previewSelectedSwitch}
+                            >
+                              <input
+                                type="radio"
+                                className="dsh-iui-edit-style-radio"
+                                name={`${stylePanelId}-switch`}
+                                data-dsh-iui-edit-style-target
+                                data-target-kind={option.target.kind}
+                                data-target-layout={option.layout}
+                                data-target-style-id={option.target.kind === 'template' ? option.target.styleId : undefined}
+                                data-current={current ? 'true' : undefined}
+                                checked={checked}
+                                aria-describedby={styleSwitchBlockedByInstruction ? styleSwitchBlockedId : undefined}
+                                onChange={() => {
+                                  actions.selectStyleTarget(option.target, option.layout)
+                                  if (!suppressSwitchPreview.current) previewSwitchOption(option)
+                                }}
+                              />
+                              <span
+                                className="dsh-iui-edit-style-swatch"
+                                data-layout={option.layout}
+                                aria-hidden="true"
+                                style={option.theme === undefined ? undefined : {
+                                  '--swatch-canvas': option.theme.light.canvas,
+                                  '--swatch-accent': option.theme.light.accent,
+                                } as CSSProperties}
+                              />
+                              <span className="dsh-iui-edit-style-target-name">{option.name}</span>
+                              <span className="dsh-iui-edit-style-target-meta">{layoutLabel}</span>
+                              {current ? <span className="dsh-iui-edit-style-current-badge" data-dsh-iui-edit-style-current-badge>{t('edit.styleSwitchCurrentBadge')}</span> : null}
+                            </label>
+                            {option.requiresArticleLayout ? <span className="dsh-iui-edit-style-target-hint">{t('edit.styleSwitchArticle')}</span> : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {session.temporaryStyle === undefined ? null : (
+                      <p className="dsh-iui-edit-style-note" data-dsh-iui-edit-style-from-temporary>{t('edit.styleFromTemporary')}</p>
+                    )}
+                    <p className="dsh-iui-edit-style-hint" data-dsh-iui-edit-style-switch-note>{t('edit.styleSwitchNote')}</p>
+                    {styleSwitchBlockedByInstruction ? (
+                      <p id={styleSwitchBlockedId} className="dsh-iui-edit-style-hint" role="note" data-dsh-iui-edit-style-switch-blocked>{t('edit.styleSwitchBlockedByInstruction')}</p>
+                    ) : null}
+                    <div className="dsh-iui-edit-style-switch-foot">
+                      <button
+                        type="button"
+                        className="dsh-iui-edit-style-apply"
+                        data-dsh-iui-edit-style-apply
+                        disabled={!styleSwitchCanApply}
+                        aria-describedby={styleSwitchBlockedByInstruction ? styleSwitchBlockedId : undefined}
+                        title={styleSwitchBlockedByInstruction ? t('edit.styleSwitchBlockedByInstruction') : undefined}
+                        onClick={() => { onPreviewStyleTarget?.(undefined); actions.applyStyleSwitch() }}
+                      >
+                        {session.styleSwitchBusy === true ? t('edit.styleSwitchBusy') : t('edit.styleSwitchApply')}
+                      </button>
+                    </div>
+                    {session.styleSwitchError === undefined ? null : (
+                      <p className="dsh-iui-edit-style-switch-error" role="alert" data-dsh-iui-edit-style-switch-error>{session.styleSwitchError}</p>
+                    )}
+                  </div>
+                )}
+                {!styleSwitchAvailable ? null : <div className="dsh-iui-edit-style-divider" role="presentation" />}
                 <label className="dsh-iui-edit-style-label" htmlFor={`${stylePanelId}-input`}>{t('edit.styleInstructionLabel')}</label>
                 <textarea
                   ref={styleTextareaRef}
