@@ -409,7 +409,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - 本记录中的“编辑器截图包含新样式区”在写作时不成立：capture harness 当时未注入 `styleEdit` 能力；后续已注入并重拍 `assets/intelligent-ui-editing-{zh,en}.webp` 与 overview 组合图，现截图确实包含「样式 / 更改样式 / 样式切换 / 应用样式」与已保存 Article 提示。
 - 本记录中的“block 序列化字节不变”在后续契约强化后不再成立：block 信封的 header 与 program 正文保持兼容，但 prose 改由 `blockEditToolContract` 生成并新增 `Tool-call contract:` 行，整段文本不再保证字节不变。
 - B1 真实 GUI 冒烟已做（2026-11-08，上海两日游会话：真实模型返回 Revision 2，样式生效、Save 对话框打开、历史可见、footer Adjust 隐藏）；证据仅为会话转录，未留存截图，不作为自动门禁。
-- 当前工作树门禁已推进到 Node 617/617（Host 299 + Client 297 + packaging 21）、`artifact-edit` 497 checks；本记录的 558/447 仍是当时的门禁数。
+- 当前工作树门禁已推进到 Node 615/615（Host 298 + Client 296 + packaging 21）、`artifact-edit` 497 checks；本记录的 558/447 仍是当时的门禁数。
 
 ## 2026-11-08 — 确定性样式切换（零模型，B2）最终验证（未提交工作树）
 
@@ -473,7 +473,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；renderer/契约全绿；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；renderer/契约全绿；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,986** 字节，解包 **12,890,199** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -494,7 +494,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **615/615** = Host **298** + Client **296** + packaging **21**；build host **836.8 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,986** 字节，解包 **12,890,199** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -600,7 +600,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **Envelope sibling 回归**：`programFenceFrom` 以 `nextEnvelopeOpen` 为界截断，恢复 close fence 的行尾约束；缺 program 的信封不再借用下一个信封的 program。新增“第一个缺 program、第二个完整”的回归。
 - **修订删除幂等**：DELETE 返回 `revision_missing` 视为已收敛（移除本地卡并刷新）；禁止删除当前卡片正在渲染的修订；DELETE 路由捕获存储失败；Host 认证测试覆盖 DELETE。
 - **晚到 stale**：Host 返回 `base_not_latest` 时（非 branch）store 进入 conflict，状态行与 Apply 禁用一致，不再显示可应用。
-- **文档/测试修正**：DELETE 路由、Article 谓词位置、当前卡删除限制、stale/base_missing 文案；E2E 增加缺 program 边界、当前卡删除保护、missing 收敛断言。
+- **文档/测试修正**：DELETE 路由、Article 谓词位置、当前卡删除限制、stale/base_missing 文案；客户端单测增加缺 program 边界；E2E 增加当前卡删除保护与 missing 收敛断言。
 
 ### 自动化结果
 
@@ -609,4 +609,38 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run check` | PASS；Node **626/626** = Host **301** + Client **304** + packaging **21**；build host **837.9 kB**、client **4.04 MB**（js 3.83 / CSS 222.4） |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **509 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,527** 字节，解包 **12,886,783** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 复审剩余 P3 修复
+
+- **删除确认可访问性**：确认态聚焦 Cancel、取消回到 Delete、warning 用 `role=status` 播报；历史对话框初始聚焦改为同步，避免延迟 rAF 抢走确认焦点。
+- **删除负路径**：Host 新增跨 artifact DELETE 测试；DELETE 已纳入 401/403 认证循环；界面禁止删除当前卡正在渲染的修订与初始修订；`revision_missing` 收敛已有 E2E。
+- **显式 target 绕过**：客户端 `applyArtifactStyleSwitch` 移除显式 target 参数，只使用会话中已选择的目标，避免测试/调用方绕过 Article 前置 gate；store 测试改为先选择再应用。
+- **测试真实性**：重试测试第二次返回 200 replay 而非 201；E2E 断言 style 结果保留 base program；新增 radio 16px/圆形、swatch 方角/background-origin 的 computed-style 断言；修正 stale E2E 注释与 browser README。
+- **文档**：恢复被改写的历史验证门禁数字（615/298/296 等）为原值；修正 DELETE 路由、Article 谓词位置、当前修订删除限制、stale/base_missing 文案；加强 doc-facts 求和/浏览器套件/pack 文件数校验；移除未使用的 style 文案 key 与测试引用。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **627/627** = Host **302** + Client **304** + packaging **21**；build host **837.9 kB**、client **4.04 MB**（js 3.82 / CSS 222.4） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **519 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,255** 字节，解包 **12,885,706** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 第二轮复审修复（焦点回归、layout gate、文档事实）
+
+- **删除后焦点逃逸（P2）**：历史对话框的 mount/cleanup effect 改为 mount-only，keydown 通过 `onCloseRef` 读取最新回调；删除成功/`revision_missing` 收敛后由 post-render effect 把焦点放回对话框 Close，父组件重渲染不再触发 cleanup 把焦点送回触发器。E2E 断言删除后焦点仍在打开的弹窗内。
+- **跨行焦点**：`HistoryRow` 只在真正的取消（`confirmingDeleteId === null`）时回焦本行 Delete，移动到另一行确认时不再抢焦点。
+- **Article/layout gate**：删除显式 target 参数后，由 chosen builtin layout 或所选 template layout 推导；template layout 缺失时在请求前失败，built-in Article 始终走共享谓词。
+- **文档事实**：625 gate 的 packed bytes 保持 6,031,253；627 gate 的实际记录为 js 3.82，628 gate 与 current facts 为 3.83；把“缺 program 边界”从 E2E 声明改为客户端单测；doc-facts 改为真正切片最新 `##` 记录、固定 9 个套件分母，并校验 `clientJsMb`。
+- **残余限制**：其他卡渲染的 latest 仍可被删除，之后按 stale/base_missing 失败；文档和删除确认文案已明确“其他仍引用该修订的卡片可能变为过期状态”，完整修复需要 render lease/卡片失效机制，不在本轮范围。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **628/628** = Host **302** + Client **305** + packaging **21**；build host **837.9 kB**、client **4.04 MB**（js 3.83 / CSS 222.4） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **519 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,502** 字节，解包 **12,886,230** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

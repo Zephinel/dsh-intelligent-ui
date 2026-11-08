@@ -2111,19 +2111,17 @@ function styleSwitchFailureMessage(code: string | undefined): string {
  * cannot be combined in one revision). Success adds a local revision card of
  * kind `style` in the current Turn and consumes the draft.
  * @param key - edit-session key.
- * @param target - durable target; falls back to the selected target when omitted.
  * @param turn - latest loaded Turn, used to place the local card.
  * @param onMissingStyle - catalog refresh hook for a `style_missing` answer.
  */
 export async function applyArtifactStyleSwitch(
   key: string,
-  target: ArtifactStyleTarget | undefined,
   turn?: number,
   onMissingStyle?: () => void,
 ): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted' || session.styleSwitchBusy === true) return
-  const chosen = target ?? session.styleSwitchTarget
+  const chosen = session.styleSwitchTarget
   if (chosen === undefined || describeStyleTargetProblem(chosen) !== undefined) return
   const fail = (message: string, keepOperationId = false): void => {
     const current = sessions.get(key)
@@ -2142,8 +2140,12 @@ export async function applyArtifactStyleSwitch(
     fail(translate('edit.styleSwitchStale'))
     return
   }
-  if (session.styleSwitchTargetLayout === 'article'
-    && describeArticleLayoutProblem(session.program) !== undefined) {
+  const chosenLayout = chosen.kind === 'builtin' ? chosen.layout : session.styleSwitchTargetLayout
+  if (chosen.kind === 'template' && chosenLayout === undefined) {
+    fail(translate('edit.styleSwitchFailed'))
+    return
+  }
+  if (chosenLayout === 'article' && describeArticleLayoutProblem(session.program) !== undefined) {
     fail(translate('edit.styleSwitchArticle'))
     return
   }

@@ -29,6 +29,7 @@ for (const file of ['README.md', 'README.en.md']) {
   expect(file, `${facts.client}`)
   expect(file, `**${facts.artifactEditChecks}**`)
   expect(file, `**${facts.nestedRendererChecks}**`)
+  expect(file, `${facts.browserSuites}/9`)
 }
 for (const file of ['docs/architecture.md', 'docs/architecture.en.md']) {
   expect(file, node)
@@ -37,17 +38,20 @@ for (const file of ['docs/architecture.md', 'docs/architecture.en.md']) {
   expect(file, `${facts.artifactEditChecks} checks`)
   expect(file, `${facts.buildHostKb} kB`)
   expect(file, `${facts.clientCssKb.toFixed(1)} kB`)
+  expect(file, `js ${facts.clientJsMb.toFixed(2)}`)
 }
 for (const file of ['CHANGELOG.md']) {
   expect(file, node)
+  expect(file, `${facts.packFiles} files`)
   expect(file, facts.packedBytes.toLocaleString('en-US'))
   expect(file, facts.unpackedBytes.toLocaleString('en-US'))
 }
 for (const file of ['docs/verification.md', 'docs/verification.en.md']) {
   // Only the newest appended record must quote the current gate values.
   const text = read(file)
-  const heading = text.lastIndexOf('\n## 2026-11-08')
-  const latest = heading < 0 ? text : text.slice(heading)
+  const headings = [...text.matchAll(/^## .*$/gm)]
+  const heading = headings.length === 0 ? 0 : headings[headings.length - 1].index
+  const latest = text.slice(heading)
   const required = [
     node,
     `${facts.host}`,
@@ -55,6 +59,8 @@ for (const file of ['docs/verification.md', 'docs/verification.en.md']) {
     `${facts.artifactEditChecks} checks`,
     `${facts.buildHostKb} kB`,
     `${facts.clientCssKb.toFixed(1)}`,
+    `js ${facts.clientJsMb.toFixed(2)}`,
+    `${facts.browserSuites}/9`,
     facts.packedBytes.toLocaleString('en-US'),
     facts.unpackedBytes.toLocaleString('en-US'),
   ]

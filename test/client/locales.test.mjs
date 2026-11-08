@@ -53,10 +53,10 @@ test('English fallback keeps the pre-i18n copy', () => {
 
 test('style switching copy exists in both languages', () => {
   const keys = [
-    'edit.styleSwitchGroup', 'edit.styleSwitchNote', 'edit.styleSwitchApply', 'edit.styleSwitchBusy',
+    'edit.styleSwitchGroup', 'edit.styleSwitchApply', 'edit.styleSwitchBusy',
     'edit.styleSwitchCurrentBadge', 'edit.styleSwitchNoChange', 'edit.styleSwitchDirty', 'edit.styleSwitchMissing',
-    'edit.styleSwitchArticle', 'edit.styleSwitchStale', 'edit.styleSwitchMismatch', 'edit.styleSwitchBlockedByInstruction',
-    'edit.styleSwitchFailed', 'edit.styleFromTemporary',
+    'edit.styleSwitchArticle', 'edit.styleSwitchStale', 'edit.styleSwitchMismatch',
+    'edit.styleSwitchFailed',
     'edit.styleTargetArticle', 'edit.styleStatusChecking', 'edit.styleStatusStale', 'edit.styleStatusDirty',
     'edit.styleStatusInstruction', 'edit.styleStatusNoTarget', 'edit.styleStatusUnavailable', 'edit.styleStatusCurrent',
     'edit.styleStatusReady', 'edit.styleStatusTemporary', 'edit.styleStatusBranch',

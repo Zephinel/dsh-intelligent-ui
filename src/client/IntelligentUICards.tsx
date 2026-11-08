@@ -418,7 +418,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     selectStyleTarget: (target, layout) => { setArtifactStyleSwitchTarget(editKey, target, layout) },
     applyStyleSwitch: () => {
       setStylePreview(undefined)
-      void applyArtifactStyleSwitch(editKey, undefined, turnNumber, refreshStyleCatalog)
+      void applyArtifactStyleSwitch(editKey, turnNumber, refreshStyleCatalog)
     },
     closeEditor: () => { closeArtifactEditor(editKey) },
     setDrawerOpen: open => { setArtifactDrawerOpen(editKey, open) },

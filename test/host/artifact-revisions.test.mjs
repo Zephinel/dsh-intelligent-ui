@@ -666,6 +666,17 @@ test('requestRejection runs before method dispatch and preserves 401/403 denial 
   }
 })
 
+test('DELETE is scoped to one artifact and cannot remove another artifact record', () => {
+  const m = mountRoutes({ revisions: [
+    revision({ revisionId: 'call-2', revision: 2, createdAt: 2 }),
+    revision({ revisionId: 'call-9', artifactId: 'call-8', baseRevisionId: 'call-8', revision: 2, createdAt: 3 }),
+  ] })
+  const cross = request(m.route, { method: 'DELETE', url: `${ARTIFACT_REVISION_ROUTE_PATH}?artifactId=call-1&revisionId=call-9` })
+  assert.equal(cross.status, 404)
+  assert.deepEqual(JSON.parse(cross.body).error.code, 'revision_missing')
+  assert.equal(createArtifactRevisionStore().get('call-9').artifactId, 'call-8')
+})
+
 test('only GET and DELETE are supported and query params must be artifact identities', () => {
   const { route } = mountRoutes()
   for (const method of ['HEAD', 'POST', 'PUT']) {

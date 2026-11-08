@@ -719,6 +719,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // 20. Per-artifact revision history dialog from the revision badge.
   await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-history-open][data-history-trigger="badge"]')
   await wait('!!document.querySelector("[data-dsh-iui-history]")', 'history dialog')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))`)
+  check(await read(`document.querySelector('[data-dsh-iui-history]')?.contains(document.activeElement) === true`), true, 'Shift+Tab wraps inside the history dialog')
   check(await count('[data-dsh-iui-history-revision]'), 3, 'history lists this artifact revisions')
   check(await read(`document.querySelector('[data-dsh-iui-history-revision="restore_local1"]')?.getAttribute('data-current')`), 'true', 'history marks the current revision')
   check((await text('[data-dsh-iui-history]')).includes('初始生成'), true, 'history includes the initial revision')
@@ -729,10 +731,17 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-delete]'), 0, 'the card rendered revision cannot be deleted from its own history')
+  check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-delete]'), 0, 'the initial revision has no delete action')
   // Deletion: delete the current local restore revision (not referenced by any
   // newer one); its local card is removed together with the history row.
   await click('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-delete]')
   await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-history-delete-cancel') === true`, 'delete confirmation focuses Cancel')
+  check(await read(`document.querySelector('[data-dsh-iui-history-delete-warning]').getAttribute('role')`), 'status', 'delete warning is announced')
+  await click('[data-dsh-iui-history-delete-cancel]')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-history-delete') === true`, 'cancelling returns focus to Delete')
+  await click('[data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation again')
   // Simulate a lost delete response: the Host has already removed it, so the
   // retry answers revision_missing and the UI must converge, not stay stale.
   await read('window.__deleteMissing = true')
@@ -740,6 +749,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector(\'[data-dsh-iui-history-revision="restore_local1"]\')', 'deleted history row')
   check(await count('[data-dsh-iui-local-revision]'), 0, 'deleting a history revision removes its local card')
   check(await count('[data-dsh-iui-history-delete-error]'), 0, 'a missing revision converges without an error banner')
+  await wait(`document.querySelector('[data-dsh-iui-history]')?.contains(document.activeElement) === true`, 'focus stays inside the open history after deletion')
   await shot('harness-history.png')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'history dialog closed')
@@ -1949,7 +1959,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
           baseRevisionId: body.baseRevisionId,
           revision: 2,
           operationId: body.operationId,
-          program: ${JSON.stringify(DST_PROGRAM)},
+          program: ${JSON.stringify(ARTICLE_PROGRAM)},
           title: '样式切换卡片',
           style: target.kind === 'builtin' ? target.layout : 'card',
           ...target.kind === 'template' ? { styleId: target.styleId } : {},
@@ -1973,6 +1983,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.activeElement.getAttribute('data-target-layout')`), 'card', 'the first built-in radio receives focus by default')
   check(await count('[data-dsh-iui-edit-style-target]'), 6, 'two built-ins and four visible saved templates are offered')
   check(await count('[data-dsh-iui-edit-style-current-badge]'), 1, 'the current built-in style carries the current badge')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-style-radio')).width`), '16px', 'the style radio is 16px')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-style-radio')).borderRadius`), '999px', 'the style radio is a true circle')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-style-swatch')).borderRadius`), '0px', 'the style swatch keeps square corners')
+  check(await read(`getComputedStyle(document.querySelector('.dsh-iui-edit-style-swatch')).backgroundOrigin`), 'border-box', 'the swatch gradient fills its border box')
   check((await text('[data-dsh-iui-edit-style-saved-group]')), '已保存样式', 'saved templates sit in their own group')
   check(await read(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled`), true, 'Apply stays disabled until a target is selected')
   check((await text('[data-dsh-iui-edit-style-status]')).includes('选择一个样式目标'), true, 'the single status line asks for a target')
@@ -2022,10 +2036,26 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(typeof switchBody.operationId === 'string' && /^req_/.test(switchBody.operationId), true, 'the switch carries a fresh operation id')
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-rev-2"]\')', 'style revision card')
   check((await text('[data-dsh-iui-call-id="style-switch-rev-2"] [data-dsh-iui-local-revision]')), '样式修订', 'the local card is labelled as a style revision')
+  check((await text('[data-dsh-iui-call-id="style-switch-rev-2"]')).includes('Intro'), true, 'the switch revision keeps the base program')
   check(await count('[data-dsh-iui-call-id="style-switch-rev-2"] [data-dsh-iui-save-result]'), 0, 'a saved-template switch result offers no Save entry')
   check(await read(`document.querySelector('[data-dsh-iui-call-id="style-switch-rev-2"]').getAttribute('data-dsh-iui-style')`), 'card', 'the style revision card keeps the reachable saved template layout')
   check(await count('[data-chip="artifact-edit"]'), chipCountBeforeSwitch, 'a style switch never creates a composer chip')
   check((await read('window.__input().draft')), draftBeforeSwitch, 'a style switch never writes the composer draft')
+
+  // A valid Article target applies when the article program satisfies the predicate.
+  await read(`window.__styleSwitchRevisionId = 'style-switch-rev-3'`)
+  await click('[data-dsh-iui-call-id="style-switch-rev-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'article switch editor')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'article switch group')
+  await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').click()`)
+  await wait(`document.querySelector('[data-dsh-iui-edit-style-apply]').disabled === false`, 'article target arms Apply')
+  const callsBeforeArticle = await read('window.__styleSwitchCalls.length')
+  await click('[data-dsh-iui-edit-style-apply]')
+  await wait(`window.__styleSwitchCalls.length === ${callsBeforeArticle + 1}`, 'article switch request')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="style-switch-rev-3"]\')', 'article style revision')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="style-switch-rev-3"]').getAttribute('data-dsh-iui-style')`), 'article', 'the article switch records the article layout')
+  check((await text('[data-dsh-iui-call-id="style-switch-rev-3"]')).includes('Intro'), true, 'the article switch keeps the article program')
 
   // Dirty block content refuses the switch with inline copy and zero POSTs.
   await click('[data-dsh-iui-call-id="style-switch-call-1"] [data-dsh-iui-edit-entry]')

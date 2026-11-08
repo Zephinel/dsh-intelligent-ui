@@ -6,7 +6,7 @@
  * fetches its program on demand and POSTs the existing restore route, then the
  * card's local-revision pipeline renders the new card.
  */
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision, ArtifactHistorySource } from '../../shared/artifact-edit.ts'
@@ -67,7 +67,7 @@ function formatHistoryTime(createdAt: number): string {
 }
 
 /** One revision row's metadata (revision, current, source, blocks). */
-function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, renderedRevision, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
+function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, renderedRevision, returnFocusOnCancel, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
   readonly t: Translate
   readonly revision: ArtifactHistoryRevision
   readonly blocks: ArtifactHistoryBlocks
@@ -76,6 +76,8 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
   readonly confirmingDelete: boolean
   /** This revision is the one rendered by the card that opened the dialog. */
   readonly renderedRevision: boolean
+  /** Only the row that was actually cancelled should reclaim focus. */
+  readonly returnFocusOnCancel: boolean
   readonly onRestore: () => void
   readonly onAskDelete: () => void
   readonly onCancelDelete: () => void
@@ -89,6 +91,14 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
     ? `${t('onDemand.badge')} · ${layoutLabel}`
     : revision.styleId !== undefined ? `${layoutLabel} · ${t('edit.historyCustomStyle')}` : layoutLabel
   const canRestore = revision.restorable && revision.hasProgram && !revision.current && !restoring
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const deleteRef = useRef<HTMLButtonElement>(null)
+  const previouslyConfirming = useRef(false)
+  useLayoutEffect(() => {
+    if (confirmingDelete) cancelRef.current?.focus()
+    else if (previouslyConfirming.current && returnFocusOnCancel) deleteRef.current?.focus()
+    previouslyConfirming.current = confirmingDelete
+  }, [confirmingDelete, returnFocusOnCancel])
   return (
     <li
       className="dsh-iui-history-row"
@@ -143,8 +153,8 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
         <div className="dsh-iui-history-actions dsh-iui-history-delete-actions">
           {confirmingDelete ? (
             <>
-              <span className="dsh-iui-history-delete-warning" data-dsh-iui-history-delete-warning>{t('edit.historyDeleteWarning')}</span>
-              <button type="button" className="dsh-iui-history-restore" data-dsh-iui-history-delete-cancel onClick={onCancelDelete}>
+              <span className="dsh-iui-history-delete-warning" role="status" aria-live="polite" data-dsh-iui-history-delete-warning>{t('edit.historyDeleteWarning')}</span>
+              <button ref={cancelRef} type="button" className="dsh-iui-history-restore" data-dsh-iui-history-delete-cancel autoFocus disabled={deleting} onClick={onCancelDelete}>
                 {t('edit.historyDeleteCancel')}
               </button>
               <button
@@ -161,6 +171,7 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
             </>
           ) : (
             <button
+              ref={deleteRef}
               type="button"
               className="dsh-iui-history-restore is-danger is-icon"
               data-dsh-iui-history-delete
@@ -195,6 +206,9 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const returnFocusToDialog = useRef(false)
   const titleId = useId()
 
   useEffect(() => {
@@ -219,14 +233,41 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
   }, [artifactId, currentRevisionId, program, reloadKey])
 
   useEffect(() => {
+    if (!returnFocusToDialog.current) return
+    returnFocusToDialog.current = false
+    closeRef.current?.focus({ preventScroll: true })
+  }, [reloadKey])
+
+  useLayoutEffect(() => {
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     if (typeof window === 'undefined') return
-    window.requestAnimationFrame(() => { closeRef.current?.focus({ preventScroll: true }) })
+    // Focus synchronously: a deferred close-focus can steal focus from the
+    // delete confirmation when the user acts immediately after opening.
+    closeRef.current?.focus({ preventScroll: true })
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      onClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (dialog === null) return
+      const focusables = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
+        .filter(element => element.getClientRects().length > 0)
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+      const activeIsFocusable = active instanceof HTMLElement && focusables.includes(active)
+      if (event.shiftKey && (active === first || !activeIsFocusable)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !activeIsFocusable)) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey, true)
     return () => {
@@ -234,7 +275,10 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
       const previous = restoreFocusRef.current
       if (previous !== null && previous.isConnected) window.requestAnimationFrame(() => { previous.focus({ preventScroll: true }) })
     }
-  }, [onClose])
+    // Mount/unmount only: parent re-renders pass a fresh onClose function; a
+    // dependency on it would re-run the cleanup and could move focus back to
+    // the history trigger while the modal is still open.
+  }, [])
 
   const restore = async (revision: ArtifactHistoryRevision): Promise<void> => {
     if (restoringId !== null) return
@@ -255,6 +299,9 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
     if (deletingId !== null || restoringId !== null) return
     setDeleteError(null)
     setDeletingId(revision.revisionId)
+    // The Confirm button disables immediately; move focus to the dialog Close
+    // so Tab cannot start from a disabled/removed element.
+    closeRef.current?.focus({ preventScroll: true })
     const outcome = await deleteArtifactRevision(artifactId, revision.revisionId)
     setDeletingId(null)
     // `missing` converges: the Host already deleted it (for example a lost
@@ -263,12 +310,14 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
       setConfirmingDeleteId(null)
       onDeleted(revision.revisionId)
       setReloadKey(key => key + 1)
+      returnFocusToDialog.current = true
       return
     }
     if (outcome !== 'deleted') { setDeleteError(outcome); return }
     setConfirmingDeleteId(null)
     onDeleted(revision.revisionId)
     setReloadKey(key => key + 1)
+    returnFocusToDialog.current = true
   }
 
   const revisions = history?.revisions ?? []
@@ -328,6 +377,7 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
                 deleting={deletingId === revision.revisionId}
                 confirmingDelete={confirmingDeleteId === revision.revisionId}
                 renderedRevision={revision.revisionId === currentRevisionId}
+                returnFocusOnCancel={confirmingDeleteId === null}
                 onRestore={() => { void restore(revision) }}
                 onAskDelete={() => { setDeleteError(null); setConfirmingDeleteId(revision.revisionId) }}
                 onCancelDelete={() => { setConfirmingDeleteId(null) }}
