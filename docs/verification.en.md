@@ -495,7 +495,7 @@ Record of the fixes after the third independent read-only review (code/security 
 | --- | --- |
 | `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; renderer/contracts green; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75, on-demand 114, settings 101 |
-| `npm run pack:check` | PASS; **65** files, **6,042,172** bytes packed, **12,880,636** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
 
 ## 2026-11-08 — Fourth-review fixes (deferred route capability, title escaping, summary fence; uncommitted working tree)
@@ -516,7 +516,7 @@ The fourth review found that the route-derived `styleSwitch` returned false sync
 | --- | --- |
 | `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75, on-demand 114, settings 101 |
-| `npm run pack:check` | PASS; **65** files, **6,042,172** bytes packed, **12,880,636** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
 
 ## 2026-11-08 — Stabilization guards (unified envelope scanner, capture-token contract, deferred inject, docs facts; uncommitted working tree)
@@ -534,12 +534,12 @@ Four structural guards added after the review loop:
 | --- | --- |
 | `npm run check` | PASS; **617/617** Node tests = Host **299** + Client **297** + packaging **21**; build host **836.7 kB**, client **4.03 MB** (js 3.81 / CSS 220.0); includes capture-token and doc-facts checks |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **497 checks**, `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,042,172** bytes packed, **12,880,636** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,047,986** bytes packed, **12,890,199** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
 
 ## 2026-11-08 — B2 real-GUI acceptance after restart
 
-- Source gate for this tree: Node **617/617** = Host **299** + Client **297** + packaging **21**; `artifact-edit` **497 checks**; build host **836.7 kB**, CSS **220.0** kB; pack **6,042,172** / **12,880,636** bytes.
+- Source gate for this tree: Node **617/617** = Host **299** + Client **297** + packaging **21**; `artifact-edit` **497 checks**; build host **836.7 kB**, CSS **220.9** kB; pack **6,047,986** / **12,890,199** bytes.
 
 - dsh-web restarted to pid **15525** (launchd loaded, port 3080 owned by it, unauthenticated root 401, clean startup log); the real GUI was opened with the new URL.
 - In the 上海两日游 session (already carrying the B1 Revision 2): opened the card editor → expanded the style section; the **B2 switch group appeared** (built-in Card/Article; the page is a temporary-style base, so no current row and the temporary note was shown); selecting built-in Card enabled **Apply style**; applying closed the editor with no alert and added a local revision card labelled **"Style revision" / Revision 3**, with unchanged content/layout.

@@ -992,8 +992,33 @@
 
 .dsh-iui-edit-style-radio {
   flex: none;
+  box-sizing: border-box;
+  inline-size: 14px;
+  block-size: 14px;
   margin: 0;
-  accent-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  /* Custom-drawn radio: keep the native input for keyboard/AT semantics. */
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--dsw-alias-bg-base, #fff);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.dsh-iui-edit-style-radio:hover {
+  border-color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-edit-style-radio:checked {
+  border-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  background: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  box-shadow: inset 0 0 0 3px var(--dsw-alias-bg-base, #fff);
+}
+
+.dsh-iui-edit-style-radio:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: 2px;
 }
 
 .dsh-iui-edit-style-swatch {
@@ -1096,6 +1121,16 @@
 @media (forced-colors: active) {
   .dsh-iui-edit-style-target.is-checked {
     outline: 1px solid Highlight;
+  }
+  .dsh-iui-edit-style-radio {
+    border-color: ButtonText;
+    background: Canvas;
+  }
+  .dsh-iui-edit-style-radio:checked {
+    border-color: Highlight;
+    background: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
   }
   /* Native radio focus must stay visible when the painted ring is gone. */
   .dsh-iui-edit-style-target:has(.dsh-iui-edit-style-radio:focus-visible) {
