@@ -440,7 +440,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 编排行右侧是一个正常的 24px「更多」触发器 `[data-dsh-iui-edit-row-menu]`，不再有覆盖文字的动作组；它打开 portal 菜单，包含定位、编辑、复制、移动到…、删除五项（`data-dsh-iui-edit-locate` / `-structure-edit` / `-structure-duplicate` / `-move` / `-structure-delete`），菜单项有 role=menuitem、方向键/Home/End、Escape、外部点击和焦点返回；触发器在正常 flow 中，标题不会与按钮重叠。
 - 结构性删除是菜单内的持久两态确认：选择「删除区块」后，同一个菜单切换为 `data-dsh-iui-edit-structure-confirm` 的安静 Cancel 与 danger-tinted Delete 两个按钮（该步骤用 dialog 语义），无行红底/大红 pill；确认态只在 Cancel、Delete、外部点击、Escape、其它结构动作、预览打开、busy 或卸载时结束。焦点进入时落到 Cancel，取消/离开时回到行触发器；live region 播报一次。
 - Block 指令 popover 现在先把目标 top 计算为 `preferredTop`，再统一 clamp 到 `[12, viewportHeight - 12 - measuredHeight]`（left 原本已 clamp），所以锚点滚出视口时输入框不会再被裁切到视口外。popover 滚动容器在 `overflow-y: auto` 的 padding box 内保留 4px 底部内边距，输入框获得焦点时的轨道光晕也留出了可见余量。
-- 验证：Node **621/621**（Host 301、Client 299、packaging 21）；浏览器 9/9；`artifact-edit` **498 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 837.4 kB、client 4.03 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node **621/621**（Host 301、Client 299、packaging 21）；浏览器 9/9；`artifact-edit` **498 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
 ### 图标系统：统一 Remix Icon
@@ -449,7 +449,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 之前手绘的 stroke 图标（16px viewBox 的铅笔/垃圾桶/复制/移动/拖拽柄/刷新/关闭/类型图标，以及字符 `✎`、`✦`）全部替换；DSH primitives 的 `IconSparkleRegular` / `IconChevronDownOutlineRegular` 也不再用于图标。
 - **例外**：OpenUI 程序内容里的 `Icon("…")` 仍由 `src/lib/components/glyph.tsx` 用 `lucide-react/dynamic.mjs` 惰性解析——那是模型生成的程序数据（历史程序里写的是 lucide 名称），不是插件 chrome，替换会破坏既有程序。
 - 许可：Remix Icon License v1.0（见 `licenses/remix-icon-LICENSE` 与 `NOTICE`）。
-- 验证：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75；构建 host 837.4 kB、client 4.03 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
+- 验证：Node 621/621、浏览器 9/9、`artifact-edit` 498 checks、`nested-edit-renderer` 75；构建 host 837.4 kB、client 4.04 MB（js 3.82 / css 221.5）；pack 65 files 6.04 / 12.88 MB。
 
 ### 按 Artifact 的修订历史（用户反馈新增）
 

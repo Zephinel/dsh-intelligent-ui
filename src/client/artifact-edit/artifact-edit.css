@@ -998,6 +998,8 @@
   margin: 0;
   border: 1.5px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  /* The shell theme sets a superellipse corner shape; this control is a circle. */
+  corner-shape: round;
   /* Custom-drawn radio: keep the native input for keyboard/AT semantics. */
   appearance: none;
   -webkit-appearance: none;
@@ -1028,6 +1030,8 @@
   height: 18px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  /* The shell theme's superellipse would render a squircle; swatches are round. */
+  corner-shape: round;
   background: linear-gradient(
     135deg,
     var(--swatch-canvas, var(--dsw-alias-bg-layer-2)) 55%,

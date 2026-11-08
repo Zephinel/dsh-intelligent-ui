@@ -429,7 +429,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run check` | PASS；`tsc --noEmit` + build；Node **603/603** = Host **292** + Client **290** + packaging **21**；renderer 解析/渲染各 **42/42**、contrast OK、i18n **4**、typography **22/22**、media-row **17/17**、pressable **9/9**、CSS 契约 **50/50**、组件契约 **63/63**、nested-css **28/28 direct + 5/5 scoped** |
 | `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **497 checks**（场景 40 + review 修复断言）、`nested-edit-renderer` **75**、on-demand **114**、settings **101** 条断言等 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,036,654** 字节，解包 **12,874,349** 字节 |
-| 构建 | host **835.9 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 MB + 514.4 kB |
+| 构建 | host **835.9 kB**、client **4.04 MB**（js 3.81 / css 220.0）、standalone 3.33 MB + 514.4 kB |
 | 文档/结构检查 | README 与五组双语文档标题层级一致；本地链接/锚点、截图引用、CHANGELOG 链接通过；`git diff --check` PASS |
 
 ### 覆盖与未覆盖
@@ -452,7 +452,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **603/603** = Host **292** + Client **290** + packaging **21**；renderer/契约全绿；build host **835.9 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **603/603** = Host **292** + Client **290** + packaging **21**；renderer/契约全绿；build host **835.9 kB**、client **4.04 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,036,654** 字节，解包 **12,874,349** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -473,7 +473,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；renderer/契约全绿；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；renderer/契约全绿；build host **836.7 kB**、client **4.04 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,986** 字节，解包 **12,890,199** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -494,7 +494,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.04 MB**（js 3.81 / css 220.0）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75、on-demand 114、settings 101 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,986** 字节，解包 **12,890,199** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -512,7 +512,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.03 MB**（js 3.81 / css 220.0）；含 capture-token 契约与 doc-facts 检查 |
+| `npm run check` | PASS；Node **617/617** = Host **299** + Client **297** + packaging **21**；build host **836.7 kB**、client **4.04 MB**（js 3.81 / css 220.0）；含 capture-token 契约与 doc-facts 检查 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **497 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,986** 字节，解包 **12,890,199** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
@@ -539,7 +539,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **621/621** = Host **301** + Client **299** + packaging **21**；build host **837.4 kB**、client **4.03 MB**（js 3.82 / css 221.5）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **621/621** = Host **301** + Client **299** + packaging **21**；build host **837.4 kB**、client **4.04 MB**（js 3.82 / css 221.5）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **498 checks**、`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,051,253** 字节，解包 **12,898,281** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,051,078** 字节，解包 **12,897,841** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
