@@ -993,11 +993,11 @@
 .dsh-iui-edit-style-radio {
   flex: none;
   box-sizing: border-box;
-  inline-size: 14px;
-  block-size: 14px;
+  inline-size: 16px;
+  block-size: 16px;
   margin: 0;
   border: 1.5px solid var(--dsw-alias-border-l2);
-  border-radius: 50%;
+  border-radius: 999px;
   /* Custom-drawn radio: keep the native input for keyboard/AT semantics. */
   appearance: none;
   -webkit-appearance: none;
@@ -3274,6 +3274,13 @@
 .dsh-iui-history-restore:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
+}
+.dsh-iui-history-restore.is-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  padding: 0;
 }
 .dsh-iui-history-delete-actions {
   flex-wrap: wrap;

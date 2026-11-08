@@ -145,13 +145,29 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
               <button type="button" className="dsh-iui-history-restore" data-dsh-iui-history-delete-cancel onClick={onCancelDelete}>
                 {t('edit.historyDeleteCancel')}
               </button>
-              <button type="button" className="dsh-iui-history-restore is-danger" data-dsh-iui-history-delete-confirm disabled={deleting} onClick={onConfirmDelete}>
-                {deleting ? t('edit.historyLoading') : t('edit.historyDeleteConfirm')}
+              <button
+                type="button"
+                className="dsh-iui-history-restore is-danger is-icon"
+                data-dsh-iui-history-delete-confirm
+                aria-label={t('edit.historyDeleteConfirm')}
+                title={t('edit.historyDeleteConfirm')}
+                disabled={deleting}
+                onClick={onConfirmDelete}
+              >
+                <RemixIcon name="delete-bin-line" size={13} />
               </button>
             </>
           ) : (
-            <button type="button" className="dsh-iui-history-restore is-danger" data-dsh-iui-history-delete disabled={deleting || restoring} onClick={onAskDelete}>
-              {t('edit.historyDelete')}
+            <button
+              type="button"
+              className="dsh-iui-history-restore is-danger is-icon"
+              data-dsh-iui-history-delete
+              aria-label={t('edit.historyDelete')}
+              title={t('edit.historyDelete')}
+              disabled={deleting || restoring}
+              onClick={onAskDelete}
+            >
+              <RemixIcon name="delete-bin-line" size={13} />
             </button>
           )}
         </div>
