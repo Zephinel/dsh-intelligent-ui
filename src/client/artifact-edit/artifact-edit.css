@@ -1027,7 +1027,7 @@
   width: 18px;
   height: 18px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 5px;
+  border-radius: 999px;
   background: linear-gradient(
     135deg,
     var(--swatch-canvas, var(--dsw-alias-bg-layer-2)) 55%,
@@ -1035,8 +1035,10 @@
   );
 }
 
+/* The swatch is a color preview, not an icon: circular so the diagonal
+   canvas/accent split never meets a clipped rounded-square corner. */
 .dsh-iui-edit-style-swatch[data-layout="article"] {
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 .dsh-iui-edit-style-target-name {
