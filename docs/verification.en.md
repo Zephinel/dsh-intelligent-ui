@@ -576,7 +576,7 @@ Four structural guards added after the review loop:
 
 | Command / check | Result |
 | --- | --- |
-| `npm run check` | PASS; **625/625** Node tests = Host **301** + Client **303** + packaging **21**; build host **837.6 kB**, client **4.04 MB** (js 3.82 / CSS 222.0), standalone 3.33 + 514.4 |
+| `npm run check` | PASS; **625/625** Node tests = Host **301** + Client **303** + packaging **21**; build host **837.6 kB**, client **4.04 MB** (js 3.82 / CSS 221.9), standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **500 checks**, `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,033,850** bytes packed, **12,886,996** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,025,580** bytes packed, **12,879,400** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |

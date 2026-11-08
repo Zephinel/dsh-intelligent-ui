@@ -556,7 +556,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **625/625** = Host **301** + Client **303** + packaging **21**；build host **837.6 kB**、client **4.04 MB**（js 3.82 / CSS 222.0）、standalone 3.33 + 514.4 |
+| `npm run check` | PASS；Node **625/625** = Host **301** + Client **303** + packaging **21**；build host **837.6 kB**、client **4.04 MB**（js 3.82 / CSS 221.9）、standalone 3.33 + 514.4 |
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **500 checks**、`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,033,850** 字节，解包 **12,886,996** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,025,580** 字节，解包 **12,879,400** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

@@ -899,6 +899,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   })
   const styleSwitchCanApply = styleSwitchChosen !== undefined && styleBlocker === undefined
   const styleStatusId = `${stylePanelId}-switch-status`
+  const articleNoteId = `${stylePanelId}-article-note`
   const styleStatusKey = styleBlocker === 'checking' ? 'edit.styleStatusChecking'
     : styleBlocker === 'stale' ? 'edit.styleStatusStale'
     : styleBlocker === 'busy' ? 'edit.styleSwitchBusy'
@@ -1579,7 +1580,6 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                         const saved = option.target.kind === 'template'
                         const firstSaved = saved && styleTargets.findIndex(candidate => candidate.target.kind === 'template') === index
                         const disabledReason = styleTargetDisableReason(option, articleProblem)
-                        const reasonId = `${stylePanelId}-target-${index}-reason`
                         const layoutLabel = option.layout === 'card'
                           ? t('edit.historyStyleCard')
                           : option.layout === 'article' ? t('edit.historyStyleArticle') : t('edit.historyStyleFree')
@@ -1613,7 +1613,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                                 data-current={current ? 'true' : undefined}
                                 checked={checked}
                                 disabled={disabledReason !== undefined}
-                                aria-describedby={disabledReason === undefined ? undefined : reasonId}
+                                aria-describedby={disabledReason === undefined ? undefined : articleNoteId}
                                 onChange={() => {
                                   if (disabledReason !== undefined) return
                                   actions.selectStyleTarget(option.target, option.layout)
@@ -1632,14 +1632,14 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               <span className="dsh-iui-edit-style-target-name">{option.name}</span>
                               <span className="dsh-iui-edit-style-target-meta">{layoutLabel}</span>
                               {current ? <span className="dsh-iui-edit-style-current-badge" data-dsh-iui-edit-style-current-badge>{t('edit.styleSwitchCurrentBadge')}</span> : null}
-                              {disabledReason === undefined ? null : (
-                                <span id={reasonId} className="dsh-iui-edit-style-target-reason" data-dsh-iui-edit-style-target-reason>{t('edit.styleTargetArticle')}</span>
-                              )}
                             </label>
                           </div>
                         )
                       })}
                     </div>
+                    {styleTargets.some(option => styleTargetDisableReason(option, articleProblem) === 'article') ? (
+                      <p id={articleNoteId} className="dsh-iui-edit-style-hint" data-dsh-iui-edit-style-article-note>{t('edit.styleTargetArticle')}</p>
+                    ) : null}
                     <p id={styleStatusId} className="dsh-iui-edit-style-status" role="status" data-dsh-iui-edit-style-status>{t(styleStatusKey)}</p>
                     <div className="dsh-iui-edit-style-switch-foot">
                       <button

@@ -2094,7 +2094,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-style-toggle]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-style-switch]")', 'failure switch group')
   check(await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-layout="article"][data-target-kind="builtin"]').disabled`), true, 'Article is disabled before selection when the program cannot be an article')
-  check((await text('[data-dsh-iui-edit-style-target-reason]')).includes('目录和章节'), true, 'the disabled Article row gives a short reason')
+  check((await text('[data-dsh-iui-edit-style-article-note]')).includes('目录和章节'), true, 'one note explains why Article targets are disabled')
   await read(`document.querySelector('[data-dsh-iui-edit-style-target][data-target-style-id="cs_ocean01"]').click()`)
   const catalogFetchesBefore = await read('window.__styleCatalogFetches.length')
   await read(`window.__styleSwitchFail = { code: 'style_missing', status: 404 }`)

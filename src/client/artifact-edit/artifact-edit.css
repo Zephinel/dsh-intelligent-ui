@@ -1010,15 +1010,6 @@
   opacity: 0.45;
 }
 
-.dsh-iui-edit-style-target-reason {
-  flex: none;
-  margin-left: auto;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10.5px;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
 .dsh-iui-edit-style-status {
   margin: 6px 0 2px;
   color: var(--dsw-alias-label-tertiary);

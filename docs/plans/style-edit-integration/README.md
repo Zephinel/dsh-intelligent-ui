@@ -36,7 +36,7 @@
 
 样式区保留一个入口，目标按「内置样式 / 已保存样式」分组，中间分割线；所有目标同一 radio group，单选互斥。
 
-- Article 行不可用时禁用，并给一行短原因（需要目录和章节）。
+- Article 行不可用时禁用，并在列表下用一行普通语言说明原因。
 - 每次只显示一条状态：检查中／非最新／有区块草稿／已填样式说明／选择目标／不适用／当前已选／可应用；应用后分支或临时样式状态使用对应提示。
 - 移除常驻的 3–4 段说明；零模型、临时样式替换等信息合入状态行。
 
@@ -51,4 +51,4 @@
 
 ## 验证
 
-Node **625/625**（Host 301、Client 303、packaging 21）；浏览器 9/9，`artifact-edit` **500 checks**；build host 837.6 kB、client 4.04 MB（js 3.82 / CSS 222.0）；pack 65 files / 6,033,850 packed / 12,886,996 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
+Node **625/625**（Host 301、Client 303、packaging 21）；浏览器 9/9，`artifact-edit` **500 checks**；build host 837.6 kB、client 4.04 MB（js 3.82 / CSS 221.9）；pack 65 files / 6,025,580 packed / 12,879,400 unpacked。新增 client 纯函数测试、store 重试测试、E2E Article 置灰/状态行/键盘跳过禁用项场景。
