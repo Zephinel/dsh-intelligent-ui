@@ -812,3 +812,19 @@ A fourth pair of fresh independent read-only reviews found no P0/P1 runtime bloc
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **632 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,056,334** bytes packed, **12,984,362** bytes unpacked |
 | Structure | the new record exists in both languages; `npm run check:docs-facts` passes; `git diff --check` passes |
+
+## 2026-11-10 — M3 exports follow the displayed revision + branch/deletion E2E
+
+- **Exports (D8)**: HTML export resolves each recorded program through the version store's selected revision after `programsFor` and synthesizes program/title/style with `stageProgramFor` while keeping the callId; when that revision is displayed by a stage card in another Turn, `assetElements` reads local images from the stage and keys buckets by the exported callId. Image export uses the pure `export-image-targets.ts` planner to resolve notices (`data-dsh-iui-artifact-id`) and cards (`data-artifact-id`) in message order, prefers the cross-Turn stage card (displayed revision), falls back to a full card of the same Turn, and throws an explicit error for a notice-only artifact with no capturable content — it never exports stale content. Multiple artifacts dedupe, expand/settle per element, and are stacked vertically by `stackBoxes`; the plain-card path keeps the container capture.
+- **Editing/deletion**: when the stage displays a revision natively owned by a frozen card, the frozen card becomes read-only and the stage is the single editing surface (one editKey, never two canvases), so selecting an old revision via the version bar keeps the conflict-banner → branch flow (selected base, `branch:true`, no extra card). Deleting the displayed transcript revision goes through revision-fallbacks → forget: latest/selected repoint to a live revision, the stage does not dangle and the card count is unchanged.
+- **Tests**: 9 new pure unit cases in `test/client/export-versions.test.mjs` and `test/client/export-image-targets.test.mjs`; artifact-edit scenarios 51 (stage old-revision branch) and 52 (stage-on displayed-transcript-revision deletion rollback), 632→**646 checks**; the export suite gains the D8 dual-path scenario (notice-only image export captures the stage and SELECTED content, never RAW; HTML embeds the selected program rather than the stale recording). Scenarios 1–50 and the export scenarios stay green.
+- **Known limits**: exports only consult the current session's version store; multi-artifact images stack at the widest capture with a 12px gap; async media/maps rely on their settled signals; branch semantics unchanged — only the stage editing surface opens.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **713/713** Node tests = Host **302** + Client **388** + packaging **23**; build host **841 kB**, client **4.11 MB** (js 3.89 / CSS 230.8) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **646 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,058,060** bytes packed, **12,988,552** bytes unpacked |
+| Structure | the M3 record exists in both languages; `check:docs-facts` passes; `git diff --check` passes |

@@ -28,6 +28,7 @@ import {
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { messageHasRenderUi, type ExportChatSnapshot } from './export-data.ts'
 import { exportCardsHtml } from './export-html.ts'
+import { artifactIdOfProgram, programsForExport } from './export-versions.ts'
 import { exportTemplatesFor, programsToExportCards } from './export-html-plan.ts'
 import { useStyleScheme } from './theme-mode.ts'
 import type { StyleCatalog } from './styles.ts'
@@ -180,7 +181,7 @@ export function ExportAction({
   const run = async (style: BeautifyStyle): Promise<void> => {
     const trigger = triggerRef.current
     if (trigger === null || busyRef.current) return
-    const programs = programsFor(String(messageId))
+    const programs = programsForExport(sessionId, programsFor(String(messageId)))
     if (programs.length === 0) {
       setStatus('empty')
       return
@@ -220,7 +221,7 @@ export function ExportAction({
   const runPage = async (): Promise<void> => {
     const trigger = triggerRef.current
     if (trigger === null || busyRef.current) return
-    const programs = programsFor(String(messageId))
+    const programs = programsForExport(sessionId, programsFor(String(messageId)))
     if (programs.length === 0) {
       setStatus('empty')
       return
@@ -233,12 +234,21 @@ export function ExportAction({
       await styles?.ensure(sessionId)
       const templates = exportTemplatesFor(styles?.getSnapshot(), sessionId)
       const cards = programsToExportCards(programs, scheme, templates, sessionStyle)
+      // A selected revision may be displayed by a stage card in another Turn;
+      // local images must be read from that element while still keying the
+      // exported card by its own callId.
+      const assetElements = new Map<string, HTMLElement>()
+      for (const program of programs) {
+        const stage = document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${artifactIdOfProgram(program)}"]`)
+        if (stage !== null) assetElements.set(program.callId, stage)
+      }
       await exportCardsHtml({
         cards,
         title: programs[0]?.title,
         lang: document.documentElement.lang || 'en',
         removeFollowUps: settings().removeFollowUps,
         trigger,
+        ...assetElements.size === 0 ? {} : { assetElements },
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {

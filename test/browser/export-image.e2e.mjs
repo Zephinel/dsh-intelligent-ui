@@ -302,6 +302,33 @@ try {
     assert.match(await cdp.evaluate('window.exportedBlobs[6].text()'), /"themeStyle":\{"--iui-canvas":"#f0fff4"/, 'ExportAction resolves saved theme from catalog')
     assert.match(await cdp.evaluate('window.exportedBlobs[6].text()'), /"style":"free"/, 'saved-template HTML preserves free composition')
     assert.equal(await cdp.evaluate('document.querySelector("[data-dsh-iui-style=free]") !== null'), true)
+    // M3/D8: a Turn that only shows a revision notice must export the
+    // artifact's currently displayed (selected) revision, never the stale one.
+    await cdp.evaluate('window.__mountStageExportFixture()')
+    const stageTrigger = '[data-stage-export] [data-dsh-iui-export]'
+    await cdp.waitFor(`!!document.querySelector('${stageTrigger}')`, 'stage export fixture')
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\'stage-art-1\']")', 'stage fixture card')
+    await cdp.evaluate(`document.querySelector('${stageTrigger}').click()`)
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'stage export menu')
+    const stageImageBase = await cdp.evaluate('window.downloads.length')
+    await cdp.evaluate(`(() => { const menus = [...document.querySelectorAll('[data-dsh-iui-export-menu]')]; const menu = menus[menus.length - 1]; menu.querySelector('[data-export-style="card"]').click(); return menus.length })()`)
+    await cdp.waitFor(`window.downloads.length === ${stageImageBase + 1}`, 'notice-only image export', { timeout: 30000 })
+    const stageProbe = await cdp.evaluate('window.captureProbes[window.captureProbes.length - 1]')
+    assert.equal(stageProbe.capturedArtifact, 'stage-art-1', 'the image export captures the stage card of the noticed artifact')
+    assert.equal(stageProbe.capturedStage, true, 'the captured target is the active stage card')
+    assert.match(stageProbe.capturedText, /SELECTED-STAGE-MARKER/, 'the export captures the selected revision content')
+    assert.doesNotMatch(stageProbe.capturedText, /RAW-STAGE-MARKER/, 'the stale recorded revision is not captured')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'stage export menu closed')
+    await cdp.evaluate(`document.querySelector('${stageTrigger}').click()`)
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'stage page menu')
+    const stagePageBase = await cdp.evaluate('window.downloads.length')
+    await cdp.evaluate('document.querySelector("[data-export-page]").click()')
+    await cdp.waitFor(`window.downloads.length === ${stagePageBase + 1}`, 'notice-only page export', { timeout: 30000 })
+    const stagePage = await cdp.evaluate('window.exportedBlobs[window.exportedBlobs.length - 1].text()')
+    assert.match(stagePage, /SELECTED-STAGE-MARKER/, 'the interactive page embeds the selected revision program')
+    assert.doesNotMatch(stagePage, /RAW-STAGE-MARKER/, 'the interactive page never embeds the superseded recording')
+    await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'stage page menu closed')
+
     console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {

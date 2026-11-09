@@ -17,7 +17,8 @@
  */
 import { snapdom } from '@zumer/snapdom'
 import { hideToAssistantBlocks } from '../lib/to-assistant.ts'
-import { beautifyPlan, canvasFits, composeBox, exportScaleFactor, imageFileName, type BeautifyPlan } from './export-image-plan.ts'
+import { beautifyPlan, canvasFits, composeBox, exportScaleFactor, imageFileName, stackBoxes, type BeautifyPlan } from './export-image-plan.ts'
+import { planExportCapture, type ExportTargetEntry } from './export-image-targets.ts'
 import type { BeautifyStyle, ExportScale } from '../shared/intelligent-ui.ts'
 
 /** Scope added to the rendered answer only while one capture is running. */
@@ -238,6 +239,111 @@ async function settleMaps(container: HTMLElement): Promise<void> {
   await twoFrames()
 }
 
+/** Direct children of one Turn's card list, with their version identity (D8). */
+function captureEntries(container: HTMLElement): ExportTargetEntry[] {
+  return [...container.children]
+    .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    .map(child => {
+      const artifactId = child.getAttribute('data-dsh-iui-artifact-id') ?? child.getAttribute('data-artifact-id') ?? undefined
+      if (artifactId === undefined) return { element: child, kind: 'card' as const }
+      return {
+        element: child,
+        artifactId,
+        kind: child.hasAttribute('data-dsh-iui-revision-notice') ? 'notice' as const : 'card' as const,
+      }
+    })
+}
+
+/** Resolve what the export captures for one action row (cross-Turn stage lookup). */
+export function planImageExportCapture(container: HTMLElement) {
+  return planExportCapture(captureEntries(container), artifactId => document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${artifactId}"]`))
+}
+
+/** Expand collapsed cards under one element; returns an idempotent restore. */
+async function expandElement(element: HTMLElement): Promise<() => void> {
+  const collapsed = [...element.querySelectorAll<HTMLButtonElement>('button.dsh-iui-header[aria-expanded="false"]')]
+  if (collapsed.length === 0) return () => undefined
+  for (const button of collapsed) button.click()
+  await twoFrames()
+  return () => {
+    for (const button of collapsed) {
+      if (button.isConnected && button.getAttribute('aria-expanded') === 'true') button.click()
+    }
+  }
+}
+
+/** Capture one element with the export capture scope applied only during the snapshot. */
+async function captureElement(element: HTMLElement, factor: number): Promise<HTMLCanvasElement> {
+  element.classList.add(EXPORT_CAPTURE_CLASS)
+  try {
+    return await snapdom.toCanvas(element, {
+      dpr: factor,
+      backgroundColor: null,
+      exclude: '[data-dsh-iui-export]',
+    })
+  } finally {
+    element.classList.remove(EXPORT_CAPTURE_CLASS)
+  }
+}
+
+/** Stack several captured elements vertically into one content canvas. */
+function stackCanvases(canvases: readonly HTMLCanvasElement[], gap: number): HTMLCanvasElement {
+  const box = stackBoxes(canvases.map(canvas => ({ width: canvas.width, height: canvas.height })), gap)
+  if (!canvasFits(box.width, box.height)) throw new Error('intelligent-ui export: the image is too large for one canvas')
+  const stacked = document.createElement('canvas')
+  stacked.width = box.width
+  stacked.height = box.height
+  const context = stacked.getContext('2d')
+  if (context === null) throw new Error('intelligent-ui export: a canvas could not be created')
+  canvases.forEach((canvas, index) => { context.drawImage(canvas, 0, box.offsets[index] ?? 0) })
+  return stacked
+}
+
+/**
+ * Capture the stage cards of a notice-only Turn (selected revision displayed in
+ * another Turn) and download them as one PNG.
+ * @param options - export preferences.
+ * @param elements - resolved capture targets in display order.
+ */
+async function exportStageElements(options: ExportCardsOptions, elements: readonly HTMLElement[]): Promise<void> {
+  const factor = exportScaleFactor(options.scale)
+  const plan = beautifyPlan(options.beautify, factor)
+  let restoreExpanded = (): void => undefined
+  let restoreFollowUps = (): void => undefined
+  let restorePhotos = (): void => undefined
+  try {
+    const expansions = await Promise.all(elements.map(expandElement))
+    restoreExpanded = () => { for (const restore of expansions) restore() }
+    if (options.hideToAssistant) {
+      const restores = elements.map(element => hideToAssistantBlocks(element))
+      restoreFollowUps = () => { for (const restore of restores) restore() }
+    }
+    const photoRestores: (() => void)[] = []
+    for (const element of elements) {
+      photoRestores.push(await settlePhotos(element))
+      await settleMaps(element)
+    }
+    restorePhotos = () => { for (const restore of photoRestores) restore() }
+    const canvases: HTMLCanvasElement[] = []
+    for (const element of elements) {
+      const rect = element.getBoundingClientRect()
+      const estimate = composeBox(Math.max(1, Math.ceil(rect.width * factor)), Math.max(1, Math.ceil(rect.height * factor)), plan)
+      if (!canvasFits(estimate.canvasWidth, estimate.canvasHeight)) {
+        throw new Error('intelligent-ui export: the image is too large for one canvas')
+      }
+      canvases.push(await captureElement(element, factor))
+    }
+    const content = canvases.length === 1 ? canvases[0] : stackCanvases(canvases, Math.round(12 * factor))
+    const composed = compose(content, plan, options.background)
+    const title = options.title ?? elements[0]?.querySelector<HTMLElement>('.dsh-iui-title')?.textContent ?? undefined
+    await downloadCanvas(composed, imageFileName(title, new Date()))
+  } finally {
+    restorePhotos()
+    restoreFollowUps()
+    restoreExpanded()
+  }
+}
+
 /**
  * Capture one completed answer and download it as a PNG.
  * @param trigger - the export button inside the assistant action row.
@@ -247,6 +353,13 @@ async function settleMaps(container: HTMLElement): Promise<void> {
 export async function exportCardsImage(trigger: HTMLElement, options: ExportCardsOptions): Promise<void> {
   const container = findCardsForAction(trigger)
   if (container === null) throw new Error('intelligent-ui export: no rendered answer')
+  const capturePlan = planImageExportCapture(container)
+  if (capturePlan.kind === 'error') throw new Error(capturePlan.message)
+  if (capturePlan.kind === 'elements') {
+    await document.fonts?.ready
+    await exportStageElements(options, capturePlan.elements)
+    return
+  }
   const factor = exportScaleFactor(options.scale)
   const plan = beautifyPlan(options.beautify, factor)
   await document.fonts?.ready

@@ -49,7 +49,6 @@ import {
   selectArtifactRevision,
   setArtifactStageVisibility,
   stageProgramFor,
-  stageRendersFrozenRevision,
   useArtifactVersion,
   useSelectedArtifactRevisionIds,
   type ArtifactVersionCardSpec,
@@ -444,7 +443,11 @@ function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | nu
     ? stageProgramFor(program, selectedRecord)
     : program
   const theme = resolveCardTheme(effective, props.templates, props.sessionStyle)
-  const readOnlyStage = stageEnabled && role === 'stage' && stageRendersFrozenRevision(state, cardId)
+  // The stage is the single editing surface: when it displays a revision that a
+  // frozen card natively owns, that historical card goes read-only instead, so
+  // only one card ever mounts the revision's edit canvas (D10 old-version editing).
+  const readOnlyFrozen = stageEnabled && role === 'frozen'
+    && state.selectedRevisionId !== undefined && state.selectedRevisionId === cardRecord?.revisionId
   const staleHint = stageEnabled && role === 'frozen'
     ? <button
         type="button"
@@ -477,11 +480,11 @@ function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | nu
       fallbackTargetIds={props.fallbackTargetIds}
       renderedRevisionIds={props.renderedRevisionIds}
       versionRole={stageEnabled ? role : undefined}
-      stageArtifactId={artifactId}
+      artifactIdentity={stageEnabled ? artifactId : undefined}
       stageVisible={state.stageVisible}
       onStageVisibleChange={stageEnabled && role === 'stage' ? reportVisibility : undefined}
       staleHint={staleHint}
-      readOnly={readOnlyStage}
+      readOnly={readOnlyFrozen}
       templates={props.templates}
       sessionStyle={props.sessionStyle}
       versionBarAvailable={stageEnabled && role === 'stage'}
@@ -530,7 +533,7 @@ interface IntelligentUICardProps {
   /** Active-stage role from the version store; absent when the stage is disabled. */
   readonly versionRole?: ArtifactCardRole
   /** Root artifact identity the stage belongs to (stage cards only). */
-  readonly stageArtifactId?: string
+  readonly artifactIdentity?: string
   /** Whether the stage card currently intersects the viewport. */
   readonly stageVisible?: boolean
   /** Reports the stage card's viewport intersection to the version store. */
@@ -556,7 +559,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, stageArtifactId, stageVisible, onStageVisibleChange, staleHint, readOnly = false, templates, sessionStyle, versionBarAvailable = false, captureThumbnail }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, artifactIdentity, stageVisible, onStageVisibleChange, staleHint, readOnly = false, templates, sessionStyle, versionBarAvailable = false, captureThumbnail }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -875,7 +878,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       data-dsh-iui-call-id={program.callId}
       data-dsh-iui-stage-card={versionRole === 'stage' ? 'true' : undefined}
       data-dsh-iui-stage-visible={versionRole === 'stage' ? (stageVisible === true ? 'true' : 'false') : undefined}
-      data-artifact-id={versionRole === 'stage' ? stageArtifactId : undefined}
+      data-artifact-id={artifactIdentity}
       tabIndex={versionRole === 'stage' ? -1 : undefined}
       data-dsh-iui-style={style}
       data-dsh-iui-style-id={program.styleId}

@@ -314,19 +314,6 @@ export function artifactCardRole(state: ArtifactVersionState, cardId: string): A
   return (card.turn ?? 0) > (stage.turn ?? 0) ? 'notice' : 'frozen'
 }
 
-/**
- * Whether the stage currently renders a revision natively owned by a frozen
- * card. Such a stage stays read-only: two cards must never mount the same edit
- * canvas (the fallback/multi-owner rule from M4-3).
- */
-export function stageRendersFrozenRevision(state: ArtifactVersionState, cardId: string): boolean {
-  if (state.stageCardId !== cardId) return false
-  const selected = state.selectedRevisionId === undefined ? undefined : state.revisions.get(state.selectedRevisionId)
-  if (selected === undefined || selected.callId === cardId) return false
-  const owner = state.cards.get(selected.callId)
-  return owner !== undefined && artifactCardRole(state, owner.cardId) === 'frozen'
-}
-
 /** Latest known revision record (highest revision number, then registration order). */
 export function latestRecord(revisions: ReadonlyMap<string, ArtifactVersionRecord>): ArtifactVersionRecord | undefined {
   let latest: ArtifactVersionRecord | undefined

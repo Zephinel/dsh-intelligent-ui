@@ -25,6 +25,12 @@ export interface ExportPageOptions {
   readonly removeFollowUps: boolean
   /** Export trigger in the answer's action row; locates the live cards for local-image inlining. */
   readonly trigger?: HTMLElement
+  /**
+   * Exported card callId → live element that currently displays the revision.
+   * Used when a selected revision lives on a stage card in another Turn; local
+   * images are read from that element but keyed by the exported callId.
+   */
+  readonly assetElements?: ReadonlyMap<string, HTMLElement>
 }
 
 /**
@@ -154,6 +160,30 @@ export async function collectLocalImageAssets(
 }
 
 /**
+ * Collect the local images of one standalone element (a stage card that renders
+ * a selected revision living in another Turn), keyed by the exported callId.
+ * @param element - element currently displaying the exported revision.
+ * @param callId - exported card callId used by the standalone payload.
+ * @returns source path → data URL for that card.
+ */
+export async function collectLocalImageAssetsForElement(element: HTMLElement, callId: string): Promise<Record<string, string>> {
+  const bucket: Record<string, string> = Object.create(null) as Record<string, string>
+  let total = 0
+  for (const image of element.querySelectorAll<HTMLImageElement>('img[data-iui-image-src]')) {
+    const source = image.dataset.iuiImageSrc
+    if (source === undefined || source === '') continue
+    const url = image.currentSrc !== '' ? image.currentSrc : image.src
+    if (!url.startsWith('blob:')) continue
+    if (typeof bucket[source] === 'string') continue
+    const dataUrl = await blobUrlToDataUrl(url)
+    total += dataUrl.length
+    if (total > MAX_INLINE_IMAGE_DATA_URL_CHARS) throw new Error('intelligent-ui export: local images are too large to inline into one page')
+    bucket[source] = dataUrl
+  }
+  return bucket
+}
+
+/**
  * Build and download one standalone interactive HTML page.
  * @param options - cards, title and UI language.
  * @returns after the browser received the `.html` download.
@@ -169,7 +199,19 @@ export async function exportCardsHtml(options: ExportPageOptions): Promise<void>
   // document is assembled so the downloaded file works offline.
   const container = options.trigger === undefined ? null : findCardsForAction(options.trigger)
   let assets: Record<string, Record<string, string>> = {}
-  if (container !== null) {
+  if (options.assetElements !== undefined && options.assetElements.size > 0) {
+    // The selected revision is displayed by a stage card somewhere else in the
+    // conversation; read its local images from that element, keyed by the
+    // exported callId so the standalone payload can resolve them.
+    let total = 0
+    for (const [callId, element] of options.assetElements) {
+      await settleLocalImages(element)
+      const bucket = await collectLocalImageAssetsForElement(element, callId)
+      for (const value of Object.values(bucket)) total += value.length
+      if (total > MAX_INLINE_IMAGE_DATA_URL_CHARS) throw new Error('intelligent-ui export: local images are too large to inline into one page')
+      if (Object.keys(bucket).length > 0) assets[callId] = bucket
+    }
+  } else if (container !== null) {
     // Only local readers matter here; searches/remote loads are not inlined
     // and must not delay the page export.
     await settleLocalImages(container)

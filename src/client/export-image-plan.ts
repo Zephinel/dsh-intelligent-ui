@@ -108,6 +108,34 @@ export function composeBox(sourceWidth: number, sourceHeight: number, plan: Beau
   }
 }
 
+/** Vertical stacking of several captured elements into one content image. */
+export interface StackedBoxes {
+  /** Common content width in device pixels (widest capture). */
+  readonly width: number
+  /** Total content height in device pixels. */
+  readonly height: number
+  /** Y offset of every input, in device pixels. */
+  readonly offsets: readonly number[]
+}
+
+/**
+ * Stack captured element sizes vertically with one gap between neighbours.
+ * @param sizes - captured element sizes in device pixels, in display order.
+ * @param gap - gap between two captures in device pixels.
+ * @returns the combined content size and per-item offsets.
+ */
+export function stackBoxes(sizes: readonly { readonly width: number; readonly height: number }[], gap: number): StackedBoxes {
+  const width = sizes.reduce((max, size) => Math.max(max, Math.max(0, Math.floor(size.width))), 0)
+  const offsets: number[] = []
+  let y = 0
+  sizes.forEach((size, index) => {
+    if (index > 0) y += Math.max(0, Math.floor(gap))
+    offsets.push(y)
+    y += Math.max(0, Math.floor(size.height))
+  })
+  return { width, height: y, offsets }
+}
+
 /** Characters no common filesystem accepts in a file name. */
 const UNSAFE_FILENAME = /[\\/:*?"<>|\u0000-\u001f]+/g
 

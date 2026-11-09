@@ -2558,8 +2558,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read(`window.__selectArtifactRevision('stage-call-1', 'stage-call-1')`)
   await wait(`document.querySelector('[data-dsh-iui-stage-card] [data-dsh-iui-title]').textContent === ${JSON.stringify(DST_TITLE)} && document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('春天把钟拨快')`, 'the stage switches to the selected revision')
   check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-1', 'selection is stored without a Host write')
-  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'a stage displaying a frozen revision is read-only')
-  check(await count('[data-dsh-iui-call-id="stage-call-1"] [data-dsh-iui-edit-entry]'), 1, 'the native frozen card keeps the edit entry')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 1, 'the stage is the single editing surface for the selected revision')
+  check(await count('[data-dsh-iui-call-id="stage-call-1"] [data-dsh-iui-edit-entry]'), 0, 'the frozen native card goes read-only while the stage shows its revision')
   await read(`window.__selectArtifactRevision('stage-call-1', 'stage-call-3')`)
   await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'the stage switches back to the latest revision')
 
@@ -2758,6 +2758,85 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read(`document.body.removeAttribute('data-ds-dark-theme')`)
   await new Promise(resolve => setTimeout(resolve, 240))
   await shot('harness-m2-dual-scheme.png')
+  await read('window.__setArtifactStageEnabled(false)')
+
+  // 51. D10: selecting an old revision on the stage keeps the existing
+  // conflict-banner --> branch flow, and the request keeps the selected base.
+  await read('window.__setArtifactStageEnabled(true)')
+  const HISTORY_V2 = 'root = Col([Card([Title("第二版标题", "sm"), Text("可见舞台原位更新", "sm")])])'
+  const HISTORY_V3 = 'root = Col([Card([Title("第三版标题", "sm"), Text("不可见舞台回落新卡", "sm")])])'
+  await read(`window.__setHistory('stage-call-1', [
+    { revisionId: 'stage-call-3', revision: 3, baseRevisionId: 'stage-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1763200003000, source: 'structure', hasProgram: true, editedBlockIds: [] },
+    { revisionId: 'stage-call-2', revision: 2, baseRevisionId: 'stage-call-1', title: '夏令时与冬令时', style: 'card', createdAt: 1763200002000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'stage-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1763200001000, source: 'initial', hasProgram: true },
+  ], { 'stage-call-2': ${JSON.stringify(HISTORY_V2)}, 'stage-call-3': ${JSON.stringify(HISTORY_V3)} })`)
+  await read('window.__remount()')
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card]")', 'branch stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'stage-call-3'`, 'branch stage converged')
+  const branchTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  const branchItem = revision => `[data-dsh-iui-version-item][data-revision="${revision}"]`
+  await click(branchTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'branch version bar')
+  await wait(`!!document.querySelector('${branchItem(2)}')`, 'branch revision item')
+  await click(branchItem(2))
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'branch bar closed')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('可见舞台原位更新')`, 'stage switched to the old revision')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-2', 'the old revision is selected')
+  await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'old-revision editor')
+  await openArrangementEditor('b1')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'old-revision popover')
+  await saveInstruction('旧版本继续编辑')
+  await wait('!!document.querySelector("[data-chip=\\"artifact-edit\\"]")', 'old-revision chip')
+  await read('window.__conflict = true')
+  await read('window.dispatchEvent(new Event("focus"))')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-conflict]")', 'old-revision conflict banner')
+  const branchConflictText = await text('[data-dsh-iui-edit-conflict]')
+  check(branchConflictText.includes('修订 2'), true, 'the conflict banner names the selected base revision')
+  await click('[data-dsh-iui-edit-branch]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-branch-note]")', 'old-revision branch note')
+  check((await text('[data-dsh-iui-edit-branch-note]')).includes('修订 2'), true, 'the branch note keeps the selected base')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('分支'))`, 'old-revision branch chip label')
+  const stageBranchEnvelope = await read('window.__serializeChipMatching("分支")')
+  check(stageBranchEnvelope.includes('"branch":true'), true, 'the old-revision request carries branch:true')
+  check(stageBranchEnvelope.includes('"baseRevisionId":"stage-call-2"'), true, 'the request base is the selected revision')
+  check(stageBranchEnvelope.includes('"artifactId":"stage-call-1"'), true, 'the request keeps the artifact identity')
+  await read('window.__conflict = false')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'old-revision editor closed')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 3, 'old-revision editing creates no extra card')
+  // Best-effort chip cleanup; the leftover detached draft is harmless here and
+  // the suite does not depend on the composer after this scenario.
+  await read(`(() => { const occurrence = window.__input().occurrences.find(item => item.source === 'artifact-edit'); if (occurrence) window.__deleteChip(occurrence.ref); return true })()`)
+
+  // 52. D3: deleting the displayed transcript revision rolls the stage back
+  // through the existing revision-fallback path (no dangling stage).
+  await click(branchTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'deletion version bar')
+  await wait(`!!document.querySelector('${branchItem(3)}')`, 'deletion revision item')
+  await click(branchItem(3))
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'deletion bar closed')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'stage shows revision 3 before deletion')
+  const cardsBeforeTranscriptDelete = await count('[data-dsh-intelligent-ui="card"]')
+  await click(branchTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'deletion details bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'deletion details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="stage-call-3"] [data-dsh-iui-history-delete]`)', 'deletion row ready')
+  await click('[data-dsh-iui-history-revision="stage-call-3"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'transcript deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('可见舞台原位更新')`, 'stage rolled back to revision 2')
+  const transcriptDeleteState = await read(`window.__artifactVersionState('stage-call-1')`)
+  check(transcriptDeleteState.latest, 'stage-call-2', 'the deleted transcript revision is no longer latest')
+  check(transcriptDeleteState.selected, 'stage-call-2', 'the stage selection repoints at a live revision')
+  check(transcriptDeleteState.revisions.includes('stage-call-3'), false, 'the deleted revision is forgotten by the store')
+  check(await count('[data-dsh-iui-stage-card]'), 1, 'exactly one stage card remains after the rollback')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-artifact-id')`), 'stage-call-1', 'the stage keeps its artifact identity')
+  check(await count('[data-dsh-intelligent-ui="card"]'), cardsBeforeTranscriptDelete, 'the card count is unchanged by the rollback')
+  check(await count('[data-dsh-iui-history-revision="stage-call-3"]'), 0, 'the deleted revision row is gone')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'deletion details closed')
   await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

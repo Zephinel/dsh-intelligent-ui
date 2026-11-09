@@ -21,6 +21,7 @@ import { createStyleCatalog } from '../../../src/client/styles.ts'
 import { createWorkspaceImageResolver } from '../../../src/client/image-source.ts'
 import { templates } from './style-fixtures.ts'
 import { ExportAction } from '../../../src/client/ExportAction.tsx'
+import { registerArtifactRevision, selectArtifactRevision } from '../../../src/client/artifact-edit/artifact-version.ts'
 import type { ExportChatSnapshot } from '../../../src/client/export-data.ts'
 import { fallbackT } from '../../../src/shared/locales.ts'
 import { EXPORT_STANDALONE_CSS_PATH, EXPORT_STANDALONE_JS_PATH } from '../../../src/shared/intelligent-ui.ts'
@@ -88,6 +89,7 @@ const SNAPSHOT = {
     values: () => [
       { kind: 'assistant-step', data: { turn: 1, finalNode: { messageId: VISIBLE_MESSAGE } } },
       { kind: 'assistant-step', data: { turn: 2, finalNode: { messageId: HIDDEN_MESSAGE } } },
+      { kind: 'assistant-step', data: { turn: 3, finalNode: { messageId: 'msg-stage' } } },
     ],
     turnDataSource: (turn: number) => ({
       getSnapshot: () => turn === 1
@@ -99,13 +101,54 @@ const SNAPSHOT = {
               argsRaw: JSON.stringify({ program: PROGRAM, title: 'Export harness', style: 'free', temporaryStyle }),
             },
           }]
-        : [],
+        : turn === 3
+          ? [{
+              root: {
+                phase: 'start',
+                callId: 'stage-raw-call',
+                name: 'render_ui',
+                argsRaw: JSON.stringify({ program: STAGE_RAW_PROGRAM, title: 'Raw stage version', style: 'card' }),
+              },
+            }]
+          : [],
     }),
   },
 } as unknown as ExportChatSnapshot
 
 const temporaryStyle: StyleSnapshot = { schemaVersion: 1, baseLayout: 'free', directives: 'Use compact groups and clear hierarchy.', theme: templates[0].theme }
 const PROGRAMS: IntelligentUIProgram[] = [{ callId: 'call-1', program: PROGRAM, title: 'Export harness', style: 'free', running: false, temporaryStyle }]
+// M3/D8 fixture: a Turn that only shows a revision notice, while the selected
+// revision is displayed by a stage card in another Turn.
+const STAGE_ARTIFACT = 'stage-art-1'
+const STAGE_RAW_PROGRAM = 'root = Col([Card([Title("RAW-STAGE-MARKER", "sm")])])'
+const STAGE_SELECTED_PROGRAM = 'root = Col([Card([Title("SELECTED-STAGE-MARKER", "sm"), Text("selected revision body", "sm")])])'
+const STAGE_PROGRAMS: IntelligentUIProgram[] = [{
+  callId: 'stage-raw-call',
+  program: STAGE_RAW_PROGRAM,
+  title: 'Raw stage version',
+  style: 'card',
+  running: false,
+  artifactId: STAGE_ARTIFACT,
+  revisionId: 'stage-art-1-rev-1',
+  revision: 1,
+}]
+registerArtifactRevision('e2e-session', STAGE_ARTIFACT, {
+  revisionId: 'stage-art-1-rev-1',
+  artifactId: STAGE_ARTIFACT,
+  revision: 1,
+  program: STAGE_RAW_PROGRAM,
+  title: 'Raw stage version',
+  style: 'card',
+})
+registerArtifactRevision('e2e-session', STAGE_ARTIFACT, {
+  revisionId: 'stage-art-1-rev-2',
+  artifactId: STAGE_ARTIFACT,
+  revision: 2,
+  program: STAGE_SELECTED_PROGRAM,
+  title: 'Stage export',
+  style: 'card',
+})
+selectArtifactRevision('e2e-session', STAGE_ARTIFACT, 'stage-art-1-rev-2')
 const savedTemplates = [{ ...templates[0], baseLayout: 'free', theme: { ...templates[0].theme, light: { ...templates[0].theme.light, canvas: '#f0fff4' } } }]
 const styles = createStyleCatalog({ fetch: async () => new Response(JSON.stringify({ templates: savedTemplates })) })
 const SETTINGS: { background: string; scale: '1x' | '2x'; removeFollowUps: boolean } = { background: '#ffffff', scale: '1x', removeFollowUps: false }
@@ -213,6 +256,54 @@ function App(): ReactElement {
   )
 }
 
+/** D8 fixture, mounted on demand after the legacy export scenarios: a notice-only
+ * Turn whose artifact's selected revision lives on a stage card in another Turn. */
+function StageExportFixture(): ReactElement {
+  return (
+    <>
+  <div data-turn-tail="3">
+    <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
+      <section className="dsh-iui-card" data-dsh-intelligent-ui="card" data-dsh-iui-stage-card data-artifact-id={STAGE_ARTIFACT} data-dsh-iui-call-id="stage-card-call">
+        <button type="button" className="dsh-iui-header" aria-expanded="true">
+          <span className="dsh-iui-title dsh-iui-title">Stage export</span>
+        </button>
+        <div className="dsh-iui-body">
+          <OpenUIRenderer program={STAGE_SELECTED_PROGRAM} title="Stage export" scheme="light" />
+        </div>
+      </section>
+    </div>
+  </div>
+  <div data-turn-tail="4">
+    <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
+      <button type="button" className="dsh-iui-revision-notice" data-dsh-iui-revision-notice data-dsh-iui-artifact-id={STAGE_ARTIFACT}>
+        Revision notice
+      </button>
+    </div>
+    <div className="harness-actions" data-stage-export style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <ExportAction
+        styles={styles}
+        sessionId="e2e-session"
+        messageId={'msg-stage' as never}
+        programsFor={() => STAGE_PROGRAMS}
+        settings={() => SETTINGS}
+        useChat={useChat}
+        t={fallbackT}
+      />
+    </div>
+  </div>
+    </>
+  )
+}
+
+/** Mount the D8 fixture only when the E2E needs it, keeping the legacy single-trigger layout. */
+;(window as unknown as { __mountStageExportFixture: () => void }).__mountStageExportFixture = () => {
+  if (document.getElementById('stage-fixture') !== null) return
+  const host = document.createElement('div')
+  host.id = 'stage-fixture'
+  document.body.appendChild(host)
+  createRoot(host).render(<StageExportFixture />)
+}
+
 createRoot(document.getElementById('app')!).render(<App />)
 
 /** Whether the element and its ancestors have no running transition duration. */
@@ -244,6 +335,9 @@ const originalToCanvas = snapdom.toCanvas.bind(snapdom)
   const mixedProse = mixedCard === undefined ? undefined : [...mixedCard.querySelectorAll<HTMLElement>('.iui-text')].find(node => node.textContent?.includes('keeps its prose'))
   const followButtons = [...element.querySelectorAll<HTMLButtonElement>('button')].filter(node => node.textContent?.trim() === 'Continue')
   ;(window as unknown as { captureProbes: unknown[] }).captureProbes.push({
+    capturedArtifact: element.getAttribute('data-artifact-id'),
+    capturedStage: element.hasAttribute('data-dsh-iui-stage-card'),
+    capturedText: (element.textContent ?? '').slice(0, 240),
     layout: element.querySelector('[data-dsh-iui-style]')?.getAttribute('data-dsh-iui-style'),
     themeCanvas: getComputedStyle(element.querySelector('.dsh-iui-host')!).getPropertyValue('--iui-canvas').trim(),
     flipFlattened: inner !== null && inner !== undefined && getComputedStyle(inner).transform === 'none',

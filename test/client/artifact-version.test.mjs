@@ -26,7 +26,6 @@ import {
   setArtifactVersionStageEnabled,
   setStageVisibilityInState,
   stageProgramFor,
-  stageRendersFrozenRevision,
   stagedArtifactIds,
   unregisterCardInState,
 } from '../../src/client/artifact-edit/artifact-version.ts'
@@ -270,16 +269,6 @@ test('stageProgramFor carries local revision provenance for the stage card badge
   )
   assert.equal(program.localRevision, true)
   assert.equal(program.localRevisionKind, 'structure')
-})
-
-test('a stage displaying a frozen card revision is marked read-only', () => {
-  let state = registerAll([card(), card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 })])
-  state = setStageVisibilityInState(state, true)
-  assert.equal(stageRendersFrozenRevision(state, 'card-2'), false, 'the stage owns the selected revision')
-  state = selectRevisionInState(state, 'rev-1')
-  assert.equal(stageRendersFrozenRevision(state, 'card-2'), true, 'rev-1 is natively rendered by the frozen card')
-  state = selectRevisionInState(state, 'rev-2')
-  assert.equal(stageRendersFrozenRevision(state, 'card-2'), false)
 })
 
 test('latestRecord prefers the revision number and then registration order', () => {
