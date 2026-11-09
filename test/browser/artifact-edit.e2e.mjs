@@ -3,8 +3,9 @@
  * Browser check for Artifact block arrangement and editing.
  *
  * Covers the structure list, conditional request list, per-block popovers,
- * keyboard and pointer reordering, batch selection/toolbar/order and batch
- * duplicate preview + apply, reset order, the combined order + edit envelope,
+ * keyboard and pointer reordering, root and nested batch selection/toolbar/
+ * per-parent order and batch duplicate preview + apply (including the unsent-
+ * draft warning), reset order, the combined order + edit envelope,
  * Host-normalized revision replay, hover request cards, composer chip label
  * shapes and the narrow/light-dark chrome. No real model is called.
  *
@@ -238,7 +239,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`(() => { const toolbar = document.querySelector('.dsh-iui-edit-toolbar').getBoundingClientRect(); const canvas = document.querySelector('.dsh-iui-edit-canvas').getBoundingClientRect(); return canvas.top - toolbar.bottom >= 16; })()`), true, 'the toolbar leaves room for the first block orbit glow')
   await read(`document.querySelector('[data-dsh-iui-edit-global]').focus()`)
   await wait('!!document.querySelector("[data-dsh-iui-input-orbit]")', 'input focus orbit')
-  check(await read(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`), true, 'the orbit sits five pixels outside the field')
+  // The editor auto-fits the content width over 320ms, so let the tracking ring
+  // settle before sampling its geometry (the panel animation is still running).
+  const orbitSitsOutside = `(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`
+  await wait(orbitSitsOutside, 'input orbit geometry settled')
+  check(await read(orbitSitsOutside), true, 'the orbit sits five pixels outside the field')
   await new Promise(resolve => setTimeout(resolve, 350))
   await shot('harness-input-orbit.png')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-global]')).outlineStyle`), 'none', 'the field focus outline is replaced by the orbit')
@@ -907,6 +912,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`, 'preview initial focus')
   check(await read(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`), true, 'initial focus is on cancel')
   check((await count('[data-dsh-iui-edit-preview-diff] [data-diff="add"]')) > 0, true, 'preview shows added diff rows')
+  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'a single-block preview shows no batch draft warning')
+  check((await text('[data-dsh-iui-edit-preview-confirm]')), '应用修改', 'the single-block confirm keeps its label')
   await click('[data-dsh-iui-edit-preview-confirm]')
   await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local structural revision card')
   const structureCalls = await read('window.__structureCalls')
@@ -966,6 +973,21 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-batch-order="up"]').disabled`), true, 'order actions are disabled without a selection')
   await shot('harness-batch-empty.png')
 
+  // Clean draft: a batch preview offers no discard warning and keeps the normal label.
+  await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
+  await wait(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected') === 'true'`, 'clean preview selection')
+  await click('[data-dsh-iui-edit-batch-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'clean batch preview dialog')
+  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'a clean draft sees no discard warning')
+  check((await text('[data-dsh-iui-edit-preview-confirm]')), '应用修改', 'a clean draft keeps the normal confirm label')
+  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 1 个区块', 'the clean preview names one selected block')
+  await click('[data-dsh-iui-edit-preview-cancel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'clean preview cancelled')
+  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'cancelling closes the clean preview')
+  await read('window.__batchStructureCalls = []')
+  await click('[data-dsh-iui-edit-batch-clear]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 0`, 'clean selection cleared')
+
   // Select one row from its control and another from the row body.
   await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
   await wait(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected') === 'true'`, 'b1 batch selection')
@@ -1015,6 +1037,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
   await new Promise(resolve => setTimeout(resolve, 200))
 
+  // Leave one unsent order change so the batch preview has to warn about the draft.
+  await click('[data-dsh-iui-edit-batch-order="down"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'dirty batch reorder')
+
   // Select every block and duplicate the batch: one preview, one apply, one revision.
   await click('[data-dsh-iui-edit-batch-select-all]')
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 2`, 'select all blocks')
@@ -1022,6 +1048,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const localBeforeBatch = await count('[data-dsh-iui-local-revision]')
   await click('[data-dsh-iui-edit-batch-duplicate]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'batch preview dialog')
+  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 1, 'a pending draft makes the batch preview warn')
+  check((await text('[data-dsh-iui-edit-preview-draft-warning]')).includes('未发送'), true, 'the warning names the unsent content')
+  check((await text('[data-dsh-iui-edit-preview-confirm]')), '丢弃草稿并应用', 'the confirm button names the draft discard')
   check(await read(`!!document.querySelector('[data-dsh-iui-edit-structure-preview]')`), true, 'batch preview uses the existing preview dialog shell')
   check((await text('.dsh-iui-edit-preview-title')), '预览批量结构修改', 'the dialog says it is a batch preview')
   check((await text('.dsh-iui-edit-preview-operation')), '复制所选', 'the batch operation label is explicit')
@@ -1066,6 +1095,135 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-live]')).includes('已退出批量操作模式'), true, 'leaving batch mode is announced')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'batch scenario closed')
+
+  // 25d. Nested arrangement batch mode: per-parent order moves and one nested batch duplicate.
+  await read(`(() => {
+    window.__nestedBatchPreviousFetch = window.fetch;
+    window.__nestedBatchStructureCalls = [];
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__nestedBatchStructureCalls.push(body);
+        if (body.preview === true) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nnestedBatchPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1', 'b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        }
+        const result = {
+          artifactId: 'nested-call-1',
+          revisionId: 'struct_e2e_nested_batch',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify(NESTED_PROGRAM)},
+          style: 'card',
+          title: '嵌套区块样例',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__nestedBatchPreviousFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested batch editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-arrangement]")', 'nested batch section')
+  const nestedRowsOf = parentId => read(`[...document.querySelectorAll('[data-dsh-iui-edit-nested-group][data-parent-id="${parentId}"] [data-dsh-iui-edit-nested-row]')].map(row => row.getAttribute('data-block-id'))`)
+  check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'nested batch mode is off by default')
+
+  // The root and nested batch modes are mutually exclusive.
+  await click('[data-dsh-iui-edit-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'root batch toolbar in nested mode')
+  await click('[data-dsh-iui-edit-nested-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'nested batch toolbar')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'entering nested batch leaves root batch mode')
+  check(await count('[data-dsh-iui-edit-batch-bar]'), 0, 'the root batch toolbar closes')
+  await click('[data-dsh-iui-edit-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'root batch toolbar again')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'entering root batch leaves nested batch mode')
+  check(await count('[data-dsh-iui-edit-nested-batch-bar]'), 0, 'the nested batch toolbar closes')
+  await click('[data-dsh-iui-edit-nested-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'nested batch toolbar again')
+  check(await count('[data-dsh-iui-edit-nested-grip]'), 0, 'nested batch replaces the nested grips')
+  check(await count('[data-dsh-iui-edit-grip]'), 2, 'root grips stay because root batch mode is off')
+  check(await count('[data-dsh-iui-edit-nested-row] [data-dsh-iui-edit-row-menu]'), 0, 'nested batch hides the per-row nested menus')
+  check((await text('[data-dsh-iui-edit-nested-batch-count]')).includes('已选 0 个区块'), true, 'the nested live status starts at zero')
+  await shot('harness-nested-batch-empty.png')
+
+  // Per-parent order moves: each selected child moves inside its own group only.
+  const selectNestedRow = blockId => click(`[data-dsh-iui-edit-nested-row][data-block-id="${blockId}"] [data-dsh-iui-edit-nested-batch-check]`)
+  await selectNestedRow('b1.2.1')
+  await selectNestedRow('b2.2.1')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-nested-batch-check][aria-checked="true"]').length === 2`, 'nested cross-parent selection')
+  await click('[data-dsh-iui-edit-nested-batch-order="down"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-nested-group][data-parent-id="b1.2"] [data-dsh-iui-edit-nested-row]').getAttribute('data-block-id') === 'b1.2.2'`, 'nested batch down reorder')
+  check(await nestedRowsOf('b1.2'), ['b1.2.2', 'b1.2.1', 'b1.2.3'], 'the first parent group moves down one slot')
+  check(await nestedRowsOf('b2.2'), ['b2.2.2', 'b2.2.1'], 'the second parent group moves independently')
+  check(await nestedRowsOf('b1'), ['b1.1', 'b1.2'], 'an unselected group keeps its order')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已批量调整区块顺序')`, 'nested batch reorder announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已批量调整区块顺序'), true, 'nested batch reordering is announced')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-reset-nested]').disabled`), false, 'nested reset is enabled after a batch reorder')
+  await click('[data-dsh-iui-edit-nested-batch-order="top"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-nested-group][data-parent-id="b1.2"] [data-dsh-iui-edit-nested-row]').getAttribute('data-block-id') === 'b1.2.1'`, 'nested batch top reorder')
+  check(await nestedRowsOf('b1.2'), ['b1.2.1', 'b1.2.2', 'b1.2.3'], 'top restores the selected child to its group front')
+  check(await nestedRowsOf('b2.2'), ['b2.2.1', 'b2.2.2'], 'top restores the other group too')
+  await shot('harness-nested-batch-reordered.png')
+
+  // Escape leaves the nested batch mode and returns focus to its toggle.
+  await read(`(() => {
+    const toggle = document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]');
+    toggle.focus();
+    toggle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  })()`)
+  await wait('!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'Escape leaves nested batch mode')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'Escape clears the nested pressed state')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-nested-batch-toggle')`), true, 'Escape returns focus to the nested batch toggle')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已退出批量操作模式')`, 'nested batch exit announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已退出批量操作模式'), true, 'leaving nested batch mode is announced')
+
+  // A dirty draft (reordered above) warns before a nested batch duplicate applies.
+  await click('[data-dsh-iui-edit-nested-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'nested batch toolbar for duplicate')
+  await selectNestedRow('b1.2.1')
+  await selectNestedRow('b2.2.1')
+  await click('[data-dsh-iui-edit-nested-batch-order="down"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-nested-group][data-parent-id="b1.2"] [data-dsh-iui-edit-nested-row]').getAttribute('data-block-id') === 'b1.2.2'`, 'nested dirty reorder')
+  await click('[data-dsh-iui-edit-nested-batch-select-all]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-nested-batch-check][aria-checked="true"]').length === 9`, 'nested select all')
+  check((await text('[data-dsh-iui-edit-nested-batch-count]')).includes('已选 9 个区块'), true, 'nested select all updates the live status')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-duplicate]').disabled`), true, 'an overlapping container selection disables the nested structure action')
+  check(
+    (await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-duplicate]').getAttribute('title')`)).includes('容器'),
+    true,
+    'the nested structure action explains the overlap',
+  )
+  await click('[data-dsh-iui-edit-nested-batch-clear]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-nested-batch-check][aria-checked="true"]').length === 0`, 'nested selection cleared')
+  for (const blockId of ['b1.1', 'b1.2.1', 'b1.2.3', 'b2.1', 'b2.2.1']) await selectNestedRow(blockId)
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-nested-batch-check][aria-checked="true"]').length === 5`, 'nested non-overlapping selection')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-duplicate]').disabled`), false, 'a valid nested selection enables the structure action')
+  const localBeforeNestedBatch = await count('[data-dsh-iui-local-revision]')
+  await click('[data-dsh-iui-edit-nested-batch-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'nested batch preview dialog')
+  check((await text('.dsh-iui-edit-preview-title')), '预览批量结构修改', 'the nested batch preview says it is a batch')
+  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 5 个区块', 'the nested preview names the batch size')
+  check(await count('[data-dsh-iui-edit-preview-blocks] [data-dsh-iui-edit-preview-batch-item]'), 5, 'the nested preview lists the involved blocks')
+  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 1, 'the dirty draft warns before a nested batch applies')
+  check((await text('[data-dsh-iui-edit-preview-confirm]')), '丢弃草稿并应用', 'the nested batch confirm names the draft discard')
+  await shot('harness-nested-batch-preview.png')
+  await click('[data-dsh-iui-edit-preview-confirm]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeNestedBatch + 1}`, 'nested batch structural revision card')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the nested batch revision')
+  const nestedBatchCalls = await read('window.__nestedBatchStructureCalls')
+  check(nestedBatchCalls.length, 2, 'the nested batch sends a preview and one real apply')
+  check(nestedBatchCalls[0].preview, true, 'the first nested batch request is the dry run')
+  check(nestedBatchCalls[1].preview === undefined, true, 'the second nested batch request is the apply')
+  check(nestedBatchCalls[0].operations.length, 5, 'the nested preview carries every operation')
+  check(nestedBatchCalls[1].operations.map(operation => operation.op), ['duplicate', 'duplicate', 'duplicate', 'duplicate', 'duplicate'], 'every nested operation duplicates')
+  check(nestedBatchCalls[1].operations.map(operation => operation.toIndex), [1, 3, 1, 1, 1], 'each parent group keeps its own descending index base')
+  check((await count('[data-dsh-iui-local-revision]')), localBeforeNestedBatch + 1, 'the nested batch produces exactly one local revision card')
+  check((await read(`[...document.querySelectorAll('[data-dsh-iui-local-revision]')].at(-1).textContent`)).includes('结构操作修订'), true, 'the nested batch revision card is labelled as a structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a nested batch structural revision')
+  await read('window.fetch = window.__nestedBatchPreviousFetch; delete window.__nestedBatchPreviousFetch')
 
   // 26. Container expansion: Box/Grid/Section/Carousel children are selectable.
   await read('window.__addNestedContainersCard()')

@@ -226,6 +226,8 @@ export interface ArtifactEditActions {
   moveBlockBy(blockId: string, delta: number): void
   /** Move every selected block one step or to an end, keeping their relative order. */
   moveBlocks(blockIds: readonly string[], mode: BatchOrderMode): void
+  /** Move every selected nested block inside its own parent group. */
+  moveNestedBlocks(blockIds: readonly string[], mode: BatchOrderMode): void
   /** Restore the target order to the base revision's page order (keeps edits/numbers/global). */
   resetOrder(): void
   /** Remove every saved block request but keep the arrangement draft and global instruction. */

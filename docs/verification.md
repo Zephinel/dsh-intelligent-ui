@@ -662,3 +662,20 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **564 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,035,842** 字节，解包 **12,905,416** 字节 |
 | 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-09 — 嵌套区块编排批量操作与批量前草稿确认
+
+- **嵌套批量模式（B1）**：嵌套编排 section head 在「重置嵌套顺序」左侧新增「批量操作」toggle（`data-dsh-iui-edit-nested-batch-toggle`、`aria-pressed`），与顶层批量模式互斥。进入后嵌套行 grip 替换为可 Tab 聚焦的选择控件（Space/Enter 或行体切换），逐行结构菜单隐藏、选中行有 `is-batch-selected` 视觉态；工具栏复用顶层批量样式（已选数量 `role=status`、全选/清除、上移/下移/置顶/置底、复制所选/删除所选、退出）。顺序操作按各自父容器独立应用（与顶层语义一致：置顶/置底保持组内相对顺序，上移升序、下移降序且只与未选邻居交换；无任何组可动时禁用）；Esc 退出并把焦点放回 toggle；切换修订或离开嵌套模式时清空选择。
+- **嵌套批量结构操作**：复用 `POST /api/intelligent-ui/artifact-structure` 的 `operations[]`（≤20），一次 `preview:true` → 现有预览弹窗（批量标题/操作标签/涉及区块/同一 diff）→ 一次真实 apply → 只产生一条 `kind:'structure'` 本地修订。duplicate 按父容器分组，组内按 base 可编辑下标降序发送、`toIndex = base 可编辑下标 + 1`，跨父互不影响；容器与其嵌套块同时选中时在请求前禁用/拦截（`edit.batchNestedOverlap`），无法解析 nodeId/sourceDigest 或超限同样不发送请求。
+- **批量前草稿确认（B2）**：草稿存在未发送内容（`hasArtifactEditContent`）时，批量结构预览显示「未发送内容会丢失」警告，确认按钮改为「丢弃草稿并应用」；草稿干净时保持原流程（「应用修改」）；单块结构操作流程与文案不变。
+- **测试**：`test/client/artifact-edit-batch-ops.test.mjs` 新增 4 个用例（嵌套按父容器独立排序与未选组不变、嵌套 duplicate 分组降序并与真实 Host `applyStructureBatch` 落位一致、嵌套 delete 单请求单修订、重叠与不可解析选择预拦截）；浏览器 `artifact-edit` 新增 25d 嵌套批量场景（互斥、跨父独立排序、全选重叠禁用、脏草稿警告、批量 apply 单修订）、25b 干净/脏草稿预览与 25 单块无警告回归；套件 564 → **610 checks**。同时修正既有 input-orbit 几何断言的采样时序（等待 320ms 面板宽度动画稳定后仍断言精确 5px），消除长套件连跑时的偶发假失败。
+- **范围与限制**：嵌套批量顺序只修改 pending `nestedOrder`/`nestedOrderChanged`；结构 duplicate 仍按修订页序而非草稿顺序；容器与后代不能同批，需分开选择；coarse 指针/真实屏幕阅读器仍未单独验证。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **642/642** = Host **303** + Client **318** + packaging **21**；build host **837.9 kB**、client **4.06 MB**（js 3.84 / CSS 227.6） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **610 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,037,805** 字节，解包 **12,912,720** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

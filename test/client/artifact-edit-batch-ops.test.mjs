@@ -12,6 +12,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
+import { NESTED_PROGRAM, NESTED_TITLE } from '../browser/fixtures/nested-artifact.ts'
 import { ARTIFACT_BASE_ROUTE_PATH } from '../../src/shared/artifact-base.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH, MAX_ARTIFACT_STRUCTURE_OPERATIONS } from '../../src/shared/artifact-structure.ts'
 import { applyStructureBatch } from '../../src/host/artifact-structure.ts'
@@ -23,11 +24,13 @@ import {
   editKey,
   editSessionFor,
   moveArtifactBlocks,
+  moveArtifactNestedBlocks,
   openArtifactBlockEditor,
   openArtifactEditor,
   previewArtifactStructure,
   previewBatchArtifactStructure,
   saveArtifactBlockInstruction,
+  setArtifactNestedMode,
 } from '../../src/client/artifact-edit/store.ts'
 import { localRevisionsFor } from '../../src/client/artifact-edit/local-revisions.ts'
 import { en, translate } from '../../src/shared/locales.ts'
@@ -77,6 +80,23 @@ async function settleRoute() {
 /** One rendered card program, as the card extraction produces it. */
 function programFor(callId, program = DST_PROGRAM, title = DST_TITLE) {
   return { callId, program, title, style: 'card', running: false }
+}
+
+/**
+ * A rendered card program, optionally the nested fixture used by the nested
+ * arrangement tests.
+ */
+function nestedProgramFor(callId) {
+  return { callId, program: NESTED_PROGRAM, title: NESTED_TITLE, style: 'card', running: false }
+}
+
+/** Open one nested-mode editor and wait for the initial probe/registration. */
+async function openNestedEditor(sessionId, callId) {
+  assert.deepEqual(openArtifactEditor(sessionId, nestedProgramFor(callId)), { ok: true })
+  await settleRoute()
+  const key = editKey(sessionId, callId)
+  assert.equal(setArtifactNestedMode(key, true), true)
+  return key
 }
 
 /** Structure request bodies in send order. */
@@ -327,4 +347,137 @@ test('single-block preview and apply keep their one-operation shape', async () =
   await settleRoute()
   assert.equal(structureCalls()[1].body.operations.length, 1)
   assert.equal(localRevisionsFor(sessionId).length, 1)
+})
+
+test('nested batch order moves each selected child inside its own parent group', async () => {
+  stubFetch(hostHandler())
+  const sessionId = 's-nested-batch-order'
+  const key = await openNestedEditor(sessionId, 'call_nested_batch_order')
+  let session = editSessionFor(sessionId, 'call_nested_batch_order')
+  assert.deepEqual(session.nestedOrder['b1'], ['b1.1', 'b1.2'], 'card group lists Title and Col')
+  assert.deepEqual(session.nestedOrder['b1.2'], ['b1.2.1', 'b1.2.2', 'b1.2.3'])
+  assert.deepEqual(session.nestedOrder['b2.2'], ['b2.2.1', 'b2.2.2'])
+
+  moveArtifactNestedBlocks(key, ['b1.2.1', 'b2.2.1'], 'down')
+  session = editSessionFor(sessionId, 'call_nested_batch_order')
+  assert.deepEqual(session.nestedOrder['b1.2'], ['b1.2.2', 'b1.2.1', 'b1.2.3'], 'the first parent group moves one slot down')
+  assert.deepEqual(session.nestedOrder['b2.2'], ['b2.2.2', 'b2.2.1'], 'the second parent group moves independently')
+  assert.deepEqual(session.nestedOrder['b1'], ['b1.1', 'b1.2'], 'unselected groups are untouched')
+  assert.equal(session.nestedOrderChanged, true)
+  assert.deepEqual(session.selection, [], 'nested ordering leaves saved requests untouched')
+  assert.equal(structureCalls().length, 0, 'nested ordering never reaches the structure route')
+
+  // A boundary selection is a no-op rather than an error.
+  moveArtifactNestedBlocks(key, ['b1.1'], 'up')
+  assert.deepEqual(editSessionFor(sessionId, 'call_nested_batch_order').nestedOrder['b1'], ['b1.1', 'b1.2'])
+
+  moveArtifactNestedBlocks(key, ['b1.2.1', 'b2.2.1'], 'top')
+  session = editSessionFor(sessionId, 'call_nested_batch_order')
+  assert.deepEqual(session.nestedOrder['b1.2'], ['b1.2.1', 'b1.2.2', 'b1.2.3'])
+  assert.deepEqual(session.nestedOrder['b2.2'], ['b2.2.1', 'b2.2.2'])
+  assert.equal(session.nestedOrderChanged, false, 'moving back to the top restores the base order')
+})
+
+test('nested batch duplicate groups operations per parent and copies land after each source', async () => {
+  let appliedProgram
+  stubFetch(hostHandler(body => {
+    if (body.preview === true) {
+      const applied = applyStructureBatch(NESTED_PROGRAM, body.operations)
+      assert.equal(applied.ok, true)
+      appliedProgram = applied.program
+      return json({
+        ok: true,
+        preview: {
+          program: applied.program,
+          operations: body.operations,
+          changedBlockIds: applied.affectedRootBlockIds,
+          touched: [],
+        },
+      })
+    }
+    return json({
+      ok: true,
+      result: {
+        artifactId: 'call_nested_batch_dup',
+        revisionId: 'struct_nested_batch_dup',
+        baseRevisionId: 'call_nested_batch_dup',
+        revision: 2,
+        operationId: body.operationId,
+        program: appliedProgram,
+        style: 'card',
+        title: NESTED_TITLE,
+      },
+    }, 201)
+  }))
+  const sessionId = 's-nested-batch-dup'
+  const key = await openNestedEditor(sessionId, 'call_nested_batch_dup')
+  previewBatchArtifactStructure(key, ['b1.2.1', 'b1.2.3', 'b2.2.1'], 'duplicate')
+  await settleRoute()
+  const calls = structureCalls()
+  assert.equal(calls.length, 1, 'the nested batch preview is one request')
+  assert.deepEqual(calls[0].body.operations.map(operation => operation.toIndex), [3, 1, 1], 'each parent group runs in descending base index order')
+  assert.equal(new Set(calls[0].body.operations.map(operation => operation.nodeId)).size, 3)
+  const applied = applyStructureBatch(NESTED_PROGRAM, calls[0].body.operations)
+  assert.equal(applied.ok, true)
+  assert.match(applied.program, /Col\(\[Text\("A", "sm"\), Text\("A", "sm"\), Text\("B", "sm"\), Text\(sharedText, "sm"\), Text\(sharedText, "sm"\)\]\)/, 'both copies land after their own source inside the container')
+  assert.match(applied.program, /Row\(\[Text\("C", "sm"\), Text\("C", "sm"\), Text\("D", "sm"\)\]\)/, 'the other parent group keeps its own index base')
+  const preview = editSessionFor(sessionId, 'call_nested_batch_dup').structurePreview
+  assert.equal(preview.batch, true)
+  assert.deepEqual(preview.blockIds, ['b1.2.1', 'b1.2.3', 'b2.2.1'], 'the dialog lists the selection in page order')
+  confirmArtifactStructurePreview(key)
+  await settleRoute()
+  assert.equal(structureCalls().length, 2, 'confirm posts one real nested batch')
+  assert.equal(localRevisionsFor(sessionId).length, 1, 'one nested batch produces one local revision card')
+})
+
+test('nested batch delete sends one request and records one revision', async () => {
+  let applies = 0
+  stubFetch(hostHandler(body => {
+    if (body.preview === true) {
+      const applied = applyStructureBatch(NESTED_PROGRAM, body.operations)
+      assert.equal(applied.ok, true)
+      return json({
+        ok: true,
+        preview: { program: applied.program, operations: body.operations, changedBlockIds: applied.affectedRootBlockIds, touched: [] },
+      })
+    }
+    applies += 1
+    return json({
+      ok: true,
+      result: {
+        artifactId: 'call_nested_batch_del',
+        revisionId: 'struct_nested_batch_del',
+        baseRevisionId: 'call_nested_batch_del',
+        revision: 2,
+        operationId: body.operationId,
+        program: NESTED_PROGRAM,
+        style: 'card',
+        title: NESTED_TITLE,
+      },
+    }, 201)
+  }))
+  const sessionId = 's-nested-batch-del'
+  const key = await openNestedEditor(sessionId, 'call_nested_batch_del')
+  previewBatchArtifactStructure(key, ['b1.2.1', 'b1.2.2'], 'delete')
+  await settleRoute()
+  const previews = structureCalls()
+  assert.equal(previews.length, 1)
+  assert.deepEqual(previews[0].body.operations.map(operation => operation.op), ['delete', 'delete'])
+  assert.equal(previews[0].body.operations.some(operation => 'toIndex' in operation), false, 'delete carries no destination index')
+  confirmArtifactStructurePreview(key)
+  await settleRoute()
+  assert.equal(applies, 1, 'one real nested batch apply')
+  assert.equal(localRevisionsFor(sessionId).length, 1)
+})
+
+test('nested batch refuses overlapping and unresolvable selections before sending', async () => {
+  stubFetch(hostHandler())
+  const sessionId = 's-nested-batch-overlap'
+  const key = await openNestedEditor(sessionId, 'call_nested_batch_overlap')
+  previewBatchArtifactStructure(key, ['b1.2', 'b1.2.1'], 'duplicate')
+  assert.equal(structureCalls().length, 0, 'the overlapping selection never reaches the route')
+  assert.equal(editSessionFor(sessionId, 'call_nested_batch_overlap').structureError, t('edit.batchNestedOverlap'))
+  previewBatchArtifactStructure(key, ['b1.9.9'], 'delete')
+  assert.equal(structureCalls().length, 0)
+  assert.equal(editSessionFor(sessionId, 'call_nested_batch_overlap').structureError, t('edit.batchUnresolved'))
 })

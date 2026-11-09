@@ -1498,6 +1498,42 @@ export function moveArtifactNestedBlockBy(key: string, parentBlockId: string, bl
   moveArtifactNestedBlock(key, parentBlockId, blockId, from + delta)
 }
 
+/**
+ * Move a batch of nested blocks, each inside its own parent group.
+ *
+ * The selection is partitioned per parent container; every group then applies
+ * the same semantics as the top-level batch move (top/bottom keep the selected
+ * relative order, up runs ascending and down descending, and a selected block
+ * only swaps with an unselected sibling). Groups without a movable selection
+ * are left untouched, and the chip/persistence path is the existing nested-order
+ * one, so edit request numbers and colours are unaffected.
+ * @param key - edit-session key.
+ * @param blockIds - selected nested display ids.
+ * @param mode - one step up/down, or straight to the top/bottom.
+ */
+export function moveArtifactNestedBlocks(key: string, blockIds: readonly string[], mode: BatchOrderMode): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.nestedOrder === undefined) return
+  const selected = new Set(blockIds)
+  const groups = orderGroups(session.blocks)
+  const next: Record<string, readonly string[]> = { ...session.nestedOrder }
+  let changed = false
+  for (const [parentId, childIds] of Object.entries(groups)) {
+    const order = session.nestedOrder[parentId] ?? childIds
+    const picked = order.filter(blockId => selected.has(blockId))
+    if (picked.length === 0) continue
+    const target = batchMoveTarget(order, picked, mode)
+    if (target === undefined) continue
+    next[parentId] = [...target]
+    changed = true
+  }
+  if (!changed) return
+  sessions.set(key, { ...session, nestedOrder: next, nestedOrderChanged: nestedOrdersDiffer(next, session.nestedOriginalOrder) })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
+}
+
 /** Restore every nested group to its base order. */
 export function resetArtifactNestedOrder(key: string): void {
   const session = sessions.get(key)
@@ -1562,46 +1598,77 @@ function moveOperationForBlock(
   }
 }
 
+/** One resolved display block of a batch structure operation. */
+interface BatchStructureTarget {
+  readonly blockId: string
+  readonly nodeId: string
+  readonly sourceDigest: string
+  /** Parent display id; empty for root-level blocks. */
+  readonly parentKey: string
+  /** Index among the parent's editable children in the base program order. */
+  readonly index: number
+}
+
 /**
- * Build the wire operations of one batch delete/duplicate over top-level blocks.
+ * Build the wire operations of one batch delete/duplicate.
  *
- * The Host applies operations in request order and re-resolves every target by
- * base identity, so duplicates are emitted in descending page order: each copy
- * then lands directly after its own source, earlier page indices stay stable and
- * every `toIndex` stays inside the base tree's editable-child range. Any block
- * without a resolvable node id/digest (or a nested block) aborts the batch
- * before any request is sent.
+ * Top-level and nested blocks are both supported. The Host applies one batch
+ * atomically in request order and re-resolves every target by base identity, so
+ * duplicate targets are grouped per parent container and emitted in descending
+ * base-index order within each group with `toIndex = base editable index + 1`:
+ * every copy lands directly after its own source, earlier indices stay stable and
+ * different parents cannot shift each other. A selection holding a container
+ * together with one of its nested blocks is refused (the Host rejects such
+ * ancestor pairs), as is any block without a resolvable node id/digest.
  * @param session - edit session whose base program is authoritative.
- * @param blockIds - selected top-level display ids in arrangement order.
+ * @param blockIds - selected display ids (root or nested).
  * @param op - batch operation kind.
- * @returns the operations in send order, or undefined when the selection cannot be resolved.
+ * @returns send-ordered operations plus display ids in page order, or undefined when the selection cannot be resolved.
  */
 function batchStructureOperations(
   session: ArtifactEditSession,
   blockIds: readonly string[],
   op: 'delete' | 'duplicate',
-): { operations: { op: 'delete' | 'duplicate'; nodeId: string; sourceDigest: string; toIndex?: number }[] } | undefined {
+): { operations: { op: 'delete' | 'duplicate'; nodeId: string; sourceDigest: string; toIndex?: number }[]; blockIds: readonly string[] } | undefined {
   const nested = nestedBlocksForProgram(session.program)
   if (nested === undefined) return undefined
+  const requested = [...new Set(blockIds)]
+  if (requested.length === 0) return undefined
+  const selected = new Set(requested)
+  // Nested display ids are hierarchical (`b1.2.1`), so a container/descendant
+  // overlap is detectable before parsing the program.
+  if (requested.some(blockId => requested.some(other => other !== blockId && other.startsWith(`${blockId}.`)))) return undefined
   const byId = new Map(nested.blocks.map(block => [block.blockId, block] as const))
-  const page = nested.blocks.filter(block => block.parentBlockId === undefined)
-  const pageIndex = new Map(page.map((block, index) => [block.blockId, index] as const))
-  const targets: { blockId: string; nodeId: string; sourceDigest: string; toIndex: number }[] = []
-  for (const blockId of new Set(blockIds)) {
-    const target = byId.get(blockId)
-    const index = pageIndex.get(blockId)
-    if (target === undefined || index === undefined || target.nodeId === undefined || target.sourceDigest === undefined) return undefined
-    targets.push({ blockId, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: index + 1 })
+  const targets: BatchStructureTarget[] = []
+  for (const blockId of requested) {
+    const block = byId.get(blockId)
+    if (block?.nodeId === undefined || block.sourceDigest === undefined) return undefined
+    const siblings = nested.blocks.filter(candidate => candidate.parentBlockId === block.parentBlockId)
+    const index = siblings.findIndex(candidate => candidate.blockId === blockId)
+    if (index < 0) return undefined
+    targets.push({ blockId, nodeId: block.nodeId, sourceDigest: block.sourceDigest, parentKey: block.parentBlockId ?? '', index })
   }
-  if (targets.length === 0) return undefined
+  const targetById = new Map(targets.map(target => [target.blockId, target] as const))
+  const pageOrder = nested.blocks.filter(block => selected.has(block.blockId)).map(block => block.blockId)
   if (op === 'delete') {
-    return { operations: targets.map(target => ({ op, nodeId: target.nodeId, sourceDigest: target.sourceDigest })) }
+    return {
+      operations: pageOrder.map(blockId => {
+        const target = targetById.get(blockId) as BatchStructureTarget
+        return { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
+      }),
+      blockIds: pageOrder,
+    }
   }
-  return {
-    operations: [...targets]
-      .sort((left, right) => pageIndex.get(right.blockId)! - pageIndex.get(left.blockId)!)
-      .map(target => ({ op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: target.toIndex })),
+  const groups = new Map<string, BatchStructureTarget[]>()
+  for (const target of targets) {
+    const group = groups.get(target.parentKey) ?? []
+    group.push(target)
+    groups.set(target.parentKey, group)
   }
+  const operations = [...groups.values()].flatMap(group => [...group]
+    .sort((left, right) => right.index - left.index)
+    .map(target => ({ op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: target.index + 1 })))
+  return { operations, blockIds: pageOrder }
 }
 
 /** Minimal line diff; enough to review a structure change. */
@@ -1781,43 +1848,39 @@ export function previewArtifactStructure(key: string, blockId: string, op: 'dele
 /**
  * Open a diff confirmation for one batch delete/duplicate.
  *
- * The whole selection is validated up front: a selection above the Host's
- * per-request cap, or one containing a block without a resolvable CST node or
- * digest, shows the inline structure error and never sends a request.
+ * Works for top-level and nested selections. The whole selection is validated up
+ * front: a selection above the Host's per-request cap, one containing a container
+ * together with one of its nested blocks, or one containing a block without a
+ * resolvable CST node/digest shows the inline structure error and never sends a
+ * request.
  * @param key - edit-session key.
- * @param blockIds - selected top-level display ids.
+ * @param blockIds - selected display ids (root or nested).
  * @param op - batch operation kind.
  */
 export function previewBatchArtifactStructure(key: string, blockIds: readonly string[], op: 'delete' | 'duplicate'): void {
   const session = sessions.get(key)
   if (session === undefined) return
   const requested = [...new Set(blockIds)]
-  const selected = new Set(requested)
-  const ordered = session.targetOrder.filter(blockId => selected.has(blockId))
   if (requested.length === 0) return
-  if (ordered.length !== requested.length) {
-    sessions.set(key, { ...session, structureError: translate('edit.batchUnresolved') })
-    publish()
-    return
-  }
-  if (ordered.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
+  if (requested.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
     sessions.set(key, {
       ...session,
-      structureError: translate('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: ordered.length }),
+      structureError: translate('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: requested.length }),
     })
     publish()
     return
   }
-  const built = batchStructureOperations(session, ordered, op)
+  const built = batchStructureOperations(session, requested, op)
   if (built === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.batchUnresolved') })
+    const overlap = requested.some(blockId => requested.some(other => other !== blockId && other.startsWith(`${blockId}.`)))
+    sessions.set(key, { ...session, structureError: translate(overlap ? 'edit.batchNestedOverlap' : 'edit.batchUnresolved') })
     publish()
     return
   }
   void previewStructureOperation(key, {
     kind: op,
-    blockId: ordered[0],
-    blockIds: ordered,
+    blockId: built.blockIds[0],
+    blockIds: built.blockIds,
     operations: built.operations,
   }, 'edit.structureFailed')
 }

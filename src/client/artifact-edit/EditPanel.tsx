@@ -31,7 +31,7 @@ import {
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode } from './contracts.ts'
 import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
-import { canBatchMove, isCurrentStyleTarget } from './store.ts'
+import { canBatchMove, hasArtifactEditContent, isCurrentStyleTarget } from './store.ts'
 import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
 import { styleSwitchBlocker as describeStyleSwitchBlocker, styleTargetDisableReason } from './style-targets.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
@@ -698,6 +698,116 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
   )
 }
 
+/**
+ * One batch action toolbar, shared by the root and nested arrangement sections.
+ *
+ * The two lists only differ in their data hooks (`data-dsh-iui-edit-batch-*`
+ * versus `data-dsh-iui-edit-nested-batch-*`); controls, disabled semantics and
+ * the accessibility shape stay identical.
+ * @param props - locale seat, list scope, selection facts and handlers.
+ * @returns the toolbar rendered below the arrangement hint.
+ */
+function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisabled, structureHint, overLimit, onSelectAll, onClear, onExit, onOrder, onStructure }: {
+  readonly t: Translate
+  readonly nested: boolean
+  readonly count: number
+  readonly allSelected: boolean
+  readonly canMove: Readonly<Record<BatchOrderMode, boolean>>
+  readonly structureDisabled: boolean
+  readonly structureHint?: string
+  readonly overLimit: boolean
+  readonly onSelectAll: () => void
+  readonly onClear: () => void
+  readonly onExit: () => void
+  readonly onOrder: (mode: BatchOrderMode) => void
+  readonly onStructure: (op: 'delete' | 'duplicate', anchor: HTMLElement) => void
+}): ReactElement {
+  const prefix = nested ? 'data-dsh-iui-edit-nested-batch' : 'data-dsh-iui-edit-batch'
+  const hook = (suffix: string, value = ''): Record<string, string> => ({ [`${prefix}-${suffix}`]: value })
+  return (
+    <div className="dsh-iui-edit-batch" {...hook('bar')} role="group" aria-label={t('edit.batchToolbarLabel')}>
+      <div className="dsh-iui-edit-batch-row">
+        <span className="dsh-iui-edit-batch-count" role="status" aria-live="polite" {...hook('count')}>
+          {t('edit.batchSelectedCount', { count })}
+        </span>
+        <span className="dsh-iui-edit-section-spacer" />
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action"
+          {...hook('select-all')}
+          disabled={allSelected}
+          aria-label={t('edit.batchSelectAll')}
+          title={t('edit.batchSelectAll')}
+          onClick={onSelectAll}
+        >{t('edit.batchSelectAll')}</button>
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action"
+          {...hook('clear')}
+          disabled={count === 0}
+          aria-label={t('edit.batchClear')}
+          title={t('edit.batchClear')}
+          onClick={onClear}
+        >{t('edit.batchClear')}</button>
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action dsh-iui-edit-batch-exit"
+          {...hook('exit')}
+          aria-label={t('edit.batchExit')}
+          title={t('edit.batchExit')}
+          onClick={onExit}
+        >{t('edit.batchExit')}</button>
+      </div>
+      <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchOrderGroup')}>
+        {BATCH_ORDER_ACTIONS.map(action => {
+          const label = t(action.labelKey)
+          return (
+            <button
+              key={action.mode}
+              type="button"
+              className="dsh-iui-edit-batch-action"
+              {...hook('order', action.mode)}
+              disabled={!canMove[action.mode]}
+              aria-label={label}
+              title={count === 0 ? t('edit.batchNeedSelection') : label}
+              onClick={() => { onOrder(action.mode) }}
+            >{label}</button>
+          )
+        })}
+      </div>
+      <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchStructureGroup')}>
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action"
+          {...hook('duplicate')}
+          disabled={structureDisabled}
+          aria-label={t('edit.batchDuplicate')}
+          title={structureHint ?? t('edit.batchDuplicate')}
+          onClick={event => { onStructure('duplicate', event.currentTarget) }}
+        >
+          <DuplicateGlyph />{t('edit.batchDuplicate')}
+        </button>
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action is-danger"
+          {...hook('delete')}
+          disabled={structureDisabled}
+          aria-label={t('edit.batchDelete')}
+          title={structureHint ?? t('edit.batchDelete')}
+          onClick={event => { onStructure('delete', event.currentTarget) }}
+        >
+          <TrashGlyph />{t('edit.batchDelete')}
+        </button>
+      </div>
+      {overLimit ? (
+        <p className="dsh-iui-edit-batch-limit" role="alert" {...hook('limit')}>
+          {t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count })}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
 export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false, styleSwitchSupported = false, styleTargets = [], onPreviewStyleTarget }: EditPanelProps): ReactElement {
   const globalId = useId()
@@ -743,11 +853,15 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
   const [addDraft, setAddDraft] = useState('')
   const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
-  // Batch arrangement mode is transient panel UI state: it never persists and
-  // the selection is a list of display block ids only.
+  // Batch arrangement modes are transient panel UI state: they never persist and
+  // each selection is a list of display block ids only. The root and nested
+  // modes are mutually exclusive.
   const [batchMode, setBatchMode] = useState(false)
   const [batchSelection, setBatchSelection] = useState<readonly string[]>([])
   const batchToggleRef = useRef<HTMLButtonElement>(null)
+  const [nestedBatchMode, setNestedBatchMode] = useState(false)
+  const [nestedBatchSelection, setNestedBatchSelection] = useState<readonly string[]>([])
+  const nestedBatchToggleRef = useRef<HTMLButtonElement>(null)
   const deleteTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const previewTriggerRef = useRef<HTMLElement | null>(null)
   const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
@@ -862,6 +976,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         return block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
       })
     : []
+  // A batch structural revision submits and closes the draft, so unsent content
+  // would be lost; the preview says so explicitly before the user confirms.
+  const previewBatchDraftWarning = preview?.batch === true && hasArtifactEditContent(session)
+  const previewConfirmLabel = previewBatchDraftWarning ? t('edit.batchDiscardApply') : t('edit.previewConfirm')
   const previewOperationLabel = preview === undefined
     ? ''
     : preview.batch === true
@@ -1029,12 +1147,20 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     flashTimers.current.clear()
   }, [])
 
-  // Switching the edited revision closes batch mode and drops its selection;
-  // the mode is never persisted (unmounting the panel clears it as well).
+  // Switching the edited revision (or leaving nested mode) closes the matching
+  // batch mode and drops its selection; neither mode is ever persisted
+  // (unmounting the panel clears them as well).
   useEffect(() => {
     setBatchMode(false)
-    setBatchSelection([])
+    setBatchSelection(current => current.length === 0 ? current : [])
+    setNestedBatchMode(false)
+    setNestedBatchSelection(current => current.length === 0 ? current : [])
   }, [session.key])
+
+  useEffect(() => {
+    setNestedBatchMode(false)
+    setNestedBatchSelection(current => current.length === 0 ? current : [])
+  }, [session.nestedMode])
 
   // Escape closes the hover card (the instruction popover owns its own Escape).
   useEffect(() => {
@@ -1197,6 +1323,38 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const batchStructureHint = batchOverLimit
     ? t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: batchSelected.length })
     : batchSelected.length === 0 ? t('edit.batchNeedSelection') : undefined
+
+  // Nested batch selection follows the pending per-parent order; the toolbar's
+  // order actions are available only when at least one group can move.
+  const nestedBlockIds = useMemo(() => nestedGroups.flatMap(group => group.childIds), [nestedGroups])
+  const nestedBatchSelected = useMemo(() => {
+    const available = new Set(nestedBlockIds)
+    return nestedBatchSelection.filter(blockId => available.has(blockId))
+  }, [nestedBatchSelection, nestedBlockIds])
+  const nestedBatchSelectedSet = useMemo(() => new Set(nestedBatchSelected), [nestedBatchSelected])
+  const nestedSelectedGroups = useMemo(() => {
+    const selected = new Set(nestedBatchSelected)
+    return nestedGroups
+      .map(group => ({ order: group.childIds, picked: group.childIds.filter(blockId => selected.has(blockId)) }))
+      .filter(group => group.picked.length > 0)
+  }, [nestedGroups, nestedBatchSelected])
+  const nestedBatchCanMove: Readonly<Record<BatchOrderMode, boolean>> = useMemo(() => {
+    const can = (mode: BatchOrderMode): boolean => nestedSelectedGroups.some(group => canBatchMove(group.order, group.picked, mode))
+    return { up: can('up'), down: can('down'), top: can('top'), bottom: can('bottom') }
+  }, [nestedSelectedGroups])
+  // A container together with one of its own nested blocks cannot share one
+  // atomic Host batch, so structure actions are refused before the preview.
+  const nestedBatchOverlap = useMemo(() => nestedBatchSelected.some(blockId =>
+    nestedBatchSelected.some(other => other !== blockId && other.startsWith(`${blockId}.`)),
+  ), [nestedBatchSelected])
+  const nestedBatchOverLimit = nestedBatchSelected.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS
+  const nestedBatchStructureDisabled = nestedBatchSelected.length === 0 || nestedBatchOverlap || nestedBatchOverLimit || rowActionsBusy
+  const nestedBatchStructureHint = nestedBatchOverlap
+    ? t('edit.batchNestedOverlap')
+    : nestedBatchOverLimit
+      ? t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: nestedBatchSelected.length })
+      : nestedBatchSelected.length === 0 ? t('edit.batchNeedSelection') : undefined
+
   const exitBatchMode = (restoreFocus: boolean): void => {
     setBatchMode(false)
     setBatchSelection([])
@@ -1206,13 +1364,36 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     if (!restoreFocus) return
     window.requestAnimationFrame(() => { batchToggleRef.current?.focus({ preventScroll: true }) })
   }
+  const exitNestedBatchMode = (restoreFocus: boolean): void => {
+    setNestedBatchMode(false)
+    setNestedBatchSelection([])
+    clearDeleteConfirm()
+    closeHover()
+    announce(t('edit.a11yBatchExited'))
+    if (!restoreFocus) return
+    window.requestAnimationFrame(() => { nestedBatchToggleRef.current?.focus({ preventScroll: true }) })
+  }
   const toggleBatchMode = (): void => {
     if (batchMode) { exitBatchMode(true); return }
+    // The two batch modes are mutually exclusive.
+    setNestedBatchMode(false)
+    setNestedBatchSelection([])
     closeHover()
     clearDeleteConfirm()
     closeMoveMenu()
     setBatchMode(true)
     setBatchSelection([])
+    announce(t('edit.a11yBatchEntered'))
+  }
+  const toggleNestedBatchMode = (): void => {
+    if (nestedBatchMode) { exitNestedBatchMode(true); return }
+    setBatchMode(false)
+    setBatchSelection([])
+    closeHover()
+    clearDeleteConfirm()
+    closeMoveMenu()
+    setNestedBatchMode(true)
+    setNestedBatchSelection([])
     announce(t('edit.a11yBatchEntered'))
   }
   const toggleBatchBlock = (blockId: string): void => {
@@ -1233,6 +1414,25 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     clearDeleteConfirm()
     closeHover()
     actions.previewBatchStructure(batchSelected, op)
+  }
+  const toggleNestedBatchBlock = (blockId: string): void => {
+    setNestedBatchSelection(current => current.includes(blockId)
+      ? current.filter(id => id !== blockId)
+      : [...current, blockId])
+  }
+  const selectAllNestedBatchBlocks = (): void => { setNestedBatchSelection([...nestedBlockIds]) }
+  const clearNestedBatchSelection = (): void => { setNestedBatchSelection([]) }
+  const runNestedBatchOrder = (mode: BatchOrderMode): void => {
+    if (nestedBatchSelected.length === 0) return
+    actions.moveNestedBlocks(nestedBatchSelected, mode)
+    announce(t('edit.a11yBatchReordered'))
+  }
+  const runNestedBatchStructure = (op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
+    if (nestedBatchStructureDisabled) return
+    previewTriggerRef.current = anchor
+    clearDeleteConfirm()
+    closeHover()
+    actions.previewBatchStructure(nestedBatchSelected, op)
   }
 
   // The add form only belongs to nested mode; escaping it cancels the draft.
@@ -1921,96 +2121,21 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           ) : null}
           <p className="dsh-iui-edit-arrangement-hint">{batchMode ? t('edit.batchHint') : t('edit.arrangementHint')}</p>
           {batchMode ? (
-            <div
-              className="dsh-iui-edit-batch"
-              data-dsh-iui-edit-batch-bar
-              role="group"
-              aria-label={t('edit.batchToolbarLabel')}
-            >
-              <div className="dsh-iui-edit-batch-row">
-                <span
-                  className="dsh-iui-edit-batch-count"
-                  role="status"
-                  aria-live="polite"
-                  data-dsh-iui-edit-batch-count
-                >
-                  {t('edit.batchSelectedCount', { count: batchSelected.length })}
-                </span>
-                <span className="dsh-iui-edit-section-spacer" />
-                <button
-                  type="button"
-                  className="dsh-iui-edit-batch-action"
-                  data-dsh-iui-edit-batch-select-all
-                  disabled={batchSelected.length >= session.targetOrder.length}
-                  aria-label={t('edit.batchSelectAll')}
-                  title={t('edit.batchSelectAll')}
-                  onClick={() => { selectAllBatchBlocks() }}
-                >{t('edit.batchSelectAll')}</button>
-                <button
-                  type="button"
-                  className="dsh-iui-edit-batch-action"
-                  data-dsh-iui-edit-batch-clear
-                  disabled={batchSelected.length === 0}
-                  aria-label={t('edit.batchClear')}
-                  title={t('edit.batchClear')}
-                  onClick={() => { clearBatchSelection() }}
-                >{t('edit.batchClear')}</button>
-                <button
-                  type="button"
-                  className="dsh-iui-edit-batch-action dsh-iui-edit-batch-exit"
-                  data-dsh-iui-edit-batch-exit
-                  aria-label={t('edit.batchExit')}
-                  title={t('edit.batchExit')}
-                  onClick={() => { exitBatchMode(true) }}
-                >{t('edit.batchExit')}</button>
-              </div>
-              <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchOrderGroup')}>
-                {BATCH_ORDER_ACTIONS.map(action => {
-                  const label = t(action.labelKey)
-                  return (
-                    <button
-                      key={action.mode}
-                      type="button"
-                      className="dsh-iui-edit-batch-action"
-                      data-dsh-iui-edit-batch-order={action.mode}
-                      disabled={!batchCanMove[action.mode]}
-                      aria-label={label}
-                      title={batchSelected.length === 0 ? t('edit.batchNeedSelection') : label}
-                      onClick={() => { runBatchOrder(action.mode) }}
-                    >{label}</button>
-                  )
-                })}
-              </div>
-              <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchStructureGroup')}>
-                <button
-                  type="button"
-                  className="dsh-iui-edit-batch-action"
-                  data-dsh-iui-edit-batch-duplicate
-                  disabled={batchStructureDisabled}
-                  aria-label={t('edit.batchDuplicate')}
-                  title={batchStructureHint ?? t('edit.batchDuplicate')}
-                  onClick={event => { runBatchStructure('duplicate', event.currentTarget) }}
-                >
-                  <DuplicateGlyph />{t('edit.batchDuplicate')}
-                </button>
-                <button
-                  type="button"
-                  className="dsh-iui-edit-batch-action is-danger"
-                  data-dsh-iui-edit-batch-delete
-                  disabled={batchStructureDisabled}
-                  aria-label={t('edit.batchDelete')}
-                  title={batchStructureHint ?? t('edit.batchDelete')}
-                  onClick={event => { runBatchStructure('delete', event.currentTarget) }}
-                >
-                  <TrashGlyph />{t('edit.batchDelete')}
-                </button>
-              </div>
-              {batchOverLimit ? (
-                <p className="dsh-iui-edit-batch-limit" role="alert" data-dsh-iui-edit-batch-limit>
-                  {t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: batchSelected.length })}
-                </p>
-              ) : null}
-            </div>
+            <BatchToolbar
+              t={t}
+              nested={false}
+              count={batchSelected.length}
+              allSelected={batchSelected.length >= session.targetOrder.length}
+              canMove={batchCanMove}
+              structureDisabled={batchStructureDisabled}
+              structureHint={batchStructureHint}
+              overLimit={batchOverLimit}
+              onSelectAll={selectAllBatchBlocks}
+              onClear={clearBatchSelection}
+              onExit={() => exitBatchMode(true)}
+              onOrder={runBatchOrder}
+              onStructure={runBatchStructure}
+            />
           ) : null}
           <div className="dsh-iui-edit-arrangement-wrap">
             <ul
@@ -2125,10 +2250,32 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
             aria-label={t('edit.nestedArrangement')}
             aria-busy={structureBusy ? true : undefined}
             data-dsh-iui-edit-nested-arrangement
+            data-dsh-iui-edit-nested-batch-mode={nestedBatchMode ? 'true' : undefined}
+            onKeyDown={event => {
+              if (event.key !== 'Escape' || !nestedBatchMode) return
+              // Dialogs and row menus own their own Escape handling.
+              if (session.structurePreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
+              event.preventDefault()
+              event.stopPropagation()
+              exitNestedBatchMode(true)
+            }}
           >
             <div className="dsh-iui-edit-section-head">
               <span className="dsh-iui-edit-section-title">{t('edit.nestedArrangement')}</span>
               <span className="dsh-iui-edit-section-spacer" />
+              <button
+                ref={nestedBatchToggleRef}
+                type="button"
+                className={`dsh-iui-edit-section-action dsh-iui-edit-batch-toggle${nestedBatchMode ? ' is-active' : ''}`}
+                data-dsh-iui-edit-nested-batch-toggle
+                aria-pressed={nestedBatchMode}
+                aria-label={t('edit.batchToggle')}
+                title={t('edit.batchToggleHint')}
+                disabled={structureBusy}
+                onClick={() => { toggleNestedBatchMode() }}
+              >
+                <BatchGlyph />{t('edit.batchToggle')}
+              </button>
               <button
                 type="button"
                 className="dsh-iui-edit-section-action"
@@ -2141,7 +2288,24 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                 <ResetGlyph />{t('edit.resetNestedOrder')}
               </button>
             </div>
-            <p className="dsh-iui-edit-arrangement-hint">{t('edit.nestedGroupHint')}</p>
+            <p className="dsh-iui-edit-arrangement-hint">{nestedBatchMode ? t('edit.batchHint') : t('edit.nestedGroupHint')}</p>
+            {nestedBatchMode ? (
+              <BatchToolbar
+                t={t}
+                nested
+                count={nestedBatchSelected.length}
+                allSelected={nestedBatchSelected.length >= nestedBlockIds.length}
+                canMove={nestedBatchCanMove}
+                structureDisabled={nestedBatchStructureDisabled}
+                structureHint={nestedBatchStructureHint}
+                overLimit={nestedBatchOverLimit}
+                onSelectAll={selectAllNestedBatchBlocks}
+                onClear={clearNestedBatchSelection}
+                onExit={() => exitNestedBatchMode(true)}
+                onOrder={runNestedBatchOrder}
+                onStructure={runNestedBatchStructure}
+              />
+            ) : null}
             {nestedGroups.map(group => {
               const parentId = group.parent.blockId
               const parentTitle = group.parent.title !== undefined && group.parent.title.trim() !== ''
@@ -2227,40 +2391,62 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                         const title = block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
                         const dragging = dragBlockId === blockId && dragParentId === parentId
                         const depth = Math.max(0, (block.depth ?? 1) - (group.parent.depth ?? 0) - 1)
+                        const nestedBatchSelectedRow = nestedBatchSelectedSet.has(blockId)
                         return (
                           <li
                             key={blockId}
-                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}`}
+                            className={`dsh-iui-edit-nested-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}${nestedBatchMode ? ' is-batch' : ''}${nestedBatchSelectedRow ? ' is-batch-selected' : ''}`}
                             data-dsh-iui-edit-nested-row
                             data-block-id={blockId}
                             data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                             data-parent-id={parentId}
                             data-order-index={index}
                             data-depth={block.depth}
+                            data-batch-selected={nestedBatchSelectedRow ? 'true' : undefined}
                             data-hover-linked={hoveredBlockId === blockId ? 'true' : undefined}
                             onPointerEnter={() => { onHoverBlock?.(blockId) }}
                             onPointerLeave={() => { onHoverBlock?.(null) }}
                             style={depth === 0 ? undefined : { paddingLeft: `${depth * 12}px` }}
                           >
-                            <button
-                              type="button"
-                              className="dsh-iui-edit-grip"
-                              data-dsh-iui-edit-nested-grip
-                              aria-label={`${t('edit.moveHandle')}: ${title}`}
-                              aria-describedby={a11yHintId}
-                              title={t('edit.moveHandle')}
-                              onPointerDown={event => { startDrag(event, blockId, parentId, group.childIds) }}
-                              onKeyDown={event => { onGripKeyDown(event, blockId, parentId, group.childIds) }}
-                            >
-                              <GripGlyph />
-                            </button>
+                            {nestedBatchMode ? (
+                              <button
+                                type="button"
+                                className="dsh-iui-edit-batch-check"
+                                data-dsh-iui-edit-nested-batch-check
+                                role="checkbox"
+                                aria-checked={nestedBatchSelectedRow}
+                                aria-label={`${t('edit.batchSelect')}: ${title}`}
+                                title={`${t('edit.batchSelect')}: ${title}`}
+                                onClick={event => { event.stopPropagation(); toggleNestedBatchBlock(blockId) }}
+                              >
+                                {nestedBatchSelectedRow ? <CheckGlyph /> : null}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="dsh-iui-edit-grip"
+                                data-dsh-iui-edit-nested-grip
+                                aria-label={`${t('edit.moveHandle')}: ${title}`}
+                                aria-describedby={a11yHintId}
+                                title={t('edit.moveHandle')}
+                                onPointerDown={event => { startDrag(event, blockId, parentId, group.childIds) }}
+                                onKeyDown={event => { onGripKeyDown(event, blockId, parentId, group.childIds) }}
+                              >
+                                <GripGlyph />
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="dsh-iui-edit-arrangement-body"
                               data-dsh-iui-edit-nested-body
-                              title={t('edit.locate')}
-                              aria-label={`${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: blockId.replace(/^b/, '') })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
-                              onClick={() => { closeHover(); locate(blockId) }}
+                              title={nestedBatchMode ? t('edit.batchSelect') : t('edit.locate')}
+                              aria-pressed={nestedBatchMode ? nestedBatchSelectedRow : undefined}
+                              aria-label={nestedBatchMode
+                                ? `${t('edit.batchSelect')}: ${title}`
+                                : `${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: blockId.replace(/^b/, '') })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
+                              onClick={nestedBatchMode
+                                ? () => { toggleNestedBatchBlock(blockId) }
+                                : () => { closeHover(); locate(blockId) }}
                             >
                               <span className="dsh-iui-edit-page-index" title={t('edit.pageOrder', { n: blockId.replace(/^b/, '') })} aria-hidden="true">{blockId.replace(/^b/, '')}</span>
                               <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
@@ -2269,21 +2455,23 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                               {entry === undefined ? null : <span className="dsh-iui-edit-badge" title={t('edit.requestOrder', { n: entry.order })} aria-hidden="true">{entry.order}</span>}
                               {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                             </button>
-                            <StructureActions
-                              t={t}
-                              blockId={blockId}
-                              title={title}
-                              busy={rowActionsBusy}
-                              onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
-                              confirming={confirmDeleteId === blockId}
-                              moveOpen={moveMenu?.blockId === blockId}
-                              onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
-                              onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
-                              onCancelDelete={() => { cancelDeleteConfirm() }}
-                              onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
-                              onMove={anchor => { openMoveMenu(blockId, anchor) }}
-                              onLocate={() => { closeHover(); locate(blockId) }}
-                            />
+                            {nestedBatchMode ? null : (
+                              <StructureActions
+                                t={t}
+                                blockId={blockId}
+                                title={title}
+                                busy={rowActionsBusy}
+                                onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
+                                confirming={confirmDeleteId === blockId}
+                                moveOpen={moveMenu?.blockId === blockId}
+                                onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
+                                onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                                onCancelDelete={() => { cancelDeleteConfirm() }}
+                                onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
+                                onMove={anchor => { openMoveMenu(blockId, anchor) }}
+                                onLocate={() => { closeHover(); locate(blockId) }}
+                              />
+                            )}
                           </li>
                         )
                       })}
@@ -2444,6 +2632,11 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                 {preview.batch === true || previewTargetTitle === undefined ? null : <span className="dsh-iui-edit-preview-target">→ {previewTargetTitle}</span>}
               </p>
             </div>
+            {!previewBatchDraftWarning ? null : (
+              <p className="dsh-iui-edit-preview-draft-warning" role="alert" data-dsh-iui-edit-preview-draft-warning>
+                {t('edit.batchDraftWarning')}
+              </p>
+            )}
             {preview.batch !== true || previewBatchTitles.length === 0 ? null : (
               <div className="dsh-iui-edit-preview-batch" data-dsh-iui-edit-preview-blocks>
                 <span className="dsh-iui-edit-preview-batch-label">{t('edit.batchPreviewBlocks')}</span>
@@ -2500,10 +2693,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                   className="dsh-iui-edit-preview-confirm"
                   data-dsh-iui-edit-preview-confirm
                   disabled={previewConfirming || structureBusy}
-                  aria-label={t('edit.previewConfirm')}
+                  aria-label={previewConfirmLabel}
                   onClick={confirmPreview}
                 >
-                  {t('edit.previewConfirm')}
+                  {previewConfirmLabel}
                 </button>
               ) : null}
             </div>
