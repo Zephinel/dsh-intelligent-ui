@@ -644,3 +644,21 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **519 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,830** 字节，解包 **12,887,088** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 区块编排批量操作（多选 + 批量顺序/复制/删除）
+
+- **批量模式**：区块编排 section head 在「重置顺序」左侧新增「批量操作」切换（`data-dsh-iui-edit-batch-toggle`、`aria-pressed`、图标+文案）。激活后每行拖拽 grip 替换为可 Tab 聚焦的选择控件（Space/Enter 切换，点击行主体也可切换），逐行结构操作菜单隐藏、行 hover 卡片不弹出，选中行有 `is-batch-selected`/`data-batch-selected` 视觉态；Esc 退出批量模式并把焦点放回切换按钮，切换修订或关闭编辑器时选择自然清空。
+- **批量工具栏**：已选数量（`role=status`）、全选/清除选择、上移/下移/置顶/置底、复制所选/删除所选、退出批量；无选择或无效果时按钮 disabled 且带 aria-label/title，选择超过 Host 单批上限 20 时结构操作禁用并提示；1180px 档 272px rail 下 section head 与工具栏换行、无水平溢出。
+- **顺序语义**：置顶/置底保持所选块相对顺序；上移按下标升序、下移按降序处理，每个所选块只与未选邻居交换一格（不越过其他所选块）。只改当前草稿 `targetOrder`/`orderChanged` 并走既有持久化与 chip 同步，编辑请求编号与颜色不变。
+- **批量结构操作**：复用 `POST /api/intelligent-ui/artifact-structure` 的批量 `operations`（上限 20），先 `preview: true` 在现有预览弹窗展示批量标题/操作标签/涉及区块列表/同一 diff，确认后一次真实批量 POST，只产生一条 `kind:'structure'` 本地修订并 `markSubmitted`。多个 duplicate 按页面降序发送、`toIndex = 原页内可编辑下标 + 1`，每份副本紧跟原块；Host 既有批量用例与新增 host 测试固定该顺序。所选块无法解析 nodeId/sourceDigest 或超过上限时在请求前报错、不发请求。
+- **范围与限制**：v1 只作用于顶层 arrangement 列表（嵌套编排不变）；批量结构操作与内容编辑草稿不互斥；结构 duplicate 落在修订页序而非草稿顺序。
+- **测试**：新增 `test/client/artifact-edit-batch-ops.test.mjs` 9 个用例（顺序语义、草稿不变性、批量 duplicate 的降序发送与 Host 实际应用位置、批量 delete 单请求单修订、20 上限、不可解析选择、取消预览、单块旧行为回归）；`test/host/artifact-structure.test.mjs` 新增多 duplicate 批量放置用例；浏览器 `artifact-edit` 新增批量场景（切换/选择/顺序/窄面板/批量预览/应用/单修订/Esc 焦点回归），519 → **564 checks**。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **638/638** = Host **303** + Client **314** + packaging **21**；build host **837.9 kB**、client **4.06 MB**（js 3.84 / CSS 226.6） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **564 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,035,842** 字节，解包 **12,905,416** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

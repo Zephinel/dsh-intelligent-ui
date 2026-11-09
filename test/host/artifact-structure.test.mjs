@@ -381,6 +381,28 @@ test('a multi-operation batch applies atomically in request order', async () => 
   assert.equal(JSON.parse(readFileSync(m.file, 'utf8')).revisions.length, 1)
 })
 
+test('a multi-duplicate batch leaves one copy directly after each source', async () => {
+  const m = mount()
+  await seed(m)
+  // The arrangement's batch duplicate sends operations in descending page order
+  // with a base editable index: secondCard (n8, index 1) duplicates first at 2,
+  // then outerCard (n2, index 0) at 1. Applying in request order must leave each
+  // copy after its own source instead of stacking both at the front.
+  const response = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      operationId: operationId('multi-duplicate'),
+      operations: [duplicateOp(NESTED_TREE, 'n8', 2), duplicateOp(NESTED_TREE, 'n2', 1)],
+    }),
+  })
+  assert.equal(response.status, 201, JSON.stringify(response.body))
+  const program = response.body.result.program
+  assert.equal(program.split('\n')[0], 'root = Col([outerCard, outerCard_copy1, secondCard, secondCard_copy1])')
+  assert.match(program, /^secondCard_copy1 = Card\(/m)
+  assert.match(program, /^outerCard_copy1 = Card\(/m)
+  const latest = createArtifactRevisionStore().latestFor('call-original')
+  assert.deepEqual([...(latest.editedBlockIds ?? [])].sort(), ['b1', 'b2'])
+})
+
 test('scoped @Each nodes are not structurally editable', async () => {
   const m = mount()
   await seed(m, SCOPED_PROGRAM, 'call-scoped')

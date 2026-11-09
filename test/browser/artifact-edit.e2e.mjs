@@ -3,9 +3,10 @@
  * Browser check for Artifact block arrangement and editing.
  *
  * Covers the structure list, conditional request list, per-block popovers,
- * keyboard and pointer reordering, reset order, the combined order + edit
- * envelope, Host-normalized revision replay, hover request cards, composer chip
- * label shapes and the narrow/light-dark chrome. No real model is called.
+ * keyboard and pointer reordering, batch selection/toolbar/order and batch
+ * duplicate preview + apply, reset order, the combined order + edit envelope,
+ * Host-normalized revision replay, hover request cards, composer chip label
+ * shapes and the narrow/light-dark chrome. No real model is called.
  *
  *   node test/browser/artifact-edit.e2e.mjs
  */
@@ -919,6 +920,152 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-local-revision]')).includes('结构操作修订'), true, 'local card is labelled as a structural revision')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the structural revision')
   check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after the structural revision')
+
+  // 25b. Batch arrangement mode: selection controls, toolbar order ops, batch duplicate.
+  await read(`(() => {
+    window.__batchPreviousFetch = window.fetch;
+    window.__batchStructureCalls = [];
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__batchStructureCalls.push(body);
+        if (body.preview === true) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nbatchPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1', 'b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        }
+        const result = {
+          artifactId: 'nested-call-1',
+          revisionId: 'struct_e2e_batch',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify(NESTED_PROGRAM)},
+          style: 'card',
+          title: '嵌套区块样例',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__batchPreviousFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'batch editor')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-toggle]")', 'batch toggle')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'batch mode is off by default')
+  check(await text('[data-dsh-iui-edit-batch-toggle]'), '批量操作', 'the toggle carries icon and copy')
+  await click('[data-dsh-iui-edit-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'batch toolbar')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'true', 'the toggle exposes its pressed state')
+  check(await read(`!!document.querySelector('.dsh-iui-edit-arrangement')`), true, 'batch mode keeps the arrangement section')
+  check(await count('[data-dsh-iui-edit-grip]'), 0, 'batch mode replaces the drag grips')
+  check(await count('[data-dsh-iui-edit-row-menu]'), 0, 'batch mode hides the per-row structure menu')
+  check(await count('[data-dsh-iui-edit-batch-check]'), 2, 'every row shows a selection control')
+  check((await text('[data-dsh-iui-edit-batch-count]')).includes('已选 0 个区块'), true, 'the live status starts at zero')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-duplicate]').disabled`), true, 'structure actions are disabled without a selection')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-duplicate]').getAttribute('title')`), '请先选择区块', 'the disabled structure action explains why')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-order="up"]').disabled`), true, 'order actions are disabled without a selection')
+  await shot('harness-batch-empty.png')
+
+  // Select one row from its control and another from the row body.
+  await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
+  await wait(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected') === 'true'`, 'b1 batch selection')
+  check(await read(`document.querySelector('${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]').getAttribute('aria-checked')`), 'true', 'the selection control reports the checked state')
+  await click(`${arrangementSelector('b2')} [data-dsh-iui-edit-arrangement-body]`)
+  await wait(`document.querySelector('${arrangementSelector('b2')}').getAttribute('data-batch-selected') === 'true'`, 'b2 batch selection')
+  check((await text('[data-dsh-iui-edit-batch-count]')).includes('已选 2 个区块'), true, 'the live status follows the selection')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-order="up"]').disabled`), true, 'up is disabled when both selected blocks already lead the list')
+  await shot('harness-batch-selected.png')
+
+  // One selected block moves down, then back to the top through the toolbar.
+  await click(`${arrangementSelector('b2')} [data-dsh-iui-edit-batch-check]`)
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 1`, 'single batch selection')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-order="down"]').disabled`), false, 'a selected block with an unselected neighbour can move down')
+  await click('[data-dsh-iui-edit-batch-order="down"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'batch down reorder')
+  check((await arrangementOrder()).slice(0, 2), ['b2', 'b1'], 'the selected block moved down one slot')
+  check(await read(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected')`), 'true', 'the selection follows the reordered row')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已批量调整区块顺序')`, 'batch reorder announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已批量调整区块顺序'), true, 'batch reordering is announced')
+  const batchChip = `[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('调整区块顺序'))`
+  await wait(batchChip, 'batch chip label')
+  check(await read(batchChip), true, 'the composer chip reports the batch reorder')
+  await click('[data-dsh-iui-edit-batch-order="top"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b1'`, 'batch top reorder')
+  check((await arrangementOrder()).slice(0, 2), ['b1', 'b2'], 'top restores the selected block to the front')
+
+  // The docked rail at 1180px is the narrowest panel: the batch toolbar wraps.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 900, deviceScaleFactor: 1, mobile: false })
+  await new Promise(resolve => setTimeout(resolve, 200))
+  const batchLayout = await read(`(() => {
+    const section = document.querySelector('.dsh-iui-edit-arrangement');
+    const bar = document.querySelector('[data-dsh-iui-edit-batch-bar]');
+    const sr = section.getBoundingClientRect();
+    const br = bar.getBoundingClientRect();
+    return {
+      sectionOverflow: section.scrollWidth - section.clientWidth,
+      barOverflow: bar.scrollWidth - bar.clientWidth,
+      inside: br.left >= sr.left - 1 && br.right <= sr.right + 1,
+      headInside: document.querySelector('.dsh-iui-edit-arrangement .dsh-iui-edit-section-head').scrollWidth <= section.clientWidth + 1,
+    };
+  })()`)
+  check(batchLayout.sectionOverflow <= 1, true, 'batch mode does not overflow the narrow rail')
+  check(batchLayout.barOverflow <= 1 && batchLayout.inside, true, 'the batch toolbar wraps inside the rail')
+  check(batchLayout.headInside, true, 'the arrangement section head still fits the narrow rail')
+  await shot('harness-batch-narrow.png')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
+  await new Promise(resolve => setTimeout(resolve, 200))
+
+  // Select every block and duplicate the batch: one preview, one apply, one revision.
+  await click('[data-dsh-iui-edit-batch-select-all]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 2`, 'select all blocks')
+  check((await text('[data-dsh-iui-edit-batch-count]')).includes('已选 2 个区块'), true, 'select all updates the live status')
+  const localBeforeBatch = await count('[data-dsh-iui-local-revision]')
+  await click('[data-dsh-iui-edit-batch-duplicate]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'batch preview dialog')
+  check(await read(`!!document.querySelector('[data-dsh-iui-edit-structure-preview]')`), true, 'batch preview uses the existing preview dialog shell')
+  check((await text('.dsh-iui-edit-preview-title')), '预览批量结构修改', 'the dialog says it is a batch preview')
+  check((await text('.dsh-iui-edit-preview-operation')), '复制所选', 'the batch operation label is explicit')
+  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 2 个区块', 'the dialog names the batch size')
+  check(await count('[data-dsh-iui-edit-preview-blocks] [data-dsh-iui-edit-preview-batch-item]'), 2, 'the dialog lists the involved blocks')
+  check((await text('[data-dsh-iui-edit-preview-blocks]')).includes('外层卡片'), true, 'the involved-block list carries the titles')
+  check((await count('[data-dsh-iui-edit-preview-diff] [data-diff="add"]')) > 0, true, 'the batch preview keeps the shared diff list')
+  await shot('harness-batch-preview.png')
+  await click('[data-dsh-iui-edit-preview-confirm]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeBatch + 1}`, 'batch structural revision card')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the batch revision')
+  const batchCalls = await read('window.__batchStructureCalls')
+  check(batchCalls.length, 2, 'the batch sends a preview and one real apply')
+  check(batchCalls[0].preview, true, 'the first batch request is the dry run')
+  check(batchCalls[1].preview === undefined, true, 'the second batch request is the apply')
+  check(batchCalls[0].operations.length, 2, 'the preview carries both operations')
+  check(batchCalls[1].operations.length, 2, 'the apply carries both operations')
+  check(batchCalls[0].operations.map(operation => operation.op), ['duplicate', 'duplicate'], 'both operations duplicate')
+  check(batchCalls[0].operations.map(operation => operation.toIndex), [2, 1], 'duplicates are sent in descending page order for stable placement')
+  check((await count('[data-dsh-iui-local-revision]')), localBeforeBatch + 1, 'the batch produces exactly one local revision card')
+  check((await read(`[...document.querySelectorAll('[data-dsh-iui-local-revision]')].at(-1).textContent`)).includes('结构操作修订'), true, 'the batch revision card is labelled as a structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a batch structural revision')
+  await read('window.fetch = window.__batchPreviousFetch; delete window.__batchPreviousFetch')
+
+  // 25c. Escape exits batch mode and returns focus to the toggle.
+  await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'batch escape editor')
+  await click('[data-dsh-iui-edit-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'batch escape toolbar')
+  await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 1`, 'batch escape selection')
+  await read(`(() => {
+    const toggle = document.querySelector('[data-dsh-iui-edit-batch-toggle]');
+    toggle.focus();
+    toggle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  })()`)
+  await wait('!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'Escape leaves batch mode')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'Escape clears the pressed state')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-batch-toggle')`), true, 'Escape returns focus to the batch toggle')
+  check(await count('[data-dsh-iui-edit-batch-check]'), 0, 'leaving batch mode restores the grips')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已退出批量操作模式')`, 'batch exit announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已退出批量操作模式'), true, 'leaving batch mode is announced')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'batch scenario closed')
 
   // 26. Container expansion: Box/Grid/Section/Carousel children are selectable.
   await read('window.__addNestedContainersCard()')

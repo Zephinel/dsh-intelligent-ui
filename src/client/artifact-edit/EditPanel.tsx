@@ -29,9 +29,9 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './contracts.ts'
-import type { ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
-import { isCurrentStyleTarget } from './store.ts'
+import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode } from './contracts.ts'
+import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
+import { canBatchMove, isCurrentStyleTarget } from './store.ts'
 import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
 import { styleSwitchBlocker as describeStyleSwitchBlocker, styleTargetDisableReason } from './style-targets.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
@@ -140,6 +140,16 @@ function GripGlyph(): ReactElement {
 /** Reset-order glyph. */
 function ResetGlyph(): ReactElement {
   return <Glyph name="refresh-line" size={13} />
+}
+
+/** Multi-select glyph for the batch-mode toggle. */
+function BatchGlyph(): ReactElement {
+  return <Glyph name="checkbox-circle-fill" size={13} />
+}
+
+/** Check glyph inside the batch selection control. */
+function CheckGlyph(): ReactElement {
+  return <Glyph name="check-line" size={12} />
 }
 
 /** Close glyph for the narrow drawer control. */
@@ -374,6 +384,14 @@ interface NestedGroup {
 
 /** How long a structural error stays visible before auto-dismissing. */
 const STRUCTURE_ERROR_TIMEOUT_MS = 8000
+
+/** Order actions shown by the batch toolbar, in display order. */
+const BATCH_ORDER_ACTIONS: readonly { mode: BatchOrderMode; labelKey: string }[] = [
+  { mode: 'up', labelKey: 'edit.batchMoveUp' },
+  { mode: 'down', labelKey: 'edit.batchMoveDown' },
+  { mode: 'top', labelKey: 'edit.batchMoveTop' },
+  { mode: 'bottom', labelKey: 'edit.batchMoveBottom' },
+]
 
 /**
  * One compact overflow action menu per arrangement row.
@@ -725,6 +743,11 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
   const [addDraft, setAddDraft] = useState('')
   const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
+  // Batch arrangement mode is transient panel UI state: it never persists and
+  // the selection is a list of display block ids only.
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchSelection, setBatchSelection] = useState<readonly string[]>([])
+  const batchToggleRef = useRef<HTMLButtonElement>(null)
   const deleteTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const previewTriggerRef = useRef<HTMLElement | null>(null)
   const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
@@ -832,9 +855,18 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const previewTargetTitle = preview?.targetParentBlockId === undefined
     ? undefined
     : preview.targetParentBlockId === 'root' ? t('edit.nestedRoot') : previewTarget?.title !== undefined && previewTarget.title.trim() !== '' ? previewTarget.title : previewTarget === undefined ? undefined : blockKindLabel(previewTarget.kind, t)
+  const previewBatchTitles = preview?.batch === true && preview.blockIds !== undefined
+    ? preview.blockIds.map(blockId => {
+        const block = blocks.get(blockId)
+        if (block === undefined) return blockId
+        return block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
+      })
+    : []
   const previewOperationLabel = preview === undefined
     ? ''
-    : preview.kind === 'delete' ? t('edit.structureDelete') : preview.kind === 'duplicate' ? t('edit.structureDuplicate') : t('edit.moveBlock')
+    : preview.batch === true
+      ? preview.kind === 'delete' ? t('edit.batchDelete') : preview.kind === 'duplicate' ? t('edit.batchDuplicate') : t('edit.moveBlock')
+      : preview.kind === 'delete' ? t('edit.structureDelete') : preview.kind === 'duplicate' ? t('edit.structureDuplicate') : t('edit.moveBlock')
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -997,6 +1029,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     flashTimers.current.clear()
   }, [])
 
+  // Switching the edited revision closes batch mode and drops its selection;
+  // the mode is never persisted (unmounting the panel clears it as well).
+  useEffect(() => {
+    setBatchMode(false)
+    setBatchSelection([])
+  }, [session.key])
+
   // Escape closes the hover card (the instruction popover owns its own Escape).
   useEffect(() => {
     if (hoverBlockId === null) return
@@ -1138,6 +1177,62 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       return
     }
     actions.moveBlockTo(moveMenu.blockId, targetId)
+  }
+
+  // Batch selection is pruned against the live arrangement draft, so a block
+  // that disappears from the draft can never be sent in a batch operation.
+  const batchSelected = useMemo(() => {
+    const available = new Set(session.targetOrder)
+    return batchSelection.filter(blockId => available.has(blockId))
+  }, [batchSelection, session.targetOrder])
+  const batchSelectedSet = useMemo(() => new Set(batchSelected), [batchSelected])
+  const batchCanMove: Readonly<Record<BatchOrderMode, boolean>> = useMemo(() => ({
+    up: canBatchMove(session.targetOrder, batchSelected, 'up'),
+    down: canBatchMove(session.targetOrder, batchSelected, 'down'),
+    top: canBatchMove(session.targetOrder, batchSelected, 'top'),
+    bottom: canBatchMove(session.targetOrder, batchSelected, 'bottom'),
+  }), [session.targetOrder, batchSelected])
+  const batchOverLimit = batchSelected.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS
+  const batchStructureDisabled = batchSelected.length === 0 || batchOverLimit || rowActionsBusy
+  const batchStructureHint = batchOverLimit
+    ? t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: batchSelected.length })
+    : batchSelected.length === 0 ? t('edit.batchNeedSelection') : undefined
+  const exitBatchMode = (restoreFocus: boolean): void => {
+    setBatchMode(false)
+    setBatchSelection([])
+    clearDeleteConfirm()
+    closeHover()
+    announce(t('edit.a11yBatchExited'))
+    if (!restoreFocus) return
+    window.requestAnimationFrame(() => { batchToggleRef.current?.focus({ preventScroll: true }) })
+  }
+  const toggleBatchMode = (): void => {
+    if (batchMode) { exitBatchMode(true); return }
+    closeHover()
+    clearDeleteConfirm()
+    closeMoveMenu()
+    setBatchMode(true)
+    setBatchSelection([])
+    announce(t('edit.a11yBatchEntered'))
+  }
+  const toggleBatchBlock = (blockId: string): void => {
+    setBatchSelection(current => current.includes(blockId)
+      ? current.filter(id => id !== blockId)
+      : [...current, blockId])
+  }
+  const selectAllBatchBlocks = (): void => { setBatchSelection([...session.targetOrder]) }
+  const clearBatchSelection = (): void => { setBatchSelection([]) }
+  const runBatchOrder = (mode: BatchOrderMode): void => {
+    if (batchSelected.length === 0) return
+    actions.moveBlocks(batchSelected, mode)
+    announce(t('edit.a11yBatchReordered'))
+  }
+  const runBatchStructure = (op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
+    if (batchStructureDisabled) return
+    previewTriggerRef.current = anchor
+    clearDeleteConfirm()
+    closeHover()
+    actions.previewBatchStructure(batchSelected, op)
   }
 
   // The add form only belongs to nested mode; escaping it cancels the draft.
@@ -1337,6 +1432,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }
 
   const scheduleHover = (blockId: string): void => {
+    if (batchMode) return
     if (dragRef.current !== null) return
     if (session.activeBlockId !== undefined) return
     if (!requests.has(blockId)) return
@@ -1764,6 +1860,16 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           className="dsh-iui-edit-section dsh-iui-edit-arrangement"
           aria-label={t('edit.arrangement')}
           aria-busy={structureBusy ? true : undefined}
+          data-dsh-iui-edit-batch-mode={batchMode ? 'true' : undefined}
+          onKeyDown={event => {
+            if (event.key !== 'Escape' || !batchMode) return
+            // The preview dialog and row menus own their own Escape handling;
+            // batch mode only exits when none of them sits above the panel.
+            if (session.structurePreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
+            event.preventDefault()
+            event.stopPropagation()
+            exitBatchMode(true)
+          }}
         >
           <div className="dsh-iui-edit-section-head">
             <span className="dsh-iui-edit-section-title">{t('edit.arrangement')}</span>
@@ -1774,6 +1880,19 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                 {t('edit.structureBusy')}
               </span>
             ) : null}
+            <button
+              ref={batchToggleRef}
+              type="button"
+              className={`dsh-iui-edit-section-action dsh-iui-edit-batch-toggle${batchMode ? ' is-active' : ''}`}
+              data-dsh-iui-edit-batch-toggle
+              aria-pressed={batchMode}
+              aria-label={t('edit.batchToggle')}
+              title={t('edit.batchToggleHint')}
+              disabled={structureBusy}
+              onClick={() => { toggleBatchMode() }}
+            >
+              <BatchGlyph />{t('edit.batchToggle')}
+            </button>
             <button
               type="button"
               className="dsh-iui-edit-section-action"
@@ -1800,12 +1919,105 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               </button>
             </div>
           ) : null}
-          <p className="dsh-iui-edit-arrangement-hint">{t('edit.arrangementHint')}</p>
+          <p className="dsh-iui-edit-arrangement-hint">{batchMode ? t('edit.batchHint') : t('edit.arrangementHint')}</p>
+          {batchMode ? (
+            <div
+              className="dsh-iui-edit-batch"
+              data-dsh-iui-edit-batch-bar
+              role="group"
+              aria-label={t('edit.batchToolbarLabel')}
+            >
+              <div className="dsh-iui-edit-batch-row">
+                <span
+                  className="dsh-iui-edit-batch-count"
+                  role="status"
+                  aria-live="polite"
+                  data-dsh-iui-edit-batch-count
+                >
+                  {t('edit.batchSelectedCount', { count: batchSelected.length })}
+                </span>
+                <span className="dsh-iui-edit-section-spacer" />
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-action"
+                  data-dsh-iui-edit-batch-select-all
+                  disabled={batchSelected.length >= session.targetOrder.length}
+                  aria-label={t('edit.batchSelectAll')}
+                  title={t('edit.batchSelectAll')}
+                  onClick={() => { selectAllBatchBlocks() }}
+                >{t('edit.batchSelectAll')}</button>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-action"
+                  data-dsh-iui-edit-batch-clear
+                  disabled={batchSelected.length === 0}
+                  aria-label={t('edit.batchClear')}
+                  title={t('edit.batchClear')}
+                  onClick={() => { clearBatchSelection() }}
+                >{t('edit.batchClear')}</button>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-action dsh-iui-edit-batch-exit"
+                  data-dsh-iui-edit-batch-exit
+                  aria-label={t('edit.batchExit')}
+                  title={t('edit.batchExit')}
+                  onClick={() => { exitBatchMode(true) }}
+                >{t('edit.batchExit')}</button>
+              </div>
+              <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchOrderGroup')}>
+                {BATCH_ORDER_ACTIONS.map(action => {
+                  const label = t(action.labelKey)
+                  return (
+                    <button
+                      key={action.mode}
+                      type="button"
+                      className="dsh-iui-edit-batch-action"
+                      data-dsh-iui-edit-batch-order={action.mode}
+                      disabled={!batchCanMove[action.mode]}
+                      aria-label={label}
+                      title={batchSelected.length === 0 ? t('edit.batchNeedSelection') : label}
+                      onClick={() => { runBatchOrder(action.mode) }}
+                    >{label}</button>
+                  )
+                })}
+              </div>
+              <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchStructureGroup')}>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-action"
+                  data-dsh-iui-edit-batch-duplicate
+                  disabled={batchStructureDisabled}
+                  aria-label={t('edit.batchDuplicate')}
+                  title={batchStructureHint ?? t('edit.batchDuplicate')}
+                  onClick={event => { runBatchStructure('duplicate', event.currentTarget) }}
+                >
+                  <DuplicateGlyph />{t('edit.batchDuplicate')}
+                </button>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-action is-danger"
+                  data-dsh-iui-edit-batch-delete
+                  disabled={batchStructureDisabled}
+                  aria-label={t('edit.batchDelete')}
+                  title={batchStructureHint ?? t('edit.batchDelete')}
+                  onClick={event => { runBatchStructure('delete', event.currentTarget) }}
+                >
+                  <TrashGlyph />{t('edit.batchDelete')}
+                </button>
+              </div>
+              {batchOverLimit ? (
+                <p className="dsh-iui-edit-batch-limit" role="alert" data-dsh-iui-edit-batch-limit>
+                  {t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: batchSelected.length })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="dsh-iui-edit-arrangement-wrap">
             <ul
               ref={listRef}
               className="dsh-iui-edit-arrangement-list"
               data-dsh-iui-edit-arrangement-list
+              data-batch={batchMode ? 'true' : undefined}
               data-dragging={dragBlockId === null || dragParentId !== null ? undefined : 'true'}
             >
               {session.targetOrder.map((blockId, index) => {
@@ -1814,38 +2026,60 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                 const entry = requests.get(blockId)
                 const title = block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
                 const dragging = dragBlockId === blockId && dragParentId === null
+                const batchSelectedRow = batchSelectedSet.has(blockId)
                 return (
                   <li
                     key={blockId}
-                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}`}
+                    className={`dsh-iui-edit-arrangement-row${entry === undefined ? '' : ` dsh-iui-edit-color-${((entry.order - 1) % COLOR_COUNT) + 1}`}${dragging ? ' is-dragging' : ''}${hoveredBlockId === blockId ? ' is-hover-linked' : ''}${batchMode ? ' is-batch' : ''}${batchSelectedRow ? ' is-batch-selected' : ''}`}
                     data-dsh-iui-edit-arrangement-row
                     data-block-id={blockId}
                     data-structure-confirming={confirmDeleteId === blockId ? 'true' : undefined}
                     data-order-index={index}
                     data-dragging={dragging ? 'true' : undefined}
+                    data-batch-selected={batchSelectedRow ? 'true' : undefined}
                     data-hover-linked={hoveredBlockId === blockId ? 'true' : undefined}
-                    onPointerEnter={() => { onHoverBlock?.(blockId); scheduleHover(blockId) }}
-                    onPointerLeave={() => { onHoverBlock?.(null); scheduleHoverHide() }}
+                    onPointerEnter={() => { onHoverBlock?.(blockId); if (!batchMode) scheduleHover(blockId) }}
+                    onPointerLeave={() => { onHoverBlock?.(null); if (!batchMode) scheduleHoverHide() }}
                   >
-                    <button
-                      type="button"
-                      className="dsh-iui-edit-grip"
-                      data-dsh-iui-edit-grip
-                      aria-label={`${t('edit.moveHandle')}: ${title}`}
-                      aria-describedby={a11yHintId}
-                      title={t('edit.moveHandle')}
-                      onPointerDown={event => { startDrag(event, blockId) }}
-                      onKeyDown={event => { onGripKeyDown(event, blockId, undefined, session.targetOrder) }}
-                    >
-                      <GripGlyph />
-                    </button>
+                    {batchMode ? (
+                      <button
+                        type="button"
+                        className="dsh-iui-edit-batch-check"
+                        data-dsh-iui-edit-batch-check
+                        role="checkbox"
+                        aria-checked={batchSelectedRow}
+                        aria-label={`${t('edit.batchSelect')}: ${title}`}
+                        title={`${t('edit.batchSelect')}: ${title}`}
+                        onClick={event => { event.stopPropagation(); toggleBatchBlock(blockId) }}
+                      >
+                        {batchSelectedRow ? <CheckGlyph /> : null}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="dsh-iui-edit-grip"
+                        data-dsh-iui-edit-grip
+                        aria-label={`${t('edit.moveHandle')}: ${title}`}
+                        aria-describedby={a11yHintId}
+                        title={t('edit.moveHandle')}
+                        onPointerDown={event => { startDrag(event, blockId) }}
+                        onKeyDown={event => { onGripKeyDown(event, blockId, undefined, session.targetOrder) }}
+                      >
+                        <GripGlyph />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="dsh-iui-edit-arrangement-body"
                       data-dsh-iui-edit-arrangement-body
-                      title={t('edit.locate')}
-                      aria-label={`${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: session.originalOrder.indexOf(blockId) + 1 })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
-                      onClick={() => { closeHover(); locate(blockId) }}
+                      title={batchMode ? t('edit.batchSelect') : t('edit.locate')}
+                      aria-pressed={batchMode ? batchSelectedRow : undefined}
+                      aria-label={batchMode
+                        ? `${t('edit.batchSelect')}: ${title}`
+                        : `${t('edit.locate')}: ${title} · ${t('edit.pageOrder', { n: session.originalOrder.indexOf(blockId) + 1 })}${entry === undefined ? '' : ` · ${t('edit.requestOrder', { n: entry.order })}`}`}
+                      onClick={batchMode
+                        ? () => { toggleBatchBlock(blockId) }
+                        : () => { closeHover(); locate(blockId) }}
                     >
                       <span className="dsh-iui-edit-page-index" title={t('edit.pageOrder', { n: session.originalOrder.indexOf(blockId) + 1 })} aria-hidden="true">{session.originalOrder.indexOf(blockId) + 1}</span>
                       <span className="dsh-iui-edit-arrangement-glyph"><TypeGlyph kind={block.kind} /></span>
@@ -1853,21 +2087,23 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                       {entry === undefined ? null : <span className="dsh-iui-edit-badge" title={t('edit.requestOrder', { n: entry.order })} aria-hidden="true">{entry.order}</span>}
                       {entry === undefined ? null : <span className="dsh-iui-edit-tag">{t('edit.editedTag')}</span>}
                     </button>
-                    <StructureActions
-                      t={t}
-                      blockId={blockId}
-                      title={title}
-                      busy={rowActionsBusy}
-                      onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
-                      confirming={confirmDeleteId === blockId}
-                      moveOpen={moveMenu?.blockId === blockId}
-                      onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
-                      onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
-                      onCancelDelete={() => { cancelDeleteConfirm() }}
-                      onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
-                      onMove={anchor => { openMoveMenu(blockId, anchor) }}
-                      onLocate={() => { closeHover(); locate(blockId) }}
-                    />
+                    {batchMode ? null : (
+                      <StructureActions
+                        t={t}
+                        blockId={blockId}
+                        title={title}
+                        busy={rowActionsBusy}
+                        onEdit={() => { closeHover(); actions.openBlockEditor(blockId) }}
+                        confirming={confirmDeleteId === blockId}
+                        moveOpen={moveMenu?.blockId === blockId}
+                        onDuplicate={anchor => { duplicateBlock(blockId, anchor) }}
+                        onRequestDelete={anchor => { requestDeleteBlock(blockId, anchor) }}
+                        onCancelDelete={() => { cancelDeleteConfirm() }}
+                        onConfirmDelete={() => { confirmDeleteBlock(blockId) }}
+                        onMove={anchor => { openMoveMenu(blockId, anchor) }}
+                        onLocate={() => { closeHover(); locate(blockId) }}
+                      />
+                    )}
                   </li>
                 )
               })}
@@ -2197,13 +2433,27 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
             onKeyDown={trapPreviewFocus}
           >
             <div className="dsh-iui-edit-preview-head">
-              <h2 id={previewTitleId} className="dsh-iui-edit-preview-title">{t('edit.previewTitle')}</h2>
+              <h2 id={previewTitleId} className="dsh-iui-edit-preview-title">{preview.batch === true ? t('edit.batchPreviewTitle') : t('edit.previewTitle')}</h2>
               <p className="dsh-iui-edit-preview-subtitle">
                 <span className="dsh-iui-edit-preview-operation">{previewOperationLabel}</span>
-                {previewBlockTitle === undefined ? null : <span className="dsh-iui-edit-preview-block">{previewBlockTitle}</span>}
-                {previewTargetTitle === undefined ? null : <span className="dsh-iui-edit-preview-target">→ {previewTargetTitle}</span>}
+                {preview.batch === true ? (
+                  <span className="dsh-iui-edit-preview-block" data-dsh-iui-edit-preview-block-count>
+                    {t('edit.batchSelectedCount', { count: previewBatchTitles.length })}
+                  </span>
+                ) : previewBlockTitle === undefined ? null : <span className="dsh-iui-edit-preview-block">{previewBlockTitle}</span>}
+                {preview.batch === true || previewTargetTitle === undefined ? null : <span className="dsh-iui-edit-preview-target">→ {previewTargetTitle}</span>}
               </p>
             </div>
+            {preview.batch !== true || previewBatchTitles.length === 0 ? null : (
+              <div className="dsh-iui-edit-preview-batch" data-dsh-iui-edit-preview-blocks>
+                <span className="dsh-iui-edit-preview-batch-label">{t('edit.batchPreviewBlocks')}</span>
+                <ul className="dsh-iui-edit-preview-batch-list">
+                  {previewBatchTitles.map((title, index) => (
+                    <li key={`${index}:${title}`} className="dsh-iui-edit-preview-batch-item" data-dsh-iui-edit-preview-batch-item title={title}>{title}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {preview.status === 'loading' ? (
               <div className="dsh-iui-edit-preview-loading" data-dsh-iui-edit-preview-loading role="status">
                 <span className="dsh-iui-edit-preview-spinner" aria-hidden="true" />

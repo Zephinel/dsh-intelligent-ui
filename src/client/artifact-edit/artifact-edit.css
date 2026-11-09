@@ -1636,6 +1636,171 @@
   transform: translateY(-1px);
 }
 
+/* Batch arrangement mode: selection controls, toolbar and selected rows. */
+.dsh-iui-edit-batch-toggle.is-active {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The extra toggle can exceed the narrowest docked rail; wrapping keeps the
+   section head intact instead of clipping Reset order. */
+.dsh-iui-edit-arrangement[data-dsh-iui-edit-batch-mode='true'] .dsh-iui-edit-section-head {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.dsh-iui-edit-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-edit-batch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-batch-count {
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-edit-batch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 5px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-batch-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-batch-action:hover:not(:disabled) {
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-batch-action:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-edit-batch-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-edit-batch-action.is-danger:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-batch-action.is-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
+
+.dsh-iui-edit-batch-exit {
+  margin-left: auto;
+}
+
+.dsh-iui-edit-batch-limit {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-batch-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0 2px 0 1px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.dsh-iui-edit-batch-check[aria-checked='true'] {
+  border-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  background: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  color: var(--dsw-alias-bg-base);
+}
+
+.dsh-iui-edit-batch-check:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-edit-arrangement-row.is-batch:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-arrangement-row.is-batch-selected,
+.dsh-iui-edit-arrangement-row.is-batch-selected:hover {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)) 8%, transparent);
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-edit-batch-check,
+  .dsh-iui-edit-batch-action {
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+  .dsh-iui-edit-batch-check[aria-checked='true'] {
+    border-color: Highlight;
+    background: Highlight;
+    color: Canvas;
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
+  .dsh-iui-edit-batch-check:focus-visible,
+  .dsh-iui-edit-batch-action:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+  .dsh-iui-edit-batch-toggle.is-active,
+  .dsh-iui-edit-arrangement-row.is-batch-selected {
+    outline: 1px solid Highlight;
+  }
+}
+
 /* Nested arrangement (M4): per-container child ordering below the root list. */
 .dsh-iui-edit-nested-arrangement {
   gap: 10px;
@@ -3180,6 +3345,45 @@
   min-width: 0;
   font: inherit;
   color: inherit;
+}
+
+/* Batch preview: the blocks the operation touches, above the shared diff. */
+.dsh-iui-edit-preview-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-preview-batch-label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-preview-batch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  max-height: 84px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.dsh-iui-edit-preview-batch-item {
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dsh-iui-edit-preview-line[data-diff='add'] {
