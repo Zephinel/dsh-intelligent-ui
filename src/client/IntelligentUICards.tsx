@@ -12,7 +12,7 @@
  * editing: entering edit mode swaps the read-only body for the edit view while
  * the card itself (header, history entry, collapse) stays in place.
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { RemixIcon } from '../lib/components/remix-icon.tsx'
 import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -46,6 +46,7 @@ import {
   forgetArtifactRevision,
   isArtifactVersionStageEnabled,
   registerArtifactVersionCard,
+  updateArtifactVersionCard,
   selectArtifactRevision,
   setArtifactStageVisibility,
   stageProgramFor,
@@ -316,9 +317,15 @@ function isSameStyleTarget(left: ArtifactStyleTarget, right: ArtifactStyleTarget
 }
 
 /** Scroll the active stage card of one artifact into view and focus it. */
+function stageCardSelector(artifactId: string): string {
+  const escaped = typeof CSS === 'undefined' ? artifactId.replace(/["\\]/g, '\\$&') : CSS.escape(artifactId)
+  return `[data-dsh-iui-stage-card][data-artifact-id="${escaped}"]`
+}
+
+/** Scroll the active stage card of one artifact into view and focus it. */
 function scrollToStageCard(artifactId: string): void {
   if (typeof document === 'undefined') return
-  const element = document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${artifactId}"]`)
+  const element = document.querySelector<HTMLElement>(stageCardSelector(artifactId))
   if (element === null) return
   element.scrollIntoView({ block: 'center', behavior: scrollBehavior() })
   element.focus({ preventScroll: true })
@@ -407,10 +414,29 @@ function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | nu
     editedBlockIdsKey,
     turnNumber,
   ])
-  useEffect(() => {
+  // F2: a spec refresh (fallback redirect, restyle, re-parsed Turn) updates the
+  // existing registration in place; only unmount releases it. Unregistering first
+  // would hand the stage over to another card and leave a read-only duplicate.
+  const registrationRef = useRef<{ sessionId: string; spec: ArtifactVersionCardSpec; unregister: () => void } | null>(null)
+  useLayoutEffect(() => {
     if (!isArtifactVersionStageEnabled()) return
-    return registerArtifactVersionCard(sessionId, spec)
-  }, [sessionId, spec])
+    const previous = registrationRef.current
+    if (previous !== null && previous.sessionId === sessionId) {
+      if (previous.spec === spec) return
+      previous.spec = spec
+      updateArtifactVersionCard(sessionId, artifactId, spec)
+      return
+    }
+    if (previous !== null) {
+      previous.unregister()
+      registrationRef.current = null
+    }
+    registrationRef.current = { sessionId, spec, unregister: registerArtifactVersionCard(sessionId, spec) }
+  }, [sessionId, artifactId, spec])
+  useLayoutEffect(() => () => {
+    registrationRef.current?.unregister()
+    registrationRef.current = null
+  }, [])
   const state = useArtifactVersion(sessionId, artifactId)
   const reportVisibility = useCallback((visible: boolean): void => {
     setArtifactStageVisibility(sessionId, artifactId, cardId, visible)

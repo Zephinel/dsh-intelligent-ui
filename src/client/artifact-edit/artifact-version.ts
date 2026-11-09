@@ -205,6 +205,37 @@ export function registerCardInState(
 }
 
 /**
+ * Artifact state with an already-registered card's spec refreshed.
+ *
+ * A card whose program changed (fallback redirect, restyle, a re-parsed Turn)
+ * must keep the role and stage ownership it already has: unlike a fresh
+ * registration it never promotes itself or hands the stage over. Latest and the
+ * selection are recomputed so a deleted selected revision still repoints at a
+ * live record.
+ * @param state - current artifact state.
+ * @param spec - refreshed card spec (same cardId).
+ * @param seq - monotonic registration sequence.
+ * @returns state with the refreshed card, stable stage role and repaired selection.
+ */
+export function updateCardInState(
+  state: ArtifactVersionState,
+  spec: ArtifactVersionCardSpec,
+  seq: number,
+): ArtifactVersionState {
+  if (!state.cards.has(spec.cardId)) return registerCardInState(state, spec, seq)
+  const registered = registerCardInState(state, spec, seq)
+  const selected = registered.selectedRevisionId !== undefined && registered.revisions.has(registered.selectedRevisionId)
+    ? registered.selectedRevisionId
+    : registered.latestRevisionId
+  return {
+    ...registered,
+    stageCardId: state.stageCardId,
+    stageVisible: state.stageVisible,
+    ...selected === undefined ? {} : { selectedRevisionId: selected },
+  }
+}
+
+/**
  * Artifact state with one card removed.
  *
  * A removed stage hands over to the newest remaining card and keeps selecting
@@ -423,6 +454,9 @@ export function stageProgramFor(cardProgram: IntelligentUIProgram, record: Artif
     ...record.requestId === undefined ? {} : { requestId: record.requestId },
     ...record.localRevision === true ? { localRevision: true } : {},
     ...record.localRevisionKind === undefined ? {} : { localRevisionKind: record.localRevisionKind },
+    // A fallback-redirected card must stay read-only on the stage too: the
+    // fallback marker drives edit/draft/runtime-state/Save suppression.
+    ...cardProgram.fallbackFrom === undefined ? {} : { fallbackFrom: cardProgram.fallbackFrom },
     running: cardProgram.running,
   }
 }
@@ -449,7 +483,8 @@ function artifactIdOfKey(key: string): string {
 
 function publish(): void {
   artifactSnapshotCache = new Map()
-  selectedSnapshotCache = new Map()
+  // The selected-id snapshot is content-compared below; keeping the cache lets
+  // unchanged sessions keep the same Set identity and skip TurnTail rerenders.
   for (const listener of listeners) listener()
 }
 
@@ -525,6 +560,19 @@ export function registerArtifactVersionCard(sessionId: string, spec: ArtifactVer
   }
 }
 
+/**
+ * Refresh one mounted card's registration without releasing its role (F2/M2).
+ * @param sessionId - chat session owning the card list.
+ * @param artifactId - root artifact identity.
+ * @param spec - refreshed card spec (same cardId).
+ */
+export function updateArtifactVersionCard(sessionId: string, artifactId: string, spec: ArtifactVersionCardSpec): void {
+  if (!enabled) return
+  seqCounter += 1
+  const current = artifactVersionFor(sessionId, artifactId)
+  commit(sessionId, artifactId, updateCardInState(current, spec, seqCounter))
+}
+
 /** Report the stage card's viewport intersection; stale cards are ignored. */
 export function setArtifactStageVisibility(sessionId: string, artifactId: string, cardId: string, visible: boolean): void {
   if (!enabled) return
@@ -573,14 +621,14 @@ export function forgetArtifactRevision(
 
 /** Selected (and latest) revision ids of every artifact in one session. */
 export function selectedArtifactRevisionIds(sessionId: string): ReadonlySet<string> {
-  const cached = selectedSnapshotCache.get(sessionId)
-  if (cached !== undefined) return cached
   const ids = new Set<string>()
   for (const [key, state] of artifacts) {
     if (!key.startsWith(`${sessionId}\u0000`)) continue
     if (state.selectedRevisionId !== undefined) ids.add(state.selectedRevisionId)
     if (state.latestRevisionId !== undefined) ids.add(state.latestRevisionId)
   }
+  const cached = selectedSnapshotCache.get(sessionId)
+  if (cached !== undefined && cached.size === ids.size && [...ids].every(id => cached.has(id))) return cached
   selectedSnapshotCache.set(sessionId, ids)
   return ids
 }

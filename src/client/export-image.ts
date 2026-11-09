@@ -256,7 +256,7 @@ function captureEntries(container: HTMLElement): ExportTargetEntry[] {
 
 /** Resolve what the export captures for one action row (cross-Turn stage lookup). */
 export function planImageExportCapture(container: HTMLElement) {
-  return planExportCapture(captureEntries(container), artifactId => document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${artifactId}"]`))
+  return planExportCapture(captureEntries(container), artifactId => document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${CSS.escape(artifactId)}"]`))
 }
 
 /** Expand collapsed cards under one element; returns an idempotent restore. */

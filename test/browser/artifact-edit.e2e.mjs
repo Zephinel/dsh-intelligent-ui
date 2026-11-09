@@ -2741,6 +2741,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`window.__thumbnailStates('stage-call-1', 'stage-call-3').dark === 'ready'`, 'dark thumbnail captured off-screen', { timeout: 12000 })
   check(await read(`window.__thumbnailStates('stage-call-1', 'stage-call-3').light`), 'ready', 'the live stage captures the current scheme')
   check(await read(`window.__thumbnailStates('stage-call-1', 'stage-call-3').dark`), 'ready', 'the same revision also stores the other scheme')
+  check(await read(`(() => { const state = window.__thumbnailStates('stage-call-1', 'stage-call-3'); return state.lightUrl !== null && state.darkUrl !== null && state.lightUrl !== state.darkUrl })()`), true, 'light and dark are two independent captures with distinct object URLs')
   const dualTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
   const dualItem = '[data-dsh-iui-version-item][data-revision="3"] [data-dsh-iui-version-thumb]'
   await click(dualTrigger)
@@ -2837,6 +2838,45 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision="stage-call-3"]'), 0, 'the deleted revision row is gone')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'deletion details closed')
+  await read('window.__setArtifactStageEnabled(false)')
+
+  // 53. F1/F2: with a single mounted card (trimmed Turn window / refresh), deleting
+  // the revision the card itself displays redirects it in place; the fallback card
+  // must stay read-only (its program carries fallbackFrom) without losing the stage.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card]")', 'solo stage cleared')
+  const SOLO_V1 = 'root = Col([Card([Title("单卡回退旧版", "sm")])])'
+  const SOLO_V2 = 'root = Col([Card([Title("单卡当前版", "sm")])])'
+  await read(`window.__setHistory('solo-call', [
+    { revisionId: 'solo-call', revision: 2, baseRevisionId: 'solo-rev-1', title: '单卡样例', style: 'card', createdAt: 1763200005000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'solo-rev-1', revision: 1, title: '单卡样例', style: 'card', createdAt: 1763200004000, source: 'initial', hasProgram: true },
+  ], { 'solo-rev-1': ${JSON.stringify(SOLO_V1)} })`)
+  await read(`window.__appendRevision('solo-call', ${JSON.stringify(SOLO_V2)}, { artifactId: 'solo-call', revisionId: 'solo-call', revision: 2, baseRevisionId: 'solo-rev-1', editedBlockIds: ['b1'] }, '单卡样例')`)
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\\"solo-call\\"]")', 'solo stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('单卡当前版')`, 'solo stage shows its own revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'the stage is the only mounted card')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 1, 'the live stage card is editable before the deletion')
+  const soloTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  await click(soloTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'solo version bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'solo details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="solo-call"] [data-dsh-iui-history-delete]`)', 'solo delete row ready')
+  await click('[data-dsh-iui-history-revision="solo-call"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'solo deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('单卡回退旧版')`, 'solo stage follows the fallback')
+  const soloState = await read(`window.__artifactVersionState('solo-call')`)
+  check(soloState.latest, 'solo-rev-1', 'the fallback revision becomes latest')
+  check(soloState.selected, 'solo-rev-1', 'the fallback revision becomes selected')
+  check(soloState.stage, 'solo-call', 'the same single card keeps the stage')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'the fallback keeps exactly one card')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'fallback stage card is read-only')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'F1: the fallback stage card is read-only')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), 'solo-call', 'the fallback stage keeps its identity')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'solo details closed')
   await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

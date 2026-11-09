@@ -28,6 +28,7 @@ import {
   stageProgramFor,
   stagedArtifactIds,
   unregisterCardInState,
+  updateCardInState,
 } from '../../src/client/artifact-edit/artifact-version.ts'
 
 const SESSION = 's-version'
@@ -328,4 +329,88 @@ test('disabling the stage switch makes registrations no-ops (browser harness swi
   release()
   setArtifactVersionStageEnabled(true)
   assert.equal(isArtifactVersionStageEnabled(), true)
+})
+
+test('F1 fallbackFrom survives stage synthesis and the fallback redirect sequence', () => {
+  const redirected = {
+    callId: 'card-1',
+    program: 'root = Col([Title("fallback")])',
+    running: false,
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    fallbackFrom: 'rev-2',
+  }
+  let state = registerAll([card({ revisionId: 'rev-2', revision: 2, turn: 2 })])
+  state = unregisterCardInState(state, 'card-1')
+  state = registerCardInState(state, {
+    cardId: 'card-1',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    turn: 1,
+    program: 'root = Col([Title("fallback")])',
+    style: 'card',
+  }, 9)
+  const record = state.revisions.get('rev-1')
+  const program = stageProgramFor(redirected, record)
+  assert.equal(program.fallbackFrom, 'rev-2', 'the stage keeps the fallback marker so the card stays read-only')
+  assert.equal(program.callId, 'card-1')
+  assert.equal(program.revisionId, 'rev-1')
+})
+
+test('F2 updateCardInState refreshes a card without moving the stage or its visibility', () => {
+  let state = registerAll([
+    card(),
+    card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 }),
+  ])
+  state = setStageVisibilityInState(state, true)
+  assert.equal(state.stageCardId, 'card-2', 'the newest registration owns the stage')
+  assert.equal(state.selectedRevisionId, 'rev-2')
+  const updated = updateCardInState(state, {
+    cardId: 'card-2',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    turn: 1,
+    program: 'root = Col([Title("redirected")])',
+    style: 'card',
+  }, 30)
+  assert.equal(updated.stageCardId, 'card-2', 'the updating card keeps the stage')
+  assert.equal(updated.stageVisible, true, 'visibility survives the update')
+  assert.equal(updated.cards.get('card-2').revisionId, 'rev-1')
+  assert.equal(updated.revisions.get('rev-1').program, 'root = Col([Title("redirected")])')
+  assert.equal(updated.selectedRevisionId, 'rev-2', 'the live selected revision stays selected')
+})
+
+test('F2 updateCardInState repairs a selected revision that disappeared and keeps frozen roles', () => {
+  let state = registerAll([
+    card(),
+    card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 }),
+  ])
+  state = { ...state, selectedRevisionId: 'rev-9' }
+  const updated = updateCardInState(state, {
+    cardId: 'card-2',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    turn: 2,
+    program: 'root = Col([Title("redirected")])',
+    style: 'card',
+  }, 31)
+  assert.equal(updated.stageCardId, 'card-2', 'the updating card keeps the stage')
+  assert.equal(updated.selectedRevisionId, 'rev-2', 'the selection falls back to the latest live revision')
+  assert.equal(updated.latestRevisionId, 'rev-2')
+  assert.equal(artifactCardRole(updated, 'card-2'), 'stage')
+})
+
+test('F3 selected revision ids keep their Set identity while the content is unchanged', () => {
+  const first = registerArtifactVersionCard(SESSION, card())
+  const idsA = selectedArtifactRevisionIds(SESSION)
+  assert.equal(selectedArtifactRevisionIds(SESSION), idsA, 'an unchanged snapshot returns the same Set')
+  registerArtifactVersionCard(SESSION, card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 }))
+  const idsB = selectedArtifactRevisionIds(SESSION)
+  assert.notEqual(idsB, idsA, 'a changed snapshot returns a new Set')
+  assert.deepEqual([...idsB].sort(), ['rev-2'])
+  first()
 })

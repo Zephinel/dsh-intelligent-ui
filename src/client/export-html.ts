@@ -10,7 +10,7 @@ import {
   EXPORT_STANDALONE_JS_PATH,
   type ExportPageCard,
 } from '../shared/intelligent-ui.ts'
-import { buildStandaloneHtml, pageFileName } from './export-html-plan.ts'
+import { buildStandaloneHtml, mergeLocalImageAssets, pageFileName } from './export-html-plan.ts'
 import { findCardsForAction, settleLocalImages } from './export-image.ts'
 
 /** Options for exporting the current answer as an interactive page. */
@@ -198,27 +198,30 @@ export async function exportCardsHtml(options: ExportPageOptions): Promise<void>
   // Local images are blob URLs created by this page; inline them before the
   // document is assembled so the downloaded file works offline.
   const container = options.trigger === undefined ? null : findCardsForAction(options.trigger)
-  let assets: Record<string, Record<string, string>> = {}
-  if (options.assetElements !== undefined && options.assetElements.size > 0) {
-    // The selected revision is displayed by a stage card somewhere else in the
-    // conversation; read its local images from that element, keyed by the
-    // exported callId so the standalone payload can resolve them.
-    let total = 0
-    for (const [callId, element] of options.assetElements) {
-      await settleLocalImages(element)
-      const bucket = await collectLocalImageAssetsForElement(element, callId)
-      for (const value of Object.values(bucket)) total += value.length
-      if (total > MAX_INLINE_IMAGE_DATA_URL_CHARS) throw new Error('intelligent-ui export: local images are too large to inline into one page')
-      if (Object.keys(bucket).length > 0) assets[callId] = bucket
-    }
-  } else if (container !== null) {
+  // Both sources contribute (F4/M6): the container covers cards that still live
+  // in the exported Turn, stage elements cover selected revisions displayed in
+  // another Turn. Element buckets win per callId.
+  let containerAssets: Record<string, Record<string, string>> = {}
+  let elementAssets: Record<string, Record<string, string>> = {}
+  if (container !== null) {
     // Only local readers matter here; searches/remote loads are not inlined
     // and must not delay the page export.
     await settleLocalImages(container)
     const exportedCallIds = new Set(options.cards
       .map(card => card.callId ?? ''))
-    assets = await collectLocalImageAssets(container, exportedCallIds)
+    containerAssets = await collectLocalImageAssets(container, exportedCallIds)
   }
+  if (options.assetElements !== undefined && options.assetElements.size > 0) {
+    for (const [callId, element] of options.assetElements) {
+      await settleLocalImages(element)
+      const bucket = await collectLocalImageAssetsForElement(element, callId)
+      if (Object.keys(bucket).length > 0) elementAssets[callId] = bucket
+    }
+  }
+  const assets = mergeLocalImageAssets(containerAssets, elementAssets)
+  let total = 0
+  for (const bucket of Object.values(assets)) for (const value of Object.values(bucket)) total += value.length
+  if (total > MAX_INLINE_IMAGE_DATA_URL_CHARS) throw new Error('intelligent-ui export: local images are too large to inline into one page')
   const title = options.title !== undefined && options.title.trim() !== ''
     ? options.title
     : options.lang.toLowerCase().startsWith('zh') ? '交互页面' : 'Interactive page'

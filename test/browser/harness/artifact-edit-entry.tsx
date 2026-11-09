@@ -433,6 +433,8 @@ w.__thumbnailStates = (artifactId: string, revisionId: string) => {
   return {
     light: read('light').status,
     dark: read('dark').status,
+    lightUrl: read('light').url ?? null,
+    darkUrl: read('dark').url ?? null,
     lightCross: read('light').crossScheme ?? null,
     darkCross: read('dark').crossScheme ?? null,
   }

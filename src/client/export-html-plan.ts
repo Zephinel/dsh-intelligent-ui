@@ -54,6 +54,26 @@ export function programsToExportCards(programs: readonly IntelligentUIProgram[],
   } })
 }
 
+/**
+ * Merge the two local-image sources of one page export (F4/M6): the stage
+ * elements of selected revisions take priority per card, while the legacy
+ * container keeps supplying cards that still live in the exported Turn.
+ * @param containerAssets - per-callId buckets collected from the Turn container.
+ * @param elementAssets - per-callId buckets collected from cross-Turn stage elements.
+ * @returns merged buckets; an element bucket wins over the container bucket.
+ */
+export function mergeLocalImageAssets(
+  containerAssets: Readonly<Record<string, Readonly<Record<string, string>>>>,
+  elementAssets: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): Record<string, Record<string, string>> {
+  const merged: Record<string, Record<string, string>> = {}
+  for (const [callId, bucket] of Object.entries(containerAssets)) merged[callId] = { ...bucket }
+  for (const [callId, bucket] of Object.entries(elementAssets)) {
+    merged[callId] = { ...(merged[callId] ?? {}), ...bucket }
+  }
+  return merged
+}
+
 /** Everything the standalone page needs, already fetched as text. */
 export interface StandalonePageInput {
   /** The recorded cards, in render order. */

@@ -17,6 +17,7 @@ import { createRoot } from 'react-dom/client'
 import { snapdom } from '@zumer/snapdom'
 import type { CSSProperties } from 'react'
 import { OpenUIRenderer } from '../../lib/render.tsx'
+import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { Translate } from '../../shared/locales.ts'
 import type { RenderLayout } from '../../shared/intelligent-ui.ts'
 import type { ImageSourceResolver } from '../../shared/image-source.ts'
@@ -142,15 +143,32 @@ export async function captureOffscreenThumbnail(input: OffscreenThumbnailInput):
     root.render(createElement(
       'div',
       { className: 'dsh-iui-card', 'data-dsh-iui-thumbnail-stage': 'true' },
-      createElement(OpenUIRenderer, {
-        program: input.program,
-        title: input.title,
-        scopeId: input.parts.revisionId,
-        themeStyle: input.themeStyle,
-        scheme: input.scheme,
-        t: input.t,
-        resolveImage: input.resolveImage,
-      }),
+      // M9/F6: mirror the real card head so lazy captures and live-stage
+      // captures share the same composition (title/icon strip + body).
+      createElement(
+        'div',
+        { className: 'dsh-iui-card-head' },
+        createElement(
+          'button',
+          { type: 'button', className: 'dsh-iui-header', 'aria-expanded': true, tabIndex: -1 },
+          createElement('span', { className: 'dsh-iui-icon', 'aria-hidden': true }, createElement(RemixIcon, { name: 'sparkling-fill', size: 14 })),
+          createElement('span', { className: 'dsh-iui-title', 'data-dsh-iui-title': true }, input.title ?? input.t('card.title')),
+          createElement('span', { className: 'dsh-iui-chevron', 'aria-hidden': true }, createElement(RemixIcon, { name: 'arrow-down-s-line', size: 14 })),
+        ),
+      ),
+      createElement(
+        'div',
+        { className: 'dsh-iui-body' },
+        createElement(OpenUIRenderer, {
+          program: input.program,
+          title: input.title,
+          scopeId: input.parts.revisionId,
+          themeStyle: input.themeStyle,
+          scheme: input.scheme,
+          t: input.t,
+          resolveImage: input.resolveImage,
+        }),
+      ),
     ))
     await wait(0)
     const card = host.firstElementChild

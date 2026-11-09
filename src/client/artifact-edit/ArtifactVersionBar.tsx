@@ -29,7 +29,6 @@ import {
   hydrateArtifactThumbnails,
   oppositeThumbnailScheme,
   thumbnailSnapshot,
-  thumbnailSnapshot,
   useThumbnailVersion,
   type ThumbnailParts,
   type ThumbnailScheme,
@@ -120,6 +119,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
   const [placement, setPlacement] = useState<{ left: number; top: number; width: number } | null>(null)
   const [focusedId, setFocusedId] = useState<string>(currentRevisionId)
   const [pendingId, setPendingId] = useState<string | undefined>()
+  const pendingRef = useRef(false)
   const [error, setError] = useState<string | undefined>()
   useThumbnailVersion()
   const versionState = useArtifactVersion(sessionId, artifactId)
@@ -289,12 +289,18 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
 
   /** Select one revision: ensure its program, then hand the selection to the parent. */
   const applySelection = useCallback(async (item: VersionItem): Promise<void> => {
-    if (pendingId !== undefined) return
+    if (pendingRef.current) return
     setError(undefined)
     if (item.revisionId === currentRevisionId) { onClose(); return }
+    pendingRef.current = true
     setPendingId(item.revisionId)
-    const resolved = await resolveRevision(item)
-    setPendingId(undefined)
+    let resolved: ResolvedRevision | undefined
+    try {
+      resolved = await resolveRevision(item)
+    } finally {
+      pendingRef.current = false
+      setPendingId(undefined)
+    }
     if (resolved === undefined) { setError(t('version.programMissing')); return }
     const parts: ThumbnailParts = { artifactId, revisionId: item.revisionId, scheme }
     const fallbackScheme: ThumbnailScheme = scheme === 'light' ? 'dark' : 'light'
@@ -306,7 +312,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
       ? { start: rectOf(rect), imageUrl: snapshot.url }
       : undefined
     onSelectRevision(item.revisionId, animation)
-  }, [artifactId, scheme, currentRevisionId, onClose, onSelectRevision, pendingId, resolveRevision, t])
+  }, [artifactId, scheme, currentRevisionId, onClose, onSelectRevision, resolveRevision, t])
 
   // Close on outside pointerdown / Escape, and reposition on resize.
   useEffect(() => {
@@ -430,6 +436,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
               role="option"
               aria-selected={item.current}
               aria-label={item.hasProgram ? t('version.select', { n: item.revision }) : t('edit.historyUnavailable')}
+              title={item.hasProgram ? t('version.select', { n: item.revision }) : t('edit.historyUnavailable')}
               tabIndex={item.revisionId === focusedId ? 0 : -1}
               className={`dsh-iui-version-item${item.current ? ' is-current' : ''}${item.local ? ' is-local' : ''}${item.hasProgram ? '' : ' is-unavailable'}`}
               data-dsh-iui-version-item
@@ -439,7 +446,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
               data-source={item.source}
               data-draft={item.draft ? 'true' : undefined}
               data-local={item.local ? 'true' : undefined}
-              disabled={pending}
+              disabled={pending || !item.hasProgram}
               onFocus={() => { setFocusedId(item.revisionId) }}
               onClick={() => { void applySelection(item) }}
             >

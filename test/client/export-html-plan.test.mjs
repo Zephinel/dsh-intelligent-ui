@@ -12,6 +12,7 @@ import {
   buildStandaloneHtml,
   escapeHtml,
   exportTemplatesFor,
+  mergeLocalImageAssets,
   pageFileName,
   scriptJson,
 } from '../../src/client/export-html-plan.ts'
@@ -197,4 +198,19 @@ test('built-in cards and a missing catalog keep the built-in theme', async () =>
   assert.equal(resolveCardTheme(temporary, [], sessionTemplate.id), undefined, 'no visible catalog means no template theme')
   assert.equal(resolveCardTheme(temporary, [sessionTemplate], undefined), undefined, 'no selected session style means no template theme')
   assert.notEqual(THEME.light.canvas, '#101010')
+})
+
+test('F4 local image sources merge per callId with stage elements winning', () => {
+  assert.deepEqual(
+    mergeLocalImageAssets({ 'call-a': { 'a.png': 'data:a' } }, {}),
+    { 'call-a': { 'a.png': 'data:a' } },
+    'a container-only card keeps its images',
+  )
+  const merged = mergeLocalImageAssets(
+    { 'call-a': { 'old.png': 'data:container', 'keep.png': 'data:keep' }, 'call-b': { 'b.png': 'data:b' } },
+    { 'call-a': { 'old.png': 'data:stage' }, 'call-c': { 'c.png': 'data:c' } },
+  )
+  assert.deepEqual(merged['call-a'], { 'old.png': 'data:stage', 'keep.png': 'data:keep' }, 'element buckets win per path while container-only paths remain')
+  assert.deepEqual(merged['call-b'], { 'b.png': 'data:b' })
+  assert.deepEqual(merged['call-c'], { 'c.png': 'data:c' }, 'stage-only cards are added')
 })
