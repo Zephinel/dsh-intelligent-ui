@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'esbuild'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
-import { DST_PROGRAM } from './fixtures/dst-artifact.ts'
+import { DST_PROGRAM, DST_TITLE } from './fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM } from './fixtures/nested-artifact.ts'
 import { PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_PROGRAM_APPLIED } from './fixtures/props-artifact.ts'
 import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
@@ -241,6 +241,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // The measured orbit position can trail one layout frame after focus; wait
   // for the settled geometry instead of failing the whole suite on that frame.
   await wait(orbitGeometry, 'orbit sits five pixels outside the field')
+  // The 320ms panel width animation can still be settling when the expression
+  // first matches; sample again after it finishes so the assertion is stable.
+  await new Promise(resolve => setTimeout(resolve, 400))
   check(await read(orbitGeometry), true, 'the orbit sits five pixels outside the field')
   await new Promise(resolve => setTimeout(resolve, 350))
   await shot('harness-input-orbit.png')
@@ -2490,6 +2493,94 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'chain history closed')
   await read("window.__clearHistory('dep-call-1')")
+
+  // 48. M1 revision stage: the visible stage updates in place (no new card), the
+  // newer revision becomes a notice row; an invisible stage hands over to a new
+  // stage card with a hint on the frozen one; a remount converges back to the
+  // latest loaded revision; local revisions obey the same suppression rule.
+  // Scenarios 1-47 ran with the harness stage switch off (pre-M1 semantics).
+  await read('window.__resetStageHarness()')
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__remount()')
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card]")', 'M1 stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-stage-visible') === 'true'`, 'stage viewport visibility reported')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), 'stage-call-1', 'the stage keeps the card DOM identity')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-artifact-id')`), 'stage-call-1', 'the stage names its artifact')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card] [data-dsh-iui-title]').textContent`), DST_TITLE, 'the stage renders the latest revision card')
+  check(await count('[data-dsh-iui-revision-notice]'), 0, 'no notice row before a newer revision exists')
+
+  // Visible stage: the new revision renders in place, only a notice row appears.
+  const STAGE_V2 = 'root = Col([Card([Title("第二版标题", "sm"), Text("可见舞台原位更新", "sm")])])'
+  await read(`window.__appendRevision('stage-call-2', ${JSON.stringify(STAGE_V2)}, { artifactId: 'stage-call-1', revisionId: 'stage-call-2', baseRevisionId: 'stage-call-1', revision: 2, editedBlockIds: ['b1'], title: '夏令时与冬令时' })`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('可见舞台原位更新')`, 'stage re-renders the new revision in place')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'no extra full card is created while the stage is visible')
+  check(await count('[data-dsh-iui-call-id="stage-call-2"]'), 0, 'the suppressed revision has no card of its own')
+  check(await count('[data-dsh-iui-revision-notice]'), 1, 'the newer revision becomes one compact notice row')
+  check((await text('[data-dsh-iui-revision-notice]')).includes('修订 2 已更新到上方卡片'), true, 'the notice names the revision and the stage')
+  check(await read(`document.querySelector('[data-dsh-iui-revision-notice]').getAttribute('data-dsh-iui-revision-id')`), 'stage-call-2', 'the notice carries the suppressed revision id')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card] [data-dsh-iui-history-count]')?.textContent`), '2', 'the stage header reports the selected revision')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-2', 'the stage selects the new revision (its own edit result)')
+  await click('[data-dsh-iui-revision-notice]')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-stage-card')`), true, 'clicking the notice focuses the stage card')
+  await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'stage editor opens on the selected revision')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-panel]') !== null`), true, 'the stage edit canvas is available')
+  await click('[data-dsh-iui-edit-exit]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'stage editor closed')
+
+  // Invisible stage: scroll it far above, then a newer revision promotes its own card.
+  await read(`(() => { const filler = document.createElement('div'); filler.id = 'm1-stage-filler'; filler.style.height = '2600px'; document.body.appendChild(filler); window.scrollTo(0, document.body.scrollHeight); return true })()`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-stage-visible') === 'false'`, 'the stage is scrolled out of view')
+  const STAGE_V3 = 'root = Col([Card([Title("第三版标题", "sm"), Text("不可见舞台回落新卡", "sm")])])'
+  await read(`window.__appendRevision('stage-call-3', ${JSON.stringify(STAGE_V3)}, { artifactId: 'stage-call-1', revisionId: 'stage-call-3', baseRevisionId: 'stage-call-2', revision: 3, editedBlockIds: ['b1'], title: '夏令时与冬令时' })`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'stage-call-3'`, 'the new card promotes to stage when the old stage is invisible')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-3', 'the promoted stage selects the latest revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 3, 'every older revision becomes a frozen full card')
+  check(await count('[data-dsh-iui-stage-stale-hint]'), 2, 'each frozen card explains where the latest revision is')
+  check((await text('[data-dsh-iui-stage-stale-hint]')), '最新修订已移到下方', 'the frozen hint is explicit')
+  check(await count('[data-dsh-iui-revision-notice]'), 0, 'the promoted revision is not suppressed')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="stage-call-2"] [data-dsh-iui-history-count]')?.textContent ?? null`), '2', 'a frozen card keeps its own revision badge')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card] [data-dsh-iui-history-count]')?.textContent ?? null`), '3', 'the stage header reports the promoted revision')
+  await click('[data-dsh-iui-stage-stale-hint]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.matches(':focus') === true`, 'the frozen hint focuses the stage')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), 'stage-call-3', 'the hint points at the active stage')
+
+  // Remount (reload/window rebuild): the newest loaded card becomes the stage and
+  // the selection returns to the latest revision (D6).
+  await read('window.__remount()')
+  await wait(`document.querySelectorAll('[data-dsh-iui-stage-card]').length === 1`, 'one stage after the remount')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'stage-call-3'`, 'the remount converges on the newest loaded revision')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-3', 'D6: a remount selects the latest revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 3, 'the remount still renders all loaded revision cards')
+
+  // Selecting an older revision only changes what the stage displays; the stage
+  // stays read-only while its revision is natively owned by a frozen card.
+  await read(`window.__selectArtifactRevision('stage-call-1', 'stage-call-1')`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card] [data-dsh-iui-title]').textContent === ${JSON.stringify(DST_TITLE)} && document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('春天把钟拨快')`, 'the stage switches to the selected revision')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-1', 'selection is stored without a Host write')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'a stage displaying a frozen revision is read-only')
+  check(await count('[data-dsh-iui-call-id="stage-call-1"] [data-dsh-iui-edit-entry]'), 1, 'the native frozen card keeps the edit entry')
+  await read(`window.__selectArtifactRevision('stage-call-1', 'stage-call-3')`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'the stage switches back to the latest revision')
+
+  // A client-local revision (structure/restore) is suppressed the same way when
+  // the stage is visible; a remount promotes the persisted local revision card.
+  await read(`document.getElementById('m1-stage-filler')?.remove()`)
+  await read(`document.querySelector('[data-dsh-iui-stage-card]').scrollIntoView({ block: 'center' })`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-stage-visible') === 'true'`, 'the stage is visible again')
+  const LOCAL_V4 = 'root = Col([Card([Title("本地修订标题", "sm"), Text("本地修订内容", "sm")])])'
+  await read(`window.__appendLocalRevision({ artifactId: 'stage-call-1', sourceRevisionId: 'stage-call-3', revisionId: 'local-rev-4', revision: 4, kind: 'structure', program: ${JSON.stringify(LOCAL_V4)}, title: '夏令时与冬令时' })`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('本地修订内容')`, 'the local revision renders on the stage')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'local-rev-4', 'the local revision becomes the selected/latest revision')
+  check(await count('[data-dsh-iui-call-id="local-rev-4"]'), 0, 'the suppressed local revision has no card of its own')
+  check(await count('[data-dsh-iui-revision-notice]'), 1, 'the local revision becomes a notice row')
+  check((await text('[data-dsh-iui-revision-notice]')).includes('修订 4'), true, 'the notice names the local revision number')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-local-revision]'), 1, 'the stage keeps the local revision badge')
+  await read('window.__remount()')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'local-rev-4'`, 'the persisted local revision becomes the stage after a remount')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'local-rev-4', 'D6 still selects the latest local revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 4, 'transcript and local revision cards all render as frozen cards')
+  await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

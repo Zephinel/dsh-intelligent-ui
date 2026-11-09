@@ -756,3 +756,21 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **566 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,044,247** 字节，解包 **12,927,122** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-10 — M1 活动舞台 + 可见性回落
+
+- **版本 store**：新增 `src/client/artifact-edit/artifact-version.ts`（内存 store + 纯 reducer，`useSyncExternalStore`）。按 `(sessionId, artifactId)` 维护 revisions/latest/selected/stageCard/stageVisible；首卡成为舞台并选中 latest；舞台可见时新修订只产生 notice 行并原位更新舞台；舞台不可见时新卡晋升并冻结旧舞台；同/旧 revision 按 turn/revision 判定 notice/frozen；舞台卸载由剩余最新卡接管，最后一卡卸载后 artifact 状态清空以便重挂载/刷新重新收敛到最新（D6）。
+- **卡片角色**：`IntelligentUICards` 新增 `ArtifactVersionGate`——stage 用选中 revision 合成渲染（保留自己的 `data-dsh-iui-call-id`，带 `data-dsh-iui-stage-card`/`data-artifact-id`/`data-dsh-iui-stage-visible`，编辑 key/历史 currentRevisionId/runtime state 以选中 revision 为准）；notice 是一行 `data-dsh-iui-revision-notice`（点击滚动并聚焦舞台）；frozen 渲染自己的 revision 并加 `data-dsh-iui-stage-stale-hint`；舞台显示 frozen 卡原生 revision 时只读，避免双画布。
+- **一致性**：`reconcileArtifactSubmissions` 仍用本 Turn 原始 programs；local revisions 走同一 gate；历史删除沿用 revision-fallbacks 后调用 `forgetArtifactRevision`，latest/selected 指回可用记录，舞台不会悬空；选中/最新 revision 计入 `renderedRevisionIds` 供删除守卫使用。
+- **测试开关**：`setArtifactVersionStageEnabled(false)` 仅 harness 使用；`artifact-edit` 场景 1–47 保持旧「每修订一张卡」断言（全部原 checks 保留），新增场景 48 开启 stage 覆盖 M1；生产默认开启，无持久化/Host 路由/新修订枚举。
+- **测试**：`test/client/artifact-version.test.mjs` 20 条（首卡舞台、可见原位更新、不可见晋升、初始收敛、旧卡冻结、舞台重注册、卸载接管/清空、重挂载收敛、selectRevision、删除重指向与 fallback 记录、stageProgramFor 身份合成、只读判定、latest 排序、模块 store 注册/可见性/禁用开关）；E2E 场景 48（可见原位更新无新卡、notice 文案/点击聚焦、编辑以选中 revision、不可见晋升 + frozen hint、重挂载回最新、选旧版本只读、local revision 抑制与重挂载晋升），套件 566 → **599 checks**。
+- **已知限制/风险**：M1 不做版本条/缩略图/持久化（M2）；抑制后的修订无整卡，图片/HTML 导出仍按既有语义（M3 对齐，已知回归风险，未改导出）；frozen 卡保留既有编辑入口；真实屏幕阅读器/coarse pointer 未单独验证。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **685/685** = Host **302** + Client **360** + packaging **23**；build host **841 kB**、client **4.08 MB**（js 3.86 / CSS 225.0） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **599 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,081** 字节，解包 **12,943,001** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

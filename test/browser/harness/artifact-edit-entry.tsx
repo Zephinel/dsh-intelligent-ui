@@ -20,10 +20,17 @@ import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/
 import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_LEGACY_AUTO_PROGRAM, PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
 import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
+import { addLocalRevision, clearLocalRevisions } from '../../../src/client/artifact-edit/local-revisions.ts'
+import { clearRevisionFallbacks } from '../../../src/client/artifact-edit/revision-fallbacks.ts'
+import { artifactVersionFor, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
 import { collectLocalImageAssets } from '../../../src/client/export-html.ts'
 import { settleLocalImages } from '../../../src/client/export-image.ts'
 
 const SESSION = 'e2e-session'
+// The M1 revision stage is a production default (see `artifact-version.ts`).
+// This suite's scenarios 1-47 assert the pre-M1 card-per-revision behavior, so
+// they run with the stage switch off; scenario 48 re-enables it explicitly.
+setArtifactVersionStageEnabled(false)
 const base = {
   sessionEnable: 'on', sessionStyle: 'inherit', globalEnabled: true, globalStyle: 'auto', enabled: true, style: 'auto', pending: false, onDemand: null,
 } satisfies IntelligentUIModeView
@@ -400,6 +407,56 @@ w.__applyBlockEditRevision = (meta: Record<string, unknown>, callId: string = 'd
     },
   }]
   update()
+}
+
+// M1 revision-stage fixtures: toggle the production stage behavior (off for
+// the pre-M1 scenarios above), read/select the version store, append revision
+// cards or local revisions and reset the harness to one clean artifact.
+w.__setArtifactStageEnabled = (next: boolean) => { setArtifactVersionStageEnabled(next) }
+w.__artifactVersionState = (artifactId: string) => {
+  const state = artifactVersionFor(SESSION, artifactId)
+  return {
+    latest: state.latestRevisionId,
+    selected: state.selectedRevisionId,
+    stage: state.stageCardId,
+    visible: state.stageVisible,
+    revisions: [...state.revisions.keys()],
+    cards: [...state.cards.keys()],
+    roles: Object.fromEntries([...state.cards.keys()].map(cardId => [cardId, state.stageCardId === cardId ? 'stage' : 'other'])),
+  }
+}
+w.__selectArtifactRevision = (artifactId: string, revisionId: string) => selectArtifactRevision(SESSION, artifactId, revisionId)
+w.__appendRevision = (callId: string, program: string, meta: Record<string, unknown> = {}, title: string = DST_TITLE) => {
+  nodes = [...nodes, cardNode(callId, program, meta, title)]
+  update()
+}
+w.__appendLocalRevision = (input: { artifactId: string; sourceRevisionId: string; revisionId: string; revision: number; program: string; title?: string; kind?: 'restore' | 'structure' | 'props' | 'style' }) => {
+  addLocalRevision(SESSION, {
+    artifactId: input.artifactId,
+    sourceRevisionId: input.sourceRevisionId,
+    revisionId: input.revisionId,
+    revision: input.revision,
+    program: input.program,
+    ...input.title === undefined ? {} : { title: input.title },
+    style: 'card',
+    ...input.kind === undefined ? {} : { kind: input.kind },
+    turn: 1,
+    createdAt: Date.now(),
+  })
+  update()
+}
+w.__resetStageHarness = () => {
+  nodes = [cardNode('stage-call-1', DST_PROGRAM)]
+  w.__latestMap = {}
+  w.__deletedRevisions = new Set<string>()
+  w.__historyByArtifact = {}
+  w.__historyPrograms = {}
+  w.__conflict = false
+  w.__restoreRevision = 4
+  turnState = { turn: 1, status: 'open', start: { time: Date.now() } }
+  clearLocalRevisions(SESSION)
+  clearRevisionFallbacks(SESSION)
+  w.__remount()
 }
 
 /** Default sample history served for any artifact without an override. */

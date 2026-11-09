@@ -1775,3 +1775,113 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Revision stage (M1): a suppressed newer revision renders as one compact
+ * notice row, and a frozen historical card carries a light hint pointing at the
+ * active stage. The stage card keeps the normal card chrome; only the focus
+ * ring is added so the notice/hint scroll target is visible when focused.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-revision-notice {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.dsh-iui-revision-notice:hover {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-revision-notice:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-revision-notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-revision-notice-arrow {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-stage-stale {
+  padding: 0 16px 12px;
+}
+
+.dsh-iui-stage-stale-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-iui-stage-stale-hint:hover {
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-stage-stale-hint:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-stage-stale-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-iui-card[data-dsh-iui-stage-card='true']:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-revision-notice,
+  .dsh-iui-stage-stale-hint {
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+
+  .dsh-iui-revision-notice:focus-visible,
+  .dsh-iui-stage-stale-hint:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+}

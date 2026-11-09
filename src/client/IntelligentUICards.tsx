@@ -37,8 +37,22 @@ import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
 import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
 import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, removeLocalRevision, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
 import { applyRevisionFallback, liveFallbackTargetIds, namedRevisionIds, recordRevisionFallback, resolveRevisionFallback, revisionFallbackMap, useRevisionFallbacks } from './artifact-edit/revision-fallbacks.ts'
+import {
+  artifactCardRole,
+  forgetArtifactRevision,
+  isArtifactVersionStageEnabled,
+  registerArtifactVersionCard,
+  setArtifactStageVisibility,
+  stageProgramFor,
+  stageRendersFrozenRevision,
+  useArtifactVersion,
+  useSelectedArtifactRevisionIds,
+  type ArtifactVersionCardSpec,
+  type ArtifactCardRole,
+} from './artifact-edit/artifact-version.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './artifact-edit/contracts.ts'
 import type { ImageSourceResolver } from '../shared/image-source.ts'
+import type { StyleTemplate } from '../shared/style-templates.ts'
 import {
   activateDraft as activateArtifactDraft,
   attachDraft as attachArtifactDraft,
@@ -162,8 +176,15 @@ export function IntelligentUICards({
   const fallbacksByDeletedId = useMemo(() => revisionFallbackMap(revisionFallbacks), [revisionFallbacks])
   // Revisions some card currently rolls back to; deleting one without a new
   // target would strand that card on a deleted record. Dead records (whose
-  // deleted revision no rendered program names anymore) are ignored.
-  const renderedRevisionIds = useMemo(() => namedRevisionIds([...programs, ...localPrograms]), [programs, localPrograms])
+  // deleted revision no rendered program names anymore) are ignored. A stage can
+  // display a revision whose own card is unloaded, so the selected/latest ids
+  // count as rendered too.
+  const selectedRevisionIds = useSelectedArtifactRevisionIds(sessionId)
+  const renderedRevisionIds = useMemo(() => {
+    const ids = new Set(namedRevisionIds([...programs, ...localPrograms]))
+    for (const revisionId of selectedRevisionIds) ids.add(revisionId)
+    return ids
+  }, [programs, localPrograms, selectedRevisionIds])
   const fallbackTargetIds = useMemo(
     () => liveFallbackTargetIds(revisionFallbacks, renderedRevisionIds),
     [revisionFallbacks, renderedRevisionIds],
@@ -235,37 +256,31 @@ export function IntelligentUICards({
   if (allPrograms.length === 0) return null
   return (
     <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
-      {allPrograms.map(program => {
-        const templates = catalog.status === 'unavailable' ? [] : catalog.templates
-        const theme = resolveCardTheme(program, templates, sessionStyle)
-        return (
-          <IntelligentUICard
-            key={program.callId}
-            program={program}
-            sessionId={sessionId}
-            turnNumber={turn.turn}
-            onToAssistant={toAssistant}
-            t={t}
-            scheme={scheme}
-            onAdjust={adjustStyle === undefined ? undefined : adjust}
-            styleEditSupported={styleEditSupported}
-            styleSwitchSupported={styleSwitchSupported}
-            styleTargets={styleSwitchTargets}
-            refreshStyleCatalog={refreshStyleCatalog}
-            resolveImage={resolveImage}
-            localRevisionIds={localRevisionIds}
-            draftRevisionIds={draftRevisionIds}
-            fallbackTargetIds={fallbackTargetIds}
-            renderedRevisionIds={renderedRevisionIds}
-            // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
-            saveAction={program.fallbackFrom !== undefined || program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={resultIdOf(program)}
-              snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
-            // Snapshot theme wins; a theme-less snapshot inherits the session's
-            // selected template, then the built-in theme.
-            themeStyle={theme === undefined ? undefined : resolveStyleThemeVars(theme, scheme) as CSSProperties}
-          />
-        )
-      })}
+      {allPrograms.map(program => (
+        <ArtifactVersionGate
+          key={program.callId}
+          sessionId={sessionId}
+          turnNumber={turn.turn}
+          program={program}
+          templates={catalog.status === 'unavailable' ? [] : catalog.templates}
+          sessionStyle={sessionStyle}
+          scheme={scheme}
+          t={t}
+          onToAssistant={toAssistant}
+          onAdjust={adjustStyle === undefined ? undefined : adjust}
+          styleEditSupported={styleEditSupported}
+          styleSwitchSupported={styleSwitchSupported}
+          styleTargets={styleSwitchTargets}
+          refreshStyleCatalog={refreshStyleCatalog}
+          resolveImage={resolveImage}
+          localRevisionIds={localRevisionIds}
+          draftRevisionIds={draftRevisionIds}
+          fallbackTargetIds={fallbackTargetIds}
+          renderedRevisionIds={renderedRevisionIds}
+          styleActions={styleActions}
+          styles={styles}
+        />
+      ))}
     </div>
   )
 }
@@ -292,6 +307,182 @@ function isSameStyleTarget(left: ArtifactStyleTarget, right: ArtifactStyleTarget
   if (left.kind !== right.kind) return false
   if (left.kind === 'builtin') return right.kind === 'builtin' && left.layout === right.layout
   return right.kind === 'template' && left.styleId === right.styleId
+}
+
+/** Scroll the active stage card of one artifact into view and focus it. */
+function scrollToStageCard(artifactId: string): void {
+  if (typeof document === 'undefined') return
+  const element = document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${artifactId}"]`)
+  if (element === null) return
+  element.scrollIntoView({ block: 'center', behavior: scrollBehavior() })
+  element.focus({ preventScroll: true })
+}
+
+/** Revision provenance recorded with the version store entry. */
+function versionSourceOf(program: IntelligentUIProgram): 'initial' | 'edit' | 'local' {
+  if (program.localRevision === true) return 'local'
+  return program.revision === undefined || program.revision <= 1 ? 'initial' : 'edit'
+}
+
+interface ArtifactVersionGateProps {
+  readonly sessionId: string
+  readonly turnNumber: number
+  readonly program: IntelligentUIProgram
+  readonly templates: readonly StyleTemplate[]
+  readonly sessionStyle?: string
+  readonly scheme: 'light' | 'dark'
+  readonly t: Translate
+  readonly onToAssistant: (message: string) => void
+  readonly onAdjust?: (program: IntelligentUIProgram) => Promise<string | null>
+  readonly styleEditSupported: boolean
+  readonly styleSwitchSupported: boolean
+  readonly styleTargets: readonly ArtifactStyleTargetOption[]
+  readonly refreshStyleCatalog: () => void
+  readonly resolveImage?: ImageSourceResolver
+  readonly localRevisionIds: ReadonlySet<string>
+  readonly draftRevisionIds: ReadonlySet<string>
+  readonly fallbackTargetIds: ReadonlySet<string>
+  readonly renderedRevisionIds: ReadonlySet<string>
+  readonly styleActions: StyleActions
+  readonly styles: StyleCatalog
+}
+
+/**
+ * Version-gate for one card: registers it in the artifact version store and
+ * renders the role the store assigns (stage / compact notice / frozen history
+ * card). When the stage behavior is disabled (the browser harness switch) the
+ * card renders exactly as before.
+ * @param props - card program plus the shared card chrome props.
+ * @returns one card, a notice row, or nothing while the store has no role yet.
+ */
+function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | null {
+  const { program, sessionId, turnNumber, t } = props
+  const artifactId = program.artifactId ?? program.callId
+  const cardId = program.callId
+  // Re-parsing a Turn's tool nodes produces fresh program objects, so the
+  // registration spec is memoized on the primitive fields that matter: a card is
+  // not unregistered/re-registered (which would drop its stage visibility)
+  // unless its revision program or metadata actually changed.
+  const temporaryStyleKey = program.temporaryStyle === undefined ? '' : JSON.stringify(program.temporaryStyle)
+  const editedBlockIdsKey = program.editedBlockIds === undefined ? '' : program.editedBlockIds.join(',')
+  const spec = useMemo<ArtifactVersionCardSpec>(() => ({
+    cardId,
+    artifactId,
+    revisionId: program.revisionId ?? program.callId,
+    ...program.revision === undefined ? {} : { revision: program.revision },
+    turn: turnNumber,
+    program: program.program,
+    ...program.title === undefined ? {} : { title: program.title },
+    style: program.style ?? 'card',
+    ...program.styleId === undefined ? {} : { styleId: program.styleId },
+    ...program.temporaryStyle === undefined ? {} : { temporaryStyle: program.temporaryStyle },
+    ...program.baseRevisionId === undefined ? {} : { baseRevisionId: program.baseRevisionId },
+    ...program.editedBlockIds === undefined ? {} : { editedBlockIds: program.editedBlockIds },
+    ...program.localRevision === true ? { localRevision: true } : {},
+    ...program.localRevisionKind === undefined ? {} : { localRevisionKind: program.localRevisionKind },
+    ...program.requestId === undefined ? {} : { requestId: program.requestId },
+    source: versionSourceOf(program),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by serialized fields above
+  }), [
+    artifactId,
+    cardId,
+    program.callId,
+    program.program,
+    program.title,
+    program.style,
+    program.styleId,
+    program.baseRevisionId,
+    program.revision,
+    program.revisionId,
+    program.requestId,
+    program.localRevision,
+    program.localRevisionKind,
+    temporaryStyleKey,
+    editedBlockIdsKey,
+    turnNumber,
+  ])
+  useEffect(() => {
+    if (!isArtifactVersionStageEnabled()) return
+    return registerArtifactVersionCard(sessionId, spec)
+  }, [sessionId, spec])
+  const state = useArtifactVersion(sessionId, artifactId)
+  const reportVisibility = useCallback((visible: boolean): void => {
+    setArtifactStageVisibility(sessionId, artifactId, cardId, visible)
+  }, [sessionId, artifactId, cardId])
+  const scrollToStage = useCallback((): void => { scrollToStageCard(artifactId) }, [artifactId])
+  const stageEnabled = isArtifactVersionStageEnabled()
+  const role: ArtifactCardRole | undefined = stageEnabled ? artifactCardRole(state, cardId) : undefined
+  const cardRecord = state.cards.get(cardId)
+  if (stageEnabled && role === 'notice') {
+    const revision = cardRecord?.revision ?? 1
+    return (
+      <button
+        type="button"
+        className="dsh-iui-revision-notice"
+        data-dsh-iui-revision-notice
+        data-dsh-iui-artifact-id={artifactId}
+        data-dsh-iui-revision-id={cardRecord?.revisionId ?? program.revisionId ?? program.callId}
+        aria-label={t('version.noticeAction', { n: revision })}
+        title={t('version.noticeAction', { n: revision })}
+        onClick={scrollToStage}
+      >
+        <RemixIcon name="history-line" size={14} />
+        <span className="dsh-iui-revision-notice-text">{t('version.notice', { n: revision })}</span>
+        <span className="dsh-iui-revision-notice-arrow" aria-hidden="true"><RemixIcon name="arrow-up-s-line" size={13} /></span>
+      </button>
+    )
+  }
+  const selectedRecord = state.selectedRevisionId === undefined ? undefined : state.revisions.get(state.selectedRevisionId)
+  const effective = stageEnabled && role === 'stage' && selectedRecord !== undefined
+    ? stageProgramFor(program, selectedRecord)
+    : program
+  const theme = resolveCardTheme(effective, props.templates, props.sessionStyle)
+  const readOnlyStage = stageEnabled && role === 'stage' && stageRendersFrozenRevision(state, cardId)
+  const staleHint = stageEnabled && role === 'frozen'
+    ? <button
+        type="button"
+        className="dsh-iui-stage-stale-hint"
+        data-dsh-iui-stage-stale-hint
+        aria-label={t('version.staleHintAction')}
+        title={t('version.staleHintAction')}
+        onClick={scrollToStage}
+      >
+        <span className="dsh-iui-stage-stale-icon" aria-hidden="true"><RemixIcon name="arrow-down-s-line" size={13} /></span>
+        {t('version.staleHint')}
+      </button>
+    : undefined
+  return (
+    <IntelligentUICard
+      program={effective}
+      sessionId={sessionId}
+      turnNumber={turnNumber}
+      onToAssistant={props.onToAssistant}
+      t={t}
+      scheme={props.scheme}
+      onAdjust={props.onAdjust}
+      styleEditSupported={props.styleEditSupported}
+      styleSwitchSupported={props.styleSwitchSupported}
+      styleTargets={props.styleTargets}
+      refreshStyleCatalog={props.refreshStyleCatalog}
+      resolveImage={props.resolveImage}
+      localRevisionIds={props.localRevisionIds}
+      draftRevisionIds={props.draftRevisionIds}
+      fallbackTargetIds={props.fallbackTargetIds}
+      renderedRevisionIds={props.renderedRevisionIds}
+      versionRole={stageEnabled ? role : undefined}
+      stageArtifactId={artifactId}
+      stageVisible={state.stageVisible}
+      onStageVisibleChange={stageEnabled && role === 'stage' ? reportVisibility : undefined}
+      staleHint={staleHint}
+      readOnly={readOnlyStage}
+      // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
+      saveAction={effective.fallbackFrom !== undefined || effective.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={resultIdOf(effective)}
+        snapshot={effective.temporaryStyle} sessionId={sessionId} actions={props.styleActions} styles={props.styles} disabled={effective.running} t={t} />}
+      // Snapshot theme wins; a theme-less snapshot inherits the session's
+      // selected template, then the built-in theme.
+      themeStyle={theme === undefined ? undefined : resolveStyleThemeVars(theme, props.scheme) as CSSProperties}
+    />
+  )
 }
 
 interface IntelligentUICardProps {
@@ -323,6 +514,18 @@ interface IntelligentUICardProps {
   readonly fallbackTargetIds?: ReadonlySet<string>
   /** Revision identities still named by the rendered card programs. */
   readonly renderedRevisionIds?: ReadonlySet<string>
+  /** Active-stage role from the version store; absent when the stage is disabled. */
+  readonly versionRole?: ArtifactCardRole
+  /** Root artifact identity the stage belongs to (stage cards only). */
+  readonly stageArtifactId?: string
+  /** Whether the stage card currently intersects the viewport. */
+  readonly stageVisible?: boolean
+  /** Reports the stage card's viewport intersection to the version store. */
+  readonly onStageVisibleChange?: (visible: boolean) => void
+  /** Light hint on a frozen historical card pointing at the active stage. */
+  readonly staleHint?: ReactNode
+  /** Suppress editing (a stage displaying a revision another card natively owns). */
+  readonly readOnly?: boolean
 }
 
 /**
@@ -332,7 +535,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, stageArtifactId, stageVisible, onStageVisibleChange, staleHint, readOnly = false }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -383,8 +586,9 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const editStore = useArtifactEditStore()
   // A redirected card renders a revision another card may own. It must not join
   // that revision's shared edit session, or two cards mount the same canvas.
-  const readOnlyFallback = program.fallbackFrom !== undefined
-  const editing = !readOnlyFallback && editSession?.editing === true
+  // The same applies to a stage that displays a revision a frozen card owns.
+  const readOnlyCard = readOnly || program.fallbackFrom !== undefined
+  const editing = !readOnlyCard && editSession?.editing === true
   // The edit view stays mounted for one short exit animation after `editing`
   // flips false; the timer is cancelled if the user re-enters edit mode first.
   const [editorMounted, setEditorMounted] = useState(editing)
@@ -394,7 +598,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     if (editSession !== undefined) lastEditSessionRef.current = editSession
   }, [editSession])
   useEffect(() => {
-    if (readOnlyFallback) {
+    if (readOnlyCard) {
       setEditorClosing(false)
       setEditorMounted(false)
       return
@@ -427,9 +631,23 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       setEditorMounted(false)
     }, EDITOR_CLOSE_ANIMATION_MS)
     return () => { window.clearTimeout(timer) }
-  }, [editing, editorMounted, editStore, editKey, sessionId, readOnlyFallback])
+  }, [editing, editorMounted, editStore, editKey, sessionId, readOnlyCard])
+  // The stage card reports its viewport intersection so a later revision can be
+  // rendered in place (visible) or promoted to a new stage card (invisible).
+  useEffect(() => {
+    const notify = onStageVisibleChange
+    const element = cardRef.current
+    if (notify === undefined || element === null || typeof IntersectionObserver !== 'function') return
+    const observer = new IntersectionObserver(entries => {
+      const entry = entries[entries.length - 1]
+      if (entry !== undefined) notify(entry.isIntersecting)
+    }, { rootMargin: '0px 0px 24px 0px', threshold: 0 })
+    observer.observe(element)
+    return () => { observer.disconnect(); notify(false) }
+  }, [onStageVisibleChange])
+
   const hasDraft = editSession !== undefined && hasArtifactEditContent(editSession)
-  const showDraftBadge = !readOnlyFallback && editSession !== undefined && !editing
+  const showDraftBadge = !readOnlyCard && editSession !== undefined && !editing
     && editSession.status !== 'submitted' && hasDraft
   const attachedDraftTotal = useMemo(() => {
     let count = 0
@@ -443,7 +661,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const blocksById = useMemo(() => new Map(blocks.map(block => [block.blockId, block])), [blocks])
   // A redirected card is read-only: the fallback revision may already have a
   // native card that owns its edit session (both would share the same edit key).
-  const editable = program.fallbackFrom === undefined && !program.running
+  const editable = !readOnlyCard && !program.running
     && blocks.length > 0 && supportsBlockEditing(program)
   // A hovered/focused/selected switch row previews its durable skin in the edit
   // canvas only; nothing is posted until the explicit Apply.
@@ -574,6 +792,10 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       className="dsh-iui-card"
       data-dsh-intelligent-ui="card"
       data-dsh-iui-call-id={program.callId}
+      data-dsh-iui-stage-card={versionRole === 'stage' ? 'true' : undefined}
+      data-dsh-iui-stage-visible={versionRole === 'stage' ? (stageVisible === true ? 'true' : 'false') : undefined}
+      data-artifact-id={versionRole === 'stage' ? stageArtifactId : undefined}
+      tabIndex={versionRole === 'stage' ? -1 : undefined}
       data-dsh-iui-style={style}
       data-dsh-iui-style-id={program.styleId}
       data-dsh-iui-temp-style={program.temporaryStyle ? 'true' : undefined}
@@ -660,6 +882,9 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             : null}
         </div>
       </div>
+      {staleHint === undefined ? null : (
+        <div className="dsh-iui-stage-stale" data-dsh-iui-stage-stale>{staleHint}</div>
+      )}
       {narrowNotice && !editing
         ? <div className="dsh-iui-edit-narrow-notice" role="status" data-dsh-iui-edit-narrow-notice>
             <div className="dsh-iui-edit-narrow-copy">
@@ -700,7 +925,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           </div>
         : null}
       <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed && !editing}>
-        {!readOnlyFallback && editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
+        {!readOnlyCard && editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
           <div className={editorLayout === 'article' ? 'dsh-iui-article' : undefined}>
             <ArtifactEditView
               t={t}
@@ -765,8 +990,11 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             onRestored={revision => { handleHistoryRestored(revision); setHistoryOpen(false) }}
             onDeleted={(revisionId, fallback) => {
               // A transcript card rolls back to the prepared older revision; a
-              // local revision card is simply removed with its history row.
+              // local revision card is simply removed with its history row. The
+              // version store drops the record so the stage can never display a
+              // dangling revision (it falls back to latest/remaining records).
               if (fallback !== undefined) recordRevisionFallback(sessionId, fallback)
+              forgetArtifactRevision(sessionId, restoreArtifactId, revisionId, fallback)
               removeLocalRevision(sessionId, revisionId)
             }}
           />

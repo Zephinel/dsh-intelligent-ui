@@ -218,6 +218,11 @@ export const zh = {
   'state.ready': '就绪',
   'state.error': '失败',
   'card.failed': '此交互式回答无法显示。',
+  // Revision stage (M1): the older cards point at the active stage.
+  'version.notice': '修订 {n} 已更新到上方卡片',
+  'version.noticeAction': '查看上方最新修订（修订 {n}）',
+  'version.staleHint': '最新修订已移到下方',
+  'version.staleHintAction': '查看下方最新修订',
 
   // Answer image export (bottom action row).
   'export.button.label': '导出',
@@ -781,6 +786,10 @@ export const en: Record<keyof typeof zh, string> = {
   'state.ready': 'Ready',
   'state.error': 'Failed',
   'card.failed': 'This interactive answer could not be displayed.',
+  'version.notice': 'Revision {n} updated in the card above',
+  'version.noticeAction': 'View the latest revision above (revision {n})',
+  'version.staleHint': 'The latest revision moved below',
+  'version.staleHintAction': 'View the latest revision below',
 
   'export.button.label': 'Export',
   'export.button.aria': 'Export answer',

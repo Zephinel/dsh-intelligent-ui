@@ -776,3 +776,21 @@ A fourth pair of fresh independent read-only reviews found no P0/P1 runtime bloc
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **566 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,044,247** bytes packed, **12,927,122** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-10 — M1 active revision stage and visibility fallback
+
+- **Version store**: new `src/client/artifact-edit/artifact-version.ts` (in-memory store + pure reducer, `useSyncExternalStore`). Per `(sessionId, artifactId)` it keeps revisions, latest/selected revision, stage card and stage visibility; the first card becomes the stage and selects latest; a newer revision while the stage is visible only produces a notice row and updates the stage in place; while the stage is invisible the new card is promoted and the old stage freezes; same/older revisions are notice/frozen by turn/revision; when the stage unmounts the newest remaining card takes over, and after the last card unmounts the artifact state is forgotten so a reload/remount converges on the latest again (D6).
+- **Card roles**: `IntelligentUICards` gains `ArtifactVersionGate` — the stage renders the selected revision synthetically while keeping its own `data-dsh-iui-call-id` and carrying `data-dsh-iui-stage-card`/`data-artifact-id`/`data-dsh-iui-stage-visible`; edit key, history `currentRevisionId` and runtime state follow the selected revision. A notice renders one `data-dsh-iui-revision-notice` row that scrolls to and focuses the stage; a frozen card renders its own revision with `data-dsh-iui-stage-stale-hint`; a stage displaying a frozen card's native revision stays read-only so two canvases are never mounted.
+- **Consistency**: `reconcileArtifactSubmissions` keeps using the Turn's original programs; local revisions pass through the same gate; history deletion still prepares the revision-fallback record and then calls `forgetArtifactRevision` so latest/selected point at a live record and the stage is never dangling; selected/latest revision ids join `renderedRevisionIds` for the delete guard.
+- **Test switch**: `setArtifactVersionStageEnabled(false)` is harness-only; `artifact-edit` scenarios 1–47 keep the pre-M1 one-card-per-revision assertions (all original checks retained) and the new scenario 48 enables the stage for M1; production defaults to enabled with no persistence, Host route or new revision enum value.
+- **Tests**: `test/client/artifact-version.test.mjs` 20 cases (first-card stage, visible in-place update, invisible promotion, initial convergence, frozen older cards, stage re-registration, unmount hand-over/forget, remount convergence, selectRevision, deletion repointing with fallback records, stageProgramFor identity synthesis, read-only rule, latest ordering, module store registration/visibility/disable switch); E2E scenario 48 (visible in-place update with no new card, notice copy and click-to-focus, editing against the selected revision, invisible promotion with frozen hint, remount back to latest, read-only older selection, local revision suppression and remount promotion); the suite grows 566 → **599 checks**.
+- **Known limits/risks**: M1 has no version bar/thumbnails/persistence (M2); suppressed revisions have no full card while image/HTML export keeps the existing semantics (M3 alignment is a known regression risk; export untouched); frozen cards keep their existing edit entry; real screen readers/coarse pointers were not separately validated.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **685/685** Node tests = Host **302** + Client **360** + packaging **23**; build host **841 kB**, client **4.08 MB** (js 3.86 / CSS 225.0) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **599 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,047,081** bytes packed, **12,943,001** bytes unpacked |
+| Structure | the new record exists in both languages; `npm run check:docs-facts` passes; `git diff --check` passes |

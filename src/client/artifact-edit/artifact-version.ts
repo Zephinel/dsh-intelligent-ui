@@ -1,0 +1,558 @@
+/**
+ * Client-side revision version store for one chat session (M1: active stage).
+ *
+ * One artifact can have several transcript cards (one per Turn that recorded a
+ * revision) plus client-local revision cards. M1 keeps a single **active stage**
+ * per artifact: that card renders the currently selected revision (default: the
+ * latest known one), while other cards are either a compact notice row (newer
+ * revisions suppressed because the stage is visible) or a frozen historical card
+ * that keeps rendering its own revision with a hint pointing at the stage.
+ *
+ * The store is memory-only: refreshing/reopening a session starts empty and the
+ * loaded cards converge again (D6 "back to latest"). No Host route, durable
+ * field or revision enum value is involved. Selection is exposed through
+ * `selectArtifactRevision` for the M2 version bar.
+ *
+ * Visibility is reported by the stage card's IntersectionObserver; registration
+ * itself is a pure reducer so the rules are unit-testable without React or DOM.
+ */
+import { useCallback, useSyncExternalStore } from 'react'
+import type { IntelligentUIProgram, RenderLayout } from '../../shared/intelligent-ui.ts'
+import type { StyleSnapshot } from '../../shared/style-templates.ts'
+import type { RevisionFallback } from './revision-fallbacks.ts'
+
+/** Role one artifact card plays in the current version layout. */
+export type ArtifactCardRole = 'stage' | 'notice' | 'frozen'
+
+/** How one revision came into existence; drives labels and limits. */
+export type ArtifactRevisionSource = 'initial' | 'edit' | 'structure' | 'restore' | 'style' | 'props' | 'local'
+
+/** One known revision of an artifact, with its program and presentation meta. */
+export interface ArtifactVersionRecord {
+  readonly revisionId: string
+  /** Root artifact identity the revision belongs to. */
+  readonly artifactId: string
+  /** 1-based revision number; an unnumbered initial render counts as revision 1. */
+  readonly revision: number
+  readonly program: string
+  readonly title?: string
+  readonly style: RenderLayout
+  readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
+  readonly baseRevisionId?: string
+  readonly editedBlockIds?: readonly string[]
+  /** Set when the revision is a client-owned local revision card. */
+  readonly localRevision?: boolean
+  readonly localRevisionKind?: 'restore' | 'structure' | 'props' | 'style'
+  readonly requestId?: string
+  /** Card that first registered this revision (used to find its native owner). */
+  readonly callId: string
+  /** Turn that first registered this revision, when known. */
+  readonly turn?: number
+  /** Monotonic registration order, used to break revision-number ties. */
+  readonly seq: number
+}
+
+/** One mounted card of an artifact, independent of the revision it names. */
+export interface ArtifactVersionCard {
+  readonly cardId: string
+  readonly revisionId: string
+  /** 1-based revision number of the card's own revision. */
+  readonly revision: number
+  readonly turn?: number
+  readonly seq: number
+  readonly source?: ArtifactRevisionSource
+}
+
+/** Everything the version store knows about one artifact. */
+export interface ArtifactVersionState {
+  /** Known revisions by revision id (programs are kept in memory). */
+  readonly revisions: ReadonlyMap<string, ArtifactVersionRecord>
+  /** Mounted cards by card id (transcript callId or local revision id). */
+  readonly cards: ReadonlyMap<string, ArtifactVersionCard>
+  readonly latestRevisionId?: string
+  readonly selectedRevisionId?: string
+  readonly stageCardId?: string
+  /** Whether the stage card currently intersects the viewport (observer-reported). */
+  readonly stageVisible: boolean
+  /** Last registration sequence used by this artifact. */
+  readonly seq: number
+}
+
+/** Input for one card registration from the render layer. */
+export interface ArtifactVersionCardSpec {
+  readonly cardId: string
+  readonly artifactId: string
+  readonly revisionId: string
+  /** 1-based revision number; absent means the initial render (revision 1). */
+  readonly revision?: number
+  readonly turn?: number
+  readonly program: string
+  readonly title?: string
+  readonly style: RenderLayout
+  readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
+  readonly baseRevisionId?: string
+  readonly editedBlockIds?: readonly string[]
+  readonly localRevision?: boolean
+  readonly localRevisionKind?: 'restore' | 'structure' | 'props' | 'style'
+  readonly requestId?: string
+  readonly source?: ArtifactRevisionSource
+}
+
+/** Empty artifact state; stable so cards render before their effect registers. */
+export const EMPTY_ARTIFACT_VERSION_STATE: ArtifactVersionState = {
+  revisions: new Map(),
+  cards: new Map(),
+  stageVisible: false,
+  seq: 0,
+}
+
+/** Artifact state with `cardId`'s registration applied. */
+export function registerCardInState(
+  state: ArtifactVersionState,
+  spec: ArtifactVersionCardSpec,
+  seq: number,
+): ArtifactVersionState {
+  const card: ArtifactVersionCard = {
+    cardId: spec.cardId,
+    revisionId: spec.revisionId,
+    revision: spec.revision ?? 1,
+    ...spec.turn === undefined ? {} : { turn: spec.turn },
+    seq,
+    ...spec.source === undefined ? {} : { source: spec.source },
+  }
+  const cards = new Map(state.cards)
+  cards.set(card.cardId, card)
+  const revisions = new Map(state.revisions)
+  const previous = revisions.get(spec.revisionId)
+  const record: ArtifactVersionRecord = {
+    revisionId: spec.revisionId,
+    artifactId: spec.artifactId,
+    revision: spec.revision ?? previous?.revision ?? 1,
+    program: spec.program,
+    ...spec.title === undefined ? {} : { title: spec.title },
+    style: spec.style,
+    ...spec.styleId === undefined ? {} : { styleId: spec.styleId },
+    ...spec.temporaryStyle === undefined ? {} : { temporaryStyle: spec.temporaryStyle },
+    ...spec.baseRevisionId === undefined ? {} : { baseRevisionId: spec.baseRevisionId },
+    ...spec.editedBlockIds === undefined ? {} : { editedBlockIds: spec.editedBlockIds },
+    ...spec.localRevision === true ? { localRevision: true } : {},
+    ...spec.localRevisionKind === undefined ? {} : { localRevisionKind: spec.localRevisionKind },
+    ...spec.requestId === undefined ? {} : { requestId: spec.requestId },
+    callId: previous?.callId ?? spec.cardId,
+    ...spec.turn === undefined && previous?.turn === undefined ? {} : { turn: spec.turn ?? previous?.turn },
+    seq: previous?.seq ?? seq,
+  }
+  revisions.set(record.revisionId, record)
+  const latest = latestRecord(revisions)
+  const next: ArtifactVersionState = {
+    ...state,
+    revisions,
+    cards,
+    seq,
+    ...latest === undefined ? {} : { latestRevisionId: latest.revisionId },
+  }
+  // First card of an artifact becomes the stage and selects the latest revision.
+  if (state.stageCardId === undefined) {
+    return {
+      ...next,
+      stageCardId: card.cardId,
+      selectedRevisionId: latest?.revisionId,
+      stageVisible: false,
+    }
+  }
+  // The stage card re-registering (for example after a fallback redirect) keeps
+  // its role; only the displayed revision selection is repaired.
+  if (state.stageCardId === card.cardId) {
+    const selected = state.selectedRevisionId !== undefined && revisions.has(state.selectedRevisionId)
+      ? state.selectedRevisionId
+      : latest?.revisionId
+    return { ...next, ...selected === undefined ? {} : { selectedRevisionId: selected } }
+  }
+  const previousLatest = state.latestRevisionId === undefined ? undefined : state.revisions.get(state.latestRevisionId)
+  const newer = record.revisionId !== previousLatest?.revisionId && isNewer(record, previousLatest)
+  if (!newer) return next
+  // A visible stage updates in place: the new revision becomes latest/selected
+  // and this card stays a compact notice row.
+  if (state.stageVisible) return { ...next, selectedRevisionId: latest?.revisionId }
+  // An invisible (or unmounted) stage hands over: this card becomes the stage,
+  // the previous stage turns frozen and nothing scrolls.
+  return {
+    ...next,
+    stageCardId: card.cardId,
+    selectedRevisionId: latest?.revisionId,
+    stageVisible: false,
+  }
+}
+
+/**
+ * Artifact state with one card removed.
+ *
+ * A removed stage hands over to the newest remaining card and keeps selecting
+ * the latest known revision (that revision's program can outlive its own card).
+ * When the last card of an artifact unmounts, the artifact is forgotten: the
+ * next loaded card converges from what is loaded again, which is what makes a
+ * full remount/reload land on the newest loaded revision instead of an old one.
+ */
+export function unregisterCardInState(state: ArtifactVersionState, cardId: string): ArtifactVersionState {
+  if (!state.cards.has(cardId)) return state
+  const cards = new Map(state.cards)
+  cards.delete(cardId)
+  const next: ArtifactVersionState = { ...state, cards }
+  if (state.stageCardId !== cardId) return next
+  const replacement = newestCard(cards)
+  if (replacement === undefined) {
+    return {
+      revisions: new Map(),
+      cards,
+      stageVisible: false,
+      seq: state.seq,
+      stageCardId: undefined,
+      latestRevisionId: undefined,
+      selectedRevisionId: undefined,
+    }
+  }
+  const latest = latestRecord(state.revisions)
+  return {
+    ...next,
+    stageCardId: replacement.cardId,
+    selectedRevisionId: latest?.revisionId ?? replacement.revisionId,
+    stageVisible: false,
+  }
+}
+
+/** Artifact state with the stage visibility updated. */
+export function setStageVisibilityInState(state: ArtifactVersionState, visible: boolean): ArtifactVersionState {
+  return state.stageVisible === visible ? state : { ...state, stageVisible: visible }
+}
+
+/** Artifact state with another revision selected (M2 entry point). */
+export function selectRevisionInState(state: ArtifactVersionState, revisionId: string): ArtifactVersionState {
+  if (!state.revisions.has(revisionId) || state.selectedRevisionId === revisionId) return state
+  return { ...state, selectedRevisionId: revisionId }
+}
+
+/**
+ * Artifact state after a revision is deleted.
+ *
+ * The deleted record is dropped; when a prepared rollback fallback is supplied
+ * its revision is (re)registered so the stage can render a live revision instead
+ * of a dangling one. Latest/selection are recomputed from the remaining records.
+ */
+export function forgetRevisionInState(
+  state: ArtifactVersionState,
+  revisionId: string,
+  fallback?: RevisionFallback,
+  seq = state.seq + 1,
+): ArtifactVersionState {
+  if (!state.revisions.has(revisionId)) return state
+  const revisions = new Map(state.revisions)
+  revisions.delete(revisionId)
+  if (fallback !== undefined) {
+    const previous = revisions.get(fallback.revisionId)
+    revisions.set(fallback.revisionId, {
+      revisionId: fallback.revisionId,
+      artifactId: fallback.artifactId,
+      revision: fallback.revision,
+      program: fallback.program,
+      ...fallback.title === undefined ? {} : { title: fallback.title },
+      style: fallback.style,
+      ...fallback.styleId === undefined ? {} : { styleId: fallback.styleId },
+      ...fallback.temporaryStyle === undefined ? {} : { temporaryStyle: fallback.temporaryStyle },
+      ...fallback.baseRevisionId === undefined ? {} : { baseRevisionId: fallback.baseRevisionId },
+      callId: previous?.callId ?? fallback.revisionId,
+      seq: previous?.seq ?? seq,
+    })
+  }
+  const latest = latestRecord(revisions)
+  const selected = state.selectedRevisionId !== undefined && revisions.has(state.selectedRevisionId)
+    ? state.selectedRevisionId
+    : latest?.revisionId
+  return {
+    ...state,
+    revisions,
+    ...latest === undefined ? {} : { latestRevisionId: latest.revisionId },
+    ...selected === undefined ? {} : { selectedRevisionId: selected },
+  }
+}
+
+/**
+ * Role one mounted card plays.
+ *
+ * The stage card is the stage; cards displaying a newer revision than the
+ * stage's own revision are suppression notices; the rest are frozen historical
+ * cards. Equal revisions fall back to turn order (a later Turn is a notice).
+ */
+export function artifactCardRole(state: ArtifactVersionState, cardId: string): ArtifactCardRole | undefined {
+  const card = state.cards.get(cardId)
+  if (card === undefined) return undefined
+  if (state.stageCardId === undefined) return 'stage'
+  if (state.stageCardId === cardId) return 'stage'
+  const stage = state.cards.get(state.stageCardId)
+  if (stage === undefined) return 'stage'
+  if (card.revision > stage.revision) return 'notice'
+  if (card.revision < stage.revision) return 'frozen'
+  return (card.turn ?? 0) > (stage.turn ?? 0) ? 'notice' : 'frozen'
+}
+
+/**
+ * Whether the stage currently renders a revision natively owned by a frozen
+ * card. Such a stage stays read-only: two cards must never mount the same edit
+ * canvas (the fallback/multi-owner rule from M4-3).
+ */
+export function stageRendersFrozenRevision(state: ArtifactVersionState, cardId: string): boolean {
+  if (state.stageCardId !== cardId) return false
+  const selected = state.selectedRevisionId === undefined ? undefined : state.revisions.get(state.selectedRevisionId)
+  if (selected === undefined || selected.callId === cardId) return false
+  const owner = state.cards.get(selected.callId)
+  return owner !== undefined && artifactCardRole(state, owner.cardId) === 'frozen'
+}
+
+/** Latest known revision record (highest revision number, then registration order). */
+export function latestRecord(revisions: ReadonlyMap<string, ArtifactVersionRecord>): ArtifactVersionRecord | undefined {
+  let latest: ArtifactVersionRecord | undefined
+  for (const record of revisions.values()) {
+    if (latest === undefined || isNewer(record, latest)) latest = record
+  }
+  return latest
+}
+
+/** Whether `left` outranks `right` as a revision (number first, then seq). */
+function isNewer(
+  left: Pick<ArtifactVersionRecord, 'revision' | 'seq'> | undefined,
+  right: Pick<ArtifactVersionRecord, 'revision' | 'seq'> | undefined,
+): boolean {
+  if (left === undefined) return false
+  if (right === undefined) return true
+  return left.revision !== right.revision ? left.revision > right.revision : left.seq > right.seq
+}
+
+/** Newest mounted card by revision, then turn, then registration order. */
+function newestCard(cards: ReadonlyMap<string, ArtifactVersionCard>): ArtifactVersionCard | undefined {
+  let newest: ArtifactVersionCard | undefined
+  for (const card of cards.values()) {
+    if (newest === undefined) {
+      newest = card
+      continue
+    }
+    if (card.revision !== newest.revision) {
+      if (card.revision > newest.revision) newest = card
+      continue
+    }
+    if ((card.turn ?? 0) !== (newest.turn ?? 0)) {
+      if ((card.turn ?? 0) > (newest.turn ?? 0)) newest = card
+      continue
+    }
+    if (card.seq > newest.seq) newest = card
+  }
+  return newest
+}
+
+/**
+ * Build the program the stage card renders for one selected revision.
+ *
+ * The card keeps its own `callId` (stable DOM identity, `data-dsh-iui-call-id`)
+ * while every program/revision identity comes from the selected revision, so
+ * editing, history and runtime state address the revision the user sees.
+ * @param cardProgram - the stage card's original program (DOM identity/running state).
+ * @param record - selected revision record.
+ * @returns the synthesized stage program.
+ */
+export function stageProgramFor(cardProgram: IntelligentUIProgram, record: ArtifactVersionRecord): IntelligentUIProgram {
+  const styleSource = record.temporaryStyle !== undefined
+    ? 'temporary' as const
+    : record.styleId !== undefined ? 'template' as const : undefined
+  return {
+    callId: cardProgram.callId,
+    program: record.program,
+    ...record.title === undefined ? {} : { title: record.title },
+    style: record.style,
+    ...record.styleId === undefined ? {} : { styleId: record.styleId },
+    ...record.temporaryStyle === undefined ? {} : { temporaryStyle: record.temporaryStyle },
+    ...styleSource === undefined ? {} : { styleSource },
+    artifactId: record.artifactId,
+    revisionId: record.revisionId,
+    ...record.baseRevisionId === undefined ? {} : { baseRevisionId: record.baseRevisionId },
+    revision: record.revision,
+    ...record.editedBlockIds === undefined ? {} : { editedBlockIds: record.editedBlockIds },
+    ...record.requestId === undefined ? {} : { requestId: record.requestId },
+    ...record.localRevision === true ? { localRevision: true } : {},
+    ...record.localRevisionKind === undefined ? {} : { localRevisionKind: record.localRevisionKind },
+    running: cardProgram.running,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module store (React external store)
+// ---------------------------------------------------------------------------
+
+type Listener = () => void
+const artifacts = new Map<string, ArtifactVersionState>()
+const listeners = new Set<Listener>()
+let artifactSnapshotCache = new Map<string, ArtifactVersionState>()
+let selectedSnapshotCache = new Map<string, ReadonlySet<string>>()
+let enabled = true
+let seqCounter = 0
+
+function stateKey(sessionId: string, artifactId: string): string {
+  return `${sessionId}\u0000${artifactId}`
+}
+
+function artifactIdOfKey(key: string): string {
+  return key.slice(key.indexOf('\u0000') + 1)
+}
+
+function publish(): void {
+  artifactSnapshotCache = new Map()
+  selectedSnapshotCache = new Map()
+  for (const listener of listeners) listener()
+}
+
+function commit(sessionId: string, artifactId: string, next: ArtifactVersionState): void {
+  artifacts.set(stateKey(sessionId, artifactId), next)
+  publish()
+}
+
+/** Whether the M1 stage behavior is enabled (production default true). */
+export function isArtifactVersionStageEnabled(): boolean {
+  return enabled
+}
+
+/**
+ * Toggle the stage behavior. Disabling is a **test-only** switch used by the
+ * browser harness to keep pre-M1 card-per-revision assertions meaningful; the
+ * production client never calls it with `false`.
+ */
+export function setArtifactVersionStageEnabled(next: boolean): void {
+  if (enabled === next) return
+  enabled = next
+  artifacts.clear()
+  publish()
+}
+
+/** Drop every store entry (unit-test isolation; also used when disabling). */
+export function resetArtifactVersions(): void {
+  artifacts.clear()
+  seqCounter = 0
+  publish()
+}
+
+/** Current version state of one artifact. */
+export function artifactVersionFor(sessionId: string, artifactId: string): ArtifactVersionState {
+  return artifacts.get(stateKey(sessionId, artifactId)) ?? EMPTY_ARTIFACT_VERSION_STATE
+}
+
+/** Subscribe to any artifact version change in this client. */
+export function subscribeArtifactVersions(listener: Listener): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
+
+/** Reactive artifact version state for one card. */
+export function useArtifactVersion(sessionId: string, artifactId: string): ArtifactVersionState {
+  const read = useCallback(() => {
+    const key = stateKey(sessionId, artifactId)
+    const cached = artifactSnapshotCache.get(key)
+    if (cached !== undefined) return cached
+    const next = artifactVersionFor(sessionId, artifactId)
+    artifactSnapshotCache.set(key, next)
+    return next
+  }, [sessionId, artifactId])
+  return useSyncExternalStore(subscribeArtifactVersions, read, read)
+}
+
+/**
+ * Register one mounted card; returns its unregister function for effect cleanup.
+ * A no-op while the stage behavior is disabled (test harness switch).
+ */
+export function registerArtifactVersionCard(sessionId: string, spec: ArtifactVersionCardSpec): () => void {
+  if (!enabled) return () => undefined
+  seqCounter += 1
+  const current = artifactVersionFor(sessionId, spec.artifactId)
+  commit(sessionId, spec.artifactId, registerCardInState(current, spec, seqCounter))
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const state = artifacts.get(stateKey(sessionId, spec.artifactId))
+    if (state === undefined) return
+    commit(sessionId, spec.artifactId, unregisterCardInState(state, spec.cardId))
+  }
+}
+
+/** Report the stage card's viewport intersection; stale cards are ignored. */
+export function setArtifactStageVisibility(sessionId: string, artifactId: string, cardId: string, visible: boolean): void {
+  if (!enabled) return
+  const state = artifacts.get(stateKey(sessionId, artifactId))
+  if (state === undefined || state.stageCardId !== cardId) return
+  const next = setStageVisibilityInState(state, visible)
+  if (next === state) return
+  commit(sessionId, artifactId, next)
+}
+
+/**
+ * Select one known revision for an artifact (M2 entry point; no Host write).
+ * @param sessionId - chat session owning the card list.
+ * @param artifactId - root artifact identity.
+ * @param revisionId - revision to display in the stage.
+ * @returns whether the selection changed.
+ */
+export function selectArtifactRevision(sessionId: string, artifactId: string, revisionId: string): boolean {
+  if (!enabled) return false
+  const state = artifacts.get(stateKey(sessionId, artifactId))
+  if (state === undefined) return false
+  const next = selectRevisionInState(state, revisionId)
+  if (next === state) return false
+  commit(sessionId, artifactId, next)
+  return true
+}
+
+/**
+ * Forget a deleted revision and repoint latest/selection at a live record.
+ * @param sessionId - chat session.
+ * @param artifactId - root artifact identity.
+ * @param revisionId - deleted revision id.
+ * @param fallback - prepared revision-fallback record, when one was written.
+ */
+export function forgetArtifactRevision(
+  sessionId: string,
+  artifactId: string,
+  revisionId: string,
+  fallback?: RevisionFallback,
+): void {
+  if (!enabled) return
+  const state = artifacts.get(stateKey(sessionId, artifactId))
+  if (state === undefined) return
+  commit(sessionId, artifactId, forgetRevisionInState(state, revisionId, fallback))
+}
+
+/** Selected (and latest) revision ids of every artifact in one session. */
+export function selectedArtifactRevisionIds(sessionId: string): ReadonlySet<string> {
+  const cached = selectedSnapshotCache.get(sessionId)
+  if (cached !== undefined) return cached
+  const ids = new Set<string>()
+  for (const [key, state] of artifacts) {
+    if (!key.startsWith(`${sessionId}\u0000`)) continue
+    if (state.selectedRevisionId !== undefined) ids.add(state.selectedRevisionId)
+    if (state.latestRevisionId !== undefined) ids.add(state.latestRevisionId)
+  }
+  selectedSnapshotCache.set(sessionId, ids)
+  return ids
+}
+
+/** Reactive selected/latest revision ids of one session (for delete guards). */
+export function useSelectedArtifactRevisionIds(sessionId: string): ReadonlySet<string> {
+  const read = useCallback(() => selectedArtifactRevisionIds(sessionId), [sessionId])
+  return useSyncExternalStore(subscribeArtifactVersions, read, read)
+}
+
+/** Artifact ids currently owning a stage in one session (debugging/tests). */
+export function stagedArtifactIds(sessionId: string): readonly string[] {
+  const ids: string[] = []
+  for (const [key, state] of artifacts) {
+    if (!key.startsWith(`${sessionId}\u0000`)) continue
+    if (state.stageCardId !== undefined) ids.push(artifactIdOfKey(key))
+  }
+  return ids
+}
