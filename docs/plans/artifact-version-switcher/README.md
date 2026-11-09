@@ -86,6 +86,16 @@
 
 不推荐把「portal 浮动层盖住原卡」当主体方案：双渲染、滚动同步脆弱，只适合做版本条的呈现技巧。更远期的方案是把「当前显示版本」交给 Host 保存（跨标签/跨设备一致），但需要新字段/路由并重写导出/E2E，代价最高。
 
+### M1 实现规格（Lead 定稿，2026-11-10）
+
+- **版本 store**（建议 `src/client/artifact-edit/artifact-version.ts`）：session 级内存 store（`useSyncExternalStore`，仿 `local-revisions`/`revision-fallbacks`），按 `artifactId` 维护 `revisions`（`revisionId → { program, title, style, styleId?, temporaryStyle?, revision, callId, turn, source }`）、`latestRevisionId`、`selectedRevisionId`（默认 latest）、`stageCardId`、舞台卡可见性；卡片以 `cardId`（transcript callId 或 local revisionId）注册。
+- **角色与渲染**：stage / notice / frozen（§4.3）。notice 只渲染一行、仍注册 revision；frozen 渲染自己的 revision + 轻提示行；stage 渲染选中 revision 的合成 program，但**DOM 身份保持舞台卡 callId**，编辑 key、history `currentRevisionId`、runtime state 以选中 revision 为准。
+- **注册算法**：无舞台 → 成为舞台并 select(latest)；新卡 revision 更新时：舞台可见 → 记 notice、latest/selected 更新（本标签页编辑=自己触发，跳到结果）、舞台原位重渲；舞台不可见 → 新卡晋升舞台、旧舞台 frozen、select(latest)。同/旧 revision 的卡按 turn 相对舞台给 frozen/notice。初始加载按注册顺序收敛到「最新加载卡为舞台」。
+- **卸载**：舞台卸载（Turn 出窗口）→ 剩余卡中 turn/revision 最新者晋升；无剩余则清空。
+- **持久化**：M1 无（D6 刷新回最新）；M2 再引入缩略图 IndexedDB 与可选选中版本。
+- **一致性边界**：`reconcileArtifactSubmissions` 继续用本 Turn 原始 programs；删除当前显示修订走现有 `revision-fallbacks`；local revisions（restore/structure/style/props）同样注册并遵守角色规则；导出对齐留 M3，M1 记录回归风险。
+- **测试开关**：E2E harness 可注入「stage 关闭」开关以保留既有「N 次编辑 = N 张卡」断言，生产默认开启；另加 M1 专属场景覆盖可见/不可见、通知行、刷新回最新、local revision 抑制。
+
 ## 6. 决策记录（2026-11-09，用户确认）
 
 ### 流程 / 交付
