@@ -100,6 +100,24 @@ export interface ArtifactVersionCardSpec {
   readonly source?: ArtifactRevisionSource
 }
 
+/** One revision record upserted without a mounted card (M2 on-demand programs). */
+export interface ArtifactVersionRecordInput {
+  readonly revisionId: string
+  readonly artifactId: string
+  readonly revision: number
+  readonly program: string
+  readonly title?: string
+  readonly style: RenderLayout
+  readonly styleId?: string
+  readonly temporaryStyle?: StyleSnapshot
+  readonly baseRevisionId?: string
+  readonly editedBlockIds?: readonly string[]
+  readonly localRevision?: boolean
+  readonly localRevisionKind?: 'restore' | 'structure' | 'props' | 'style'
+  readonly requestId?: string
+  readonly turn?: number
+}
+
 /** Empty artifact state; stable so cards render before their effect registers. */
 export const EMPTY_ARTIFACT_VERSION_STATE: ArtifactVersionState = {
   revisions: new Map(),
@@ -350,6 +368,45 @@ function newestCard(cards: ReadonlyMap<string, ArtifactVersionCard>): ArtifactVe
 }
 
 /**
+ * Artifact state with one revision record upserted without a card (M2 on-demand
+ * program fetch). Latest is recomputed so a fetched newer record is selectable;
+ * the selection and stage card stay untouched.
+ */
+export function registerRevisionInState(
+  state: ArtifactVersionState,
+  input: ArtifactVersionRecordInput,
+  seq: number,
+): ArtifactVersionState {
+  const revisions = new Map(state.revisions)
+  const previous = revisions.get(input.revisionId)
+  revisions.set(input.revisionId, {
+    revisionId: input.revisionId,
+    artifactId: input.artifactId,
+    revision: input.revision,
+    program: input.program,
+    ...input.title === undefined ? {} : { title: input.title },
+    style: input.style,
+    ...input.styleId === undefined ? {} : { styleId: input.styleId },
+    ...input.temporaryStyle === undefined ? {} : { temporaryStyle: input.temporaryStyle },
+    ...input.baseRevisionId === undefined ? {} : { baseRevisionId: input.baseRevisionId },
+    ...input.editedBlockIds === undefined ? {} : { editedBlockIds: input.editedBlockIds },
+    ...input.localRevision === true ? { localRevision: true } : {},
+    ...input.localRevisionKind === undefined ? {} : { localRevisionKind: input.localRevisionKind },
+    ...input.requestId === undefined ? {} : { requestId: input.requestId },
+    callId: previous?.callId ?? input.revisionId,
+    ...input.turn === undefined && previous?.turn === undefined ? {} : { turn: input.turn ?? previous?.turn },
+    seq: previous?.seq ?? seq,
+  })
+  const latest = latestRecord(revisions)
+  return {
+    ...state,
+    revisions,
+    seq,
+    ...latest === undefined ? {} : { latestRevisionId: latest.revisionId },
+  }
+}
+
+/**
  * Build the program the stage card renders for one selected revision.
  *
  * The card keeps its own `callId` (stable DOM identity, `data-dsh-iui-call-id`)
@@ -545,6 +602,20 @@ export function selectedArtifactRevisionIds(sessionId: string): ReadonlySet<stri
 export function useSelectedArtifactRevisionIds(sessionId: string): ReadonlySet<string> {
   const read = useCallback(() => selectedArtifactRevisionIds(sessionId), [sessionId])
   return useSyncExternalStore(subscribeArtifactVersions, read, read)
+}
+
+/**
+ * Register one revision record that has no mounted card yet (M2 on-demand
+ * program fetch after selecting a historical revision).
+ * @param sessionId - chat session.
+ * @param artifactId - root artifact identity.
+ * @param input - revision program/meta to remember.
+ */
+export function registerArtifactRevision(sessionId: string, artifactId: string, input: ArtifactVersionRecordInput): void {
+  if (!enabled) return
+  seqCounter += 1
+  const current = artifactVersionFor(sessionId, artifactId)
+  commit(sessionId, artifactId, registerRevisionInState(current, input, seqCounter))
 }
 
 /** Artifact ids currently owning a stage in one session (debugging/tests). */

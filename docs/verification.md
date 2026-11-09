@@ -774,3 +774,21 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **599 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,047,081** 字节，解包 **12,943,001** 字节 |
 | 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — M2 最近任务式版本条 + 截图缩略图 + 切换动画
+
+- **版本条**：stage 卡 history 图标改为打开横向「最近任务」浮层（portal 贴卡片、`role=dialog`/`listbox`、`data-dsh-iui-version-bar`）；旧 metadata 对话框降级为条内「详细列表」入口（恢复/删除不动），frozen 卡继续直接开详细列表。条目合并 Host history / local revisions / M1 store 已知 revisions，按 revision 降序取最近 20 条并提示剩余数量；每项含缩略图或占位、修订号、来源、时间、「当前」与待发送草稿标记；支持方向键/Home/End/Tab 循环、Enter 激活、Escape 关闭并归还焦点，`aria-selected` 标记当前项。
+- **按需切换**：选中未知 program 的历史 revision 时用 `fetchArtifactHistoryProgram` 拉取并 `registerArtifactRevision` 注册，再 `selectArtifactRevision` 原位切换；不写 Host、不产生修订、不新增卡片；不可得时保持当前并提示。
+- **缩略图（D5 双 scheme）**：新增 `artifact-thumbnails.ts`（key=artifactId+revisionId+scheme；内存 LRU 40 条/6MB + object URL 回收；IndexedDB v1 按 artifact 索引、上限与失败静默降级）；stage 显示 revision 后 SnapDOM 异步截当前 scheme（fonts+双帧+~420ms settle，~300px webp），随后用离屏 renderer 以**另一 scheme + 该 scheme 的 themeStyle** 再截一份入库；版本条打开时对前 8 个无图条目按两 scheme 各排一次（同一并发≤2、非当前 scheme 用自己 themeStyle）；读取优先当前 scheme，缺失才回退另一 scheme 并带 `data-thumb-scheme` 标注；删除修订两 scheme 一并清理并写 tombstone，飞行中采集不会写回。
+- **FLIP**：`stage-flip.ts` 纯几何 `interpolateFlipRect`（单测）+ fixed 图片浮层 260ms 从条缩略图过渡到 stage `.dsh-iui-body`，stage 同步淡入；reduced-motion/无缩略图直接切换；浮层带 `data-dsh-iui-stage-flip` 且必定清理。
+- **测试**：新增 `test/client/artifact-thumbnails.test.mjs`、`test/client/version-items.test.mjs` 共 20 条（LRU/字节上限、IDB 不可用降级、repo hydrate/loading/put/remove/clear、双 scheme 存取/回退/tombstone、条目合并/上限/current/draft/来源、FLIP 几何）；浏览器新增场景 49（版本条打开/当前/来源/draft、键盘与焦点归还、自动与懒缩略图、FLIP 浮层、切换无新卡与无 Host 写、reduced-motion、详细列表入口、stage-on 删除回退）与场景 50（D5：同一 revision light/dark 均 ready、切换页面 scheme 后各自使用本 scheme 图且另一份保留），套件 599 → **632 checks**；既有 1–47（stage off）与 48（M1）全过。
+- **已知限制**：M2 不持久化选中版本（D6 仍回最新）；缩略图可能截到异步媒体占位（失败可重开条重试）；抑制卡无整卡时图片/HTML 导出对齐仍留 M3；版本条为非模态 dialog（Tab 在条内循环，点击外部关闭）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **705/705** = Host **302** + Client **380** + packaging **23**；build host **841 kB**、client **4.11 MB**（js 3.88 / CSS 230.8） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **632 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,056,334** 字节，解包 **12,984,362** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

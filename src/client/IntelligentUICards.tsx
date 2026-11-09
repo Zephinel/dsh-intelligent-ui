@@ -34,6 +34,10 @@ import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
 import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
 import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
+import { ArtifactVersionBar } from './artifact-edit/ArtifactVersionBar.tsx'
+import { captureCardThumbnail, scheduleLazyThumbnail } from './artifact-edit/artifact-thumbnail-capture.ts'
+import { deleteRevisionThumbnails, oppositeThumbnailScheme, saveArtifactThumbnail } from './artifact-edit/artifact-thumbnails.ts'
+import { playStageFlip, type FlipRect } from './artifact-edit/stage-flip.ts'
 import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
 import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, removeLocalRevision, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
 import { applyRevisionFallback, liveFallbackTargetIds, namedRevisionIds, recordRevisionFallback, resolveRevisionFallback, revisionFallbackMap, useRevisionFallbacks } from './artifact-edit/revision-fallbacks.ts'
@@ -42,6 +46,7 @@ import {
   forgetArtifactRevision,
   isArtifactVersionStageEnabled,
   registerArtifactVersionCard,
+  selectArtifactRevision,
   setArtifactStageVisibility,
   stageProgramFor,
   stageRendersFrozenRevision,
@@ -107,6 +112,8 @@ import {
 
 /** Runtime kept mounted after exit so the panel can play its exit animation. */
 const EDITOR_CLOSE_ANIMATION_MS = 320
+/** Stable empty set for optional props that require a revision-id set. */
+const EMPTY_ID_SET: ReadonlySet<string> = new Set()
 
 /** Session-bound, Turn-keyed program source supplied by the plugin's registration. */
 export interface IntelligentUICardsInjected {
@@ -475,6 +482,12 @@ function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | nu
       onStageVisibleChange={stageEnabled && role === 'stage' ? reportVisibility : undefined}
       staleHint={staleHint}
       readOnly={readOnlyStage}
+      templates={props.templates}
+      sessionStyle={props.sessionStyle}
+      versionBarAvailable={stageEnabled && role === 'stage'}
+      captureThumbnail={stageEnabled && role === 'stage' && selectedRecord !== undefined && effective.running !== true
+        ? { artifactId, revisionId: selectedRecord.revisionId, scheme: props.scheme }
+        : undefined}
       // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
       saveAction={effective.fallbackFrom !== undefined || effective.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={resultIdOf(effective)}
         snapshot={effective.temporaryStyle} sessionId={sessionId} actions={props.styleActions} styles={props.styles} disabled={effective.running} t={t} />}
@@ -526,6 +539,14 @@ interface IntelligentUICardProps {
   readonly staleHint?: ReactNode
   /** Suppress editing (a stage displaying a revision another card natively owns). */
   readonly readOnly?: boolean
+  /** Visible saved templates, used by lazy version-bar thumbnail renders. */
+  readonly templates?: readonly StyleTemplate[]
+  /** Session-selected template id, used by lazy version-bar thumbnail renders. */
+  readonly sessionStyle?: string
+  /** The M1 stage card: its history icon opens the version bar. */
+  readonly versionBarAvailable?: boolean
+  /** Displayed revision to auto-capture as a version-bar thumbnail. */
+  readonly captureThumbnail?: { readonly artifactId: string; readonly revisionId: string; readonly scheme: 'light' | 'dark' }
 }
 
 /**
@@ -535,7 +556,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, stageArtifactId, stageVisible, onStageVisibleChange, staleHint, readOnly = false }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, stageArtifactId, stageVisible, onStageVisibleChange, staleHint, readOnly = false, templates, sessionStyle, versionBarAvailable = false, captureThumbnail }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -546,6 +567,8 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const [detachedNotice, setDetachedNotice] = useState(false)
   const [restoreState, setRestoreState] = useState<'checking' | 'available' | 'busy' | 'done' | 'error' | 'hidden'>('checking')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [versionBarOpen, setVersionBarOpen] = useState(false)
+  const historyButtonRef = useRef<HTMLButtonElement>(null)
   const [restoredRevision, setRestoredRevision] = useState<number | undefined>()
   /** Transient switch preview target; swaps the edit-canvas skin with no request. */
   const [stylePreview, setStylePreview] = useState<ArtifactStyleTarget | undefined>(undefined)
@@ -718,6 +741,42 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     discardDraft: key => { discardArtifactDraft(key) },
   }), [editKey, turnNumber, refreshStyleCatalog])
 
+  // Capture one thumbnail for the revision the stage displays (M2/D9): fonts,
+  // two frames and the capture module's short settle budget run asynchronously;
+  // failure only leaves the version bar placeholder. Re-captures when the
+  // displayed revision, the scheme or the editing state changes.
+  useEffect(() => {
+    const target = captureThumbnail
+    if (target === undefined) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (cancelled || editing) return
+        const element = cardRef.current
+        if (element === null) return
+        const thumbnail = await captureCardThumbnail(element)
+        if (cancelled || thumbnail === undefined) return
+        const capturedScheme = target.scheme
+        saveArtifactThumbnail({ artifactId: target.artifactId, revisionId: target.revisionId, scheme: capturedScheme }, thumbnail)
+        // D5: keep one image per scheme. The live card only exists in the current
+        // scheme, so the other one is rendered off-screen with its own theme vars.
+        const otherScheme = oppositeThumbnailScheme(capturedScheme)
+        const theme = resolveCardTheme(program, templates ?? [], sessionStyle)
+        scheduleLazyThumbnail({
+          parts: { artifactId: target.artifactId, revisionId: target.revisionId, scheme: otherScheme },
+          program: program.program,
+          ...program.title === undefined ? {} : { title: program.title },
+          style: program.style ?? 'card',
+          ...theme === undefined ? {} : { themeStyle: resolveStyleThemeVars(theme, otherScheme) as CSSProperties },
+          scheme: otherScheme,
+          t,
+          ...resolveImage === undefined ? {} : { resolveImage },
+        })
+      })()
+    }, 80)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [captureThumbnail?.artifactId, captureThumbnail?.revisionId, captureThumbnail?.scheme, editing])
+
   // Leaving edit mode always drops a transient switch preview.
   useEffect(() => {
     if (!editing) setStylePreview(undefined)
@@ -769,6 +828,28 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     setRestoredRevision(revision.revision)
     setRestoreState('done')
   }
+
+  /** Close the version bar; an explicit close returns focus to its trigger. */
+  const closeVersionBar = useCallback((restoreFocus: boolean): void => {
+    setVersionBarOpen(false)
+    if (!restoreFocus) return
+    window.requestAnimationFrame(() => { historyButtonRef.current?.focus({ preventScroll: true }) })
+  }, [])
+
+  /** Apply a version-bar selection to the stage, then play the FLIP hand-off. */
+  const handleVersionSelect = useCallback((revisionId: string, animation?: { readonly start: FlipRect; readonly imageUrl: string }): void => {
+    setVersionBarOpen(false)
+    const changed = selectArtifactRevision(sessionId, restoreArtifactId, revisionId)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!changed) { historyButtonRef.current?.focus({ preventScroll: true }); return }
+        const stage = cardRef.current
+        if (stage === null) return
+        if (animation !== undefined) void playStageFlip({ start: animation.start, imageUrl: animation.imageUrl, stageElement: stage })
+        stage.focus({ preventScroll: true })
+      })
+    })
+  }, [sessionId, restoreArtifactId])
 
   const toggleEditing = (): void => {
     if (editing) { closeArtifactEditor(editKey); return }
@@ -858,13 +939,15 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             ? <span className="dsh-iui-state" data-dsh-iui-restore-error>{t('edit.restoreFailed')}</span>
             : null}
           <button
+            ref={historyButtonRef}
             type="button"
             className="dsh-iui-head-icon dsh-iui-history-open"
             data-dsh-iui-history-open
+            data-dsh-iui-version-open={versionBarAvailable ? 'true' : undefined}
             data-history-trigger="icon"
             aria-label={historyLabel}
             title={historyLabel}
-            onClick={() => { setHistoryOpen(true) }}
+            onClick={() => { if (versionBarAvailable) setVersionBarOpen(true); else setHistoryOpen(true) }}
           >
             <RemixIcon name="history-line" size={14} />
             {historyRevision === undefined
@@ -974,6 +1057,24 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           {error === null ? null : <span className="dsh-iui-style-error" role="alert">{error}</span>}
         </div>
       ) : null}
+      {versionBarOpen && versionBarAvailable
+        ? <ArtifactVersionBar
+            t={t}
+            sessionId={sessionId}
+            artifactId={restoreArtifactId}
+            currentRevisionId={restoreRevisionId}
+            scheme={scheme}
+            program={program.program}
+            templates={templates}
+            sessionStyle={sessionStyle}
+            resolveImage={resolveImage}
+            draftRevisionIds={draftRevisionIds ?? EMPTY_ID_SET}
+            anchor={historyButtonRef.current}
+            onClose={() => { closeVersionBar(true) }}
+            onOpenDetails={() => { setVersionBarOpen(false); setHistoryOpen(true) }}
+            onSelectRevision={handleVersionSelect}
+          />
+        : null}
       {historyOpen
         ? <ArtifactHistory
             t={t}
@@ -995,6 +1096,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               // dangling revision (it falls back to latest/remaining records).
               if (fallback !== undefined) recordRevisionFallback(sessionId, fallback)
               forgetArtifactRevision(sessionId, restoreArtifactId, revisionId, fallback)
+              deleteRevisionThumbnails(restoreArtifactId, revisionId)
               removeLocalRevision(sessionId, revisionId)
             }}
           />

@@ -1885,3 +1885,318 @@
     outline-offset: 1px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * M2 revision bar: a "recent tasks" strip of revision thumbnails opened from
+ * the stage card's history icon. Geometry rides the existing chrome tokens;
+ * the detailed metadata dialog (restore/delete) stays behind the Details button.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-version-bar {
+  position: fixed;
+  z-index: 1350;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 22%);
+  animation: dsh-iui-version-in 140ms ease-out;
+}
+
+.dsh-iui-version-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dsh-iui-version-title {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.dsh-iui-version-spacer {
+  flex: 1 1 auto;
+}
+
+.dsh-iui-version-details {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 22px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-version-details:hover {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-version-details:focus-visible,
+.dsh-iui-version-close:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-version-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.dsh-iui-version-close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-version-list {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.dsh-iui-version-item {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 152px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dsh-iui-version-item:hover {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.dsh-iui-version-item:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.dsh-iui-version-item.is-current {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, var(--dsw-alias-bg-layer-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 24%, transparent);
+}
+
+.dsh-iui-version-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dsh-iui-version-item.is-unavailable .dsh-iui-version-thumb {
+  opacity: 0.7;
+}
+
+.dsh-iui-version-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 92px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.dsh-iui-version-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.dsh-iui-version-thumb-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 14px;
+  text-align: center;
+}
+
+.dsh-iui-version-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px 7px;
+}
+
+.dsh-iui-version-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dsh-iui-version-revision {
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-version-current {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground, #fff);
+  font-size: 9.5px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.dsh-iui-version-source {
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10.5px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-version-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-iui-version-draft {
+  flex: none;
+  margin-left: auto;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary, var(--dsw-alias-border-l2)) 45%, var(--dsw-alias-border-l2));
+  border-radius: 999px;
+  color: var(--dsw-alias-state-warn-primary, var(--dsw-alias-label-secondary));
+  font-size: 9.5px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.dsh-iui-version-pending {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.dsh-iui-version-unavailable {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.dsh-iui-version-status {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.dsh-iui-version-status.is-error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-version-more {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+@keyframes dsh-iui-version-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-version-bar { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-version-bar,
+  .dsh-iui-version-item,
+  .dsh-iui-version-details,
+  .dsh-iui-version-thumb {
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+
+  .dsh-iui-version-item:focus-visible,
+  .dsh-iui-version-details:focus-visible,
+  .dsh-iui-version-close:focus-visible,
+  .dsh-iui-version-item.is-current {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+}
+
+/* Visually hidden helper copy used by the version bar's keyboard hint. */
+.dsh-iui-a11y-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

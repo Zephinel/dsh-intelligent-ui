@@ -2580,6 +2580,184 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'local-rev-4'`, 'the persisted local revision becomes the stage after a remount')
   check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'local-rev-4', 'D6 still selects the latest local revision')
   check(await count('[data-dsh-intelligent-ui="card"]'), 4, 'transcript and local revision cards all render as frozen cards')
+
+  // 49. M2 version bar: recent-task thumbnails, keyboard, on-demand select with
+  // FLIP, draft markers, lazy capture, reduced motion, the Details entry and a
+  // stage-on deletion rollback. The M1 stage stays enabled from scenario 48.
+  await read(`window.__setHistory('stage-call-1', [
+    { revisionId: 'local-rev-4', revision: 4, baseRevisionId: 'stage-call-3', title: '夏令时与冬令时', style: 'card', createdAt: 1763200004000, source: 'restore', hasProgram: false },
+    { revisionId: 'stage-call-3', revision: 3, baseRevisionId: 'stage-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1763200003000, source: 'structure', hasProgram: true, editedBlockIds: [] },
+    { revisionId: 'stage-call-2', revision: 2, baseRevisionId: 'stage-call-1', title: '夏令时与冬令时', style: 'card', createdAt: 1763200002000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'stage-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1763200001000, source: 'initial', hasProgram: true },
+  ])`)
+  await read(`(() => {
+    window.__m2Fetch = [];
+    window.__m2PreviousFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      window.__m2Fetch.push({ url, method: init?.method ?? 'GET' });
+      return window.__m2PreviousFetch(input, init);
+    };
+    return true;
+  })()`)
+  const versionTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  const versionItem = revision => `[data-dsh-iui-version-item][data-revision="${revision}"]`
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'version bar')
+  // Host history is fetched asynchronously; wait for the merged items, not just the shell.
+  await wait(`document.querySelectorAll('[data-dsh-iui-version-item]').length === 4`, 'version items ready')
+  check(await count('[data-dsh-iui-version-item]'), 4, 'the version bar lists the recent revisions')
+  check(await read(`document.querySelector('${versionItem(4)}').getAttribute('data-current')`), 'true', 'the bar marks the displayed revision as current')
+  check((await text(versionItem(1))).includes('初始生成'), true, 'the initial revision carries its source label')
+  check((await text(versionItem(2))).includes('区块编辑'), true, 'an edited revision carries its source label')
+  check((await text(versionItem(3))).includes('结构操作'), true, 'a structure revision carries its source label')
+  check((await text(versionItem(4))).includes('恢复'), true, 'the local restore revision is merged into the bar')
+  check(await count('[data-dsh-iui-version-item] [data-dsh-iui-version-thumb]'), 4, 'every item owns a thumbnail slot')
+  await wait(`document.activeElement?.getAttribute('data-revision') === '4'`, 'initial focus is the current revision')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '4', 'initial focus is the current revision')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))`)
+  await wait(`document.activeElement?.getAttribute('data-revision') === '3'`, 'ArrowRight focus')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '3', 'ArrowRight moves to the next (older) revision')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))`)
+  await wait(`document.activeElement?.getAttribute('data-revision') === '1'`, 'End focus')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '1', 'End focuses the oldest revision')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))`)
+  await wait(`document.activeElement?.getAttribute('data-revision') === '4'`, 'Home focus')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '4', 'Home returns to the newest revision')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))`)
+  await wait(`document.activeElement?.getAttribute('data-revision') === '3'`, 'Tab focus')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '3', 'Tab moves to the next revision')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))`)
+  await wait(`document.activeElement?.getAttribute('data-revision') === '4'`, 'Shift+Tab focus')
+  check(await read(`document.activeElement?.getAttribute('data-revision')`), '4', 'Shift+Tab returns to the previous revision')
+  await shot('harness-m2-version-bar.png')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'Escape closes the version bar')
+  await wait(`document.activeElement?.getAttribute('data-dsh-iui-version-open') === 'true'`, 'focus returned to the history icon')
+  check(await read(`document.activeElement?.getAttribute('data-dsh-iui-version-open')`), 'true', 'Escape returns focus to the history trigger')
+
+  // Pending-draft marker: an unsent draft on the stage's displayed revision is flagged in the bar.
+  await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'draft editor')
+  await typeInto('[data-dsh-iui-edit-global]', 'draft for the stage revision')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'draft editor closed')
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'version bar for draft marker')
+  await wait(`document.querySelector('${versionItem(4)}').getAttribute('data-draft') === 'true'`, 'draft marker on the stage revision')
+  check((await text(versionItem(4))).includes('待发送草稿'), true, 'the drafted revision shows its pending-draft label')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'draft bar closed')
+  // Clear the draft so later stages are clean: empty global instruction discards it.
+  await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'draft cleanup editor')
+  await typeInto('[data-dsh-iui-edit-global]', '')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'draft cleanup closed')
+
+  // An auto-captured thumbnail becomes a real image; older items lazy-capture.
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'version bar for thumbnails')
+  await wait(`document.querySelector('${versionItem(4)} [data-dsh-iui-version-thumb]')?.getAttribute('data-thumb-status') === 'ready'`, 'stage thumbnail captured')
+  check(await count(`${versionItem(4)} [data-dsh-iui-version-thumb] img`), 1, 'the captured thumbnail renders as an image')
+
+  // Selecting a historical revision switches the stage without writing the Host.
+  await wait(`document.querySelector('${versionItem(3)} [data-dsh-iui-version-thumb]')?.getAttribute('data-thumb-status') === 'ready'`, 'revision 3 thumbnail ready')
+  await click(versionItem(3))
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'selection closes the version bar')
+  await wait('!!document.querySelector("[data-dsh-iui-stage-flip]")', 'FLIP thumbnail overlay', { timeout: 3000, step: 20 })
+  await wait('!document.querySelector("[data-dsh-iui-stage-flip]")', 'FLIP overlay finished', { timeout: 3000, step: 20 })
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'stage switched to revision 3')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-3', 'the selection moved to revision 3')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 4, 'switching a revision creates no new card')
+  const writesWhileSwitching = await read(`window.__m2Fetch.filter(call => !call.url.includes('/api/intelligent-ui/artifact-base') && call.method !== 'GET').map(call => call.method + ' ' + call.url)`)
+  check(writesWhileSwitching.length, 0, 'switching a revision never writes the Host')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-stage-card')`), true, 'focus lands on the stage after the switch')
+
+  // Reduced motion switches directly with no FLIP overlay.
+  await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'reduced-motion bar')
+  await wait(`!!document.querySelector('${versionItem(2)}')`, 'reduced-motion item ready')
+  await click(versionItem(2))
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('可见舞台原位更新')`, 'reduced-motion stage switch')
+  await new Promise(resolve => setTimeout(resolve, 160))
+  check(await count('[data-dsh-iui-stage-flip]'), 0, 'reduced motion skips the FLIP overlay')
+  await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [] })
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'bar before lazy capture')
+  await wait(`!!document.querySelector('${versionItem(3)}')`, 'lazy-capture item ready')
+  await click(versionItem(3))
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'stage back on revision 3')
+
+  // Lazy capture: with the cache cleared, opening the bar renders older items
+  // off-screen and captures them without blocking the bar.
+  await read(`window.__clearArtifactThumbnails('stage-call-1')`)
+  await wait('!document.querySelector("[data-dsh-iui-stage-flip]")', 'flip settled before lazy capture', { timeout: 3000, step: 20 })
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'lazy capture bar')
+  await wait(`document.querySelector('${versionItem(1)} [data-dsh-iui-version-thumb]')?.getAttribute('data-thumb-status') === 'ready'`, 'lazy off-screen thumbnail', { timeout: 10000, step: 120 })
+  check(await count(`${versionItem(1)} [data-dsh-iui-version-thumb] img`), 1, 'the lazy capture renders an off-screen image')
+
+  // Details entry keeps the metadata management dialog.
+  await click('[data-dsh-iui-version-details]')
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'details closes the bar')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'details dialog')
+  // The dialog loads its rows from the Host after opening; wait for the list.
+  await wait('!!document.querySelector("[data-dsh-iui-history-list]")', 'details history rows')
+  check((await text('[data-dsh-iui-history]')).includes('修订 4'), true, 'the details dialog lists revisions')
+  await click('[data-dsh-iui-history-close]')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'details dialog closed')
+
+  // Stage-on deletion: deleting the local revision currently displayed in the
+  // frozen local card hands the stage over to the newest remaining card.
+  await click(versionTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'bar before deletion')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'deletion history dialog')
+  // Wait for the target row and its deletable action, not just the dialog shell.
+  await wait('!!document.querySelector(\'[data-dsh-iui-history-revision="local-rev-4"] [data-dsh-iui-history-delete]\')', 'deletable local revision row')
+  await click('[data-dsh-iui-history-revision="local-rev-4"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'stage-call-3'`, 'stage hands over after the deletion')
+  check(await read(`window.__artifactVersionState('stage-call-1').latest`), 'stage-call-3', 'the deleted local revision leaves a live stage revision')
+  check(await read(`window.__artifactVersionState('stage-call-1').selected`), 'stage-call-3', 'the stage selection repoints to a live revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 3, 'the deleted local revision card is gone')
+  check(await read('!!document.querySelector("[data-dsh-iui-history]")'), false, 'the dialog closes with the removed card')
+  check((await text('[data-dsh-iui-stage-card]')).includes('不可见舞台回落新卡'), true, 'the promoted stage renders its own revision')
+
+  await read('window.fetch = window.__m2PreviousFetch; delete window.__m2PreviousFetch; delete window.__m2Fetch')
+  await read('window.__setArtifactStageEnabled(false)')
+
+  // 50. D5: every revision keeps one thumbnail per scheme. The live stage
+  // captures the current scheme, the other scheme is rendered off-screen with
+  // its own theme; both are stored and the bar reads the requested scheme first.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__remount()')
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card]")', 'D5 stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]')?.getAttribute('data-dsh-iui-call-id') === 'stage-call-3'`, 'D5 stage converges on revision 3')
+  await wait(`window.__thumbnailStates('stage-call-1', 'stage-call-3').light === 'ready'`, 'light thumbnail captured', { timeout: 10000 })
+  await wait(`window.__thumbnailStates('stage-call-1', 'stage-call-3').dark === 'ready'`, 'dark thumbnail captured off-screen', { timeout: 12000 })
+  check(await read(`window.__thumbnailStates('stage-call-1', 'stage-call-3').light`), 'ready', 'the live stage captures the current scheme')
+  check(await read(`window.__thumbnailStates('stage-call-1', 'stage-call-3').dark`), 'ready', 'the same revision also stores the other scheme')
+  const dualTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  const dualItem = '[data-dsh-iui-version-item][data-revision="3"] [data-dsh-iui-version-thumb]'
+  await click(dualTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'D5 version bar')
+  await wait(`document.querySelector('${dualItem}')?.getAttribute('data-thumb-status') === 'ready'`, 'D5 bar thumbnail ready')
+  check(await read(`document.querySelector('${dualItem}').getAttribute('data-thumb-scheme')`), 'current', 'the light scheme uses its own thumbnail')
+  // Switching the page scheme must keep both copies and read the dark one.
+  await read(`document.body.setAttribute('data-ds-dark-theme', '')`)
+  await wait(`window.__thumbnailStates('stage-call-1', 'stage-call-3').dark === 'ready'`, 'dark thumbnail after the scheme switch', { timeout: 8000 })
+  await wait(`document.querySelector('${dualItem}')?.getAttribute('data-thumb-scheme') === 'current'`, 'dark bar thumbnail ready')
+  check(await read(`document.querySelector('${dualItem}').getAttribute('data-thumb-scheme')`), 'current', 'the dark scheme uses its own thumbnail')
+  check(await read(`window.__thumbnailStates('stage-call-1', 'stage-call-3').light`), 'ready', 'the light copy survives the scheme switch')
+  await read(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'D5 bar closed')
+  await read(`document.body.removeAttribute('data-ds-dark-theme')`)
+  await new Promise(resolve => setTimeout(resolve, 240))
+  await shot('harness-m2-dual-scheme.png')
   await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

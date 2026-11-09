@@ -9,10 +9,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
-import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision, ArtifactHistorySource } from '../../shared/artifact-edit.ts'
+import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactHistoryRevision } from '../../shared/artifact-edit.ts'
 import type { LocalArtifactRevision } from './local-revisions.ts'
 import { ensureArtifactBase, invalidateArtifactBase } from './artifact-base.ts'
-import { deleteArtifactRevision, fetchArtifactHistory, fetchArtifactHistoryProgram, isStyleSwitchRevision, restoreRevision } from './local-revisions.ts'
+import { deleteArtifactRevision, fetchArtifactHistory, fetchArtifactHistoryProgram, restoreRevision } from './local-revisions.ts'
+import { formatRevisionTime, historySourceLabel } from './revision-meta.ts'
 import { createRevisionFallback, needsRevisionFallback, rollbackTargetFor, type RevisionFallback } from './revision-fallbacks.ts'
 import type { Translate } from '../../shared/locales.ts'
 
@@ -48,34 +49,6 @@ export interface ArtifactHistoryProps {
 
 /** Load state of the history request. */
 type HistoryStatus = 'loading' | 'error' | 'ready'
-
-/** Locale key for one revision source. */
-function sourceLabelKey(source: ArtifactHistorySource): 'edit.historyInitial' | 'edit.historyEdit' | 'edit.historyStructure' | 'edit.historyRestore' {
-  if (source === 'initial') return 'edit.historyInitial'
-  if (source === 'edit') return 'edit.historyEdit'
-  if (source === 'structure') return 'edit.historyStructure'
-  return 'edit.historyRestore'
-}
-
-/**
- * Localized source label for one revision.
- *
- * A deterministic style switch is recorded as a structure revision with no
- * edited blocks, so it gets its own label instead of the operation one.
- */
-function sourceLabel(t: Translate, revision: ArtifactHistoryRevision): string {
-  return t(isStyleSwitchRevision(revision) ? 'edit.historyStyleSwitch' : sourceLabelKey(revision.source))
-}
-
-/** Short local date/time for one revision timestamp. */
-function formatHistoryTime(createdAt: number): string {
-  if (!Number.isFinite(createdAt)) return ''
-  try {
-    return new Date(createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
-}
 
 /** One revision row's metadata (revision, current, source, blocks). */
 function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, canDelete, rollbackRevision, draftLocked, referencedLocked, dependencyLocked, returnFocusOnCancel, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
@@ -129,9 +102,9 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
       <div className="dsh-iui-history-row-head">
         <span className="dsh-iui-history-revision">{t('edit.revision', { n: revision.revision })}</span>
         {revision.current ? <span className="dsh-iui-history-current">{t('edit.historyCurrent')}</span> : null}
-        <span className="dsh-iui-history-source">{sourceLabel(t, revision)}</span>
+        <span className="dsh-iui-history-source">{historySourceLabel(t, revision)}</span>
         <span className="dsh-iui-history-spacer" />
-        <span className="dsh-iui-history-time">{formatHistoryTime(revision.createdAt)}</span>
+        <span className="dsh-iui-history-time">{formatRevisionTime(revision.createdAt)}</span>
       </div>
       <div className="dsh-iui-history-meta">{styleNote}</div>
       {edited.length > 0 ? (
@@ -150,7 +123,7 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
           </ul>
         </div>
       ) : (
-        <p className="dsh-iui-history-note">{sourceLabel(t, revision)}</p>
+        <p className="dsh-iui-history-note">{historySourceLabel(t, revision)}</p>
       )}
       {revision.hasProgram ? null : <p className="dsh-iui-history-unavailable">{t('edit.historyUnavailable')}</p>}
       {draftLocked === true ? <p className="dsh-iui-history-note" data-dsh-iui-history-draft-lock>{t('edit.historyDeleteDraftLocked')}</p> : null}

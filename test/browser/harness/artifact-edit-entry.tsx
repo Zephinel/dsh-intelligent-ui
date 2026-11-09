@@ -23,6 +23,7 @@ import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 import { addLocalRevision, clearLocalRevisions } from '../../../src/client/artifact-edit/local-revisions.ts'
 import { clearRevisionFallbacks } from '../../../src/client/artifact-edit/revision-fallbacks.ts'
 import { artifactVersionFor, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
+import { artifactThumbnails, clearArtifactThumbnails } from '../../../src/client/artifact-edit/artifact-thumbnails.ts'
 import { collectLocalImageAssets } from '../../../src/client/export-html.ts'
 import { settleLocalImages } from '../../../src/client/export-image.ts'
 
@@ -426,6 +427,16 @@ w.__artifactVersionState = (artifactId: string) => {
   }
 }
 w.__selectArtifactRevision = (artifactId: string, revisionId: string) => selectArtifactRevision(SESSION, artifactId, revisionId)
+w.__clearArtifactThumbnails = (artifactId: string) => { clearArtifactThumbnails(artifactId) }
+w.__thumbnailStates = (artifactId: string, revisionId: string) => {
+  const read = (scheme: 'light' | 'dark') => artifactThumbnails.snapshot({ artifactId, revisionId, scheme })
+  return {
+    light: read('light').status,
+    dark: read('dark').status,
+    lightCross: read('light').crossScheme ?? null,
+    darkCross: read('dark').crossScheme ?? null,
+  }
+}
 w.__appendRevision = (callId: string, program: string, meta: Record<string, unknown> = {}, title: string = DST_TITLE) => {
   nodes = [...nodes, cardNode(callId, program, meta, title)]
   update()
