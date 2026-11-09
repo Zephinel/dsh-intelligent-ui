@@ -254,9 +254,14 @@ function captureEntries(container: HTMLElement): ExportTargetEntry[] {
     })
 }
 
+/** Escape one selector value; the regex fallback keeps non-DOM harnesses working. */
+function escapeSelectorValue(value: string): string {
+  return typeof CSS === 'undefined' ? value.replace(/["\\]/g, '\\$&') : CSS.escape(value)
+}
+
 /** Resolve what the export captures for one action row (cross-Turn stage lookup). */
 export function planImageExportCapture(container: HTMLElement) {
-  return planExportCapture(captureEntries(container), artifactId => document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${CSS.escape(artifactId)}"]`))
+  return planExportCapture(captureEntries(container), artifactId => document.querySelector<HTMLElement>(`[data-dsh-iui-stage-card][data-artifact-id="${escapeSelectorValue(artifactId)}"]`))
 }
 
 /** Expand collapsed cards under one element; returns an idempotent restore. */

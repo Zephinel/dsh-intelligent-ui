@@ -1109,7 +1109,9 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             t={t}
             artifactId={restoreArtifactId}
             currentRevisionId={restoreRevisionId}
-            renderedRevisionLocal={program.localRevision === true}
+            // Only a card whose own identity is the local revision is a local card;
+            // the stage synthesizes local revisions with the stage card's own callId.
+            renderedRevisionLocal={program.localRevision === true && program.callId === program.revisionId}
             localRevisionIds={localRevisionIds}
             draftRevisionIds={draftRevisionIds}
             fallbackTargetIds={fallbackTargetIds}

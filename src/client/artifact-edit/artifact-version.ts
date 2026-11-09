@@ -51,6 +51,13 @@ export interface ArtifactVersionRecord {
   readonly turn?: number
   /** Monotonic registration order, used to break revision-number ties. */
   readonly seq: number
+  /**
+   * Set when this record became the displayed revision through a deletion
+   * fallback: the deleted revision id. The stage synthesizes `fallbackFrom`
+   * from it so a stage displaying a fetched revision stays read-only after the
+   * displayed revision is deleted.
+   */
+  readonly redirectedFrom?: string
 }
 
 /** One mounted card of an artifact, independent of the revision it names. */
@@ -161,6 +168,7 @@ export function registerCardInState(
     callId: previous?.callId ?? spec.cardId,
     ...spec.turn === undefined && previous?.turn === undefined ? {} : { turn: spec.turn ?? previous?.turn },
     seq: previous?.seq ?? seq,
+    ...previous?.redirectedFrom === undefined ? {} : { redirectedFrom: previous.redirectedFrom },
   }
   revisions.set(record.revisionId, record)
   const latest = latestRecord(revisions)
@@ -312,6 +320,10 @@ export function forgetRevisionInState(
       ...fallback.baseRevisionId === undefined ? {} : { baseRevisionId: fallback.baseRevisionId },
       callId: previous?.callId ?? fallback.revisionId,
       seq: previous?.seq ?? seq,
+      // The displayed revision changed through a deletion fallback. The stage
+      // card's own program may belong to another revision (it can display a
+      // fetched revision), so stageProgramFor must read this from the record.
+      redirectedFrom: revisionId,
     })
   }
   const latest = latestRecord(revisions)
@@ -455,8 +467,12 @@ export function stageProgramFor(cardProgram: IntelligentUIProgram, record: Artif
     ...record.localRevision === true ? { localRevision: true } : {},
     ...record.localRevisionKind === undefined ? {} : { localRevisionKind: record.localRevisionKind },
     // A fallback-redirected card must stay read-only on the stage too: the
-    // fallback marker drives edit/draft/runtime-state/Save suppression.
-    ...cardProgram.fallbackFrom === undefined ? {} : { fallbackFrom: cardProgram.fallbackFrom },
+    // fallback marker drives edit/draft/runtime-state/Save suppression. A stage
+    // displaying a fetched revision had no cardProgram-level redirect, so the
+    // record marker written by forgetRevisionInState covers that case.
+    ...(cardProgram.fallbackFrom ?? record.redirectedFrom) === undefined
+      ? {}
+      : { fallbackFrom: cardProgram.fallbackFrom ?? record.redirectedFrom },
     running: cardProgram.running,
   }
 }

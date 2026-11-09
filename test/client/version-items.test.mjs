@@ -96,3 +96,12 @@ test('FLIP rectangles interpolate linearly and clamp progress', () => {
 test('rectOf copies only geometry fields', () => {
   assert.deepEqual(rectOf({ left: 1, top: 2, width: 3, height: 4, x: 1, y: 2, bottom: 6, right: 4 }), { left: 1, top: 2, width: 3, height: 4 })
 })
+
+test('a store-known revision stays selectable even when the history row reports no program', () => {
+  const { items } = buildVersionItems({
+    history: [historyRow(2, { hasProgram: false }), historyRow(1)],
+    known: new Map([['rev-2', { revisionId: 'rev-2', revision: 2 }]]),
+  })
+  assert.equal(items[0].hasProgram, true, 'the known program upgrades the disabled history row')
+  assert.equal(items[0].source, 'edit', 'history metadata still wins for the source')
+})

@@ -18,6 +18,7 @@ import {
   latestRecord,
   registerArtifactVersionCard,
   registerCardInState,
+  registerRevisionInState,
   resetArtifactVersions,
   selectArtifactRevision,
   selectRevisionInState,
@@ -413,4 +414,50 @@ test('F3 selected revision ids keep their Set identity while the content is unch
   assert.notEqual(idsB, idsA, 'a changed snapshot returns a new Set')
   assert.deepEqual([...idsB].sort(), ['rev-2'])
   first()
+})
+
+test('H1 residual: a deleted fetched revision marks the fallback record as redirected', () => {
+  // One card owns rev-1 and displays a fetched rev-2 (selected via the bar).
+  let state = registerAll([card({ revisionId: 'rev-1', revision: 1 })])
+  state = registerRevisionInState(state, {
+    revisionId: 'rev-2',
+    artifactId: ARTIFACT,
+    revision: 2,
+    program: 'root = Col([Title("fetched")])',
+    style: 'card',
+  }, 5)
+  state = { ...state, selectedRevisionId: 'rev-2', latestRevisionId: 'rev-2' }
+  state = forgetRevisionInState(state, 'rev-2', {
+    deletedRevisionId: 'rev-2',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    program: 'root = Col([Title("fallback program")])',
+    style: 'card',
+    createdAt: 2,
+  })
+  const record = state.revisions.get('rev-1')
+  assert.equal(record.redirectedFrom, 'rev-2', 'the fallback record remembers the deleted displayed revision')
+  assert.equal(state.selectedRevisionId, 'rev-1')
+  const program = stageProgramFor(
+    { callId: 'card-1', program: 'root = Col([Title("own rev1")])', running: false, artifactId: ARTIFACT, revisionId: 'rev-1', revision: 1 },
+    record,
+  )
+  assert.equal(program.fallbackFrom, 'rev-2', 'the synthesized stage program is read-only after the redirect')
+  // Re-registering and updating the stage card must keep the marker.
+  const reRegistered = registerCardInState(state, card({ revisionId: 'rev-1', revision: 1 }), 8)
+  assert.equal(reRegistered.revisions.get('rev-1').redirectedFrom, 'rev-2', 'register keeps the marker')
+  const updated = updateCardInState(reRegistered, card({ revisionId: 'rev-1', revision: 1 }), 9)
+  assert.equal(updated.revisions.get('rev-1').redirectedFrom, 'rev-2', 'update keeps the marker')
+  assert.equal(stageProgramFor({ callId: 'card-1', program: 'root = Col([])', running: false }, updated.revisions.get('rev-1')).fallbackFrom, 'rev-2')
+})
+
+test('H1 residual: a card-level fallbackFrom still wins over the record marker', () => {
+  const state = registerAll([card()])
+  const record = { ...state.revisions.get('rev-1'), redirectedFrom: 'rev-9' }
+  const program = stageProgramFor(
+    { callId: 'card-1', program: 'root = Col([])', running: false, fallbackFrom: 'rev-2' },
+    record,
+  )
+  assert.equal(program.fallbackFrom, 'rev-2')
 })

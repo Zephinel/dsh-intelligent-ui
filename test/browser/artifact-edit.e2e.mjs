@@ -2819,6 +2819,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'deletion bar closed')
   await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('不可见舞台回落新卡')`, 'stage shows revision 3 before deletion')
   const cardsBeforeTranscriptDelete = await count('[data-dsh-intelligent-ui="card"]')
+  const stageCardBeforeDelete = await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`)
+  check(stageCardBeforeDelete, 'stage-call-3', 'the stage card identity is pinned before the deletion')
+  check(await count('[data-dsh-iui-stage-card]'), 1, 'exactly one stage card before the deletion')
+  check(await count('[data-dsh-iui-stage-card][data-artifact-id="stage-call-1"]'), 1, 'the single stage belongs to the deleted artifact')
   await click(branchTrigger)
   await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'deletion details bar')
   await click('[data-dsh-iui-version-details]')
@@ -2833,6 +2837,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(transcriptDeleteState.selected, 'stage-call-2', 'the stage selection repoints at a live revision')
   check(transcriptDeleteState.revisions.includes('stage-call-3'), false, 'the deleted revision is forgotten by the store')
   check(await count('[data-dsh-iui-stage-card]'), 1, 'exactly one stage card remains after the rollback')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), stageCardBeforeDelete, 'M2 gate wiring: the fallback keeps the same stage card (no unregister/re-register handover)')
+  check(await count('[data-dsh-iui-stage-card][data-artifact-id="stage-call-1"]'), 1, 'the surviving stage still belongs to the fallback artifact')
   check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-artifact-id')`), 'stage-call-1', 'the stage keeps its artifact identity')
   check(await count('[data-dsh-intelligent-ui="card"]'), cardsBeforeTranscriptDelete, 'the card count is unchanged by the rollback')
   check(await count('[data-dsh-iui-history-revision="stage-call-3"]'), 0, 'the deleted revision row is gone')
@@ -2877,6 +2883,118 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), 'solo-call', 'the fallback stage keeps its identity')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'solo details closed')
+  await read('window.__setArtifactStageEnabled(false)')
+
+  // 54. H1 real-GUI residual: a single stage card owns rev-1 but displays a
+  // revision fetched from Host history (rev-2). Deleting that displayed fetched
+  // revision must redirect the stage through redirectedFrom and keep it read-only.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card]")', 'fetched stage cleared')
+  const FETCHED_V1 = 'root = Col([Card([Title("拉取修订旧版", "sm")])])'
+  const FETCHED_V2 = 'root = Col([Card([Title("拉取修订当前版", "sm")])])'
+  await read(`window.__setHistory('solo2', [
+    { revisionId: 'solo2-rev-2', revision: 2, baseRevisionId: 'solo2-rev-1', title: '单卡历史样例', style: 'card', createdAt: 1763200007000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'solo2-rev-1', revision: 1, title: '单卡历史样例', style: 'card', createdAt: 1763200006000, source: 'initial', hasProgram: true },
+  ], { 'solo2-rev-1': ${JSON.stringify(FETCHED_V1)}, 'solo2-rev-2': ${JSON.stringify(FETCHED_V2)} })`)
+  await read(`window.__appendRevision('solo2', ${JSON.stringify(FETCHED_V1)}, { artifactId: 'solo2', revisionId: 'solo2-rev-1', revision: 1 }, '单卡历史样例')`)
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\\"solo2\\"]")', 'fetched stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('拉取修订旧版')`, 'stage shows its own rev1')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 1, 'the own-revision stage is editable before the fetched revision is displayed')
+  const fetchedTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  await click(fetchedTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'fetched version bar')
+  await wait('!!document.querySelector(\'[data-dsh-iui-version-item][data-revision="2"]\')', 'fetched revision 2 item')
+  await click('[data-dsh-iui-version-item][data-revision="2"]')
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'fetched bar closed')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('拉取修订当前版')`, 'stage displays the fetched revision 2')
+  check(await read(`window.__artifactVersionState('solo2').selected`), 'solo2-rev-2', 'the fetched revision is selected')
+  await click(fetchedTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'fetched details bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'fetched details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="solo2-rev-2"] [data-dsh-iui-history-delete]`)', 'fetched delete row ready')
+  await click('[data-dsh-iui-history-revision="solo2-rev-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'fetched deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('拉取修订旧版')`, 'fetched stage follows the fallback')
+  const fetchedState = await read(`window.__artifactVersionState('solo2')`)
+  check(fetchedState.latest, 'solo2-rev-1', 'the fallback revision becomes latest')
+  check(fetchedState.selected, 'solo2-rev-1', 'the fallback revision becomes selected')
+  check(fetchedState.stage, 'solo2', 'the same single card keeps the stage')
+  check(fetchedState.redirected['solo2-rev-1'], 'solo2-rev-2', 'the fallback record remembers the deleted fetched revision')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'the fallback keeps exactly one card')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'fetched fallback stage is read-only')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'H1 residual: the stage displaying a deleted fetched revision is read-only after the fallback')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'fetched details closed before the bar check')
+  await click(fetchedTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'bar after the fetched fallback')
+  await wait('!!document.querySelector(\'[data-dsh-iui-version-item][data-revision="1"]\')', 'bar shows revision 1 after the deletion')
+  check(await read(`document.querySelector('[data-dsh-iui-version-item][data-revision="1"]').getAttribute('data-current')`), 'true', 'the bar marks the fallback revision as current')
+  check(await count('[data-dsh-iui-version-item]'), 1, 'the deleted fetched revision is gone from the bar')
+  await read(`document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'bar after the fetched fallback closed')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'fetched details closed')
+  await read('window.__setArtifactStageEnabled(false)')
+
+  // 55. H1 last variant: the stage displays a client-local revision while its own
+  // program is the initial transcript revision. Deleting that displayed local
+  // revision must still write a fallback (transcript-card semantics): the stage
+  // stays the same card, becomes read-only and the revision badge disappears.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card]")', 'local revision stage cleared')
+  const LOCAL_V1 = 'root = Col([Card([Title("本地修订前旧版", "sm")])])'
+  const LOCAL_V2 = 'root = Col([Card([Title("本地修订当前版", "sm")])])'
+  await read(`window.__setHistory('solo3', [
+    { revisionId: 'local-struct-2', revision: 2, baseRevisionId: 'solo3-rev-1', title: '单卡本地修订', style: 'card', createdAt: 1763200009000, source: 'structure', hasProgram: false },
+    { revisionId: 'solo3-rev-1', revision: 1, title: '单卡本地修订', style: 'card', createdAt: 1763200008000, source: 'initial', hasProgram: true },
+  ], { 'solo3-rev-1': ${JSON.stringify(LOCAL_V1)} })`)
+  await read(`window.__appendRevision('solo3', ${JSON.stringify(LOCAL_V1)}, { artifactId: 'solo3', revisionId: 'solo3-rev-1', revision: 1 }, '单卡本地修订')`)
+  // The local revision is known to the store but its local card is not mounted
+  // (trimmed Turn window), so the transcript card stays the stage.
+  await read(`window.__registerLocalRevision('solo3', { revisionId: 'local-struct-2', revision: 2, program: ${JSON.stringify(LOCAL_V2)}, title: '单卡本地修订', kind: 'structure', sourceRevisionId: 'solo3-rev-1' })`)
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\\"solo3\\"]")', 'local revision stage card')
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === 1`, 'only the transcript stage card is mounted')
+  const localStageCallId = await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`)
+  check(localStageCallId, 'solo3', 'the stage card identity is pinned before the local revision deletion')
+  check(await count('[data-dsh-iui-stage-card]'), 1, 'exactly one stage card before the local revision deletion')
+  const localTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  await click(localTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'local revision version bar')
+  await wait('!!document.querySelector(\'[data-dsh-iui-version-item][data-revision="2"]\')', 'local revision item')
+  await click('[data-dsh-iui-version-item][data-revision="2"]')
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'local revision bar closed')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('本地修订当前版')`, 'stage displays the displayed local revision')
+  check(await read(`window.__artifactVersionState('solo3').selected`), 'local-struct-2', 'the local revision is selected')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), localStageCallId, 'selection keeps the stage card identity')
+  check(await text('[data-dsh-iui-history-count]'), '2', 'the stage badge shows the local revision number')
+  await click(localTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'local revision details bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'local revision details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="local-struct-2"] [data-dsh-iui-history-delete]`)', 'local revision delete row ready')
+  check(await count('[data-dsh-iui-history-delete-error]'), 0, 'the displayed local revision offers a working delete')
+  await click('[data-dsh-iui-history-revision="local-struct-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'local revision deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('本地修订前旧版')`, 'stage follows the fallback to the older revision')
+  const localState = await read(`window.__artifactVersionState('solo3')`)
+  check(localState.latest, 'solo3-rev-1', 'the fallback revision becomes latest')
+  check(localState.selected, 'solo3-rev-1', 'the fallback revision becomes selected')
+  check(localState.stage, 'solo3', 'the same stage card survives the fallback')
+  check(localState.redirected['solo3-rev-1'], 'local-struct-2', 'the fallback record remembers the deleted local revision')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), localStageCallId, 'M2 gate wiring: the local-revision fallback keeps the same stage card')
+  check(await count('[data-dsh-iui-stage-card]'), 1, 'exactly one stage card remains after the local revision fallback')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'the stage card count is unchanged (no local card was mounted)')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'local-revision fallback stage is read-only')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'the stage is read-only after the local revision fallback')
+  await wait('!document.querySelector("[data-dsh-iui-history-count]")', 'the revision badge disappears after the fallback')
+  check(await count('[data-dsh-iui-history-count]'), 0, 'the badge falls back to the initial revision (no number)')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'local revision details closed')
   await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)

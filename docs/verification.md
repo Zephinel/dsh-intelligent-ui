@@ -798,14 +798,14 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **导出（D8）**：HTML 导出在 `programsFor` 后按 artifact 查询版本 store 选中 revision，用 `stageProgramFor` 合成 program/title/style 并保留原 callId；选中 revision 的 stage 卡在另一 Turn 时用 `assetElements` 从 stage 元素读取本地图片并按导出 callId 建桶。图片导出用纯规划器 `export-image-targets.ts` 按消息顺序解析 notice（`data-dsh-iui-artifact-id`）/卡片（`data-artifact-id`），优先跨 Turn 捕获 stage 卡（当前显示版本），找不到 stage 时退回本 Turn 整卡；notice-only 且无可捕获内容时明确报错，绝不导出旧内容；多 artifact 去重后逐个展开/等待 settled，`stackBoxes` 纵向合成；既有普通卡片路径保持 container 截图。
 - **编辑/删除**：stage 显示 frozen 卡原生 revision 时 frozen 卡只读、stage 为唯一编辑面（同一 editKey 不双挂画布），可经版本条选旧 revision 后沿用冲突横幅→branch 流程（base=选中 revision、branch:true、无新增卡）。删除 stage 当前显示的 transcript revision 走既有 revision-fallbacks→forget，latest/selected 重指向 live revision，stage 不悬空、卡片数不变。
 - **测试**：新增 `test/client/export-versions.test.mjs`、`test/client/export-image-targets.test.mjs` 共 9 条纯单测；artifact-edit 新增场景 51（stage 旧 revision branch）、52（stage 当前 transcript revision 删除回退）与 53（单卡 Turn 删除当前显示 revision：fallbackFrom 继承后回退卡只读、stage 不换卡），632→**655 checks**；review 修复另加 6 条 store/Set 身份/默认开关/资源合并单测（见下）；导出套件新增 D8 双路径场景（notice-only 图片导出捕获 stage 且内容为 SELECTED 非 RAW；HTML 嵌入选中 revision 而非旧记录）。既有 1–50 与导出场景全过。
-- **Review 修复（2026-11-10）**：`stageProgramFor` 继承 `fallbackFrom`（单卡 stage 删除当前显示修订后回退卡只读）；gate 注册改为同一 cardId 的 update 路径（新增 `updateArtifactVersionCard`/`updateCardInState`，卸载才 unregister，stage 角色/可见性保持）；注册改 `useLayoutEffect`；版本条删除重复 import、`hasProgram=false` 条目禁用、pending 用 ref；selected revision ids Set 内容不变时保持身份；stage 选择器用 `CSS.escape`；HTML 导出 assetElements 与 container 两路本地图片合并；离屏懒采集补最小卡头与真实卡构图一致；新增生产默认 enabled 独立测试、双 scheme 缩略图 URL 不同断言。
+- **Review 修复（2026-11-10）**：`stageProgramFor` 继承 `fallbackFrom`（单卡 stage 删除当前显示修订后回退卡只读）；gate 注册改为同一 cardId 的 update 路径（新增 `updateArtifactVersionCard`/`updateCardInState`，卸载才 unregister，stage 角色/可见性保持）；注册改 `useLayoutEffect`；版本条删除重复 import、`hasProgram=false` 条目禁用、pending 用 ref；selected revision ids Set 内容不变时保持身份；stage 选择器用 `CSS.escape`；HTML 导出 assetElements 与 container 两路本地图片合并；离屏懒采集补最小卡头与真实卡构图一致；新增生产默认 enabled 独立测试、双 scheme 缩略图 URL 不同断言。**真机复验补充（H1 残留）**：stage 显示从 Host history 拉取的 revision（卡片自身 program 是旧 revision）被删除时，store 在回退记录写 `redirectedFrom`、`stageProgramFor` 合成 `fallbackFrom`，回退 stage 保持只读；reducer 单测 + 场景 54 覆盖。**最后一个变体**：stage 显示 store 已知的 local revision 时，`renderedRevisionLocal` 仅对真 local 卡（callId===revisionId）为真、`locallyOwned` 要求对话框打开卡就是该 local 卡，删除当前显示 local revision 仍写 fallback 并保持只读；场景 55 覆盖，同时保留本地卡自身删除不写 fallback（场景 49 不回归）。
 - **已知限制**：导出只看当前 session 版本 store；多 artifact 以最大宽度+12px 纵向拼接（窄卡留透明侧边）；异步媒体/地图以 settled 信号为准；branch 语义未改，仅 stage 编辑面放开。
 
 ### 自动化结果
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **719/719** = Host **302** + Client **394** + packaging **23**；build host **841 kB**、client **4.12 MB**（js 3.89 / CSS 230.8） |
-| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **655 checks**、`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,058,514** 字节，解包 **12,990,345** 字节 |
+| `npm run check` | PASS；Node **722/722** = Host **302** + Client **397** + packaging **23**；build host **841 kB**、client **4.12 MB**（js 3.89 / CSS 230.8） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **685 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,058,653** 字节，解包 **12,991,046** 字节 |
 | 结构 | M3 记录中英对应；`check:docs-facts` 通过；`git diff --check` 通过 |

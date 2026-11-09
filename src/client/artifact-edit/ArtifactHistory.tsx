@@ -304,10 +304,12 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, renderedRevi
     // Any card still rendering the deleted revision rolls back to the newest
     // older revision whose program is still retained. The opening card cannot be
     // left unbound, so it requires that target; other rows use it when available
-    // and otherwise keep the documented stale-card behavior. A revision owned by
-    // a client-local card is removed with that card and needs no rollback.
+    // and otherwise keep the documented stale-card behavior. Only a revision
+    // owned by the opening client-local card is removed with that card (no
+    // rollback); when a transcript stage displays a local revision, deleting it
+    // must still write the fallback so the redirected stage is read-only.
     let fallback: RevisionFallback | undefined
-    const locallyOwned = localRevisionIds?.has(revision.revisionId) === true
+    const locallyOwned = renderedRevisionLocal && localRevisionIds?.has(revision.revisionId) === true
     const target = locallyOwned ? undefined : rollbackTargetFor(revisions, revision.revisionId, localRevisionIds)
     const source = target === undefined ? undefined : await fetchArtifactHistoryProgram(artifactId, target.revisionId)
     // A known target whose program could not be loaded is a transient failure:
@@ -330,10 +332,16 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, renderedRevi
     } else {
       // A merely historical row that no rendered card names and no live
       // fallback targets needs no record; writing one would leave a dead entry
-      // that later falsely blocks deleting the target revision.
+      // that later falsely blocks deleting the target revision. A client-local
+      // revision deleted from another card's dialog disappears with its own
+      // local card, so it needs no fallback unless this dialog's card currently
+      // displays it (the stage-displays-local-revision case).
       const liveTargets = fallbackTargetIds ?? new Set<string>()
-      const needsRecord = renderedRevisionIds === undefined
-        || needsRevisionFallback(revision.revisionId, renderedRevisionIds, liveTargets)
+      const displayedByOpener = revision.revisionId === currentRevisionId && !renderedRevisionLocal
+      const localRowWithoutOwnCard = localRevisionIds?.has(revision.revisionId) === true && !displayedByOpener
+      const needsRecord = (renderedRevisionIds === undefined
+        || needsRevisionFallback(revision.revisionId, renderedRevisionIds, liveTargets))
+        && !localRowWithoutOwnCard
       if (needsRecord) fallback = createRevisionFallback(artifactId, revision.revisionId, target, source.program)
     }
     const outcome = await deleteArtifactRevision(artifactId, revision.revisionId)

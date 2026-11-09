@@ -172,7 +172,23 @@ export function buildVersionItems(input: VersionItemsInput): { readonly items: V
     })
   }
   for (const [revisionId, known] of input.known ?? []) {
-    if (merged.has(revisionId)) continue
+    const existing = merged.get(revisionId)
+    if (existing !== undefined) {
+      // A store-known revision stays selectable even when a history row reports
+      // hasProgram=false (the program is already in memory): upgrade the merged
+      // item instead of leaving it disabled.
+      merged.set(revisionId, {
+        ...existing,
+        hasProgram: true,
+        local: existing.local || known.localRevision === true,
+        ...known.title === undefined ? {} : { title: existing.title ?? known.title },
+        ...known.style === undefined ? {} : { style: existing.style ?? known.style },
+        ...known.styleId === undefined ? {} : { styleId: existing.styleId ?? known.styleId },
+        ...known.temporaryStyle === undefined ? {} : { temporaryStyle: existing.temporaryStyle ?? known.temporaryStyle },
+        ...known.baseRevisionId === undefined ? {} : { baseRevisionId: existing.baseRevisionId ?? known.baseRevisionId },
+      })
+      continue
+    }
     put({
       revisionId,
       revision: known.revision,

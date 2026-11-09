@@ -22,7 +22,7 @@ import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 import { addLocalRevision, clearLocalRevisions } from '../../../src/client/artifact-edit/local-revisions.ts'
 import { clearRevisionFallbacks } from '../../../src/client/artifact-edit/revision-fallbacks.ts'
-import { artifactVersionFor, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
+import { artifactVersionFor, registerArtifactRevision, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
 import { artifactThumbnails, clearArtifactThumbnails } from '../../../src/client/artifact-edit/artifact-thumbnails.ts'
 import { collectLocalImageAssets } from '../../../src/client/export-html.ts'
 import { settleLocalImages } from '../../../src/client/export-image.ts'
@@ -422,12 +422,26 @@ w.__artifactVersionState = (artifactId: string) => {
     stage: state.stageCardId,
     visible: state.stageVisible,
     revisions: [...state.revisions.keys()],
+    redirected: Object.fromEntries([...state.revisions.entries()].map(([revisionId, record]) => [revisionId, record.redirectedFrom ?? null])),
     cards: [...state.cards.keys()],
     roles: Object.fromEntries([...state.cards.keys()].map(cardId => [cardId, state.stageCardId === cardId ? 'stage' : 'other'])),
   }
 }
 w.__selectArtifactRevision = (artifactId: string, revisionId: string) => selectArtifactRevision(SESSION, artifactId, revisionId)
 w.__clearArtifactThumbnails = (artifactId: string) => { clearArtifactThumbnails(artifactId) }
+w.__registerLocalRevision = (artifactId: string, input: { revisionId: string; revision: number; program: string; title?: string; kind?: 'restore' | 'structure' | 'props' | 'style'; sourceRevisionId?: string }) => {
+  registerArtifactRevision(SESSION, artifactId, {
+    revisionId: input.revisionId,
+    artifactId,
+    revision: input.revision,
+    program: input.program,
+    ...input.title === undefined ? {} : { title: input.title },
+    style: 'card',
+    localRevision: true,
+    ...input.kind === undefined ? {} : { localRevisionKind: input.kind },
+    ...input.sourceRevisionId === undefined ? {} : { baseRevisionId: input.sourceRevisionId },
+  })
+}
 w.__thumbnailStates = (artifactId: string, revisionId: string) => {
   const read = (scheme: 'light' | 'dark') => artifactThumbnails.snapshot({ artifactId, revisionId, scheme })
   return {
