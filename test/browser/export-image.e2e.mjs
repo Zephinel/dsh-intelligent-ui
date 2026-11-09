@@ -143,14 +143,15 @@ try {
       canvas.width = bitmap.width; canvas.height = bitmap.height
       const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0)
       const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
-      let themedPixels = 0, green = 0, magenta = 0
+      let themedPixels = 0, green = 0, magenta = 0, cyan = 0
       for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
         if (r === 237 && g === 247 && b === 255 && a === 255) themedPixels++
         if (a === 255 && Math.abs(r - 0) <= 2 && Math.abs(g - 255) <= 2 && Math.abs(b - 0) <= 2) green++
         if (a === 255 && Math.abs(r - 255) <= 2 && Math.abs(g - 0) <= 2 && Math.abs(b - 255) <= 2) magenta++
+        if (a === 255 && Math.abs(r - 0) <= 2 && Math.abs(g - 255) <= 2 && Math.abs(b - 255) <= 2) cyan++
       }
-      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height, themedPixels, green, magenta }
+      return { type: blob.type, size: blob.size, width: bitmap.width, height: bitmap.height, themedPixels, green, magenta, cyan }
     })()`)
     assert.equal(raw.type, 'image/png', 'the download is a PNG')
     assert.ok(raw.size > 1000, 'the PNG carries pixels')
@@ -160,6 +161,7 @@ try {
     // colours are painted when nothing is hidden.
     assert.ok(raw.green > 100, 'the prose-card body marker is painted normally')
     assert.ok(raw.magenta > 100, 'the pure follow-up card marker is painted normally')
+    assert.ok(raw.cyan > 20, 'a local (blob/data-backed) image is rasterized into the PNG without canvas taint')
 
     // A second export with the card frame must reserve room for the soft shadow
     // instead of painting the background edge-to-edge and clipping it.

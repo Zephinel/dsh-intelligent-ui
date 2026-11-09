@@ -1,12 +1,20 @@
 import { Fragment, type ReactNode } from "react";
 import { CURRENCY_PREFIX, hasCjk, webUrl } from "./style";
+import { InlineImage } from "./image-source.tsx";
 
 // A small Markdown renderer that builds React elements and never injects HTML.
-// Inline: **bold**, *italic*, ~~strike~~, `code`, [text](https://...).
+// Inline: **bold**, *italic*, ~~strike~~, `code`, [text](https://...),
+// ![alt](image source). A destination may be bare or angle-bracketed
+// (`![alt](<figures/a b.png>)`, CommonMark-style) so paths with spaces work.
 // Blocks: paragraphs, # headings (h5/h6 render at the h4 size), nested - and 1.
 // lists, > quotes, ``` code, ---, | tables |.
 
-const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+?\*\*|__[^_\n]+?__)|(~~[^~\n]+?~~)|(\*[^*\s][^*\n]*?\*|_[^_\s][^_\n]*?_)|(\[[^\]\n]+\]\([^)\s]+\))/;
+const INLINE = /(!\[[^\]\n]*\]\((?:<[^>\n]+>|[^)\s]+)\))|(`[^`\n]+`)|(\*\*[^*\n]+?\*\*|__[^_\n]+?__)|(~~[^~\n]+?~~)|(\*[^*\s][^*\n]*?\*|_[^_\s][^_\n]*?_)|(\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\s]+)\))/;
+
+/** Strip CommonMark angle brackets from one link/image destination. */
+function destination(raw: string): string {
+  return raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw;
+}
 
 export function inline(text: string, key = "i"): ReactNode {
   // Currency symbols are set tight in display type; don't let a heading's negative
@@ -32,14 +40,17 @@ export function inline(text: string, key = "i"): ReactNode {
     if (m.index) out.push(rest.slice(0, m.index));
     const token = m[0];
     const k = `${key}-${n++}`;
-    if (m[1]) out.push(<code key={k} className="iui-code">{token.slice(1, -1)}</code>);
-    else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k)}</strong>);
-    else if (m[3]) out.push(<s key={k}>{inline(token.slice(2, -2), k)}</s>);
-    else if (m[4]) out.push(<em key={k}>{inline(token.slice(1, -1), k)}</em>);
+    if (m[1]) {
+      const close = token.indexOf("](");
+      out.push(<InlineImage key={k} src={destination(token.slice(close + 2, -1))} alt={token.slice(2, close)} />);
+    } else if (m[2]) out.push(<code key={k} className="iui-code">{token.slice(1, -1)}</code>);
+    else if (m[3]) out.push(<strong key={k}>{inline(token.slice(2, -2), k)}</strong>);
+    else if (m[4]) out.push(<s key={k}>{inline(token.slice(2, -2), k)}</s>);
+    else if (m[5]) out.push(<em key={k}>{inline(token.slice(1, -1), k)}</em>);
     else {
       const close = token.indexOf("](");
       const label = token.slice(1, close);
-      const href = webUrl(token.slice(close + 2, -1));
+      const href = webUrl(destination(token.slice(close + 2, -1)));
       out.push(
         href ? (
           <a key={k} className="iui-link" href={href} target="_blank" rel="noopener noreferrer">

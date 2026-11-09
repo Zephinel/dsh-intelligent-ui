@@ -71,7 +71,7 @@
     },
     "Markdown": {
       "signature": "Markdown(text: string)",
-      "description": "Prose with headings, lists, quotes, code and tables."
+      "description": "Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; http(s), a small data:image base64 URI, or a workspace image path)."
     },
     "Quote": {
       "signature": "Quote(text: string, cite?: string)",
@@ -143,7 +143,7 @@
     },
     "Image": {
       "signature": "Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: \"cover\" | \"contain\")",
-      "description": "Photo from a URL the user or a tool gave; if it fails, a photo is found for alt."
+      "description": "Photo from an http(s) URL, a small data:image base64 URI, or an image path the user or a tool named (workspace-relative like figures/chart.png, or absolute). Local paths are read by the app, so never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo."
     },
     "Icon": {
       "signature": "Icon(name: string, size?: \"sm\" | \"md\" | \"lg\" | \"xl\", color?: Color)",
@@ -219,7 +219,7 @@
     },
     "HtmlView": {
       "signature": "HtmlView(html: string, height?: number, title?: string)",
-      "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set."
+      "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs and images. Fits its content unless height is set."
     },
     "Section": {
       "signature": "Section(title: string, children: Node[], anchor?: string)",
@@ -1318,7 +1318,7 @@
           "text"
         ],
         "additionalProperties": false,
-        "description": "Prose with headings, lists, quotes, code and tables."
+        "description": "Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; http(s), a small data:image base64 URI, or a workspace image path)."
       },
       "Quote": {
         "type": "object",
@@ -1940,7 +1940,7 @@
           "alt"
         ],
         "additionalProperties": false,
-        "description": "Photo from a URL the user or a tool gave; if it fails, a photo is found for alt."
+        "description": "Photo from an http(s) URL, a small data:image base64 URI, or an image path the user or a tool named (workspace-relative like figures/chart.png, or absolute). Local paths are read by the app, so never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo."
       },
       "Icon": {
         "type": "object",
@@ -2493,7 +2493,7 @@
           "html"
         ],
         "additionalProperties": false,
-        "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set."
+        "description": "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs and images. Fits its content unless height is set."
       },
       "Section": {
         "type": "object",

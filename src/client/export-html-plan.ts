@@ -72,6 +72,9 @@ export interface StandalonePageInput {
   readonly lang: string
   /** Whether the export removes the @ToAssistant follow-up block. */
   readonly removeFollowUps: boolean
+  /** Local image source → data URL map, inlined so the page works offline. */
+  /** Card call id → source path → inlined data URL. */
+  readonly assets?: Readonly<Record<string, Readonly<Record<string, string>>>>
 }
 
 /** Escape text for an HTML text node or quoted attribute. */
@@ -114,7 +117,7 @@ export function buildStandaloneHtml(input: StandalonePageInput): string {
 <body>
 <div id="iui-root"></div>
 <script data-iui-renderer>${inlineSafe(input.js, 'script')}</script>
-<script>window.mountIUI(document.getElementById("iui-root"), ${scriptJson(input.cards)}, {lang:${scriptJson(lang)}, hideToAssistant:${input.removeFollowUps ? 'true' : 'false'}});</script>
+<script>window.mountIUI(document.getElementById("iui-root"), ${scriptJson(input.cards)}, {lang:${scriptJson(lang)}, hideToAssistant:${input.removeFollowUps ? 'true' : 'false'}, assets:${scriptJson(input.assets ?? {})}});</script>
 </body>
 </html>
 `

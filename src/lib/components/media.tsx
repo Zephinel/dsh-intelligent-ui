@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { z } from "zod/v4";
 import { Glyph } from "./glyph";
 import { color, textFg, cx, radius, radiusSchema, webUrl } from "./style";
+import { ImageError, isOversizedImage, useImageSource } from "./image-source.tsx";
+import { explicitImageSource } from "../../shared/image-source.ts";
+import type { ImageSourceProblem } from "../../shared/image-source.ts";
 
 const ICON_SIZE = { sm: 14, md: 18, lg: 24, xl: 32 } as const;
 
@@ -176,18 +179,61 @@ function useImageSearch(query: string | null): string[] | undefined {
   return query && result?.query === query ? result.images : undefined;
 }
 
-type PhotoProps = { query: string; src?: string | null; aspectRatio?: number | null; radius?: unknown; fit?: string | null };
+type PhotoProps = {
+  query: string;
+  src?: string | null;
+  /**
+   * `search` resolves the query through the image search; `image` always treats
+   * `src` as an explicit source. The distinction is semantic, not runtime-type
+   * based: an unresolved dynamic `src` expression reaches the component as a
+   * non-string value and must still be an invalid explicit source, not a search.
+   */
+  mode?: "image" | "search";
+  aspectRatio?: number | null;
+  radius?: unknown;
+  fit?: string | null;
+};
 
-/** A photo from src, or, without one or when it fails, the best search result for query. */
+/**
+ * A photo from an explicit source, or, for `SearchImage`, the best search
+ * result for the query. An explicit source never falls back to a search: a
+ * missing local file or a broken URL shows a clear placeholder instead of an
+ * unrelated photo.
+ */
 function Photo(props: PhotoProps) {
   const alt = typeof props.query === "string" ? props.query.trim() : "";
-  const src = webUrl(props.src);
+  const isSearch = props.mode === "search";
+  // `Image` always has an explicit source: any string is explicit (even an
+  // empty/whitespace one), and a non-string dynamic expression degrades to an
+  // invalid source rather than falling back to a searched substitute photo.
+  const explicitSrc = isSearch ? null : explicitImageSource(props.src);
+  const source = useImageSource(explicitSrc);
   const [failed, setFailed] = useState<string[]>([]);
   const [loaded, setLoaded] = useState<string | null>(null);
-  const needSearch = (!src || failed.includes(src)) && alt.length > 2;
-  const found = useImageSearch(needSearch ? alt : null);
-  const current = [src, ...(found ?? [])].find((url): url is string => !!url && !failed.includes(url));
-  const settled = !current && (!needSearch || found !== undefined);
+  const [rejected, setRejected] = useState<ImageSourceProblem | null>(null);
+  // A new source is a new image: clear the previous load/failure bookkeeping so
+  // a restored card never inherits an error from the revision before it.
+  useEffect(() => {
+    setFailed([]);
+    setLoaded(null);
+    setRejected(null);
+  }, [explicitSrc]);
+  const searching = isSearch && alt.length > 2;
+  const found = useImageSearch(searching ? alt : null);
+  const searched = explicitSrc === null ? (found ?? []).find((url) => !failed.includes(url)) : undefined;
+  const ready = source.status === "ready" ? source : undefined;
+  const localProblem: ImageSourceProblem | null =
+    explicitSrc === null
+      ? null
+      : source.status === "error"
+        ? source.problem
+        : ready !== undefined && rejected !== null
+          ? rejected
+          : ready !== undefined && failed.includes(ready.url)
+            ? "load-failed"
+            : null;
+  const current = explicitSrc === null ? searched : localProblem === null ? ready?.url : undefined;
+  const settled = explicitSrc === null ? !searching || found !== undefined : localProblem !== null;
   // The default ratio lives in the stylesheet, not inline: the media-row rule
   // may suggest a 4:3 default without overriding a ratio the program asked
   // for. An explicit aspectRatio stays inline, so no stylesheet rule can win
@@ -199,21 +245,31 @@ function Photo(props: PhotoProps) {
       : null;
   return (
     <div
-      className={cx("iui-image", props.fit === "contain" && "is-contain", loaded === current && "is-loaded")}
+      className={cx("iui-image", props.fit === "contain" && "is-contain", current !== undefined && loaded === current && "is-loaded")}
+      data-iui-image-pending={explicitSrc !== null && source.status === "loading" ? "true" : undefined}
       style={{ ...(ratio === null ? {} : { aspectRatio: ratio }), borderRadius: radius(props.radius ?? "lg") }}
-      role={current ? undefined : "img"}
-      aria-label={current ? undefined : alt}
+      role={current !== undefined || localProblem !== null ? undefined : "img"}
+      aria-label={current !== undefined || localProblem !== null ? undefined : alt}
     >
-      {current ? (
+      {current !== undefined ? (
         <img
           key={current}
           src={current}
           alt={alt}
           loading="lazy"
           referrerPolicy="no-referrer"
-          onLoad={() => setLoaded(current)}
-          onError={() => setFailed((list) => [...list, current])}
+          data-iui-image-src={ready?.origin === "path" ? ready.source : undefined}
+          onLoad={(event) => {
+            if (explicitSrc !== null && ready !== undefined && isOversizedImage(event.currentTarget, ready.origin)) {
+              setRejected("too-large");
+              return;
+            }
+            setLoaded(current);
+          }}
+          onError={() => setFailed((list) => (list.includes(current) ? list : [...list, current]))}
         />
+      ) : localProblem !== null ? (
+        <ImageError problem={localProblem} alt={alt} />
       ) : settled ? (
         <RemixIcon name="image-line" size={24} className="iui-image-empty" />
       ) : null}
@@ -228,12 +284,12 @@ export const SearchImage = defineComponent({
   props: z.object({ query: z.string(), aspectRatio: z.number().optional(), radius: radiusSchema.optional(), fit }),
   description:
     'A real photo the app finds for query; it needs no URL and no tool. Name the exact thing in 2 to 4 words: "Belém Tower Lisbon", "iPhone 17", "pastel de nata". Use one for every place, dish, product or thing with a look.',
-  component: ({ props }) => <Photo {...props} />,
+  component: ({ props }) => <Photo {...props} mode="search" />,
 });
 
 export const Image = defineComponent({
   name: "Image",
   props: z.object({ src: z.string(), alt: z.string(), aspectRatio: z.number().optional(), radius: radiusSchema.optional(), fit }),
-  description: "Photo from a URL the user or a tool gave; if it fails, a photo is found for alt.",
-  component: ({ props }) => <Photo query={props.alt} src={props.src} aspectRatio={props.aspectRatio} radius={props.radius} fit={props.fit} />,
+  description: "Photo from an http(s) URL, a small data:image base64 URI, or an image path the user or a tool named (workspace-relative like figures/chart.png, or absolute). Local paths are read by the app, so never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo.",
+  component: ({ props }) => <Photo mode="image" query={props.alt} src={props.src} aspectRatio={props.aspectRatio} radius={props.radius} fit={props.fit} />,
 });

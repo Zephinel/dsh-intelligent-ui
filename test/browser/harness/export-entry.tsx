@@ -18,6 +18,7 @@ import { resolveStyleThemeVars } from '../../../src/lib/style-theme.ts'
 import type { StyleSnapshot } from '../../../src/shared/style-templates.ts'
 import type { IntelligentUIProgram } from '../../../src/shared/intelligent-ui.ts'
 import { createStyleCatalog } from '../../../src/client/styles.ts'
+import { createWorkspaceImageResolver } from '../../../src/client/image-source.ts'
 import { templates } from './style-fixtures.ts'
 import { ExportAction } from '../../../src/client/ExportAction.tsx'
 import type { ExportChatSnapshot } from '../../../src/client/export-data.ts'
@@ -26,11 +27,53 @@ import { EXPORT_STANDALONE_CSS_PATH, EXPORT_STANDALONE_JS_PATH } from '../../../
 import '../../../src/client/index.css'
 
 const PHOTO = `${location.origin}/photo.svg`
+
+/**
+ * A solid-cyan blob image so the PNG export proves the production local-file
+ * path (workspace resolver → MIME sniff → same-origin blob URL) is rasterized
+ * without tainting the canvas.
+ */
+const nativeCreateObjectUrl = URL.createObjectURL.bind(URL)
+const LOCAL_IMAGE_BYTES = new Promise<Uint8Array>((resolveBytes) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = 8
+  canvas.height = 8
+  const context = canvas.getContext('2d')
+  if (context !== null) {
+    context.fillStyle = '#00ffff'
+    context.fillRect(0, 0, 8, 8)
+  }
+  canvas.toBlob((blob) => {
+    if (blob === null) {
+      resolveBytes(new Uint8Array())
+      return
+    }
+    void blob.arrayBuffer().then(buffer => resolveBytes(new Uint8Array(buffer)))
+  }, 'image/png')
+})
+
+/** The production resolver, backed by the in-page cyan PNG bytes. */
+const localImageResolver = createWorkspaceImageResolver('export-harness', {
+  remote: {
+    async stat() {
+      const bytes = await LOCAL_IMAGE_BYTES
+      return { ok: true as const, value: { bytes: bytes.byteLength } }
+    },
+    async readBytes() {
+      const bytes = await LOCAL_IMAGE_BYTES
+      return { ok: true as const, value: { data: bytes } }
+    },
+  },
+  // The harness wraps URL.createObjectURL to record export downloads; the
+  // fixture must use the native factory so it does not join that list.
+  createObjectUrl: nativeCreateObjectUrl,
+})
 // Two follow-up shapes, each with a solid colour marker so the PNG can prove
 // what the capture kept: a Card with prose keeps its prose marker (#00ff00) and
 // loses only its control; a Card that is only a follow-up block disappears,
 // taking its marker (#ff00ff) with it.
-const PROGRAM = `root = Col([quizCard, photoCard, mixedFollowCard, onlyFollowCard], 3)
+const PROGRAM = `root = Col([quizCard, photoCard, localPhotoCard, mixedFollowCard, onlyFollowCard], 3)
+localPhotoCard = Card([Image("figures/local.png", "Local chart photo")])
 quizCard = Flashcard("front question", "back answer")
 photoCard = SearchImage("harness search photo", 1.35)
 mixedFollowCard = Card([Title("Follow-up card", "sm"), Text("This card keeps its prose when follow-ups are off.", "sm", "muted"), Box([Text("Kept prose map")], null, 2, null, "#00ff00"), Button("Continue")])
@@ -126,7 +169,7 @@ function Card(): ReactElement {
         <span className="dsh-iui-title" data-dsh-iui-title>Export harness</span>
       </button>
       <div className="dsh-iui-body" hidden={collapsed}>
-        <OpenUIRenderer program={PROGRAM} title="Export harness" themeStyle={resolveStyleThemeVars(saved ? savedTemplates[0].theme : temporaryStyle.theme, 'light')} scheme="light" />
+        <OpenUIRenderer program={PROGRAM} title="Export harness" themeStyle={resolveStyleThemeVars(saved ? savedTemplates[0].theme : temporaryStyle.theme, 'light')} scheme="light" resolveImage={localImageResolver} />
         <FakeMap />
       </div>
     </section>

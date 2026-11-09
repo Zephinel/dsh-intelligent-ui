@@ -7,11 +7,12 @@
  * keeps the renderer's real interactions (maps, forms, @OpenUrl, @ToAssistant
  * fallback), so it does not depend on DSH when opened locally.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { OpenUIRenderer } from '../lib/render.tsx'
 import { en, translate, zh, type Translate } from '../shared/locales.ts'
 import type { ExportPageCard } from '../shared/intelligent-ui.ts'
+import type { ImageSourceResolver } from '../shared/image-source.ts'
 import { hideToAssistantBlocks } from '../lib/to-assistant.ts'
 import '../client/index.css'
 import 'katex/dist/katex.min.css'
@@ -23,6 +24,9 @@ interface StandaloneOptions {
   readonly lang?: string
   /** Hide controls that would continue the conversation. */
   readonly hideToAssistant?: boolean
+  /** Local image source → data URL map, already inlined by the exporting page. */
+  /** Card call id → source path → inlined data URL. */
+  readonly assets?: Record<string, Record<string, string>>
 }
 
 /** Copy text with a legacy fallback for file:// pages without the async API. */
@@ -55,24 +59,36 @@ interface CardProps {
   readonly t: Translate
   readonly onToAssistant: (message: string) => void
   readonly hideToAssistant: boolean
+  /** Inline image lookup for the exported page; local paths absent from it fail visibly. */
+  readonly resolveImage?: ImageSourceResolver
 }
 
 /**
  * Render only the answer body. The exported page deliberately drops the DSH
  * card header and its collapse control: it carries content, not chat chrome.
  */
-function CardBody({ card, t, onToAssistant, hideToAssistant }: CardProps): ReactElement {
+function CardBody({ card, t, onToAssistant, hideToAssistant, assets }: CardProps & { readonly assets?: Record<string, Record<string, string>> }): ReactElement {
+  const resolveImage = useMemo<ImageSourceResolver | undefined>(() => {
+    const bucket = assets?.[card.callId ?? '']
+    if (bucket === undefined) return undefined
+    return (path) => {
+      const dataUrl = Object.hasOwn(bucket, path) ? bucket[path] : undefined
+      return Promise.resolve(typeof dataUrl === 'string'
+        ? { ok: true, url: dataUrl }
+        : { ok: false, problem: 'unavailable' as const })
+    }
+  }, [assets, card.callId])
   return (
     <section className="dsh-iui-standalone-card" data-dsh-intelligent-ui="card" data-dsh-iui-style={card.style ?? 'card'}>
       <div className={card.style === 'article' ? 'dsh-iui-article' : undefined}>
-        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} themeStyle={card.themeStyle} scheme={card.scheme} onToAssistant={hideToAssistant ? undefined : onToAssistant} t={t} />
+        <OpenUIRenderer program={card.program} title={card.title} scopeId={card.callId} themeStyle={card.themeStyle} scheme={card.scheme} onToAssistant={hideToAssistant ? undefined : onToAssistant} t={t} resolveImage={resolveImage} />
       </div>
     </section>
   )
 }
 
 /** Render the exported cards plus the copy fallback toast. */
-function Page({ cards, lang, hideToAssistant }: { readonly cards: readonly ExportPageCard[]; readonly lang: string; readonly hideToAssistant: boolean }): ReactElement {
+function Page({ cards, lang, hideToAssistant, assets }: { readonly cards: readonly ExportPageCard[]; readonly lang: string; readonly hideToAssistant: boolean; readonly assets?: Record<string, Record<string, string>> }): ReactElement {
   const t = lang.toLowerCase().startsWith('zh') ? translate(zh) : translate(en)
   const [toast, setToast] = useState<string | null>(null)
   const timer = useRef<number | null>(null)
@@ -104,7 +120,7 @@ function Page({ cards, lang, hideToAssistant }: { readonly cards: readonly Expor
       <div className="dsh-iui-cards dsh-iui-standalone-cards" data-dsh-intelligent-ui-list
         data-dsh-iui-free-layout={cards.some(card => card.style === 'free') ? 'true' : undefined}>
         {cards.map((card, index) => (
-          <CardBody key={card.callId ?? `${index}-${card.title ?? ''}`} card={card} t={t} onToAssistant={onToAssistant} hideToAssistant={hideToAssistant} />
+          <CardBody key={card.callId ?? `${index}-${card.title ?? ''}`} card={card} t={t} onToAssistant={onToAssistant} hideToAssistant={hideToAssistant} assets={assets} />
         ))}
       </div>
       {toast === null ? null : <div className="dsh-iui-standalone-toast" role="status">{toast}</div>}
@@ -119,5 +135,5 @@ declare global {
 }
 
 window.mountIUI = (element, cards, options = {}) => {
-  createRoot(element).render(<Page cards={cards} lang={options.lang ?? 'en'} hideToAssistant={options.hideToAssistant === true} />)
+  createRoot(element).render(<Page cards={cards} lang={options.lang ?? 'en'} hideToAssistant={options.hideToAssistant === true} assets={options.assets} />)
 }

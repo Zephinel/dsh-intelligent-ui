@@ -267,6 +267,15 @@
 .iui-image.is-contain > img { object-fit: contain; }
 .iui-image.is-loaded > img { opacity: 1; }
 .iui-image-empty { width: 26px; height: 26px; color: var(--iui-photo-empty-icon); }
+/* A source that cannot be shown keeps the box and explains itself instead of
+   substituting a searched photo. */
+.iui-image:has(.iui-image-error)::before { display: none; }
+.iui-image-error { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; max-width: calc(100% - 24px); padding: 8px; color: var(--iui-photo-empty-icon); font-size: 11.5px; line-height: 1.35; text-align: center; }
+.iui-image-error-icon { flex: none; }
+.iui-image-error-text { color: var(--iui-content-muted); }
+.iui-image-error-inline { flex-direction: row; gap: 4px; padding: 0 2px; vertical-align: middle; font-size: 12px; }
+.iui-image-pending { display: inline-block; width: 120px; height: 16px; vertical-align: text-bottom; border-radius: 4px; background: var(--iui-photo-empty); }
+.iui-markdown-image { display: inline; max-width: 100%; height: auto; border-radius: 10px; vertical-align: middle; }
 
 /* A framed table: 14px corners, a surface header row, hover rows. */
 .iui-table-scroll { width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--iui-border); border-radius: 14px; }

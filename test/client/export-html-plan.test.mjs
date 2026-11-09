@@ -46,6 +46,21 @@ test('one document carries every card, the theme, the renderer and the mount cal
   assert.match(html, /hideToAssistant:false/)
 })
 
+test('local image assets ride along as an inline mount option', () => {
+  const html = buildStandaloneHtml({
+    cards,
+    js: '',
+    css: '',
+    tokens: ':root{}',
+    colorScheme: 'light',
+    title: 'Images',
+    lang: 'en',
+    removeFollowUps: false,
+    assets: { 'call-1': { 'figures/chart.png': 'data:image/png;base64,AAAA' } },
+  })
+  assert.match(html, /assets:\{"call-1":\{"figures\/chart\.png":"data:image\/png;base64,AAAA"\}\}/)
+})
+
 test('the page can omit the follow-up controls', () => {
   const html = buildStandaloneHtml({
     cards: [],

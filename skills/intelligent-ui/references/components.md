@@ -224,9 +224,9 @@ marker replaces the bullet or number, e.g. a time or an emoji.
 Markdown(text: string)
 ```
 
-Prose with headings, lists, quotes, code and tables.
+Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; http(s), a small `data:image` base64 URI, or a workspace image path).
 
-**Notes.** Prose with headings, lists, quotes, tables and code fences. Lists nest by indentation, keeping ordered and unordered levels; only h1–h4 have display styles, so h5 and h6 render at the h4 size. Use for long-form notes; build UI with components, not Markdown.
+**Notes.** Prose with headings, lists, quotes, tables, code fences and inline images. The image resolver is the same one `Image` uses, so a source may be http(s), a small `data:image` base64 URI, or a workspace path (relative or absolute); a destination containing spaces or parentheses goes in angle brackets (`![alt](<figures/a b.png>)`). Lists nest by indentation, keeping ordered and unordered levels; only h1–h4 have display styles, so h5 and h6 render at the h4 size. Use for long-form notes; build UI with components, not Markdown.
 
 ### `Quote`
 
@@ -406,9 +406,9 @@ A real photo the app finds for query; it needs no URL and no tool. Name the exac
 Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain")
 ```
 
-Photo from a URL the user or a tool gave; if it fails, a photo is found for alt.
+Photo from an http(s) URL, a small `data:image` base64 URI, or an image path the user or a tool named (workspace-relative like `figures/chart.png`, or absolute). Local paths are read by the app: never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo.
 
-**Notes.** Photo from a URL the user or a tool gave; if it fails, the app searches by `alt`. `aspectRatio` is clamped to 0.05–20.
+**Notes.** Accepted sources are `http(s):` URLs, `data:image/png|jpeg|webp|gif;base64,...` URIs (about 512 KiB decoded at most), and filesystem paths (workspace-relative or absolute; `..`/NUL/URL-scheme paths are rejected). Local files are read by the Host process through its workspace-files read authority (which is not confined to the workspace and can read absolute paths outside it) and shown from a same-origin blob URL; missing, oversized (>10 MiB) or non-whitelisted content (including SVG) renders a localized error placeholder. An explicit source never falls back to a searched photo; that behavior belongs to `SearchImage`. `aspectRatio` is clamped to 0.05–20.
 
 ### `Icon`
 

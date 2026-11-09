@@ -237,7 +237,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`(() => { const toolbar = document.querySelector('.dsh-iui-edit-toolbar').getBoundingClientRect(); const canvas = document.querySelector('.dsh-iui-edit-canvas').getBoundingClientRect(); return canvas.top - toolbar.bottom >= 16; })()`), true, 'the toolbar leaves room for the first block orbit glow')
   await read(`document.querySelector('[data-dsh-iui-edit-global]').focus()`)
   await wait('!!document.querySelector("[data-dsh-iui-input-orbit]")', 'input focus orbit')
-  check(await read(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`), true, 'the orbit sits five pixels outside the field')
+  const orbitGeometry = `(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`
+  // The measured orbit position can trail one layout frame after focus; wait
+  // for the settled geometry instead of failing the whole suite on that frame.
+  await wait(orbitGeometry, 'orbit sits five pixels outside the field')
+  check(await read(orbitGeometry), true, 'the orbit sits five pixels outside the field')
   await new Promise(resolve => setTimeout(resolve, 350))
   await shot('harness-input-orbit.png')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-global]')).outlineStyle`), 'none', 'the field focus outline is replaced by the orbit')
@@ -503,8 +507,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   assert.ok(normalized, 'fixture reorder computes')
   await read(`window.__applyBlockEditRevision(${JSON.stringify({ program: normalized, editedBlockIds: ['b3', 'b5'] })})`)
   await wait('document.querySelectorAll("[data-dsh-intelligent-ui=card]").length === 2', 'edited revision card')
-  check(await count('[data-dsh-iui-revision]'), 1, 'revision badge on the edited card')
-  check(await text('[data-dsh-iui-revision]'), '修订 2', 'revision number')
+  check(await count('[data-dsh-iui-revision]'), 0, 'no standalone revision badge remains')
+  check(await count('[data-dsh-iui-history-count]'), 1, 'revision count on the edited card')
+  check(await text('[data-dsh-iui-history-count]'), '2', 'revision number')
   const revisedText = await text('[data-dsh-intelligent-ui-list] [data-dsh-intelligent-ui="card"]:last-of-type')
   check(revisedText.includes('首次实施年份'), true, 'edited block content renders')
   check(revisedText.indexOf('首次实施年份') < revisedText.indexOf('同一时刻'), true, 'normalized program puts the rules table first')
@@ -657,11 +662,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     return map
   }, {})
   check(Object.keys(envelopeMap).length, 2, 'composed message names two request/artifact pairs')
-  const badgesBefore = await count('[data-dsh-iui-revision]')
+  const badgesBefore = await count('[data-dsh-iui-history-count]')
   await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-1', revisionId: 'dst-call-2', baseRevisionId: 'dst-call-1', revision: 2, requestId: envelopeMap['dst-call-1'], editedBlockIds: ['b3'], program: DIGITAL_PROGRAM, title: '夏令时与冬令时' })}, 'dst-call-2')`)
   await read(`window.__applyBlockEditRevision(${JSON.stringify({ artifactId: 'dst-call-9', revisionId: 'dst-call-10', baseRevisionId: 'dst-call-9', revision: 2, requestId: envelopeMap['dst-call-9'], editedBlockIds: ['b5'], program: DST_PROGRAM, title: '第二张卡片' })}, 'dst-call-10')`)
   await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === ${cardsBefore + 3}`, 'two revision cards')
-  check(await count('[data-dsh-iui-revision]'), badgesBefore + 2, 'two new revision badges')
+  check(await count('[data-dsh-iui-history-count]'), badgesBefore + 2, 'two new revision counts')
   // 17. Turn close reconciles both fulfilled drafts away.
   await read('window.__closeTurn()')
   await wait('!document.querySelector("[data-dsh-iui-draft-badge]")', 'fulfilled drafts reconciled')
@@ -716,8 +721,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-restore-done]')).includes('4'), true, 'restore reports the new revision number')
   check((await text('[data-dsh-intelligent-ui="card"]:last-of-type')).includes('夏令时与冬令时'), true, 'restored card renders the old program')
 
-  // 20. Per-artifact revision history dialog from the revision badge.
-  await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-history-open][data-history-trigger="badge"]')
+  // 20. Per-artifact revision history dialog from the single history icon.
+  await click('[data-dsh-iui-call-id="dst-call-2"] [data-dsh-iui-history-open][data-history-trigger="icon"]')
   await wait('!!document.querySelector("[data-dsh-iui-history]")', 'history dialog')
   await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))`)
   check(await read(`document.querySelector('[data-dsh-iui-history]')?.contains(document.activeElement) === true`), true, 'Shift+Tab wraps inside the history dialog')
@@ -730,7 +735,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await count('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-restore]'), 0, 'history offers no restore for unavailable content')
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for retained old revisions')
   check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-restore]'), 1, 'history offers restore for edited old revisions')
-  check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-delete]'), 0, 'the card rendered revision cannot be deleted from its own history')
+  // The restore revision is based on dst-call-2, so the Host marks it
+  // referenced and the client hides Delete; scenario 41 covers deleting a
+  // rendered revision through the real rollback flow.
+  check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-delete]'), 0, 'a revision used as another revision base hides Delete')
+  check(await count('[data-dsh-iui-history-revision="dst-call-2"] [data-dsh-iui-history-referenced-lock]'), 1, 'the referenced row explains why Delete is unavailable')
   check(await count('[data-dsh-iui-history-revision="dst-call-1"] [data-dsh-iui-history-delete]'), 0, 'the initial revision has no delete action')
   // Deletion: delete the current local restore revision (not referenced by any
   // newer one); its local card is removed together with the history row.
@@ -738,9 +747,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation')
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-history-delete-cancel') === true`, 'delete confirmation focuses Cancel')
   check(await read(`document.querySelector('[data-dsh-iui-history-delete-warning]').getAttribute('role')`), 'status', 'delete warning is announced')
-  await click('[data-dsh-iui-history-delete-cancel]')
+  await click('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-delete-cancel]')
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-history-delete') === true`, 'cancelling returns focus to Delete')
-  await click('[data-dsh-iui-history-delete]')
+  await click('[data-dsh-iui-history-revision="restore_local1"] [data-dsh-iui-history-delete]')
   await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'delete confirmation again')
   // Simulate a lost delete response: the Host has already removed it, so the
   // retry answers revision_missing and the UI must converge, not stay stale.
@@ -748,6 +757,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-history-delete-confirm]')
   await wait('!document.querySelector(\'[data-dsh-iui-history-revision="restore_local1"]\')', 'deleted history row')
   check(await count('[data-dsh-iui-local-revision]'), 0, 'deleting a history revision removes its local card')
+  check(await read(`(JSON.parse(localStorage.getItem('dsh-intelligent-ui-revision-fallbacks:v1:e2e-session') ?? '[]')).some(item => item.deletedRevisionId === 'restore_local1')`), false, 'deleting a local-card revision records no rollback fallback')
   check(await count('[data-dsh-iui-history-delete-error]'), 0, 'a missing revision converges without an error banner')
   await wait(`document.querySelector('[data-dsh-iui-history]')?.contains(document.activeElement) === true`, 'focus stays inside the open history after deletion')
   await shot('harness-history.png')
@@ -1911,8 +1921,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     artifactId: 'props-call-1', revisionId: 'props-style-2', baseRevisionId: 'props-call-1', revision: 2,
     editedBlockIds: [], program: PROPS_PROGRAM_APPLIED, title: '属性调整样例', style: 'card', temporaryStyle: STYLE_SNAPSHOT,
   })}, 'props-style-2')`)
-  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-revision]\')', 'style revision card')
-  check((await text('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-revision]')).includes('修订 2'), true, 'style revision card shows its revision number')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-history-count]\')', 'style revision card')
+  check((await text('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-history-count]')).includes('2'), true, 'style revision card shows its revision number')
   check(await count('[data-dsh-iui-call-id="props-style-2"] [data-dsh-iui-save-result]'), 1, 'style revision card keeps the Save action')
   check(await count('[data-dsh-iui-call-id="props-style-2"] .dsh-iui-result-actions button:not([data-dsh-iui-save-result])'), 0, 'editable + capability hides the legacy adjust action')
   // Save stays a working action on the new style revision card.
@@ -2200,6 +2210,286 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read('window.fetch = window.__styleSwitchOriginalFetch')
   await read('delete window.__styleSwitchFail; delete window.__styleSwitchRevisionId; delete window.__styleSwitchCalls; delete window.__styleCatalogFetches; delete window.__styleSwitchOriginalFetch')
   await read('window.__project({ styleEdit: false, styleSwitch: false })')
+
+  // 41. Deleting the revision a card renders rolls that card back to the newest
+  // older revision with a retained program, and the rollback survives rerenders.
+  const ROLL_INITIAL = 'root = Col([Title("回退测试"), Text("初始内容")])'
+  const ROLL_EDITED = 'root = Col([Title("回退测试"), Text("编辑后内容")])'
+  await read('window.__forgetDeletedRevisions()')
+  await read(`window.__addCard('roll-call-1', '回退测试', ${JSON.stringify(ROLL_INITIAL)})`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'roll-call-1', revisionId: 'roll-call-2', baseRevisionId: 'roll-call-1',
+    revision: 2, editedBlockIds: ['b1'], program: ROLL_EDITED, title: '回退测试',
+  })}, 'roll-call-2')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-history-count]\')', 'rollback card revision count')
+  check((await text('[data-dsh-iui-call-id="roll-call-2"]')).includes('编辑后内容'), true, 'edited revision renders before rollback')
+  await read(`window.__setHistory('roll-call-1', [
+    { revisionId: 'roll-call-2', revision: 2, baseRevisionId: 'roll-call-1', title: '回退测试', style: 'card', createdAt: 1762500000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'roll-call-1', revision: 1, title: '回退测试', style: 'card', createdAt: 1762490000000, source: 'initial', hasProgram: true },
+  ], { 'roll-call-1': ${JSON.stringify(ROLL_INITIAL)} })`)
+  await click('[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'rollback history dialog')
+  check(await count('[data-dsh-iui-history-revision="roll-call-2"] [data-dsh-iui-history-delete]'), 1, 'rendered revision offers delete with a rollback target')
+  check(await count('[data-dsh-iui-history-revision="roll-call-1"] [data-dsh-iui-history-delete]'), 0, 'initial revision still has no delete')
+  await click('[data-dsh-iui-history-revision="roll-call-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'rollback confirmation')
+  check((await text('[data-dsh-iui-history-delete-warning]')).includes('回退到修订 1'), true, 'confirmation names the rollback revision')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait('!document.querySelector(\'[data-dsh-iui-history-revision="roll-call-2"]\')', 'deleted rendered revision row')
+  await wait('!document.querySelector(\'[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-history-count]\')', 'rolled-back card drops its revision count')
+  const rolledText = await text('[data-dsh-iui-call-id="roll-call-2"]')
+  check(rolledText.includes('初始内容'), true, 'card renders the fallback revision content')
+  check(rolledText.includes('编辑后内容'), false, 'deleted revision content is gone')
+  check(await count('[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-edit-entry]'), 0, 'a rolled-back card is read-only')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'rollback history closed')
+  await read('window.__remount()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="roll-call-2"]\')', 'card after remount')
+  check((await text('[data-dsh-iui-call-id="roll-call-2"]')).includes('初始内容'), true, 'rollback survives a rerender')
+  // Opening the native fallback revision's editor must not mount a second canvas
+  // on the redirected card that shares its revision identity.
+  await click('[data-dsh-iui-call-id="roll-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="roll-call-1"] [data-dsh-iui-edit-view]\')', 'native fallback editor')
+  check(await count('[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-edit-view]'), 0, 'a redirected card never mounts the shared edit canvas')
+  check(await count('[data-dsh-iui-call-id="roll-call-2"] [data-dsh-iui-draft-badge]'), 0, 'a redirected card shows no draft chrome from the shared session')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector(\'[data-dsh-iui-call-id="roll-call-1"] [data-dsh-iui-edit-view]\')', 'native fallback editor closed')
+  await read("window.__clearHistory('roll-call-1')")
+
+  // A rendered revision without a retained older program cannot be deleted: the
+  // card could not roll back, so no delete action is offered.
+  const NOFALL_PROGRAM = 'root = Col([Title("无回退")])'
+  await read(`window.__addCard('nofall-call-1', '无回退', ${JSON.stringify(NOFALL_PROGRAM)})`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'nofall-call-1', revisionId: 'nofall-call-2', baseRevisionId: 'nofall-call-1',
+    revision: 2, editedBlockIds: ['b1'], program: 'root = Col([Title("无回退编辑"), Text("内容")])', title: '无回退',
+  })}, 'nofall-call-2')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="nofall-call-2"] [data-dsh-iui-history-count]\')', 'no-fallback card revision count')
+  await read(`window.__setHistory('nofall-call-1', [
+    { revisionId: 'nofall-call-2', revision: 2, baseRevisionId: 'nofall-call-1', title: '无回退', style: 'card', createdAt: 1762600000000, source: 'edit', hasProgram: true },
+    { revisionId: 'nofall-call-1', revision: 1, title: '无回退', style: 'card', createdAt: 1762590000000, source: 'initial', hasProgram: false },
+  ])`)
+  await click('[data-dsh-iui-call-id="nofall-call-2"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'no-fallback history dialog')
+  check(await count('[data-dsh-iui-history-revision="nofall-call-2"] [data-dsh-iui-history-delete]'), 0, 'rendered revision without a retained fallback offers no delete')
+  check(await count('[data-dsh-iui-history-revision="nofall-call-1"] [data-dsh-iui-history-delete]'), 0, 'the initial revision stays undeletable')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'no-fallback history closed')
+  await read("window.__clearHistory('nofall-call-1'); window.__forgetDeletedRevisions()")
+
+  // 42. Image sources: local workspace files, http(s), inline data, Markdown
+  // images, and explicit failures that must not fall back to a searched photo.
+  const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  await writeFile(join(temp, 'pixel.png'), Buffer.from(TINY_PNG, 'base64'))
+  await read(`window.__workspaceImages = {}; window.__workspaceImages['figures/att01.png'] = Uint8Array.from(atob(${JSON.stringify(TINY_PNG)}), c => c.charCodeAt(0)); window.__workspaceImages['figures/with space.png'] = window.__workspaceImages['figures/att01.png']; window.__workspaceImages['/virtual/att02.png'] = window.__workspaceImages['figures/att01.png']`)
+  await read(`window.__searches = []; window.__origFetch = window.fetch; window.fetch = (url, opts) => { const text = String(url); if (text.includes('wikipedia.org') || text.includes('commons.wikimedia.org')) window.__searches.push(text); return window.__origFetch(url, opts) }`)
+  const httpImage = `${server.url}pixel.png`
+  const brokenHttp = `${server.url}missing.png`
+  // A 24-byte PNG header claiming 10000x10000 pixels; the header pre-check must
+  // reject it before <img> tries to decode a decompression bomb.
+  const PIXEL_BOMB = (() => {
+    const bytes = Buffer.alloc(24)
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0)
+    bytes.writeUInt32BE(10000, 16)
+    bytes.writeUInt32BE(10000, 20)
+    return bytes.toString('base64')
+  })()
+  const imageProgram = [
+    'root = Col([Title("图片来源")',
+    'Image("figures/att01.png", "Local file")',
+    'Image("/virtual/att02.png", "Absolute file")',
+    'Image("  figures/att01.png  ", "Padded path")',
+    `Image(${JSON.stringify(httpImage)}, "HTTP file")`,
+    `Image("data:image/png;base64,${TINY_PNG}", "Inline pixel")`,
+    'Image("figures/missing.png", "Missing local")',
+    `Image(${JSON.stringify(brokenHttp)}, "Broken HTTP")`,
+    'Image("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=", "SVG source")',
+    'Image("figures/../escape.png", "Escape attempt")',
+    'Image("", "Empty source")',
+    'Image("   ", "Whitespace source")',
+    `Image("data:image/png;base64,${PIXEL_BOMB}", "Huge inline")`,
+    'Markdown("Inline image: ![local](figures/att01.png)")',
+    'Markdown("Angle destination: ![spaced](<figures/with space.png>)")',
+    '])',
+  ].join(', ')
+  await read(`window.__addCard('image-call-1', '图片来源', ${JSON.stringify(imageProgram)})`)
+  await wait(`!!document.querySelector('[data-dsh-iui-call-id="image-call-1"]')`, 'image card')
+  await read(`document.querySelector('[data-dsh-iui-call-id="image-call-1"]').scrollIntoView({ block: 'start' })`)
+  // The card is taller than the viewport with ten sources; force the lazy images
+  // to load so their error placeholders appear without scrolling each one in.
+  await read(`[...document.querySelectorAll('[data-dsh-iui-call-id="image-call-1"] img')].forEach(img => { img.loading = 'eager' })`)
+  await wait(`document.querySelectorAll('[data-dsh-iui-call-id="image-call-1"] .iui-image.is-loaded img').length >= 5`, 'local, absolute, padded, http and inline images loaded')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] .iui-image img[data-iui-image-src="figures/att01.png"][alt="Local file"]`), 1, 'a workspace-relative image renders from its blob URL')
+  check(await read(`(document.querySelector('[data-dsh-iui-call-id="image-call-1"] .iui-image img[data-iui-image-src="figures/att01.png"][alt="Local file"]')?.getAttribute('src') ?? '').startsWith('blob:')`), true, 'the local image is a same-origin blob URL')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] .iui-image img[data-iui-image-src="/virtual/att02.png"]`), 1, 'an absolute path resolves through the same session authority')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] .iui-image img[data-iui-image-src="figures/att01.png"][alt="Padded path"]`), 1, 'a padded path is canonicalized before render/export')
+  await wait(`document.querySelectorAll('[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error]').length >= 7`, 'seven image error placeholders')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="unavailable"]`), 1, 'a missing local image shows the unavailable placeholder')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="load-failed"]`), 1, 'a broken http image shows the load placeholder')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="svg-unsupported"]`), 1, 'SVG sources are rejected explicitly')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="path-escape"]`), 1, 'a parent-segment path is rejected before any read')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="path-invalid"]`), 2, 'empty and whitespace sources are invalid explicit sources, not searches')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="too-large"]`), 1, 'an inline pixel bomb is rejected from its header before decode')
+  check(await read(`document.querySelector('[data-dsh-iui-call-id="image-call-1"] [data-iui-image-error="unavailable"]').getAttribute('aria-label')`), 'Missing local: 本地图片无法读取', 'the error placeholder accessible name carries the alt and the reason')
+  check(await count(`[data-dsh-iui-call-id="image-call-1"] .iui-markdown-image[data-iui-image-src="figures/att01.png"]`), 1, 'a Markdown image uses the same resolver')
+  await wait(`!!document.querySelector('[data-dsh-iui-call-id="image-call-1"] .iui-markdown-image[data-iui-image-src="figures/with space.png"]')`, 'angle-bracket Markdown path resolves')
+  check(await read(`document.querySelectorAll('[data-dsh-iui-call-id="image-call-1"] [data-iui-image-pending]').length`), 0, 'no image source stays pending after resolution')
+  const assets = await read('window.__collectImageAssets("image-call-1")')
+  check(Object.keys(assets), ['image-call-1'], 'HTML export groups collected assets per card')
+  check(Object.keys(assets['image-call-1']).sort(), ['/virtual/att02.png', 'figures/att01.png', 'figures/with space.png'], 'HTML export collects only the mounted local image sources')
+  check(assets['image-call-1']['figures/att01.png'].startsWith('data:image/png;base64,'), true, 'the collected local image is inlined as a data URL')
+  check(await read('(window.__searches ?? []).length'), 0, 'explicit image sources never search Wikipedia for a substitute')
+  await read('window.fetch = window.__origFetch; delete window.__origFetch')
+  await shot('harness-image-sources.png')
+
+  // 43. A card with an open edit draft cannot delete the revision it renders.
+  const LOCK_INITIAL = 'root = Col([Title("草稿锁"), Text("第一段"), Text("第二段")])'
+  const LOCK_EDITED = 'root = Col([Title("草稿锁"), Text("第一段（改）"), Text("第二段")])'
+  await read(`window.__addCard('lock-call-1', '草稿锁', ${JSON.stringify(LOCK_INITIAL)})`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'lock-call-1', revisionId: 'lock-call-2', baseRevisionId: 'lock-call-1',
+    revision: 2, editedBlockIds: ['b2'], program: LOCK_EDITED, title: '草稿锁',
+  })}, 'lock-call-2')`)
+  await read(`window.__setHistory('lock-call-1', [
+    { revisionId: 'lock-call-2', revision: 2, baseRevisionId: 'lock-call-1', title: '草稿锁', style: 'card', createdAt: 1762700000000, source: 'edit', hasProgram: true, editedBlockIds: ['b2'] },
+    { revisionId: 'lock-call-1', revision: 1, title: '草稿锁', style: 'card', createdAt: 1762690000000, source: 'initial', hasProgram: true },
+  ])`)
+  await wait(`!!document.querySelector('[data-dsh-iui-call-id="lock-call-2"] [data-dsh-iui-history-count]')`, 'draft-lock card')
+  await click('[data-dsh-iui-call-id="lock-call-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'draft-lock editor')
+  await moveWithKeyboard('b3', 'ArrowUp', 1)
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-arrangement-row] [data-dsh-iui-edit-grip]')`, 'draft lock arrangement')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(chip => (chip.getAttribute('data-chip-label') ?? '').includes('草稿锁'))`), true, 'the open editor has a real draft')
+  // Open the history from the bird's-eye card (a different card): a draft owned
+  // by lock-call-2 must still make its base revision undeletable.
+  await click('[data-dsh-iui-call-id="lock-call-1"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'cross-card draft-lock history dialog')
+  check(await count('[data-dsh-iui-history-revision="lock-call-2"] [data-dsh-iui-history-delete]'), 0, 'another card\'s unsent draft makes the base revision undeletable')
+  check((await text('[data-dsh-iui-history-draft-lock]')).includes('未发送'), true, 'the dialog explains the cross-card draft lock')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'draft-lock history closed')
+  await read("window.__clearHistory('lock-call-1')")
+
+  // 44. A revision still used as another revision's base is not deletable: the
+  // Host would answer 409, so the row hides Delete and explains the reference.
+  await read(`window.__addCard('ref-call-1', '引用锁', 'root = Col([Title("引用锁")])')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'ref-call-1', revisionId: 'ref-call-2', baseRevisionId: 'ref-call-1',
+    revision: 2, editedBlockIds: ['b1'], program: 'root = Col([Title("引用锁二")])', title: '引用锁',
+  })}, 'ref-call-2')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'ref-call-1', revisionId: 'ref-call-3', baseRevisionId: 'ref-call-2',
+    revision: 3, editedBlockIds: ['b1'], program: 'root = Col([Title("引用锁三")])', title: '引用锁',
+  })}, 'ref-call-3')`)
+  await read(`window.__setHistory('ref-call-1', [
+    { revisionId: 'ref-call-3', revision: 3, baseRevisionId: 'ref-call-2', title: '引用锁', style: 'card', createdAt: 1762800000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'], referenced: false },
+    { revisionId: 'ref-call-2', revision: 2, baseRevisionId: 'ref-call-1', title: '引用锁', style: 'card', createdAt: 1762790000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'], referenced: true },
+    { revisionId: 'ref-call-1', revision: 1, title: '引用锁', style: 'card', createdAt: 1762780000000, source: 'initial', hasProgram: true, referenced: true },
+  ])`)
+  await wait(`!!document.querySelector('[data-dsh-iui-call-id="ref-call-3"] [data-dsh-iui-history-count]')`, 'referenced-lock card')
+  await click('[data-dsh-iui-call-id="ref-call-3"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'referenced-lock history dialog')
+  check(await count('[data-dsh-iui-history-revision="ref-call-3"] [data-dsh-iui-history-delete]'), 1, 'the latest unreferenced revision stays deletable')
+  check(await count('[data-dsh-iui-history-revision="ref-call-2"] [data-dsh-iui-history-delete]'), 0, 'a referenced base revision hides its delete action')
+  check(await count('[data-dsh-iui-history-referenced-lock]'), 1, 'the referenced row explains why delete is unavailable')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'referenced-lock history closed')
+  await read("window.__clearHistory('ref-call-1')")
+
+  // 45. The HTML page export waits only for local readers: a pending local file
+  // must settle, while an outstanding image search must not add the 12.5s wait.
+  await read(`window.__workspaceImages['figures/slow.png'] = window.__workspaceImages['figures/att01.png']; window.__workspaceImageDelayPaths['figures/slow.png'] = 1200`)
+  const slowProgram = 'root = Col([Title("慢速本地图"), Image("figures/slow.png", "Slow local"), SearchImage("slow search photo", 1.2)])'
+  await read(`window.__addCard('slow-call-1', '慢速本地图', ${JSON.stringify(slowProgram)})`)
+  await wait(`!!document.querySelector('[data-dsh-iui-call-id="slow-call-1"] [data-iui-image-pending]')`, 'slow local image pending')
+  const settleMs = await read(`(async () => {
+    const start = performance.now()
+    await window.__settleLocalImages('slow-call-1')
+    return performance.now() - start
+  })()`)
+  check(settleMs >= 450, true, 'the local-image settle waits for the outstanding local read')
+  check(settleMs < 2800, true, 'the local-image settle ignores the outstanding image search instead of the full deadline')
+  check(await count('[data-dsh-iui-call-id="slow-call-1"] .iui-image img[data-iui-image-src="figures/slow.png"]'), 1, 'the waited local image resolved to a blob URL')
+  await read('delete window.__workspaceImageDelayPaths["figures/slow.png"]')
+
+  // 46. Falling back to the initial revision borrows its temporary style for
+  // rendering, but Save/Adjust need a real result snapshot and stay hidden.
+  const TEMPFALL_INITIAL = 'root = Col([Title("回退样式"), Text("初始样式内容")])'
+  const TEMPFALL_EDITED = 'root = Col([Title("回退样式"), Text("编辑后样式内容")])'
+  await read(`window.__addCard('tempfall-call-1', '回退样式', ${JSON.stringify(TEMPFALL_INITIAL)})`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'tempfall-call-1', revisionId: 'tempfall-call-2', baseRevisionId: 'tempfall-call-1',
+    revision: 2, editedBlockIds: ['b1'], program: TEMPFALL_EDITED, title: '回退样式',
+  })}, 'tempfall-call-2')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="tempfall-call-2"] [data-dsh-iui-history-count]\')', 'temp-fallback card')
+  await read(`window.__setHistory('tempfall-call-1', [
+    { revisionId: 'tempfall-call-2', revision: 2, baseRevisionId: 'tempfall-call-1', title: '回退样式', style: 'card', createdAt: 1762900000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'tempfall-call-1', revision: 1, title: '回退样式', style: 'card', createdAt: 1762890000000, source: 'initial', hasProgram: true, temporaryStyle: ${JSON.stringify(STYLE_SNAPSHOT)} },
+  ], { 'tempfall-call-1': ${JSON.stringify(TEMPFALL_INITIAL)} })`)
+  await click('[data-dsh-iui-call-id="tempfall-call-2"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'temp-fallback history')
+  await click('[data-dsh-iui-history-revision="tempfall-call-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'temp-fallback confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-call-id="tempfall-call-2"]')?.textContent.includes('初始样式内容') === true`, 'temp-fallback card content')
+  check(await count('[data-dsh-iui-call-id="tempfall-call-2"] [data-dsh-iui-save-result]'), 0, 'a redirected card offers no Save for a borrowed style snapshot')
+  check(await count('[data-dsh-iui-call-id="tempfall-call-2"] .dsh-iui-result-actions button'), 0, 'a redirected card offers no Adjust for a borrowed style snapshot')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'temp-fallback history closed')
+  await read("window.__clearHistory('tempfall-call-1')")
+
+  // 47. A revision that a card rolls back to cannot be deleted when no older
+  // fallback exists; once one exists, deleting it retargets the older fallback.
+  const DEP_ONE = 'root = Col([Title("依赖锁"), Text("第一版内容")])'
+  const DEP_TWO = 'root = Col([Title("依赖锁"), Text("第二版内容")])'
+  const DEP_THREE = 'root = Col([Title("依赖锁"), Text("第三版内容")])'
+  await read(`window.__addCard('dep-call-1', '依赖锁', ${JSON.stringify(DEP_ONE)})`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'dep-call-1', revisionId: 'dep-call-2', baseRevisionId: 'dep-call-1',
+    revision: 2, editedBlockIds: ['b1'], program: DEP_TWO, title: '依赖锁',
+  })}, 'dep-call-2')`)
+  await read(`window.__applyBlockEditRevision(${JSON.stringify({
+    artifactId: 'dep-call-1', revisionId: 'dep-call-3', baseRevisionId: 'dep-call-2',
+    revision: 3, editedBlockIds: ['b1'], program: DEP_THREE, title: '依赖锁',
+  })}, 'dep-call-3')`)
+  const depRows = (initialHasProgram) => [
+    { revisionId: 'dep-call-3', revision: 3, baseRevisionId: 'dep-call-2', title: '依赖锁', style: 'card', createdAt: 1763000000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'dep-call-2', revision: 2, baseRevisionId: 'dep-call-1', title: '依赖锁', style: 'card', createdAt: 1762990000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'dep-call-1', revision: 1, title: '依赖锁', style: 'card', createdAt: 1762980000000, source: 'initial', hasProgram: initialHasProgram },
+  ]
+  await read(`window.__setHistory('dep-call-1', ${JSON.stringify(depRows(false))}, { 'dep-call-2': ${JSON.stringify(DEP_TWO)} })`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="dep-call-3"] [data-dsh-iui-history-count]\')', 'dependency card')
+  // Delete R3 first: records R3→R2, so R2 becomes a live fallback target.
+  await click('[data-dsh-iui-call-id="dep-call-3"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'dependency history')
+  await click('[data-dsh-iui-history-revision="dep-call-3"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'dependency deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-call-id="dep-call-3"]')?.textContent.includes('第二版内容') === true`, 'dependency fallback content')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'dependency history closed')
+  // R1 is not retained, so deleting R2 would strand the redirected card: the
+  // row hides Delete and explains the dependency.
+  await click('[data-dsh-iui-call-id="dep-call-1"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'dependency lock history')
+  check(await count('[data-dsh-iui-history-revision="dep-call-2"] [data-dsh-iui-history-delete]'), 0, 'a fallback target with no older fallback cannot be deleted')
+  check(await count('[data-dsh-iui-history-dependency-lock]'), 1, 'the dependency lock is explained')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'dependency lock history closed')
+  // Once R1 is retained, deleting R2 is allowed and retargets R3→R1.
+  await read(`window.__setHistory('dep-call-1', ${JSON.stringify(depRows(true))}, { 'dep-call-1': ${JSON.stringify(DEP_ONE)} })`)
+  await click('[data-dsh-iui-call-id="dep-call-1"] [data-dsh-iui-history-open]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'chain history')
+  check(await count('[data-dsh-iui-history-revision="dep-call-2"] [data-dsh-iui-history-delete]'), 1, 'the fallback target is deletable once an older fallback exists')
+  await click('[data-dsh-iui-history-revision="dep-call-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'chain deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait('!document.querySelector(\'[data-dsh-iui-history-revision="dep-call-2"]\')', 'chain row removed')
+  await wait(`document.querySelector('[data-dsh-iui-call-id="dep-call-3"]')?.textContent.includes('第一版内容') === true`, 'chained fallback content')
+  check(await count('[data-dsh-iui-call-id="dep-call-3"] [data-dsh-iui-edit-view]'), 0, 'the redirected card stays read-only after a chained delete')
+  await read('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'chain history closed')
+  await read("window.__clearHistory('dep-call-1')")
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

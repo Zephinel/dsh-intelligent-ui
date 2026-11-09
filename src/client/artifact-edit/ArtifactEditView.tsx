@@ -48,6 +48,7 @@ export function ArtifactEditView({
   styleSwitchSupported = false,
   styleTargets,
   onPreviewStyleTarget,
+  resolveImage,
 }: ArtifactEditViewClosingProps): ReactElement {
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null)
@@ -299,6 +300,7 @@ export function ArtifactEditView({
                 onToAssistant={onToAssistant}
                 t={t}
                 runtimeState={editRuntimeState}
+                resolveImage={resolveImage}
               />
             </BlockSlotPathContext.Provider>
           ) : (
@@ -312,6 +314,7 @@ export function ArtifactEditView({
               onToAssistant={onToAssistant}
               t={t}
               runtimeState={editRuntimeState}
+              resolveImage={resolveImage}
             />
           )}
         </BlockSlotContext.Provider>

@@ -205,12 +205,12 @@ budget = [{item: "Lodging", amount: 840}, {item: "Food", amount: 420}, {item: "T
   {
     id: "images",
     title: "Images",
-    note: "A working src; no src (search by alt); a failing src that falls back to search; a failing src with nothing found.",
+    note: "A working src; no src (search by alt); a broken src that shows an error placeholder instead of an unrelated photo; an inline data image.",
     code: `root = Card([Title("Golden hour in San Francisco", "md"), Grid([i1, i2, i3, i4], 4, 150, 3)])
 i1 = Col([Image("${bridge}", "Golden Gate Bridge from Battery East"), Text("Working src", "sm", null, "semibold"), Caption("Loads the given URL")], 2)
 i2 = Col([SearchImage("Alcatraz Island"), Text("No src", "sm", null, "semibold"), Caption("Found by searching the query")], 2)
-i3 = Col([Image("https://example.invalid/palace.jpg", "Palace of Fine Arts"), Text("Broken src", "sm", null, "semibold"), Caption("Falls back to search")], 2)
-i4 = Col([Image("https://example.invalid/none.jpg", "qzxv unfindable subject 0000", 1.5, "xl"), Text("Nothing found", "sm", null, "semibold"), Caption("Quiet placeholder")], 2)`,
+i3 = Col([Image("https://example.invalid/palace.jpg", "Palace of Fine Arts"), Text("Broken src", "sm", null, "semibold"), Caption("Error placeholder, no search")], 2)
+i4 = Col([Image("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "Inline pixel", 1.5, "xl"), Text("Inline data", "sm", null, "semibold"), Caption("Decoded from the program")], 2)`,
   },
   {
     id: "map",

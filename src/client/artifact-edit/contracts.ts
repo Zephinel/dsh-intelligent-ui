@@ -5,6 +5,7 @@
  */
 import type { CSSProperties } from 'react'
 import type { Translate } from '../../shared/locales.ts'
+import type { ImageSourceResolver } from '../../shared/image-source.ts'
 import type { ArtifactBlockPropComponent, ArtifactBlockProps } from '../../shared/artifact-block-props.ts'
 import type { ArtifactBlock, ArtifactBlockKind } from '../../shared/artifact-edit.ts'
 import type { ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
@@ -293,6 +294,8 @@ export interface ArtifactEditViewProps {
    * parent card can swap the edit-canvas skin without any request.
    */
   readonly onPreviewStyleTarget?: (target: ArtifactStyleTarget | undefined) => void
+  /** Reads one local image path for the edit canvas renderer. */
+  readonly resolveImage?: ImageSourceResolver
 }
 
 /** Localized label for one block kind. */

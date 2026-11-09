@@ -63,7 +63,7 @@ Badge(text: string, color?: "neutral" | "info" | "success" | "warning" | "danger
 Link(text: string, url: string) — Opens an http(s) URL in a new tab.
 List(items: (string | ListItem)[], marker?: "bullet" | "number" | "none", timeline?: boolean) — timeline joins the markers with a line.
 ListItem(title: string, description?: string, marker?: string, children?: Node[]) — marker replaces the bullet or number, e.g. a time or an emoji.
-Markdown(text: string) — Prose with headings, lists, quotes, code and tables.
+Markdown(text: string) — Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; src may be http(s), a small data:image base64 URI, or an image path, with `<...>` around a path that contains spaces).
 Quote(text: string, cite?: string) — A quotation or a callout with a side rule; cite names the source.
 Code(code: string, language?: string) — Code block with a copy button.
 Math(tex: string, inline?: boolean) — LaTeX formula, e.g. Math("E = mc^2"); inline true to sit in a Text list.
@@ -87,7 +87,7 @@ Form(children: Node[]) — Groups fields; only a Button's @ToAssistant message t
 
 ### Media and data
 SearchImage(query: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain") — A real photo the app finds for query; it needs no URL and no tool. Name the exact thing in 2 to 4 words: "Belém Tower Lisbon", "iPhone 17", "pastel de nata". Use one for a place, dish, product or thing with a look; treat it as feature media, not one photo per list row.
-Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain") — Photo from a URL the user or a tool gave; if it fails, a photo is found for alt.
+Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain") — Photo from an http(s) URL, a small data:image base64 URI, or an image path the user or a tool named (workspace-relative like figures/chart.png, or absolute). Local paths are read by the app, so never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo.
 Icon(name: string, size?: "sm" | "md" | "lg" | "xl", color?: Color) — Lucide icon by name, e.g. "map-pin".
 Table(columns: string[], rows: any[][]) — Each row lists its cells in column order; a cell may be a component. Number columns align right.
 Chart(type: "bar" | "line" | "area" | "pie" | "donut" | "scatter", data: Record<string, string | number>[], x?: string, series?: string[], format?: "number" | "currency" | "percent", currency?: string, stacked?: boolean, height?: number) — Rows of data; x is the category key (a number key for scatter), series the value keys (default: every number key). percent values are like 45; currency is a code like "EUR".
@@ -271,6 +271,14 @@ s3 = Svg([Rect(40, 16, 160, 128, "#EFE9DF", "ink", 2), Rect(40, 16, 160, 14, "su
 drawings = [s0, s1, s2, s3]
 viewer = Card([Row([Badge("Step " + ($step + 1) + " of 4", "info"), Spacer(), Caption(@Percent($step + 1, 4) + "% done")], 2), Box([drawings[$step]], null, null, 3, "surface", "lg"), Title(steps[$step].title, "md"), Text(steps[$step].text, "sm"), Row([Button("Back", @Set($step, @Clamp($step - 1, 0, 3)), "outline", null, null, "arrow-left", $step == 0), Spacer(), Button("Next step", @Set($step, @Clamp($step + 1, 0, 3)), "solid", null, null, "arrow-right", $step == 3)], 2)], null, 4)
 strip = Grid(@Each(@Range(0, 4), "i", Pressable([drawings[i], Caption((i + 1) + ". " + steps[i].title)], @Set($step, i), i == $step, 2)), 4, 110, 2)
+
+## Image sources
+
+- `Image` accepts an http(s) URL, a small `data:image/png|jpeg|webp|gif;base64,...` URI (about 512 KiB decoded at most), or an image path. Prefer the path when the image already exists as a file.
+- When you or a tool created the image in the workspace, pass its workspace-relative path (or its absolute path) directly, for example `Image("figures/chart.png", "Revenue by quarter")`. The app reads it through the session's own file permissions; do not start a static file server, do not invent an `http://` URL, and do not tell the user the image cannot be shown just because it is a local file.
+- A missing, unsupported or oversized image renders a clear placeholder that names the problem. It is never replaced by an unrelated searched photo.
+- The same sources work in Markdown with `![alt](src)`; wrap a destination that contains spaces or parentheses in angle brackets, for example `![chart](<figures/q1 chart.png>)`.
+- `SearchImage` is still the way to get a photo the app must find; SVG files as a path or data source are not supported (an http(s) SVG URL renders through the browser `<img>` behavior), and `HtmlView` cannot display local image paths.
 
 ## Layout and spacing contract
 

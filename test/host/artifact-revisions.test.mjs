@@ -99,6 +99,8 @@ test('the history route lists metadata newest-first with current/restorable/sour
   assert.equal(previous.current, false)
   assert.equal(previous.restorable, true)
   assert.equal(previous.source, 'edit')
+  assert.equal(latest.referenced, false)
+  assert.equal(previous.referenced, true, 'revision 2 is the base of revision 3 and cannot be deleted yet')
   for (const entry of response.revisions) assert.equal(Object.hasOwn(entry, 'program'), false, 'history is metadata-only')
   assert.equal(JSON.stringify(response).includes('root = Col('), false)
 })
@@ -125,6 +127,8 @@ test('the history route merges the program-only initial revision with style fall
   assert.equal(initial.current, false)
   assert.equal(initial.hasProgram, true)
   assert.equal(initial.restorable, true)
+  assert.equal(initial.referenced, true, 'the initial render is the base of the first edit')
+  assert.equal(response.revisions[0].referenced, false)
   // A record whose program is gone is not restorable.
   assert.equal(response.revisions[1].hasProgram, true)
   assert.equal(response.latestRevision, 3)

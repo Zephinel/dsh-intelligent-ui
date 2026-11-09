@@ -257,6 +257,7 @@ function isHistoryRevision(value: unknown): value is ArtifactHistoryRevision {
     && typeof record.current === 'boolean'
     && typeof record.hasProgram === 'boolean'
     && typeof record.restorable === 'boolean'
+    && (record.referenced === undefined || typeof record.referenced === 'boolean')
     && (record.source === 'initial' || record.source === 'edit' || record.source === 'structure' || record.source === 'restore')
     && (record.style === 'card' || record.style === 'article' || record.style === 'free')
     && (record.title === undefined || typeof record.title === 'string')

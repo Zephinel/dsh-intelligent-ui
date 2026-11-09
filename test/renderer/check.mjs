@@ -47,6 +47,7 @@ import { library } from ${JSON.stringify(join(root, 'src/lib/library.ts'))}
 import { compositionPrograms } from ${JSON.stringify(join(galleryDir, 'composition-programs.ts'))}
 import { programs } from ${JSON.stringify(join(galleryDir, 'programs.ts'))}
 import { toolPrograms } from ${JSON.stringify(join(galleryDir, 'tool-programs.ts'))}
+import { readFileSync } from 'node:fs'
 
 const all = [
   ...compositionPrograms,
@@ -74,7 +75,28 @@ for (const program of all) {
 
 for (const failure of failures) console.error('FAIL ' + failure.id + ' — ' + failure.reason)
 console.log('check: ' + (all.length - failures.length) + '/' + all.length + ' gallery programs parsed from ' + ${JSON.stringify(galleryDir)})
-if (failures.length > 0) process.exitCode = 1
+
+// The vendored spec is model-facing; the runtime library keeps its own copy of
+// each component description. Compare them here so the two cannot drift.
+const shipped = JSON.parse(readFileSync(${JSON.stringify(join(root, 'vendor/spec.json'))}, 'utf8')).components
+const defs = library.toJSONSchema().$defs ?? {}
+const descriptionFailures = []
+let expected = 0
+for (const [name, entry] of Object.entries(shipped)) {
+  // Empty descriptions mark intentionally undescribed primitives; every
+  // non-empty vendor description must exist identically in the runtime library.
+  if (typeof entry.description !== 'string' || entry.description.trim() === '') continue
+  expected += 1
+  const runtime = defs[name]?.description
+  if (typeof runtime !== 'string') {
+    descriptionFailures.push(name + ': runtime description is missing')
+    continue
+  }
+  if (runtime !== entry.description) descriptionFailures.push(name + ': runtime copy differs from vendor/spec.json')
+}
+for (const failure of descriptionFailures) console.error('FAIL description ' + failure)
+console.log('check: ' + (expected - descriptionFailures.length) + '/' + expected + ' runtime component descriptions match the vendored spec')
+if (expected === 0 || descriptionFailures.length > 0) process.exitCode = 1
 `)
 
 await build({

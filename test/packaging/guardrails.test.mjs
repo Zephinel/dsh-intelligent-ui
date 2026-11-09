@@ -20,6 +20,7 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8')
 const skill = read('skills/intelligent-ui/SKILL.md')
 const prompt = read('src/generated/prompt.txt')
 const troubleshooting = read('skills/intelligent-ui/references/troubleshooting.md')
+const spec = JSON.parse(read('vendor/spec.json'))
 
 test('the skill makes the extension checkout read-only while answering', () => {
   assert.match(skill, /extension checkout[\s\S]{0,160}read-only/i, 'SKILL.md names the checkout rule')
@@ -56,6 +57,26 @@ test('the layout and spacing contract is single-sourced in the prompt and skill'
   assert.match(prompt, /Never create vertical space with `Spacer\(\)`/, 'the contract forbids manual vertical spacers')
   assert.match(skill, /Layout and spacing contract/, 'the Agent Skill carries the same contract')
   assert.match(skill, /Host warns about root gaps/, 'the skill points at the Host warnings')
+})
+
+test('component descriptions and their schema copies stay identical', () => {
+  const defs = spec.schema.$defs
+  const missing = Object.keys(spec.components).filter(name => defs[name] === undefined)
+  assert.deepEqual(missing, [], 'every component has a JSON-schema definition')
+  for (const [name, entry] of Object.entries(spec.components)) {
+    if (defs[name].description !== undefined) {
+      assert.equal(defs[name].description, entry.description, `${name}: schema description matches components.copy`)
+    }
+  }
+})
+
+test('the local image-source contract is single-sourced in the prompt, skill and spec', () => {
+  assert.match(prompt, /## Image sources/, 'the injected prompt carries the image-source contract')
+  assert.match(prompt, /never start a web server or invent an http URL for a local file/i, 'the prompt forbids the static-server workaround')
+  assert.match(prompt, /never replaced by an unrelated searched photo/i, 'the prompt states no search fallback for an explicit source')
+  assert.match(skill, /Use the file path for an image you already have/i, 'the Agent Skill carries the same rule')
+  assert.match(spec.components.Image.description, /workspace-relative/i, 'the vendored spec names workspace-relative paths')
+  assert.doesNotMatch(spec.components.Image.description, /if it fails, a photo is found/i, 'the vendored Image description dropped the search fallback')
 })
 
 test('the article style and Section/Toc vocabulary stay documented', () => {

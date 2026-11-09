@@ -238,6 +238,7 @@ export function ExportAction({
         title: programs[0]?.title,
         lang: document.documentElement.lang || 'en',
         removeFollowUps: settings().removeFollowUps,
+        trigger,
       })
       setStatus('done')
       closeTimerRef.current = window.setTimeout(() => {

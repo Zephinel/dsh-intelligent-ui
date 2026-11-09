@@ -180,7 +180,7 @@ export const List = defineComponent({
 export const Markdown = defineComponent({
   name: "Markdown",
   props: z.object({ text: z.string() }),
-  description: "Prose with headings, lists, quotes, code and tables.",
+  description: "Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; http(s), a small data:image base64 URI, or a workspace image path).",
   component: ({ props }) => (
     <div className="iui-markdown">
       <MarkdownBlocks text={str(props.text)} />

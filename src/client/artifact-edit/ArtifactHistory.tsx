@@ -13,6 +13,7 @@ import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse, ArtifactH
 import type { LocalArtifactRevision } from './local-revisions.ts'
 import { ensureArtifactBase, invalidateArtifactBase } from './artifact-base.ts'
 import { deleteArtifactRevision, fetchArtifactHistory, fetchArtifactHistoryProgram, isStyleSwitchRevision, restoreRevision } from './local-revisions.ts'
+import { createRevisionFallback, needsRevisionFallback, rollbackTargetFor, type RevisionFallback } from './revision-fallbacks.ts'
 import type { Translate } from '../../shared/locales.ts'
 
 /** Title lookup for edited block ids (display id -> known block). */
@@ -24,6 +25,16 @@ export interface ArtifactHistoryProps {
   readonly artifactId: string
   /** Revision currently rendered by this card (marked as current). */
   readonly currentRevisionId: string
+  /** True when this card is a client-owned local card, which deletion removes entirely. */
+  readonly renderedRevisionLocal?: boolean
+  /** Revision ids owned by client-local revision cards; deleting one records no rollback. */
+  readonly localRevisionIds?: ReadonlySet<string>
+  /** Revision ids that an unsent draft in this chat is editing. */
+  readonly draftRevisionIds?: ReadonlySet<string>
+  /** Revisions that a persisted card fallback currently renders. */
+  readonly fallbackTargetIds?: ReadonlySet<string>
+  /** Revision identities still named by the rendered card programs. */
+  readonly renderedRevisionIds?: ReadonlySet<string>
   /** Program of the rendered card, registered as the Host base before authoritative reads. */
   readonly program: string
   /** Display blocks of the current card, used to name edited block ids. */
@@ -31,8 +42,8 @@ export interface ArtifactHistoryProps {
   readonly onClose: () => void
   /** Called after a successful restore with the restored local revision meta. */
   readonly onRestored: (revision: LocalArtifactRevision) => void
-  /** Called after one recorded revision is deleted (removes its local card). */
-  readonly onDeleted: (revisionId: string) => void
+  /** Called after one recorded revision is deleted (removes its local card or rolls this card back). */
+  readonly onDeleted: (revisionId: string, fallback?: RevisionFallback) => void
 }
 
 /** Load state of the history request. */
@@ -67,15 +78,23 @@ function formatHistoryTime(createdAt: number): string {
 }
 
 /** One revision row's metadata (revision, current, source, blocks). */
-function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, renderedRevision, returnFocusOnCancel, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
+function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete, canDelete, rollbackRevision, draftLocked, referencedLocked, dependencyLocked, returnFocusOnCancel, onRestore, onAskDelete, onCancelDelete, onConfirmDelete }: {
   readonly t: Translate
   readonly revision: ArtifactHistoryRevision
   readonly blocks: ArtifactHistoryBlocks
   readonly restoring: boolean
   readonly deleting: boolean
   readonly confirmingDelete: boolean
-  /** This revision is the one rendered by the card that opened the dialog. */
-  readonly renderedRevision: boolean
+  /** This revision may be deleted without leaving a card unbound to a record. */
+  readonly canDelete: boolean
+  /** When set, deleting this revision rolls the opening card back to that revision. */
+  readonly rollbackRevision?: number
+  /** The opening card cannot delete this revision because it has an open edit draft. */
+  readonly draftLocked?: boolean
+  /** A newer revision records this one as its base (the Host would refuse). */
+  readonly referencedLocked?: boolean
+  /** A card still rolls back to this revision and no older fallback exists. */
+  readonly dependencyLocked?: boolean
   /** Only the row that was actually cancelled should reclaim focus. */
   readonly returnFocusOnCancel: boolean
   readonly onRestore: () => void
@@ -134,6 +153,9 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
         <p className="dsh-iui-history-note">{sourceLabel(t, revision)}</p>
       )}
       {revision.hasProgram ? null : <p className="dsh-iui-history-unavailable">{t('edit.historyUnavailable')}</p>}
+      {draftLocked === true ? <p className="dsh-iui-history-note" data-dsh-iui-history-draft-lock>{t('edit.historyDeleteDraftLocked')}</p> : null}
+      {draftLocked === true || referencedLocked !== true ? null : <p className="dsh-iui-history-note" data-dsh-iui-history-referenced-lock>{t('edit.historyDeleteReferenced')}</p>}
+      {dependencyLocked === true ? <p className="dsh-iui-history-note" data-dsh-iui-history-dependency-lock>{t('edit.historyDeleteDependencyLocked')}</p> : null}
       {revision.restorable && !revision.current ? (
         <div className="dsh-iui-history-actions">
           <button
@@ -149,11 +171,15 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
           </button>
         </div>
       ) : null}
-      {revision.source === 'initial' || renderedRevision ? null : (
+      {canDelete ? (
         <div className="dsh-iui-history-actions dsh-iui-history-delete-actions">
           {confirmingDelete ? (
             <>
-              <span className="dsh-iui-history-delete-warning" role="status" aria-live="polite" data-dsh-iui-history-delete-warning>{t('edit.historyDeleteWarning')}</span>
+              <span className="dsh-iui-history-delete-warning" role="status" aria-live="polite" data-dsh-iui-history-delete-warning>
+                {rollbackRevision === undefined
+                  ? t('edit.historyDeleteWarning')
+                  : t('edit.historyDeleteRollbackWarning', { n: rollbackRevision })}
+              </span>
               <button ref={cancelRef} type="button" className="dsh-iui-history-restore" data-dsh-iui-history-delete-cancel autoFocus disabled={deleting} onClick={onCancelDelete}>
                 {t('edit.historyDeleteCancel')}
               </button>
@@ -184,7 +210,7 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
             </button>
           )}
         </div>
-      )}
+      ) : null}
     </li>
   )
 }
@@ -194,14 +220,14 @@ function HistoryRow({ t, revision, blocks, restoring, deleting, confirmingDelete
  * @param props - locale, artifact identity, current blocks and close/restore callbacks.
  * @returns the portaled dialog.
  */
-export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blocks, onClose, onRestored, onDeleted }: ArtifactHistoryProps): ReactElement {
+export function ArtifactHistory({ t, artifactId, currentRevisionId, renderedRevisionLocal = false, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, program, blocks, onClose, onRestored, onDeleted }: ArtifactHistoryProps): ReactElement {
   const [status, setStatus] = useState<HistoryStatus>('loading')
   const [history, setHistory] = useState<ArtifactHistoryResponse | undefined>(undefined)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState(false)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<'referenced' | 'missing' | 'failed' | null>(null)
+  const [deleteError, setDeleteError] = useState<'referenced' | 'missing' | 'unavailable' | 'fallback' | 'failed' | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -302,25 +328,82 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
     // The Confirm button disables immediately; move focus to the dialog Close
     // so Tab cannot start from a disabled/removed element.
     closeRef.current?.focus({ preventScroll: true })
+    // Any card still rendering the deleted revision rolls back to the newest
+    // older revision whose program is still retained. The opening card cannot be
+    // left unbound, so it requires that target; other rows use it when available
+    // and otherwise keep the documented stale-card behavior. A revision owned by
+    // a client-local card is removed with that card and needs no rollback.
+    let fallback: RevisionFallback | undefined
+    const locallyOwned = localRevisionIds?.has(revision.revisionId) === true
+    const target = locallyOwned ? undefined : rollbackTargetFor(revisions, revision.revisionId, localRevisionIds)
+    const source = target === undefined ? undefined : await fetchArtifactHistoryProgram(artifactId, target.revisionId)
+    // A known target whose program could not be loaded is a transient failure:
+    // retry instead of deleting without a fallback for other cards.
+    if (target !== undefined && source === undefined) {
+      setDeletingId(null)
+      setDeleteError('fallback')
+      return
+    }
+    if (target === undefined) {
+      // The opening card cannot be left unbound, and a revision some card
+      // currently rolls back to cannot lose its only live target either.
+      const needsFallback = revision.revisionId === currentRevisionId && !renderedRevisionLocal
+        || fallbackDependentFor(revision)
+      if (needsFallback) {
+        setDeletingId(null)
+        setDeleteError('unavailable')
+        return
+      }
+    } else {
+      // A merely historical row that no rendered card names and no live
+      // fallback targets needs no record; writing one would leave a dead entry
+      // that later falsely blocks deleting the target revision.
+      const liveTargets = fallbackTargetIds ?? new Set<string>()
+      const needsRecord = renderedRevisionIds === undefined
+        || needsRevisionFallback(revision.revisionId, renderedRevisionIds, liveTargets)
+      if (needsRecord) fallback = createRevisionFallback(artifactId, revision.revisionId, target, source.program)
+    }
     const outcome = await deleteArtifactRevision(artifactId, revision.revisionId)
     setDeletingId(null)
     // `missing` converges: the Host already deleted it (for example a lost
     // response followed by a retry), so remove the local card and refresh.
     if (outcome === 'missing') {
       setConfirmingDeleteId(null)
-      onDeleted(revision.revisionId)
+      onDeleted(revision.revisionId, fallback)
       setReloadKey(key => key + 1)
       returnFocusToDialog.current = true
       return
     }
     if (outcome !== 'deleted') { setDeleteError(outcome); return }
     setConfirmingDeleteId(null)
-    onDeleted(revision.revisionId)
+    onDeleted(revision.revisionId, fallback)
     setReloadKey(key => key + 1)
     returnFocusToDialog.current = true
   }
 
   const revisions = history?.revisions ?? []
+  // The revision this card renders: deleting it is only offered when the card
+  // can roll back (transcript cards) or disappears (local revision cards).
+  const renderedRevision = revisions.find(revision => revision.revisionId === currentRevisionId)
+  const rollback = renderedRevision === undefined
+    ? undefined
+    : rollbackTargetFor(revisions, renderedRevision.revisionId, localRevisionIds)
+  const draftLockedFor = (revision: ArtifactHistoryRevision): boolean =>
+    revision.source !== 'initial' && draftRevisionIds?.has(revision.revisionId) === true
+  const referencedLockedFor = (revision: ArtifactHistoryRevision): boolean =>
+    revision.source !== 'initial' && revision.referenced === true
+  const fallbackDependentFor = (revision: ArtifactHistoryRevision): boolean =>
+    fallbackTargetIds?.has(revision.revisionId) === true
+  const dependencyLockedFor = (revision: ArtifactHistoryRevision): boolean => revision.source !== 'initial'
+    && fallbackDependentFor(revision)
+    && rollbackTargetFor(revisions, revision.revisionId, localRevisionIds) === undefined
+  const canDelete = (revision: ArtifactHistoryRevision): boolean => revision.source !== 'initial'
+    && !draftLockedFor(revision)
+    && !referencedLockedFor(revision)
+    && !dependencyLockedFor(revision)
+    && (revision.revisionId !== currentRevisionId || renderedRevisionLocal || rollback !== undefined)
+  const rollbackRevisionFor = (revision: ArtifactHistoryRevision): number | undefined =>
+    revision.revisionId === currentRevisionId && !renderedRevisionLocal ? rollback?.revision : undefined
   const artifactTitle = revisions.find(revision => revision.title !== undefined && revision.title.trim() !== '')?.title?.trim()
   const current = revisions.find(revision => revision.current)?.revision
 
@@ -362,7 +445,11 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
         {restoreError ? <p className="dsh-iui-history-status is-error" data-dsh-iui-history-restore-error role="alert">{t('edit.restoreFailed')}</p> : null}
         {deleteError === null ? null : (
           <p className="dsh-iui-history-status is-error" data-dsh-iui-history-delete-error role="alert">
-            {t(deleteError === 'referenced' ? 'edit.historyDeleteReferenced' : deleteError === 'missing' ? 'edit.historyDeleteMissing' : 'edit.historyDeleteFailed')}
+            {t(deleteError === 'referenced' ? 'edit.historyDeleteReferenced'
+              : deleteError === 'missing' ? 'edit.historyDeleteMissing'
+                : deleteError === 'unavailable' ? 'edit.historyDeleteUnavailable'
+                  : deleteError === 'fallback' ? 'edit.historyDeleteFallbackFailed'
+                    : 'edit.historyDeleteFailed')}
           </p>
         )}
         {status === 'ready' && revisions.length > 0 ? (
@@ -376,7 +463,11 @@ export function ArtifactHistory({ t, artifactId, currentRevisionId, program, blo
                 restoring={restoringId === revision.revisionId}
                 deleting={deletingId === revision.revisionId}
                 confirmingDelete={confirmingDeleteId === revision.revisionId}
-                renderedRevision={revision.revisionId === currentRevisionId}
+                canDelete={canDelete(revision)}
+                rollbackRevision={rollbackRevisionFor(revision)}
+                draftLocked={draftLockedFor(revision)}
+                referencedLocked={referencedLockedFor(revision)}
+                dependencyLocked={dependencyLockedFor(revision)}
                 returnFocusOnCancel={confirmingDeleteId === null}
                 onRestore={() => { void restore(revision) }}
                 onAskDelete={() => { setDeleteError(null); setConfirmingDeleteId(revision.revisionId) }}

@@ -46,6 +46,9 @@ import type { ComposerAccess } from './composer.ts'
 import { styleCatalog } from './styles.ts'
 import { styleActions } from './style-actions.ts'
 import { programsForMessage, type ExportChatSnapshot } from './export-data.ts'
+import { createWorkspaceImageResolver, type WorkspaceImageRemote } from './image-source.ts'
+import type { ImageSourceResolver } from '../shared/image-source.ts'
+import { revisionFallbackMap, revisionFallbacksFor } from './artifact-edit/revision-fallbacks.ts'
 import { registerArtifactEditChip } from './artifact-edit/composer.ts'
 import { ArtifactEditSummary, artifactEditSummaryRule } from './artifact-edit/user-text.tsx'
 import { ARTIFACT_EDIT_SUMMARY, BLOCK_EDIT_TOOL } from '../shared/artifact-edit.ts'
@@ -53,6 +56,7 @@ import {
   HOST_ENTRY_ID,
   PACKAGE_NAME,
   readImageExportSettings,
+  resultIdOf,
   type SessionEnable,
   type StylePreference,
 } from '../shared/intelligent-ui.ts'
@@ -75,6 +79,15 @@ const EXPORT_ID = 'intelligent-ui-export'
 let settingsForm: SettingsFormLike | undefined
 
 /**
+ * Workspace file Remote registered by the DSH web shell; absent on deployments
+ * without the workspace-files service, where local image paths degrade to the
+ * renderer's "unsupported Host" placeholder.
+ */
+let workspaceImageRemote: WorkspaceImageRemote | undefined
+/** One stable resolver per Session, so card renders do not rebind image effects. */
+const imageResolvers = new Map<string, ImageSourceResolver>()
+
+/**
  * Register the Turn-tail cards, the compact `render_ui` Tool row, the composer
  * Intelligent UI switch, the per-message export entry, and the extension's
  * Settings section.
@@ -82,6 +95,29 @@ let settingsForm: SettingsFormLike | undefined
  */
 export function apply(ctx: ClientContext): void {
   const token = clientToken()
+  // Optional: local image sources need the workspace-files client namespace.
+  // Deferred injection keeps the plugin loading on Hosts without that service.
+  ctx.inject?.(['remote.workspaceFiles'], (scope: unknown) => {
+    const scoped = scope as {
+      readonly remote?: { readonly workspaceFiles?: WorkspaceImageRemote }
+      effect?(fn: () => unknown): unknown
+    }
+    workspaceImageRemote = scoped.remote?.workspaceFiles
+    scoped.effect?.(() => () => { workspaceImageRemote = undefined })
+  })
+  /** Resolver for local image paths in one Session's cards (stable identity). */
+  const resolveImageFor = (sessionId: SessionId): ImageSourceResolver => {
+    const key = String(sessionId)
+    const cached = imageResolvers.get(key)
+    if (cached !== undefined) return cached
+    const resolver: ImageSourceResolver = (path: string) => {
+      const remote = workspaceImageRemote
+      if (remote === undefined) return Promise.resolve({ ok: false, problem: 'unsupported-host' as const })
+      return createWorkspaceImageResolver(key, { remote })(path)
+    }
+    imageResolvers.set(key, resolver)
+    return resolver
+  }
   const run = async (sessionId: SessionId, command: string): Promise<string | null> => {
     const result = await ctx.remote.commands.execute(sessionId, command, [])
     if (!result.ok) return `${result.error.message} (${result.error.code})`
@@ -156,8 +192,11 @@ export function apply(ctx: ClientContext): void {
         sessionId,
         styles: styleCatalog,
         styleActions,
+        resolveImage: resolveImageFor(sessionId),
         ...composerFor(sessionId),
-        adjustStyle: program => run(sessionId, onDemandCommand('adjust', token, program.callId)),
+        // The footer adjust addresses the Host result snapshot, which lives under
+        // the recorded revision id after a rollback (callId stays the first one).
+        adjustStyle: program => run(sessionId, onDemandCommand('adjust', token, resultIdOf(program))),
         keyedHooks: {
           programs: (turn: string) => {
             const snapshot = chat.getSnapshot()
@@ -182,7 +221,11 @@ export function apply(ctx: ClientContext): void {
       return {
         programsFor: (messageId: string) => {
           const snapshot = chat.getSnapshot()
-          return snapshot === undefined ? [] : programsForMessage(snapshot as unknown as ExportChatSnapshot, messageId)
+          if (snapshot === undefined) return []
+          // A card that rolled back after its revision was deleted exports the
+          // fallback revision too, so the export matches the visible card.
+          const fallbacks = revisionFallbackMap(revisionFallbacksFor(String(sessionId)))
+          return programsForMessage(snapshot as unknown as ExportChatSnapshot, messageId, fallbacks)
         },
         styles: styleCatalog,
         sessionId,

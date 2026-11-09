@@ -116,12 +116,34 @@ const exampleTwoReplacement = 'days = Col(@Each(plan, "d", Row([Box([SearchImage
 if (!withForwarding.includes(exampleTwoLine)) throw new Error('generate-prompt: the vendored Example 2 day-list line changed; update the rewrite.')
 const withExampleTwo = withForwarding.replace(exampleTwoLine, exampleTwoReplacement)
 
+// `Image` now reads local workspace files as well as URLs and inline data.
+// Rewrite the vendored description so the model knows local paths are first
+// class and never reaches for a static server or a made-up URL.
+const imageDocLine = 'Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain") — Photo from a URL the user or a tool gave; if it fails, a photo is found for alt.'
+const imageDocReplacement = 'Image(src: string, alt: string, aspectRatio?: number, radius?: Radius, fit?: "cover" | "contain") — Photo from an http(s) URL, a small data:image base64 URI, or an image path the user or a tool named (workspace-relative like figures/chart.png, or absolute). Local paths are read by the app, so never start a web server or invent an http URL for a local file; a missing or unsupported image shows a clear placeholder, not a substitute photo.'
+if (!withExampleTwo.includes(imageDocLine)) {
+  throw new Error('generate-prompt: the vendored Image description changed; update the rewrite.')
+}
+const withImageDoc = withExampleTwo.replace(imageDocLine, imageDocReplacement)
+
+// Image-source policy: the model names the file; the app reads it. This is
+// owned text because the vendored prompt predates local image support.
+const imageContract = [
+  '## Image sources',
+  '',
+  '- `Image` accepts an http(s) URL, a small `data:image/png|jpeg|webp|gif;base64,...` URI (about 512 KiB decoded at most), or an image path. Prefer the path when the image already exists as a file.',
+  '- When you or a tool created the image in the workspace, pass its workspace-relative path (or its absolute path) directly, for example `Image("figures/chart.png", "Revenue by quarter")`. The app reads it through the session\'s own file permissions; do not start a static file server, do not invent an `http://` URL, and do not tell the user the image cannot be shown just because it is a local file.',
+  '- A missing, unsupported or oversized image renders a clear placeholder that names the problem. It is never replaced by an unrelated searched photo.',
+  '- The same sources work in Markdown with `![alt](src)`; wrap a destination that contains spaces or parentheses in angle brackets, for example `![chart](<figures/q1 chart.png>)`.',
+  '- `SearchImage` is still the way to get a photo the app must find; SVG files as a path or data source are not supported (an http(s) SVG URL renders through the browser `<img>` behavior), and `HtmlView` cannot display local image paths.',
+].join('\n')
+
 // The HtmlView sandbox is not script-CDN-only: its CSP also loads style/font
 // CDNs and any https image, while fetch/XHR/WebSocket stay on the script CDNs.
 const htmlViewLine = 'HtmlView(html: string, height?: number, title?: string) — Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set.'
 const htmlViewReplacement = 'HtmlView(html: string, height?: number, title?: string) — Sandboxed HTML page with inline JS, for games and canvas. Its CSP allows inline code, script/style/font CDNs and https images; fetch, XHR and WebSocket reach only those CDN hosts. Fits its content unless height is set.'
 if (!withExampleTwo.includes(htmlViewLine)) throw new Error('generate-prompt: the vendored HtmlView description changed; update the rewrite.')
-const withFacts = withExampleTwo.replace(htmlViewLine, htmlViewReplacement)
+const withFacts = withImageDoc.replace(htmlViewLine, htmlViewReplacement)
 
 // Behavior docs that changed with the component batch: the Length grammar
 // accepts safe CSS length functions and a wider unit set, canvas/on-ink joined
@@ -137,6 +159,11 @@ const behaviorRewrites = [
     label: 'Color token background-only rule',
     from: '"surface", "surface-strong" and "border" are surface/paint tokens: use them as backgrounds or SVG fills, never as text, caption or icon colors (they are washes and would disappear).',
     to: '"surface", "surface-strong", "border", "canvas" and "on-ink" are background/paint tokens: use them as backgrounds or SVG fills; as text, caption or icon colors they are ignored and the theme ink is used instead (they would disappear).',
+  },
+  {
+    label: 'Markdown description',
+    from: 'Markdown(text: string) — Prose with headings, lists, quotes, code and tables.',
+    to: 'Markdown(text: string) — Prose with headings, lists, quotes, code, tables and inline images (`![alt](src)`; src may be http(s), a small data:image base64 URI, or an image path, with `<...>` around a path that contains spaces).',
   },
   {
     label: 'number Input description',
@@ -166,7 +193,7 @@ const layoutContract = [
   '- A hand-built list of `Row`s is page rhythm, not an inner pair: leave the list `Col` gap unset (the 12px flow rhythm) or use 2–3, never 1; center-align a row whose photo is taller than its copy (`Row(..., 2, "center")`); and give the rank a fixed-width slot (`Box([Text(m.r + "", ...)], ..., 26)`) so 9 and 10 line up. Rankings are still clearest as `Table` or `List`.',
 ].join('\n')
 
-const withLayout = withBehavior.replace('\n## Important Rules\n', `\n${layoutContract}\n\n## Important Rules\n`)
+const withLayout = withBehavior.replace('\n## Important Rules\n', `\n${imageContract}\n\n${layoutContract}\n\n## Important Rules\n`)
 if (!withLayout.includes(layoutContract)) throw new Error('generate-prompt: could not place the layout contract before Important Rules')
 
 const toolResponseLine = `

@@ -130,3 +130,33 @@ test('a Turn whose revision came from edit_ui_blocks is exportable', () => {
   assert.equal(programs[0].program, node.root.meta.program)
   assert.equal(programs[0].revision, 2)
 })
+
+test('a card that rolled back after deletion exports the fallback revision', () => {
+  const node = settled('call-2', { program: 'root = Col([Title("fragment only")])' }, { name: 'edit_ui_blocks' })
+  node.root.meta = {
+    artifactId: 'call-1',
+    revisionId: 'call-2',
+    baseRevisionId: 'call-1',
+    revision: 2,
+    program: 'root = Card([Text("deleted")])',
+    title: 'Edited',
+    style: 'card',
+  }
+  const fallbacks = new Map([['call-2', {
+    deletedRevisionId: 'call-2',
+    artifactId: 'call-1',
+    revisionId: 'call-1',
+    revision: 1,
+    program: 'root = Card([Text("initial")])',
+    title: 'Initial',
+    style: 'card',
+    createdAt: 1,
+  }]])
+  const programs = programsForMessage(snapshot({ toolNodes: () => [node] }), MESSAGE, fallbacks)
+  assert.equal(programs.length, 1)
+  assert.equal(programs[0].callId, 'call-2')
+  assert.equal(programs[0].revisionId, 'call-1')
+  assert.equal(programs[0].revision, 1)
+  assert.equal(programs[0].program, 'root = Card([Text("initial")])')
+  assert.equal(programs[0].title, 'Initial')
+})

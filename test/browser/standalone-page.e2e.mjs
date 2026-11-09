@@ -227,7 +227,39 @@ try {
     await cdp.evaluate('document.querySelector(".iui-flashcard").click()')
     assert.equal(await cdp.evaluate('document.querySelector(".iui-flashcard").classList.contains("is-flipped")'), true)
   }
-  console.log('standalone-page E2E: OK (legacy, inline and saved themes; free/legacy mixed exports, light/dark, wide/narrow, interactions)')
+  // A local image is inlined as a data URL, so the downloaded page works offline.
+  const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const imageCards = [{
+    program: `root = Card([Title("Local image"), Image("figures/chart.png", "Chart"), Image("figures/missing.png", "Missing"), Image("data:image/png;base64,${TINY_PNG}", "Inline")])`,
+    title: 'Images',
+    style: 'card',
+    callId: 'img-1',
+  }]
+  await writeFile(join(temp, 'image.html'), buildStandaloneHtml({
+    cards: imageCards,
+    js,
+    css,
+    tokens: PAGE_TOKENS,
+    colorScheme: 'light',
+    title: 'Image harness',
+    lang: 'en',
+    removeFollowUps: false,
+    assets: { [imageCards[0].callId ?? '']: { 'figures/chart.png': `data:image/png;base64,${TINY_PNG}` } },
+  }))
+  await cdp.send('Page.navigate', { url: server.url + 'image.html' })
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-standalone-card").length === 1', 'image page cards', { timeout: 60000 })
+  await cdp.waitFor('!!document.querySelector(\'img[data-iui-image-src="figures/chart.png"]\')', 'inlined local image', { timeout: 10000 })
+  const imageState = await cdp.evaluate(`(() => ({
+    local: !!document.querySelector('img[data-iui-image-src="figures/chart.png"]'),
+    localSrc: (document.querySelector('img[data-iui-image-src="figures/chart.png"]')?.getAttribute('src') ?? '').slice(0, 15),
+    inline: [...document.querySelectorAll('.iui-image img')].some(img => img.getAttribute('src')?.startsWith('data:image/png')),
+    missing: !!document.querySelector('[data-iui-image-error="unavailable"]'),
+  }))()`)
+  assert.equal(imageState.local, true, 'the exported page renders the inlined local image')
+  assert.equal(imageState.localSrc, 'data:image/png;', 'the local image is a self-contained data URL')
+  assert.equal(imageState.inline, true, 'an inline data image renders in the export')
+  assert.equal(imageState.missing, true, 'a path missing from the asset map shows a placeholder, not a search')
+  console.log('standalone-page E2E: OK (legacy, inline and saved themes; free/legacy mixed exports, light/dark, wide/narrow, interactions; inlined local images)')
 } finally {
   await cleanup()
 }

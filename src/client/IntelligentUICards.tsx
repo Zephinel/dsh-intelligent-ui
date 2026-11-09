@@ -10,7 +10,7 @@
  *
  * A card whose program exposes recognizable root blocks also offers block
  * editing: entering edit mode swaps the read-only body for the edit view while
- * the card itself (header, revision badge, collapse) stays in place.
+ * the card itself (header, history entry, collapse) stays in place.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { RemixIcon } from '../lib/components/remix-icon.tsx'
@@ -18,7 +18,7 @@ import type { InputActions } from '@deepseek-ai/dsh-client-ui-conversation/clien
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { MAX_ARTIFACT_BATCH_REQUESTS, MAX_ARTIFACT_DRAFTS } from '../shared/artifact-edit.ts'
-import { MODE_PROJECTION_KEY, type IntelligentUIModeView, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
+import { MODE_PROJECTION_KEY, resultIdOf, type IntelligentUIModeView, type IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 import type { ArtifactStyleTarget } from '../shared/artifact-structure.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import { OpenUIRenderer } from '../lib/render.tsx'
@@ -36,11 +36,15 @@ import { ArtifactEditView } from './artifact-edit/ArtifactEditView.tsx'
 import { ArtifactHistory } from './artifact-edit/ArtifactHistory.tsx'
 import { ensureArtifactBase } from './artifact-edit/artifact-base.ts'
 import { addLocalRevision, fetchArtifactStatus, localRevisionProgram, removeLocalRevision, restoreRevision, useLocalRevisions, type LocalArtifactRevision } from './artifact-edit/local-revisions.ts'
+import { applyRevisionFallback, liveFallbackTargetIds, namedRevisionIds, recordRevisionFallback, resolveRevisionFallback, revisionFallbackMap, useRevisionFallbacks } from './artifact-edit/revision-fallbacks.ts'
 import { isEditViewportWideEnough, MIN_EDIT_WIDTH, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption } from './artifact-edit/contracts.ts'
+import type { ImageSourceResolver } from '../shared/image-source.ts'
 import {
   activateDraft as activateArtifactDraft,
   attachDraft as attachArtifactDraft,
   activeDraftKeyFor,
+  unsentDraftRevisionIds,
+  useArtifactEditStore,
   blocksForProgram,
   closeArtifactBlockEditor,
   applyArtifactStructure,
@@ -98,6 +102,8 @@ export interface IntelligentUICardsInjected {
   readonly adjustStyle?: (program: IntelligentUIProgram) => Promise<string | null>
   readonly readInput?: ComposerAccess['readInput']
   readonly focusComposer?: ComposerAccess['focusComposer']
+  /** Reads one local image path for `Image`/Markdown in this Session's cards. */
+  readonly resolveImage?: ImageSourceResolver
   readonly keyedHooks: {
     /**
      * The closing Turn's root Tool nodes in anchor order.
@@ -119,7 +125,7 @@ const noProjection: SessionProjectionReader = () => undefined
  * @returns one card per program, or null for a Turn that called no render_ui tool.
  */
 export function IntelligentUICards({
-  turn, inputActions, usePrograms, sessionId, styles, styleActions = defaultStyleActions, adjustStyle, readInput, focusComposer, useProjection, t = fallbackT,
+  turn, inputActions, usePrograms, sessionId, styles, styleActions = defaultStyleActions, adjustStyle, readInput, focusComposer, resolveImage, useProjection, t = fallbackT,
 }: PropsRuntime<'conversation.chat.turnTail'>
   & InjectFace<IntelligentUICardsInjected>
   & { readonly t?: Translate; readonly useProjection?: SessionProjectionReader }): ReactNode {
@@ -143,11 +149,30 @@ export function IntelligentUICards({
   }, [turn.status, turn.turn, turn.end?.seq, turn.end?.time, turn.start?.time, sessionId, programs])
   // Client-owned revision cards (restored without a model turn) belong to the
   // Turn that triggered the restore, so each one renders exactly once.
+  const editStore = useArtifactEditStore()
+  const draftRevisionIds = useMemo(() => unsentDraftRevisionIds(editStore.sessions, sessionId), [editStore, sessionId])
   const localRevisions = useLocalRevisions(sessionId)
+  const localRevisionIds = useMemo(() => new Set(localRevisions.map(revision => revision.revisionId)), [localRevisions])
   const localPrograms = useMemo(() => localRevisions
     .filter(revision => revision.turn === turn.turn)
     .map(localRevisionProgram), [localRevisions, turn.turn])
-  const allPrograms = useMemo(() => [...programs, ...localPrograms], [programs, localPrograms])
+  // A card whose rendered revision was deleted from history keeps its transcript
+  // identity but renders the newest older revision instead (persisted fallback).
+  const revisionFallbacks = useRevisionFallbacks(sessionId)
+  const fallbacksByDeletedId = useMemo(() => revisionFallbackMap(revisionFallbacks), [revisionFallbacks])
+  // Revisions some card currently rolls back to; deleting one without a new
+  // target would strand that card on a deleted record. Dead records (whose
+  // deleted revision no rendered program names anymore) are ignored.
+  const renderedRevisionIds = useMemo(() => namedRevisionIds([...programs, ...localPrograms]), [programs, localPrograms])
+  const fallbackTargetIds = useMemo(
+    () => liveFallbackTargetIds(revisionFallbacks, renderedRevisionIds),
+    [revisionFallbacks, renderedRevisionIds],
+  )
+  const redirectedPrograms = useMemo(() => programs.map(program => {
+    const fallback = resolveRevisionFallback(fallbacksByDeletedId, program.revisionId)
+    return fallback === undefined ? program : applyRevisionFallback(program, fallback)
+  }), [programs, fallbacksByDeletedId])
+  const allPrograms = useMemo(() => [...redirectedPrograms, ...localPrograms], [redirectedPrograms, localPrograms])
   const catalog = useSyncExternalStore(styles.subscribe, styles.getSnapshot, styles.getSnapshot)
   const scheme = useStyleScheme()
   // A theme-less result snapshot inherits the session's selected template; the
@@ -227,8 +252,13 @@ export function IntelligentUICards({
             styleSwitchSupported={styleSwitchSupported}
             styleTargets={styleSwitchTargets}
             refreshStyleCatalog={refreshStyleCatalog}
+            resolveImage={resolveImage}
+            localRevisionIds={localRevisionIds}
+            draftRevisionIds={draftRevisionIds}
+            fallbackTargetIds={fallbackTargetIds}
+            renderedRevisionIds={renderedRevisionIds}
             // Saving a style needs a palette to copy, so a theme-less snapshot cannot offer it.
-            saveAction={program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={program.callId}
+            saveAction={program.fallbackFrom !== undefined || program.temporaryStyle?.theme === undefined ? undefined : <SaveResultAction resultId={resultIdOf(program)}
               snapshot={program.temporaryStyle} sessionId={sessionId} actions={styleActions} styles={styles} disabled={program.running} t={t} />}
             // Snapshot theme wins; a theme-less snapshot inherits the session's
             // selected template, then the built-in theme.
@@ -283,6 +313,16 @@ interface IntelligentUICardProps {
   readonly styleTargets?: readonly ArtifactStyleTargetOption[]
   /** Catalog refresh hook used when the Host reports a missing style. */
   readonly refreshStyleCatalog?: () => void
+  /** Reads one local image path for `Image`/Markdown in this card. */
+  readonly resolveImage?: ImageSourceResolver
+  /** Revision ids owned by client-local revision cards (deletion removes them). */
+  readonly localRevisionIds?: ReadonlySet<string>
+  /** Revision ids that an unsent draft in this chat is editing. */
+  readonly draftRevisionIds?: ReadonlySet<string>
+  /** Revisions that a persisted card fallback currently renders. */
+  readonly fallbackTargetIds?: ReadonlySet<string>
+  /** Revision identities still named by the rendered card programs. */
+  readonly renderedRevisionIds?: ReadonlySet<string>
 }
 
 /**
@@ -292,7 +332,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -319,23 +359,32 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   const bodyId = useId()
   const title = program.title !== undefined && program.title.trim() !== '' ? program.title : t('card.title')
   const style = program.style ?? 'card'
+  // One history entry: the clock icon carries the revision number once the card
+  // renders an edited revision, so the old standalone revision badge is gone.
+  const historyRevision = program.revision !== undefined && program.revision > 1 ? program.revision : undefined
+  const historyLabel = historyRevision === undefined
+    ? t('edit.historyOpen')
+    : `${t('edit.historyOpen')} · ${t('edit.revision', { n: historyRevision })}`
   const baseRevisionId = program.revisionId ?? program.callId
   // B2-6: a new revision card restores the runtime state of the revision it was
   // edited from; the mount reports its own latest state back for the next edit.
-  const runtimeProgramRef = useMemo(() => ({
+  const runtimeProgramRef = useMemo(() => program.fallbackFrom !== undefined ? undefined : ({
     artifactId: program.artifactId ?? program.callId,
     revisionId: program.revisionId ?? program.callId,
     baseRevisionId: program.baseRevisionId,
     callId: program.callId,
-  }), [program.artifactId, program.revisionId, program.baseRevisionId, program.callId])
-  const runtimeState = useMemo(() => runtimeStateForProgram(runtimeProgramRef), [runtimeProgramRef])
+  }), [program.artifactId, program.revisionId, program.baseRevisionId, program.callId, program.fallbackFrom])
+  const runtimeState = useMemo(() => runtimeProgramRef === undefined ? undefined : runtimeStateForProgram(runtimeProgramRef), [runtimeProgramRef])
   const handleRuntimeStateChange = useCallback((state: Record<string, unknown>) => {
-    recordRuntimeState(runtimeProgramRef, state)
+    if (runtimeProgramRef !== undefined) recordRuntimeState(runtimeProgramRef, state)
   }, [runtimeProgramRef])
   const editKey = `${sessionId}:${baseRevisionId}`
   const editSession = useArtifactEditSession(sessionId, baseRevisionId)
   const editStore = useArtifactEditStore()
-  const editing = editSession?.editing === true
+  // A redirected card renders a revision another card may own. It must not join
+  // that revision's shared edit session, or two cards mount the same canvas.
+  const readOnlyFallback = program.fallbackFrom !== undefined
+  const editing = !readOnlyFallback && editSession?.editing === true
   // The edit view stays mounted for one short exit animation after `editing`
   // flips false; the timer is cancelled if the user re-enters edit mode first.
   const [editorMounted, setEditorMounted] = useState(editing)
@@ -345,6 +394,11 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     if (editSession !== undefined) lastEditSessionRef.current = editSession
   }, [editSession])
   useEffect(() => {
+    if (readOnlyFallback) {
+      setEditorClosing(false)
+      setEditorMounted(false)
+      return
+    }
     if (editing) {
       setEditorClosing(false)
       setEditorMounted(true)
@@ -373,9 +427,10 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       setEditorMounted(false)
     }, EDITOR_CLOSE_ANIMATION_MS)
     return () => { window.clearTimeout(timer) }
-  }, [editing, editorMounted, editStore, editKey, sessionId])
+  }, [editing, editorMounted, editStore, editKey, sessionId, readOnlyFallback])
   const hasDraft = editSession !== undefined && hasArtifactEditContent(editSession)
-  const showDraftBadge = editSession !== undefined && !editing && editSession.status !== 'submitted' && hasDraft
+  const showDraftBadge = !readOnlyFallback && editSession !== undefined && !editing
+    && editSession.status !== 'submitted' && hasDraft
   const attachedDraftTotal = useMemo(() => {
     let count = 0
     for (const candidate of editStore.sessions.values()) {
@@ -386,7 +441,10 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
   }, [editStore, sessionId])
   const blocks = useMemo(() => blocksForProgram(program.program).blocks, [program.program])
   const blocksById = useMemo(() => new Map(blocks.map(block => [block.blockId, block])), [blocks])
-  const editable = !program.running && blocks.length > 0 && supportsBlockEditing(program)
+  // A redirected card is read-only: the fallback revision may already have a
+  // native card that owns its edit session (both would share the same edit key).
+  const editable = program.fallbackFrom === undefined && !program.running
+    && blocks.length > 0 && supportsBlockEditing(program)
   // A hovered/focused/selected switch row previews its durable skin in the edit
   // canvas only; nothing is posted until the explicit Apply.
   const stylePreviewOption = stylePreview === undefined
@@ -579,27 +637,18 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             : null}
           <button
             type="button"
-            className="dsh-iui-head-icon"
+            className="dsh-iui-head-icon dsh-iui-history-open"
             data-dsh-iui-history-open
             data-history-trigger="icon"
-            aria-label={t('edit.historyOpen')}
-            title={t('edit.historyOpen')}
+            aria-label={historyLabel}
+            title={historyLabel}
             onClick={() => { setHistoryOpen(true) }}
           >
             <RemixIcon name="history-line" size={14} />
+            {historyRevision === undefined
+              ? null
+              : <span className="dsh-iui-history-count" data-dsh-iui-history-count aria-hidden="true">{historyRevision}</span>}
           </button>
-          {program.revision !== undefined && program.revision > 1
-            ? <button
-                type="button"
-                className="dsh-iui-revision dsh-iui-revision-button"
-                data-dsh-iui-revision
-                data-dsh-iui-history-open
-                data-history-trigger="badge"
-                aria-label={t('edit.historyOpen')}
-                title={t('edit.historyOpen')}
-                onClick={() => { setHistoryOpen(true) }}
-              >{t('edit.revision', { n: program.revision })}</button>
-            : null}
           {editable
             ? <button
                 type="button"
@@ -651,7 +700,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
           </div>
         : null}
       <div className="dsh-iui-body" data-dsh-iui-body id={bodyId} hidden={collapsed && !editing}>
-        {editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
+        {!readOnlyFallback && editorMounted && (editSession ?? lastEditSessionRef.current) !== undefined ? (
           <div className={editorLayout === 'article' ? 'dsh-iui-article' : undefined}>
             <ArtifactEditView
               t={t}
@@ -666,6 +715,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
               onPreviewStyleTarget={setStylePreview}
               closing={editorClosing && !editing}
               onOpenHistory={() => { setHistoryOpen(true) }}
+              resolveImage={resolveImage}
             />
           </div>
         ) : (
@@ -681,17 +731,20 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
                 t={t}
                 runtimeState={runtimeState}
                 onRuntimeStateChange={handleRuntimeStateChange}
+                resolveImage={resolveImage}
               />
             </div>
           </RendererBoundary>
         )}
       </div>
-      {program.temporaryStyle ? (
+      {program.temporaryStyle !== undefined && (
+        (onAdjust !== undefined && program.fallbackFrom === undefined && !(styleEditSupported && editable))
+        || saveAction !== undefined || error !== null) ? (
         <div className="dsh-iui-result-actions">
           {/* The in-canvas style section replaces the legacy on-demand adjust
               action only when the Host supports it AND this card is editable;
               otherwise the footer keeps the old fallback. */}
-          {onAdjust === undefined || (styleEditSupported && editable) ? null : <button type="button" disabled={adjusting || program.running} onClick={() => { void adjust() }}>{t('onDemand.adjust')}</button>}
+          {onAdjust === undefined || program.fallbackFrom !== undefined || (styleEditSupported && editable) ? null : <button type="button" disabled={adjusting || program.running} onClick={() => { void adjust() }}>{t('onDemand.adjust')}</button>}
           {saveAction}
           {error === null ? null : <span className="dsh-iui-style-error" role="alert">{error}</span>}
         </div>
@@ -701,11 +754,21 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             t={t}
             artifactId={restoreArtifactId}
             currentRevisionId={restoreRevisionId}
+            renderedRevisionLocal={program.localRevision === true}
+            localRevisionIds={localRevisionIds}
+            draftRevisionIds={draftRevisionIds}
+            fallbackTargetIds={fallbackTargetIds}
+            renderedRevisionIds={renderedRevisionIds}
             program={program.program}
             blocks={blocksById}
             onClose={() => { setHistoryOpen(false) }}
             onRestored={revision => { handleHistoryRestored(revision); setHistoryOpen(false) }}
-            onDeleted={revisionId => { removeLocalRevision(sessionId, revisionId) }}
+            onDeleted={(revisionId, fallback) => {
+              // A transcript card rolls back to the prepared older revision; a
+              // local revision card is simply removed with its history row.
+              if (fallback !== undefined) recordRevisionFallback(sessionId, fallback)
+              removeLocalRevision(sessionId, revisionId)
+            }}
           />
         : null}
     </section>

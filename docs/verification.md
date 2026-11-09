@@ -644,3 +644,115 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **519 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,031,830** 字节，解包 **12,887,088** 字节 |
 | 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 历史单一入口与删除回退
+
+- **入口收口**：卡片头部的独立 `Revision N` 徽标按钮移除，历史图标成为卡片唯一的历史入口；渲染修订号 >1 时在图标后显示数字，并把修订号并入 aria-label（`data-dsh-iui-history-count`）。编辑面板头部历史按钮保留；收口前后所有入口共用同一个 `ArtifactHistory` 与同一份 Host 历史。
+- **删除回退**：`ArtifactHistory` 在删除前用 `rollbackTargetFor()` 选出「修订号更小且 program 仍保留」的最新修订，经 program 路由取回后写入新的 `artifact-edit/revision-fallbacks.ts`（`localStorage`、每会话 ≤20、按被删修订 id 去重）；`IntelligentUICards` 用 `applyRevisionFallback()` 把仍渲染被删修订的工具结果卡替换为回退修订（保留 `callId`/`requestId`/卡片位置），刷新后仍生效；`export-data.ts::programsForMessage` 应用同一 fallback。没有可回退目标时，卡片自己渲染的修订行不提供删除；确认文案改为「会回退到修订 N」。
+- **本地卡**：本地修订卡（恢复/结构/属性/样式）删除仍走 `removeLocalRevision()` 移除卡片，不写回退记录。
+- **测试**：新增 `test/client/revision-fallbacks.test.mjs`（9 条：目标选择、样式/标题替换、持久化/去重/上限、脏数据忽略、索引）；`export-data.test.mjs` 新增 1 条导出回退；浏览器 `artifact-edit` 新增场景 41（单一入口与修订号、回退删除确认、删除后卡片内容与修订号、重渲染后仍回退、无回退目标时不提供删除）并更新原历史场景的断言。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **637/637** = Host **302** + Client **314** + packaging **21**；build host **837.9 kB**、client **4.05 MB**（js 3.83 / CSS 222.2） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **530 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,033,184** 字节，解包 **12,892,076** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 本地图片来源（Image / Markdown）
+
+- **共享策略**：新增 `src/shared/image-source.ts`：分类 http(s)/data/路径三类来源；`data:` 只收 base64 `png/jpeg/webp/gif`（解码 ≤512 KiB）；路径拒绝 NUL/控制字符、`..`、`~` 和 URL scheme（绝对路径与工作区相对路径都允许）；本地文件 ≤10 MiB、像素 ≤40 MP，MIME 按 magic bytes 嗅探；SVG 显式拒绝。单测 `test/client/image-source.test.mjs` 14 条覆盖分类、路径策略、MIME 嗅探、头解析像素上限、data URI 头解析、SVG 识别与错误映射。
+- **客户端读取**：新增 `src/client/image-source.ts`，经可选的 `remote.workspaceFiles.stat/readBytes` 读取字节，嗅探后生成同源 Blob URL；`src/client/index.tsx` 用 `ctx.inject(['remote.workspaceFiles'])` 绑定，服务缺失时本地图片降级为「不支持 Host」占位。
+- **渲染层**：新增 `src/lib/components/image-source.tsx`（Provider/`useImageSource`/错误占位）；`Image` 的显式来源失败显示占位且不再按 `alt` 搜图，`SearchImage` 不变；`Markdown` 支持 `![alt](src)`；`OpenUIRenderer`、卡片与编辑画布新增 `resolveImage` 注入。顺带修复显式来源为空时误渲染无 `src` `<img>` 的条件判断。
+- **导出**：PNG settle 把错误占位视为已落定；HTML 导出从实时 `img[data-iui-image-src]` 读回 Blob 转 data URL，随 `mountIUI` 的 `assets` 内联；standalone 用资产表合成 resolver。浏览器 `artifact-edit` 场景 42 覆盖本地/内联/http/缺失/坏链/SVG/越链/Markdown 图与「显式来源不搜图」；`standalone-page` 断言内联图片与缺失占位。
+- **契约与文档**：`scripts/generate-prompt.mjs` 新增 Image 描述重写（带 guard，vendor 原文不改）与图片来源契约段；同步 `vendor/spec.json`、生成的 prompt、`skills/intelligent-ui/SKILL.md`、`references/components.md`、README/usage/limitations/architecture；`test/packaging/guardrails.test.mjs` 新增图片来源单源 guard。旧 Host 无 workspace-files 时仅本地图降级，http/data 不受影响；`HtmlView` 本地图与 SVG 在 v1 不支持。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **649/649** = Host **302** + Client **325** + packaging **22**；build host **839.6 kB**、client **4.06 MB**（js 3.84 / CSS 222.9） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **538 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,040,072** 字节，解包 **12,912,120** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 独立 review 修复（系统式根因收口）
+
+两路只读独立 review（实现深审 + 发布就绪度）结论合并：无 P0，2 个 P1，去重后 6 个 P2；本轮按根因统一修复并补测试。
+
+- **P1 result 身份**：新增 `resultIdOf(program)`（`revisionId ?? callId`），卡片 Save as template 与底部 Adjust 统一用它；回退后不再指向被删修订的 result 快照。
+- **P1 显式空来源**：`Image` 的任何字符串 `src` 都是显式来源，空/纯空白 → `path-invalid` 占位，绝不按 `alt` 搜图。
+- **P2 导出 settle**：Photo/Markdown 本地图解析期统一 `data-iui-image-pending` 标记，PNG/HTML 导出等待它；离线只跳过搜索等待，本地图仍等待解析；HTML 资产收集用 canonical（trim 后）source 作为 key。
+- **P2 本地卡回退记录**：父层把本 session 本地修订 id 集合传给历史弹窗，删除本地卡拥有的修订时不写回退记录（与文档一致），回退目标另受序列化字节预算约束（`MAX_REVISION_FALLBACK_STORAGE_CHARS`）。
+- **P2 编辑草稿删除锁**：卡片正在渲染的修订在存在未发送编辑/打开画布时不允许删除，历史行显示原因；删除其他行的行为不变。
+- **P2 契约/文案**：`vendor/spec.json` 的 components 与 schema `$defs` 描述同步，并新增逐组件 equal guard；Markdown 图片语法写入 prompt/spec/reference；troubleshooting 的旧 Image 失败描述已更新；README/usage/limitations/architecture 补充无回退目标时跨卡 stale、初始修订借用样式、HTML 导出 mounted-only、draft lock 等边界。
+- **P3 系统化**：本地 SVG 按内容识别为 `svg-unsupported`；`//host/x` 归一化 https、`DATA:` 大小写不敏感；Markdown 支持 `<...>` 目标（含空格路径）；40 MP 上限对 PNG/JPEG/GIF/WebP 头预解析（未知头仍加载后检查）；`bounded()` 超时竞速避免忽略 abort 的 Remote 卡住；ImageError 的可访问名称包含原因；`bounded`/导出收集等路径补单测与 e2e（绝对路径、padded path、空来源、angle 目标、DOM 资产收集、本地图 PNG 导出、草稿锁）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **657/657** = Host **302** + Client **332** + packaging **23**；build host **840.8 kB**、client **4.06 MB**（js 3.84 / CSS 222.9） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **547 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,042,022** 字节，解包 **12,918,700** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 第二次独立复审修复（系统式收口）
+
+第二轮两个全新独立只读复审确认上一轮 8 项修复均落地，但发现新的回退生命周期问题；本轮按根因修复后重跑全部门禁。
+
+- **P1 回退链**：`resolveRevisionFallback()` 传递解析（深度/循环上限 20），记录新回退时改写目标等于被删修订的旧条目；卡片与 `export-data.ts` 共用，避免二次删除回退目标后卡片停留在已删除修订。
+- **P2 所有权/并发**：`rollbackTargetFor()` 跳过本地卡拥有的修订；回退卡带 `fallbackFrom` 并只读，避免与同一修订的原生卡共用 `editKey` 挂载双画布；草稿锁改为 session 级 `unsentDraftRevisionIds()`（任一卡有未发送草稿，对应 base 修订均不可删）。
+- **P2 图片来源语义**：`Image` 与 `SearchImage` 显式 mode；动态/非字符串 `src` 一律视为无效显式来源，绝不退搜图。
+- **P2 导出**：HTML 导出改用 `settleLocalImages()`，只等待本地来源解析（短上限），不再为图片搜索/远程加载等满 12.5 s；内联 `data:` 图片也做头级 40 MP 预解析。
+- **P3**：Host 历史响应新增 `referenced`，被更新修订作为基础的修订隐藏删除并说明；运行时 `defineComponent` 描述与 `vendor/spec.json` 增加全量一致性 guard（49 条）；SVG 文案限定为 path/data 来源；文档修正 Host 读权限边界、portaled Popover/失败图片导出占位、回退链/只读卡/跨卡草稿锁；修复证明/文档数字（standalone 50、image-export 66、revision-fallbacks 13、image-source 16）并移除无对应改动的“移除 unused hook”声明。
+- **复审数字复核**：第二轮复审曾判 `artifact-edit` 547 checks 虚报（静态 `check(` 530）；插桩运行确认 helper 内 check 会重复执行（`chooseQuickOption` 12 次、`unitOptionsOf` 4 次），运行时 547/557 才是真实门禁数字，未按静态计数改写。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **663/663** = Host **302** + Client **338** + packaging **23**；build host **841 kB**、client **4.06 MB**（js 3.84 / CSS 222.9） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **557 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,043,599** 字节，解包 **12,924,267** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 第三轮独立复审修复（双画布/回退生命周期收口）
+
+第三轮两个全新独立只读复审各自复现了同一 P1 与若干 P2/P3；本轮按根因修复并重跑门禁。
+
+- **P1 回退卡双画布**：`editing`/`editorMounted`/草稿徽标/`ArtifactEditView` 挂载全部以 `fallbackFrom === undefined` 门禁；原生回退修订打开编辑器时，被重定向卡片 `[data-dsh-iui-edit-view]` 为 0。e2e 场景 41 增加该断言。
+- **P2 result-bound 动作**：回退到 initial 时 Host 历史借用 `records[0].temporaryStyle`，回退卡不再显示 Save/Adjust（没有对应 result 快照）；场景 46 覆盖。
+- **P2 删除失败与依赖锁**：任何已知 fallback target 但 program 拉取失败都中止并提示重试；被某卡 fallback 指向、且没有更早可回退目标的修订禁止删除并说明原因（`edit.historyDeleteDependencyLocked`），保证回退链不会落到已删除记录；场景 47 覆盖依赖锁与删除目标后的链式 retarget。
+- **P3 系统化**：回退卡跳过 runtime-state 发布；per-session 图片 resolver 记忆化；HTML 导出资产仅收集导出卡片集合、按 card callId + source 分组（不再跨卡折叠同路径快照）；renderer 描述 guard 在运行时描述缺失时失败（49/49）；`data:` 大小估算扣除 base64 padding；`//host` 仅当 authority 含点/端口时按 URL，其余按双斜杠路径；cycle/depth 测试改为持久化真环与 20/21 深度边界；文档修正 session 级草稿锁文案、依赖锁/Save-Adjust 边界、SVG 作用域、跨标签页限制、per-card 资产与测试计数（revision-fallbacks 13、image-source 17、artifact-edit 566）；`.gitignore` 增加 `video/`。
+- **验证数字复核**：第三轮复审中的 557/547 等静态计数讨论已由运行时确认（helper 重复执行），本轮真实数为 artifact-edit **566**、Node **664**。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **664/664** = Host **302** + Client **339** + packaging **23**；build host **841 kB**、client **4.06 MB**（js 3.85 / CSS 222.9） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **566 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,044,044** 字节，解包 **12,926,327** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |
+
+## 2026-11-09 — 第四轮独立复审修复（活 fallback/测试保真收口）
+
+第四轮两个全新独立只读复审结论：无 P0/P1 运行时阻塞，所有门禁通过；剩余 P2 为死 fallback 误锁、e2e fixture 与真实 Host 的 `referenced` 不一致、文档仍写 Save/Adjust 指向回退修订，P3 为若干契约/注释/边界项。本轮修复后重新验证。
+
+- **P2 活 fallback 判定**：新增 `namedRevisionIds()` / `liveFallbackTargetIds()` / `needsRevisionFallback()`；只有仍被某个渲染程序命名的修订、或仍被活 fallback 指向的修订才记录回退；依赖锁只统计活 fallback target，死记录不再阻止 Host 允许的删除。单测覆盖三条判定。
+- **P2 e2e fixture 保真**：history mock 现在按真实 Host 规则从所有记录的 `baseRevisionId` 推导 `referenced`；场景 20 改为断言“被作为基础的修订隐藏删除并说明”，真实 rollback 文案由场景 41 覆盖。
+- **P2 文档**：architecture/README/usage/limitations/skill/CHANGELOG 中 Save/Adjust 的描述改为“普通卡使用 `resultIdOf`；只读回退卡隐藏 Save/Adjust（回退 initial 的样式为借用、无 result 快照）”，删除语义补上依赖锁例外，`//host` 归一化补 authority 条件。
+- **P3**：`ArtifactHistoryProps` 补齐 `fallbackTargetIds`/`renderedRevisionIds`；空 result-actions wrapper 不再渲染；`export-data` 的 React-free 描述改为诚实说明；导出 assets 使用 null-prototype 容器并按字符串校验（含 `__proto__`/`constructor` 路径），`''` callId bucket 与 collector 过滤一致；`MAX_INLINE_IMAGE_DATA_URL_CHARS` 命名与计量说明；cycle/undefined 注释与真实行为对齐；late-injected workspaceFiles 与 fallback 淘汰后的 reload 行为写入 limitations；偶发 input-orbit 几何断言改为等待稳定几何。
+- **验证数字**：Node **665/665** = Host **302** + Client **340** + packaging **23**（新增 live-fallback 单测）；artifact-edit **566 checks**；pack **65 files / 6,044,247 / 12,927,122**。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **665/665**（Host 302 / Client 340 / packaging 23）；build host **841 kB**、client **4.07 MB**（js 3.85 / CSS 222.9） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **566 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,044,247** 字节，解包 **12,927,122** 字节 |
+| 结构 | 双语标题 parity、本地链接/锚点、截图引用、`git diff --check` 全 OK |

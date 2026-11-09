@@ -160,6 +160,28 @@ function isUserDraft(session: ArtifactEditSession): boolean {
   return session.status !== 'submitted' && hasArtifactEditContent(session)
 }
 
+/**
+ * Base revision ids that one chat's unsent drafts are editing.
+ *
+ * A deletion of such a revision is blocked regardless of which card opens the
+ * history: another card's draft is keyed by that base and would be stranded if
+ * the record disappeared.
+ * @param allSessions - current edit-session map.
+ * @param sessionId - chat session.
+ * @returns revision ids that must not be deleted while a draft exists.
+ */
+export function unsentDraftRevisionIds(
+  allSessions: ReadonlyMap<string, ArtifactEditSession>,
+  sessionId: string,
+): ReadonlySet<string> {
+  const ids = new Set<string>()
+  for (const session of allSessions.values()) {
+    if (session.sessionId !== sessionId || !isUserDraft(session)) continue
+    ids.add(session.baseRevisionId)
+  }
+  return ids
+}
+
 /** Count the chat's drafts, optionally ignoring one key. */
 function draftCount(sessionId: string, excludeKey?: string): number {
   let count = 0

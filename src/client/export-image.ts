@@ -161,13 +161,11 @@ async function downloadCanvas(canvas: HTMLCanvasElement, fileName: string): Prom
  * @param container - the rendered card list.
  * @returns a restore action that puts the forced eager-loading photos back to lazy.
  */
-async function settlePhotos(container: HTMLElement): Promise<() => void> {
+export async function settlePhotos(container: HTMLElement): Promise<() => void> {
   const forcedEager = new Set<HTMLImageElement>()
-  // Offline: no search or image can settle any more; capture what is painted.
-  if (navigator.onLine === false) {
-    await twoFrames()
-    return () => undefined
-  }
+  // Offline only disables the *search* waiting path; workspace images resolve
+  // through the local Host Remote and must still be allowed to settle.
+  const online = navigator.onLine !== false
   const deadline = Date.now() + IMAGE_SETTLE_MS
   while (Date.now() < deadline) {
     // Ask lazy photos to load eagerly on every pass: a search may mount new
@@ -181,11 +179,18 @@ async function settlePhotos(container: HTMLElement): Promise<() => void> {
     }
     const photos = [...container.querySelectorAll<HTMLElement>('.iui-image')]
     const imagesLoading = [...container.querySelectorAll<HTMLImageElement>('img')].some(image => !image.complete)
-    const searchesPending = photos.some(photo =>
-      photo.querySelector('img') === null && photo.querySelector('.iui-image-empty') === null)
+    // Any explicit image source that is still resolving marks itself; this also
+    // covers Markdown images, which do not live inside an `.iui-image` wrapper.
+    const sourcesPending = container.querySelector('[data-iui-image-pending]') !== null
+    // A photo with no <img> yet and no explicit-source marker is searching; an
+    // empty icon or a source-error placeholder means it has settled.
+    const searchesPending = online && photos.some(photo =>
+      photo.querySelector('img') === null && photo.querySelector('.iui-image-empty') === null
+        && photo.querySelector('[data-iui-image-error]') === null
+        && photo.querySelector('[data-iui-image-pending]') === null)
     const photosLoading = photos.some(photo =>
       photo.querySelector('img') !== null && !photo.classList.contains('is-loaded'))
-    if (!imagesLoading && !searchesPending && !photosLoading) break
+    if (!imagesLoading && !sourcesPending && !searchesPending && !photosLoading) break
     await wait(120)
   }
   await twoFrames()
@@ -194,6 +199,26 @@ async function settlePhotos(container: HTMLElement): Promise<() => void> {
       if (image.isConnected && image.loading === 'eager') image.loading = 'lazy'
     }
   }
+}
+
+/** How long the HTML page export waits for its own local images to resolve. */
+export const LOCAL_IMAGE_SETTLE_MS = 3_000
+
+/**
+ * Wait only until in-page local image sources have resolved.
+ *
+ * The single-file page export inlines local blob images before serializing, so
+ * it needs the local readers to finish; it does not need `SearchImage` results
+ * or remote `<img>` loads, which would otherwise add the full photo-settle
+ * deadline to a previously immediate export.
+ * @param container - the rendered card list.
+ * @param timeoutMs - upper bound for the local readers.
+ */
+export async function settleLocalImages(container: HTMLElement, timeoutMs = LOCAL_IMAGE_SETTLE_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  await twoFrames()
+  while (Date.now() < deadline && container.querySelector('[data-iui-image-pending]') !== null) await wait(60)
+  await twoFrames()
 }
 
 /**

@@ -8,12 +8,15 @@
  * reads that Turn's recorded `tool-call` nodes. The `render_ui` tool call is the
  * durable marker: no extra session field is written.
  *
- * This module is deliberately free of React, DOM, and DSH package imports so
- * the Node unit test can load it through Node's TypeScript stripping with no
- * build step.
+ * This module is free of DOM and DSH package imports so the Node unit test can
+ * load it through Node's TypeScript stripping with no build step. It imports
+ * only pure fallback helpers; the fallback store module also exports React
+ * hooks, so React is a transitive dependency of Node loading (no React code
+ * runs here).
  */
 import type { IntelligentUIProgram } from '../shared/intelligent-ui.ts'
 import { programsFromToolNodes, type ToolCallNode } from './programs.ts'
+import { applyRevisionFallback, resolveRevisionFallback, type RevisionFallback } from './artifact-edit/revision-fallbacks.ts'
 
 /** One Chat node value: the structural subset the lookups read. */
 export interface ExportNodeLike {
@@ -143,14 +146,25 @@ export function messageHasRenderUi(snapshot: ExportChatSnapshot, messageId: stri
  * Read every program rendered by one finalized assistant message, in invocation order.
  * @param snapshot - current Chat snapshot.
  * @param messageId - durable assistant message identity.
+ * @param fallbacks - rollback targets for revisions deleted from history, so an
+ * exported card matches the card the user sees; omitted in pure lookups.
  * @returns the Turn's programs; empty when the message has none.
  */
-export function programsForMessage(snapshot: ExportChatSnapshot, messageId: string): IntelligentUIProgram[] {
+export function programsForMessage(
+  snapshot: ExportChatSnapshot,
+  messageId: string,
+  fallbacks?: ReadonlyMap<string, RevisionFallback>,
+): IntelligentUIProgram[] {
   const turn = turnForMessage(snapshot, messageId)
   if (turn === undefined) return []
   try {
     const nodes = snapshot.nodes.turnDataSource(turn, 'tool-call').getSnapshot()
-    return programsFromToolNodes(nodes)
+    const programs = programsFromToolNodes(nodes)
+    if (fallbacks === undefined) return programs
+    return programs.map(program => {
+      const fallback = resolveRevisionFallback(fallbacks, program.revisionId)
+      return fallback === undefined ? program : applyRevisionFallback(program, fallback)
+    })
   } catch {
     return []
   }

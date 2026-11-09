@@ -58,10 +58,32 @@ export interface IntelligentUIProgram {
   readonly editedBlockIds?: readonly string[]
   /** Client-owned revision card that was restored without a model turn. */
   readonly localRevision?: boolean
+  /**
+   * Deleted revision this card used to render. Set when a history deletion
+   * redirected the card to a fallback revision: the card is read-only because
+   * another card may already own editing of that revision.
+   */
+  readonly fallbackFrom?: string
   /** Provenance of a local revision card, when produced by a structural operation. */
   readonly localRevisionKind?: 'restore' | 'structure' | 'props' | 'style'
   /** True while the call has started but its result has not landed. */
   readonly running: boolean
+}
+
+/**
+ * Host result identity for one rendered card program.
+ *
+ * Edit revisions register their ResultStore snapshot under the recorded
+ * revision id, which equals the tool-call id for a normal edit. A card rolled
+ * back after a revision deletion keeps its original tool `callId` while it
+ * renders an older revision, so Host-facing actions that address a result
+ * snapshot (save-as-template, footer adjust) must use this identity rather than
+ * `callId` alone.
+ * @param program - card program (rendered or rolled back).
+ * @returns the recorded revision id, or the tool call id when none exists.
+ */
+export function resultIdOf(program: Pick<IntelligentUIProgram, 'revisionId' | 'callId'>): string {
+  return program.revisionId ?? program.callId
 }
 
 /** Parsed `render_ui` arguments. Kept loose because programs are model-authored. */

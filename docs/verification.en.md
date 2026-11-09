@@ -664,3 +664,115 @@ Fixes after the independent read-only review of `852e331..HEAD`:
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **519 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,031,830** bytes packed, **12,887,088** bytes unpacked |
 | Structure | bilingual heading parity, local links/anchors, screenshot references, `git diff --check` all OK |
+
+## 2026-11-09 — Single history entry and deletion rollback
+
+- **One entry point**: the standalone `Revision N` button is gone from the card header and the history icon is the card's only history entry; when the rendered revision number is above 1 the icon is followed by that number and the accessible label carries it (`data-dsh-iui-history-count`). The edit-panel header keeps its own history icon; before and after the collapse every entry rendered the same `ArtifactHistory` over the same Host history.
+- **Deletion rollback**: before a delete, `ArtifactHistory` uses `rollbackTargetFor()` to pick the newest smaller revision with a retained program, loads it through the history-program route and stores it in the new `artifact-edit/revision-fallbacks.ts` (`localStorage`, at most 20 per chat, deduplicated by deleted revision id); `IntelligentUICards` then uses `applyRevisionFallback()` to replace every tool-result card still rendering the deleted revision with the fallback (keeping `callId`/`requestId`/card position), and the redirect survives a reload; `export-data.ts::programsForMessage` applies the same fallback. When no fallback is available the card's own rendered revision offers no delete, and the confirmation copy names the rollback revision.
+- **Local cards**: deleting a local revision card (restore/structure/property/style) still removes it via `removeLocalRevision()` and records no fallback.
+- **Tests**: new `test/client/revision-fallbacks.test.mjs` (9 tests at landing: target selection, style/title replacement, persistence/deduplication/cap, malformed entries ignored, indexing); `export-data.test.mjs` gains 1 export-fallback test; browser `artifact-edit` gains scenario 41 (single entry and revision number, rollback confirmation, rolled-back content and revision number, rollback surviving a rerender, no delete without a fallback) and updates the earlier history assertions.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **637/637** Node tests = Host **302** + Client **314** + packaging **21**; build host **837.9 kB**, client **4.05 MB** (js 3.83 / CSS 222.2) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **530 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,033,184** bytes packed, **12,892,076** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-09 — Local image sources (Image / Markdown)
+
+- **Shared policy**: new `src/shared/image-source.ts` classifies http(s)/data/path sources; `data:` accepts base64 `png/jpeg/webp/gif` only (≤512 KiB decoded); paths reject NUL/control characters, `..`, `~` and URL schemes (both absolute and workspace-relative paths are accepted); local files are capped at 10 MiB, images at 40 MP, the MIME is sniffed from magic bytes and SVG is refused. `test/client/image-source.test.mjs` adds 14 tests for classification, path policy, MIME sniffing, header pixel caps, data-URI headers, SVG recognition and error mapping.
+- **Client read**: new `src/client/image-source.ts` reads bytes through the optional `remote.workspaceFiles.stat/readBytes`, sniffs the type and creates a same-origin blob URL; `src/client/index.tsx` binds it with `ctx.inject(['remote.workspaceFiles'])`, degrading local paths to the unsupported-Host placeholder when absent.
+- **Renderer**: new `src/lib/components/image-source.tsx` (provider, `useImageSource`, error placeholder); an explicit `Image` source that fails shows the placeholder and never searches by `alt`, while `SearchImage` is unchanged; Markdown supports `![alt](src)`; `OpenUIRenderer`, cards and the edit canvas accept the optional `resolveImage`. Also fixed the condition that rendered an `<img>` without `src` for a source that was still resolving.
+- **Export**: PNG settle treats the error placeholder as settled; the HTML export reads blobs back from live `img[data-iui-image-src]` elements as data URLs and inlines them through the `mountIUI` `assets` map, and the standalone page builds its resolver from that map. Browser `artifact-edit` scenario 42 covers local/inline/http/missing/broken/SVG/escape/Markdown images and "an explicit source never searches"; `standalone-page` asserts the inlined image and the missing-map placeholder.
+- **Contracts and docs**: `scripts/generate-prompt.mjs` gained an Image description rewrite (guarded; the vendored text stays untouched) and an image-source contract section; `vendor/spec.json`, the generated prompt, `skills/intelligent-ui/SKILL.md`, `references/components.md` and the README/usage/limitations/architecture docs were synchronized; `test/packaging/guardrails.test.mjs` guards the single-sourced contract. On an old Host without workspace-files only local images degrade; http/data sources are unchanged; local images inside `HtmlView` and SVG sources are unsupported in v1.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **649/649** Node tests = Host **302** + Client **325** + packaging **22**; build host **839.6 kB**, client **4.06 MB** (js 3.84 / CSS 222.9) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **538 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,040,072** bytes packed, **12,912,120** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-09 — Independent-review fixes (systemic closeout)
+
+Two read-only independent reviews (implementation depth + release readiness) merged to: no P0, two P1s, six P2s after deduplication; this round fixes them at the root and adds coverage.
+
+- **P1 result identity**: new `resultIdOf(program)` (`revisionId ?? callId`) is now used by Save as template and the footer Adjust, so after a rollback they address the visible fallback revision instead of the deleted revision's result snapshot.
+- **P1 explicit empty source**: any string `Image` src is explicit; empty/whitespace becomes a `path-invalid` placeholder and never searches by `alt`.
+- **P2 export settling**: Photo/Markdown local resolution marks `data-iui-image-pending`; PNG and HTML export wait for it. Offline mode only skips the search wait, while local images still settle. HTML asset keys use the canonical (trimmed) source.
+- **P2 local-card fallbacks**: the parent passes the session's local revision ids to the history dialog, so deleting a local-card revision records no fallback (matching the docs); fallback entries additionally respect a serialized-size budget (`MAX_REVISION_FALLBACK_STORAGE_CHARS`).
+- **P2 open-draft deletion lock**: the revision an opening card renders cannot be deleted while that card has an open canvas/unsent draft; the history row explains why.
+- **P2 contracts and copy**: `vendor/spec.json` components and schema `$defs` descriptions are synchronized and guarded per component; Markdown image syntax joined the prompt/spec/reference; the stale troubleshooting Image row was corrected; README/usage/limitations/architecture now state the no-fallback cross-card stale case, initial-revision borrowed style, HTML mounted-only images and the draft lock.
+- **P3 systemic fixes**: local SVG recognized by content as `svg-unsupported`; `//host/x` normalized to https and `DATA:` accepted case-insensitively; Markdown `<...>` destinations (spaces/parentheses); 40 MP cap pre-read from PNG/JPEG/GIF/WebP headers (unknown headers still checked after load); `bounded()` races a real timeout so a Remote ignoring abort cannot stall; ImageError's accessible name includes the reason; coverage added for absolute/padded paths, empty source, angle destinations, DOM asset collection, local-image PNG export and the draft lock.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **657/657** Node tests = Host **302** + Client **332** + packaging **23**; build host **840.8 kB**, client **4.06 MB** (js 3.84 / CSS 222.9) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **547 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,042,022** bytes packed, **12,918,700** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-09 — Second independent re-review fixes (systemic closeout)
+
+Two fresh independent read-only reviews confirmed all eight previous fixes and found new rollback-lifecycle issues; this round fixes them at the root and reruns every gate.
+
+- **P1 fallback chain**: `resolveRevisionFallback()` follows chained deletions (depth/cycle bound 20), and recording a fallback retargets older entries whose target is the deleted revision; cards and `export-data.ts` share it, so deleting a fallback revision cannot leave a card on a deleted record.
+- **P2 ownership/concurrency**: `rollbackTargetFor()` skips revisions owned by client-local cards; redirected cards carry `fallbackFrom` and are read-only, so a fallback revision has one editing owner and cannot mount two canvases; the draft lock is session-wide (`unsentDraftRevisionIds()`), so any card's unsent draft blocks its base revision.
+- **P2 source semantics**: `Image` and `SearchImage` have explicit modes; a dynamic/non-string `src` is an invalid explicit source and never searches.
+- **P2 export**: the HTML page export uses `settleLocalImages()` and waits only for local source resolution (short bound) instead of the full 12.5 s photo wait; inline `data:` images also get the header-level 40 MP pre-check.
+- **P3**: the Host history response carries `referenced`, so a revision still used as a newer revision's base hides Delete with an explanation; a renderer-level guard compares all 49 runtime component descriptions with `vendor/spec.json`; SVG guidance is scoped to path/data sources; docs fix the Host read-authority boundary, portaled-Popover/failed-image export placeholders and the fallback-chain/read-only-card/cross-card-draft-lock design; proof/test counts are corrected (standalone 50, image-export 66, revision-fallbacks 13, image-source 16) and the unsupported "unused hook removed" claim was dropped.
+- **Gate-count verification**: the second review reported artifact-edit 547 as false (530 static `check(` calls); an instrumented run showed helper-invoked checks execute multiple times (`chooseQuickOption` 12, `unitOptionsOf` 4), so the runtime count (547/557) is the real gate and was not "corrected" to the static number.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **663/663** Node tests = Host **302** + Client **338** + packaging **23**; build host **841 kB**, client **4.06 MB** (js 3.84 / CSS 222.9) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **557 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,043,599** bytes packed, **12,924,267** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-09 — Third independent re-review fixes (double-canvas / rollback lifecycle closeout)
+
+A third pair of fresh independent read-only reviews reproduced the same P1 and several P2/P3 issues; this round fixes them at the contract level and reruns every gate.
+
+- **P1 redirected double canvas**: `editing`, `editorMounted`, the draft badge and the `ArtifactEditView` mount are all gated on `fallbackFrom === undefined`; opening the native fallback revision's editor leaves the redirected card with zero `[data-dsh-iui-edit-view]`. Scenario 41 asserts it.
+- **P2 result-bound actions**: a fallback to the initial revision borrows `records[0].temporaryStyle` in Host history, so the redirected card now hides Save/Adjust (no matching result snapshot); scenario 46 covers it.
+- **P2 deletion failure/dependency lock**: any known fallback target whose program fails to load aborts with a retry message, and a revision that a card's fallback targets cannot be deleted unless an older fallback exists (with `edit.historyDeleteDependencyLocked`), keeping the transitive chain from landing on a deleted record; scenario 47 covers the dependency lock and the chained retarget after deleting the target.
+- **P3 systemic fixes**: redirected cards skip runtime-state publication; the per-session image resolver is memoized; the HTML export collects assets only for exported cards and groups them by card callId + source (no cross-card collapse of the same path); the renderer description guard fails when a described runtime component loses its description (49/49); `data:` size estimation subtracts base64 padding; `//host` is a URL only when the authority has a dot/port, otherwise it stays a double-slash path; cycle/depth tests seed a real persisted cycle and the 20/21-depth boundary; docs fix session-wide draft copy, dependency/Save-Adjust caveats, SVG scope, cross-tab limits, per-card assets and test counts (`revision-fallbacks` 13, `image-source` 17, `artifact-edit` 566); `.gitignore` ignores `video/`.
+- **Gate-count verification**: the third review's static-count discussion (547/557 vs `check()` sites) was again resolved by the runtime count (helper-invoked checks execute more than once); this round's real numbers are artifact-edit **566** and Node **664**.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **664/664** Node tests = Host **302** + Client **339** + packaging **23**; build host **841 kB**, client **4.06 MB** (js 3.85 / CSS 222.9) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **566 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,044,044** bytes packed, **12,926,327** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |
+
+## 2026-11-09 — Fourth independent re-review fixes (live fallback / test fidelity closeout)
+
+A fourth pair of fresh independent read-only reviews found no P0/P1 runtime blocker and all gates green; the remaining P2s were dead fallback records falsely blocking deletes, an e2e fixture that did not derive `referenced` like the real Host, and docs that still described Save/Adjust as addressing the fallback revision. P3s were contract/comment/boundary items. This round fixes them.
+
+- **P2 live-fallback semantics**: `namedRevisionIds()`, `liveFallbackTargetIds()` and `needsRevisionFallback()` distinguish live fallbacks from dead historical records; only a revision still named by a rendered program or still targeted by a live fallback records a fallback, and the dependency lock ignores dead records. Unit-tested.
+- **P2 e2e fixture fidelity**: the history mock now derives `referenced` from all records' `baseRevisionId` like the Host; scenario 20 asserts the referenced row hides Delete with an explanation, while the real rollback copy remains covered by scenario 41.
+- **P2 docs**: architecture/README/usage/limitations/skill/CHANGELOG now say normal cards use `resultIdOf` while redirected read-only fallback cards hide Save/Adjust (a fallback to the initial revision borrows a style snapshot with no matching result snapshot); deletion prose includes the dependency-lock exception; the `//host` normalization caveat is documented.
+- **P3**: `ArtifactHistoryProps` declares `fallbackTargetIds`/`renderedRevisionIds`; an empty result-actions wrapper is no longer rendered; the `export-data` comment states its real dependency rather than claiming React-free; export asset maps use null-prototype objects and string checks (safe for `__proto__`/`constructor` paths), with consistent `''` callId buckets; `MAX_INLINE_IMAGE_DATA_URL_CHARS` is named for its unit; cycle/undefined comments match behavior; late-injected workspaceFiles and fallback-eviction reload behavior are documented in limitations; the flaky input-orbit geometry assertion waits for settled geometry.
+- **Numbers**: Node **665/665** = Host **302** + Client **340** + packaging **23** (new live-fallback test); artifact-edit **566 checks**; pack **65 files / 6,044,247 / 12,927,122**.
+
+### Automated results
+
+| Command / check | This round |
+| --- | --- |
+| `npm run check` | PASS; **665/665** Node tests (Host 302 / Client 340 / packaging 23); build host **841 kB**, client **4.07 MB** (js 3.85 / CSS 222.9) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **566 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,044,247** bytes packed, **12,927,122** bytes unpacked |
+| Structure | bilingual heading parity, local links/anchors, screenshot references and `git diff --check` all OK |

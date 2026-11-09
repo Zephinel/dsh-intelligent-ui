@@ -45,7 +45,7 @@ export const HtmlView = defineComponent({
     height: z.number().optional(),
     title: z.string().optional(),
   }),
-  description: "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs. Fits its content unless height is set.",
+  description: "Sandboxed HTML page with inline JS, for games and canvas. No network except script CDNs and images. Fits its content unless height is set.",
   component: function HtmlViewView({ props }) {
     const t = useT();
     const streaming = useIsStreaming();

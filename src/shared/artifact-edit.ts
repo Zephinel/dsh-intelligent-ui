@@ -312,6 +312,12 @@ export interface ArtifactHistoryRevision {
   readonly hasProgram: boolean
   /** Whether this revision can be restored as a new one. */
   readonly restorable: boolean
+  /**
+   * True when a newer revision records this one as its `baseRevisionId`.
+   * The Host refuses such a delete (409 `revision_referenced`), so the dialog
+   * hides the action instead of offering a dead end.
+   */
+  readonly referenced?: boolean
 }
 
 /** Response of one artifact's revision history. */

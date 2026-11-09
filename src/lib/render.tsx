@@ -32,7 +32,9 @@ import './components/reset.css'
 import { webUrl } from './components/style'
 import { blockEditLibrary, library, nestedEditLibrary } from './library'
 import { I18nProvider, useT } from './i18n'
+import { ImageSourceProvider } from './components/image-source.tsx'
 import { fallbackT, type Translate } from '../shared/locales.ts'
+import type { ImageSourceResolver } from '../shared/image-source.ts'
 
 export interface OpenUIRendererProps {
   readonly program: string
@@ -60,6 +62,11 @@ export interface OpenUIRendererProps {
   readonly runtimeState?: Record<string, unknown>
   /** Reports the renderer's latest runtime state so a host can snapshot it. */
   readonly onRuntimeStateChange?: (state: Record<string, unknown>) => void
+  /**
+   * Reads one local image path for `Image`/Markdown; absent in tests and plain
+   * embeds, where local paths show an unavailable placeholder.
+   */
+  readonly resolveImage?: ImageSourceResolver
 }
 
 /** Open an @OpenUrl action, if the model wrote an http(s) URL. */
@@ -137,7 +144,7 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
-export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false, runtimeState, onRuntimeStateChange }: OpenUIRendererProps): ReactElement {
+export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false, runtimeState, onRuntimeStateChange, resolveImage }: OpenUIRendererProps): ReactElement {
   const activeLibrary = nestedBlockSlots ? nestedEditLibrary : blockSlots ? blockEditLibrary : library
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
@@ -147,6 +154,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
 
   return (
     <I18nProvider t={t}>
+      <ImageSourceProvider resolver={resolveImage}>
       <ArticleScope.Provider value={scopeId}>
       <div className="dsh-iui-host dsh-iui-root" style={themeStyle} data-iui-scheme={scheme}>
         <RendererBoundary program={program}>
@@ -174,6 +182,7 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
         </RendererBoundary>
       </div>
       </ArticleScope.Provider>
+      </ImageSourceProvider>
     </I18nProvider>
   )
 }

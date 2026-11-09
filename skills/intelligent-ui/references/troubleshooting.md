@@ -257,7 +257,7 @@ These are not errors to fix in the program; they are how the card behaves when t
 
 | Situation | What the user sees | What to do |
 | --- | --- | --- |
-| Photo search offline or rate-limited | `SearchImage` and a failed `Image` show a neutral image placeholder, not a broken icon. Search timeouts are 8 s per request, 12 s total. | Nothing. Do not add prose about images failing. |
+| Photo search offline or rate-limited | `SearchImage` shows a neutral placeholder. An explicit `Image` whose source is missing, too large, unsupported (e.g. SVG) or fails to load shows a short localized error placeholder and never searches for a substitute. Search timeouts are 8 s per request, 12 s total. | Nothing. Do not add prose about images failing; for a local file, pass the workspace path instead of a URL. |
 | Map tiles unavailable | `Map tiles are temporarily unavailable. The places are still shown.`（「地图瓦片暂时不可用，地点仍会显示。」）The pins stay interactive. | Nothing; keep the place list near the map. |
 | Map renderer cannot start (old browser, no WebGL) | `Map preview unavailable`（「地图预览不可用」）plus `The places are listed below.`（「地点列表见下方。」）with a numbered list of labels and coordinates. | Keep marker labels short and recognizable; the fallback is a list. |
 | Routing service down | `Street routing unavailable. Showing direct connections.`（「街道路线不可用，改为直线连接。」）Straight lines still join the pins in order. | Nothing; route is an enhancement. |

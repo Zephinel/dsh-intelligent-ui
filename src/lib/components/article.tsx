@@ -28,7 +28,7 @@ export const Section = defineComponent({
     children,
     anchor: z.string().optional(),
   }),
-  description: "Collapsible article section; starts open. The optional anchor is the Toc target; falls back to the title.",
+  description: "Collapsible article section; starts open. Optional anchor is the Toc target; falls back to the title.",
   component: function SectionView({ props, renderNode }) {
     const [open, setOpen] = useState(true);
     const scope = useContext(ArticleScope);
@@ -60,7 +60,7 @@ export const Section = defineComponent({
 export const Toc = defineComponent({
   name: "Toc",
   props: z.object({ items: z.array(z.string()), anchors: z.array(z.string()).optional() }),
-  description: "Compact table of contents linking to Section anchors. `items` are labels; optional parallel `anchors` decouple them from the displayed text.",
+  description: "Compact table of contents linking to Section anchors. Items are labels; the optional parallel anchors array decouples labels from targets.",
   component: function TocView({ props }) {
     const t = useT();
     const scope = useContext(ArticleScope);

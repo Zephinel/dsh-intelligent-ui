@@ -354,6 +354,10 @@ export function buildArtifactHistory(
   const programEntries = programsFor(programs, artifactId)
   const programIds = new Set(programEntries.map(entry => entry.revisionId))
   const recordIds = new Set(records.map(record => record.revisionId))
+  // A revision that a newer record names as its base cannot be deleted yet.
+  const referencedIds = new Set(records
+    .map(record => record.baseRevisionId)
+    .filter((revisionId): revisionId is string => revisionId !== undefined))
   const latestRecord = records.length === 0 ? undefined : records[records.length - 1]
   let initial: ArtifactHistoryRevision | undefined
   if (!records.some(record => record.revision === 1)) {
@@ -374,6 +378,7 @@ export function buildArtifactHistory(
         source: 'initial',
         hasProgram: true,
         restorable: false,
+        referenced: referencedIds.has(candidate.revisionId),
       }
     }
   }
@@ -395,6 +400,7 @@ export function buildArtifactHistory(
       source: historySource(record),
       hasProgram,
       restorable: hasProgram && !current,
+      referenced: referencedIds.has(record.revisionId),
     }
   })
   if (initial !== undefined) {

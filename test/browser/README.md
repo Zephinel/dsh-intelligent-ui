@@ -30,7 +30,34 @@ events but not the full DSH Web integration.
   into a local revision card without a model call (local badge, restore-done
   notice, exactly one copy) and branch from an outdated revision's conflict
   banner (note names the base revision, chip label gains " · branch", the
-  envelope carries `"branch":true` with the old base). The M3-3 scenario saves an
+  envelope carries `"branch":true` with the old base). The revision-history
+  scenario opens from the single header icon (which carries the rendered
+  revision number instead of the removed `Revision N` badge), asserts the
+  rollback copy when the card's own revision is deleted, and scenario 41 deletes
+  a rendered revision and checks that the card re-renders the retained fallback
+  revision (number and content), that the rollback survives a rerender, that the
+  redirected card is read-only (no edit entry and, while the native fallback
+  revision's editor is open, no second edit canvas), and that no delete is
+  offered when no fallback program exists. Scenario 42 covers image
+  sources: workspace-relative, absolute and padded paths render from blob URLs
+  via the mocked `remote.workspaceFiles`, http(s) and inline data images still
+  load, a missing file / broken URL / SVG / parent-segment path / empty source
+  each show their own error placeholder, an inline data-URI pixel bomb is
+  rejected from its header and the error placeholder's accessible name carries
+  the reason, Markdown images (including an angle-bracket destination with a
+  space) use the same resolver, the real DOM asset collector produces data URLs
+  for the HTML export, and an explicit source never triggers a Wikipedia photo
+  search. Scenario 43 checks that an unsent draft on one card makes its base
+  revision undeletable from another card's history; scenario 44 checks that a
+  revision still used as another revision's base hides Delete with an
+  explanation; scenario 45 proves the HTML export's local-only settle waits for
+  a slow local reader but not for an outstanding image search; scenario 46
+  checks that a fallback to the initial revision neither shows Save nor Adjust
+  for the borrowed style snapshot; scenario 47 checks that a live fallback
+  target cannot be deleted without an older fallback and that deleting it once
+  one exists retargets the chained fallback to the older revision; scenario 20
+  also asserts that deleting a local-card revision records no rollback
+  fallback. The M3-3 scenario saves an
   unsent draft, checks its `sessionStorage` payload, reloads the page and
   confirms the composer chip and the pending request list are restored, then
   resets to the pristine harness state. The M3-4 scenario then edits a
@@ -69,7 +96,7 @@ events but not the full DSH Web integration.
   and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. Scenario 36
   covers the Artifact base-registration lifecycle on legacy cards: opening the editor registers exactly one base with the render call id as the
   revision identity and the rendered program, the registration precedes the first structure request, the old-host 404 degrades without blocking,
-  both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, the legacy footer Adjust fallback rules, unit-tested `struct_` history labelling (E2E does not reopen history), third-pass assertions for contract-correct block/style envelopes (exact tool args, parser marker hardening, order-only title/styleId, temporary additions, unsaved-draft guard), and scenario 40 covers B2 deterministic style switching: capability picker/current row, zero-POST hover/focus preview (article wrapper + template accent), one-POST apply with `operations: []` + target + scope, local style revision card with no composer chip, dirty guard, temporary-base drop, Article targets disabled client-side, `style_missing`/`base_style_mismatch` copy, keyboard/a11y/forced-colors, the capability-off B1 regression, and the review follow-ups: contract-correct style envelope, preview-on-open suppression, style_missing/blocked-Apply/mismatch copy and client-side Article gating. 519 checks; no real
+  both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, the legacy footer Adjust fallback rules, unit-tested `struct_` history labelling (E2E does not reopen history), third-pass assertions for contract-correct block/style envelopes (exact tool args, parser marker hardening, order-only title/styleId, temporary additions, unsaved-draft guard), and scenario 40 covers B2 deterministic style switching: capability picker/current row, zero-POST hover/focus preview (article wrapper + template accent), one-POST apply with `operations: []` + target + scope, local style revision card with no composer chip, dirty guard, temporary-base drop, Article targets disabled client-side, `style_missing`/`base_style_mismatch` copy, keyboard/a11y/forced-colors, the capability-off B1 regression, and the review follow-ups: contract-correct style envelope, preview-on-open suppression, style_missing/blocked-Apply/mismatch copy and client-side Article gating. 566 checks; no real
   model is called (the
   real-model restore/branch, cross-tab lease and nested-edit/nested-order
   acceptance were run manually against an isolated second DSH Web instance and

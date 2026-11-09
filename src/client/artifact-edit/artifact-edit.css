@@ -3315,13 +3315,30 @@
   cursor: pointer;
 }
 
+/* One history entry: the clock icon owns the revision number it opens. */
+.dsh-iui-history-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: auto;
+  min-width: 22px;
+  padding: 0 4px;
+}
+
+.dsh-iui-history-count {
+  color: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 .dsh-iui-head-icon:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 .dsh-iui-head-icon:focus-visible,
-.dsh-iui-revision-button:focus-visible,
 .dsh-iui-edit-panel-history:focus-visible,
 .dsh-iui-history-close:focus-visible,
 .dsh-iui-history-restore:focus-visible {
@@ -3355,25 +3372,6 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: 10.5px;
   line-height: 15px;
-}
-
-
-.dsh-iui-revision-button {
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font: inherit;
-  font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.dsh-iui-revision-button:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 .dsh-iui-edit-panel-history {

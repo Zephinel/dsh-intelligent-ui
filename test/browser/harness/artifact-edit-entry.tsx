@@ -20,6 +20,8 @@ import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/
 import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_LEGACY_AUTO_PROGRAM, PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
 import { templates } from './style-fixtures.ts'
 import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
+import { collectLocalImageAssets } from '../../../src/client/export-html.ts'
+import { settleLocalImages } from '../../../src/client/export-image.ts'
 
 const SESSION = 'e2e-session'
 const base = {
@@ -187,7 +189,41 @@ w.__nextTurn = () => {
 }
 w.__conflict = false
 w.__latestMap = {}
+// Workspace image bytes the mocked `remote.workspaceFiles` returns; tests set
+// them per path so a local `Image("figures/x.png")` renders a real blob URL.
+w.__workspaceImages = {} as Record<string, Uint8Array>
+// Optional per-path delay, so a test can observe the HTML export's local-only
+// settle path while a search is also outstanding.
+w.__workspaceImageDelayPaths = {} as Record<string, number>
 w.__restoreRevision = 4
+// Per-artifact history overrides for the deletion-rollback scenario; absent
+// artifacts keep the shared sample history below.
+w.__historyByArtifact = {}
+w.__historyPrograms = {}
+w.__deletedRevisions = new Set<string>()
+w.__setHistory = (artifactId: string, revisions: unknown[], programs: Record<string, string> = {}) => {
+  w.__historyByArtifact[artifactId] = revisions
+  for (const [revisionId, program] of Object.entries(programs)) {
+    w.__historyPrograms[`${artifactId}:${revisionId}`] = program
+  }
+}
+w.__clearHistory = (artifactId: string) => {
+  delete w.__historyByArtifact[artifactId]
+  for (const key of Object.keys(w.__historyPrograms)) {
+    if (key.startsWith(`${artifactId}:`)) delete w.__historyPrograms[key]
+  }
+}
+w.__forgetDeletedRevisions = () => { w.__deletedRevisions = new Set<string>() }
+// Exercises the real DOM→data-URL collection used by the HTML page export.
+w.__collectImageAssets = (callId: string) => {
+  const card = document.querySelector(`[data-dsh-iui-call-id="${callId}"]`)
+  return card === null ? Promise.resolve({}) : collectLocalImageAssets(card as HTMLElement)
+}
+// Exercises the HTML export's local-only settle bound.
+w.__settleLocalImages = (callId: string) => {
+  const card = document.querySelector(`[data-dsh-iui-call-id="${callId}"]`)
+  return card === null ? Promise.resolve() : settleLocalImages(card as HTMLElement)
+}
 w.__input = () => ({ draft: input.draft, occurrences: input.occurrences, draftRev: input.draftRev, phase: input.phase })
 w.__setDraft = (text: string) => setDraft(text)
 w.__appendDraft = (text: string) => setInput({ ...input, draft: input.draft + text, draftRev: input.draftRev + 1 } as InputState)
@@ -366,8 +402,19 @@ w.__applyBlockEditRevision = (meta: Record<string, unknown>, callId: string = 'd
   update()
 }
 
+/** Default sample history served for any artifact without an override. */
+const DEFAULT_HISTORY = [
+  { revisionId: 'restore_local1', revision: 3, baseRevisionId: 'dst-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1762400000000, source: 'restore', hasProgram: false },
+  { revisionId: 'dst-call-2', revision: 2, baseRevisionId: 'dst-call-1', title: '夏令时与冬令时', style: 'card', styleId: 'cs_e2e123', createdAt: 1762300000000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+  { revisionId: 'dst-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1762200000000, source: 'initial', hasProgram: true },
+]
+
+// Blob/data URLs are browser-internal: the Host-route mock must not intercept
+// them, otherwise the HTML export's blob→data-URL reader is not exercised.
+const nativeFetch = window.fetch.bind(window)
 window.fetch = async (url: string | URL, options?: RequestInit) => {
   const text = String(url)
+  if (text.startsWith('blob:') || text.startsWith('data:')) return nativeFetch(text, options)
   if (text.includes('/api/intelligent-ui/artifact-revisions') && options?.method === 'DELETE') {
     const query = new URL(text, 'http://localhost').searchParams
     const revisionId = query.get('revisionId')
@@ -403,19 +450,40 @@ window.fetch = async (url: string | URL, options?: RequestInit) => {
     const query = new URL(text, 'http://localhost').searchParams
     const artifactId = query.get('artifactId') ?? 'dst-call-1'
     const revisionId = query.get('revisionId') ?? 'dst-call-1'
-    return new Response(JSON.stringify({ ok: true, artifactId, revisionId, revision: revisionId === 'dst-call-1' ? 1 : 2, program: DST_PROGRAM }), { status: 200, headers: { 'content-type': 'application/json' } })
-  }
-  if (text.includes('/api/intelligent-ui/artifact-history')) {
-    const artifactId = new URL(text, 'http://localhost').searchParams.get('artifactId') ?? 'dst-call-1'
+    const overrides = w.__historyByArtifact[artifactId] as Array<Record<string, unknown>> | undefined
+    const entry = overrides?.find(revision => revision.revisionId === revisionId)
+    const program = (w.__historyPrograms as Record<string, string>)[`${artifactId}:${revisionId}`] ?? DST_PROGRAM
     return new Response(JSON.stringify({
       ok: true,
       artifactId,
-      latestRevision: 3,
-      revisions: [
-        { revisionId: 'restore_local1', revision: 3, baseRevisionId: 'dst-call-2', title: '夏令时与冬令时', style: 'card', createdAt: 1762400000000, current: true, source: 'restore', hasProgram: false, restorable: false },
-        { revisionId: 'dst-call-2', revision: 2, baseRevisionId: 'dst-call-1', title: '夏令时与冬令时', style: 'card', styleId: 'cs_e2e123', createdAt: 1762300000000, current: false, source: 'edit', hasProgram: true, restorable: true, editedBlockIds: ['b1'] },
-        { revisionId: 'dst-call-1', revision: 1, title: '夏令时与冬令时', style: 'card', createdAt: 1762200000000, current: false, source: 'initial', hasProgram: true, restorable: true },
-      ].filter(revision => !(w.__deletedRevisions as Set<string> | undefined)?.has(revision.revisionId)),
+      revisionId,
+      revision: entry?.revision ?? (revisionId === 'dst-call-1' ? 1 : 2),
+      program,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  if (text.includes('/api/intelligent-ui/artifact-history')) {
+    const artifactId = new URL(text, 'http://localhost').searchParams.get('artifactId') ?? 'dst-call-1'
+    const overrides = w.__historyByArtifact[artifactId] as Array<Record<string, unknown>> | undefined
+    const baseRevisions = overrides ?? DEFAULT_HISTORY
+    const deleted = w.__deletedRevisions as Set<string>
+    const revisions = baseRevisions.filter(revision => !deleted.has(String(revision.revisionId)))
+    // The real Host derives `referenced` from every record's baseRevisionId;
+    // fixtures that omit it must still behave like the Host or the client will
+    // hide Delete for a reason the mock never exposes.
+    const referencedIds = new Set(revisions
+      .map(revision => revision.baseRevisionId)
+      .filter((revisionId): revisionId is string => typeof revisionId === 'string' && revisionId !== ''))
+    const latestRevision = revisions.reduce((latest, revision) => Math.max(latest, Number(revision.revision) || 1), 1)
+    return new Response(JSON.stringify({
+      ok: true,
+      artifactId,
+      latestRevision,
+      revisions: revisions.map(revision => ({
+        ...revision,
+        referenced: revision.referenced ?? referencedIds.has(String(revision.revisionId)),
+        current: Number(revision.revision) === latestRevision,
+        restorable: revision.hasProgram === true && Number(revision.revision) !== latestRevision,
+      })),
     }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
   }
   if (text.includes('/api/intelligent-ui/artifact-restore') && options?.method === 'POST') {
@@ -465,6 +533,28 @@ apply({
   inject: (deps: string[], callback: (scope: unknown) => void) => {
     if (deps.includes('inputTriggers')) {
       callback({ inputTriggers: { registerSource: (source: unknown) => { w.__chipSource = source; return () => {} } } })
+    }
+    if (deps.includes('remote.workspaceFiles')) {
+      callback({
+        remote: {
+          workspaceFiles: {
+            async stat(_sessionId: string, path: string) {
+              const bytes = (w.__workspaceImages as Record<string, Uint8Array>)[path]
+              return bytes === undefined
+                ? { ok: false, error: { code: 'workspace-file/not-found' } }
+                : { ok: true, value: { bytes: bytes.byteLength } }
+            },
+            async readBytes(_sessionId: string, path: string) {
+              const delay = (w.__workspaceImageDelayPaths as Record<string, number>)[path]
+              if (delay !== undefined) await new Promise(resolve => setTimeout(resolve, delay))
+              const bytes = (w.__workspaceImages as Record<string, Uint8Array>)[path]
+              return bytes === undefined
+                ? { ok: false, error: { code: 'workspace-file/not-found' } }
+                : { ok: true, value: { data: bytes } }
+            },
+          },
+        },
+      })
     }
   },
 } as never)

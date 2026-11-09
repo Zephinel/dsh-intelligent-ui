@@ -11,6 +11,7 @@ import {
   type ExportPageCard,
 } from '../shared/intelligent-ui.ts'
 import { buildStandaloneHtml, pageFileName } from './export-html-plan.ts'
+import { findCardsForAction, settleLocalImages } from './export-image.ts'
 
 /** Options for exporting the current answer as an interactive page. */
 export interface ExportPageOptions {
@@ -22,6 +23,8 @@ export interface ExportPageOptions {
   readonly lang: string
   /** Whether the export removes the @ToAssistant follow-up block. */
   readonly removeFollowUps: boolean
+  /** Export trigger in the answer's action row; locates the live cards for local-image inlining. */
+  readonly trigger?: HTMLElement
 }
 
 /**
@@ -97,6 +100,59 @@ async function downloadHtml(html: string, fileName: string): Promise<void> {
   }
 }
 
+/** Largest total data-URL text (characters, a conservative bound) inlined into one page. */
+const MAX_INLINE_IMAGE_DATA_URL_CHARS = 32 * 1024 * 1024
+
+/** Read one blob URL as a data URL so the exported page stays self-contained offline. */
+async function blobUrlToDataUrl(url: string): Promise<string> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('intelligent-ui export: a local image could not be re-read')
+  const blob = await response.blob()
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('intelligent-ui export: a local image could not be encoded'))
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Collect every resolved local image in the live cards as a source→data-URL map.
+ *
+ * The exported page has no Host connection, so local images are inlined. The
+ * live card marks each resolved local `<img>` with `data-iui-image-src`; only
+ * blob-backed images are read back, while http(s) and data sources already
+ * describe themselves.
+ * @param container - the rendered card list.
+ * @param allowedCallIds - cards that are actually exported; other cards' images
+ *   (for example client-local revision cards) are not collected.
+ * @returns card call id → source path → data URL, in first-seen order.
+ */
+export async function collectLocalImageAssets(
+  container: HTMLElement,
+  allowedCallIds?: ReadonlySet<string>,
+): Promise<Record<string, Record<string, string>>> {
+  const assets: Record<string, Record<string, string>> = Object.create(null) as Record<string, Record<string, string>>
+  let total = 0
+  for (const image of container.querySelectorAll<HTMLImageElement>('img[data-iui-image-src]')) {
+    const source = image.dataset.iuiImageSrc
+    if (source === undefined || source === '') continue
+    const card = image.closest<HTMLElement>('[data-dsh-iui-call-id]')
+    const callId = card?.dataset.dshIuiCallId ?? ''
+    if (allowedCallIds !== undefined && !allowedCallIds.has(callId)) continue
+    const url = image.currentSrc !== '' ? image.currentSrc : image.src
+    if (!url.startsWith('blob:')) continue
+    const bucket = assets[callId] ?? (Object.create(null) as Record<string, string>)
+    assets[callId] = bucket
+    if (typeof bucket[source] === 'string') continue
+    const dataUrl = await blobUrlToDataUrl(url)
+    total += dataUrl.length
+    if (total > MAX_INLINE_IMAGE_DATA_URL_CHARS) throw new Error('intelligent-ui export: local images are too large to inline into one page')
+    bucket[source] = dataUrl
+  }
+  return assets
+}
+
 /**
  * Build and download one standalone interactive HTML page.
  * @param options - cards, title and UI language.
@@ -109,9 +165,21 @@ export async function exportCardsHtml(options: ExportPageOptions): Promise<void>
     fetchAsset(EXPORT_STANDALONE_CSS_PATH),
   ])
   const { tokens, colorScheme } = captureThemeTokens()
+  // Local images are blob URLs created by this page; inline them before the
+  // document is assembled so the downloaded file works offline.
+  const container = options.trigger === undefined ? null : findCardsForAction(options.trigger)
+  let assets: Record<string, Record<string, string>> = {}
+  if (container !== null) {
+    // Only local readers matter here; searches/remote loads are not inlined
+    // and must not delay the page export.
+    await settleLocalImages(container)
+    const exportedCallIds = new Set(options.cards
+      .map(card => card.callId ?? ''))
+    assets = await collectLocalImageAssets(container, exportedCallIds)
+  }
   const title = options.title !== undefined && options.title.trim() !== ''
     ? options.title
     : options.lang.toLowerCase().startsWith('zh') ? '交互页面' : 'Interactive page'
-  const html = buildStandaloneHtml({ cards: options.cards, js, css, tokens, colorScheme, title, lang: options.lang, removeFollowUps: options.removeFollowUps })
+  const html = buildStandaloneHtml({ cards: options.cards, js, css, tokens, colorScheme, title, lang: options.lang, removeFollowUps: options.removeFollowUps, assets })
   await downloadHtml(html, pageFileName(options.title, new Date()))
 }
