@@ -884,5 +884,5 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run typecheck` / `npm run test:renderer` | PASS |
 | `node test/browser/artifact-edit.e2e.mjs` | PASS；**882 checks**（迁移场景 + 新增 57–64） |
 | `npm run test:browser` | PASS；**9/9** 套件；`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,285** 字节，解包 **13,070,892** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,330** 字节，解包 **13,070,892** 字节 |
 | 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

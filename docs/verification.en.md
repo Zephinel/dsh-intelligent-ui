@@ -904,5 +904,5 @@ Local `main` merged `artifact-version-switcher` (fast-forward) and `artifact-bat
 | `npm run typecheck` / `npm run test:renderer` | PASS |
 | `node test/browser/artifact-edit.e2e.mjs` | PASS; **882 checks** (migrated scenarios plus new 57–64) |
 | `npm run test:browser` | PASS; **9/9** suites; `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,075,285** bytes packed, **13,070,892** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,075,330** bytes packed, **13,070,892** bytes unpacked |
 | Structure | both languages present; `npm run check:docs-facts` passes; `git diff --check` passes |
