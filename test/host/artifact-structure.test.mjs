@@ -13,6 +13,8 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH, isArtifactStructurePreview, isArtifactStructureResult } from '../../src/shared/artifact-structure.ts'
 import { NESTED_PROGRAM, NESTED_TITLE, SCOPED_PROGRAM } from '../browser/fixtures/nested-artifact.ts'
+import { DEEP_DASHBOARD_PROGRAM, VERY_DEEP_PROGRAM } from '../browser/fixtures/deep-artifact.ts'
+import { NESTED_CONTAINER_TYPES } from '../../src/shared/artifact-containers.ts'
 import { buildArtifactTree } from '../../src/shared/program-cst.ts'
 import { buildEditRequestText } from '../../src/shared/artifact-edit.ts'
 import {
@@ -44,6 +46,12 @@ function tempHome(prefix) {
 /** Authoritative tree for the nested fixture under the structure container whitelist. */
 const NESTED_TREE = buildArtifactTree(NESTED_PROGRAM, { containerTypes: ['Col', 'Row', 'Card'] })
 const SCOPED_TREE = buildArtifactTree(SCOPED_PROGRAM, { containerTypes: ['Col', 'Row', 'Card'] })
+/** The route's own container whitelist, so digests/node ids match its tree. */
+const ROUTE_TREE_OPTIONS = { containerTypes: [...NESTED_CONTAINER_TYPES] }
+/** Depth-6, 83-node dashboard fixture (the shape the historical depth limit rejected). */
+const DEEP_TREE = buildArtifactTree(DEEP_DASHBOARD_PROGRAM, ROUTE_TREE_OPTIONS)
+/** Depth-11 fixture: one level past the supported structure depth. */
+const VERY_DEEP_TREE = buildArtifactTree(VERY_DEEP_PROGRAM, ROUTE_TREE_OPTIONS)
 
 const node = (tree, nodeId) => {
   const found = tree.nodes.get(nodeId)
@@ -327,6 +335,63 @@ test('duplicate clones one inline block at the requested editable insertion posi
   assert.equal(copies.length, 2, 'the copy is an independent node')
   assert.notEqual(copies[0].nodeId, copies[1].nodeId)
   assert.equal(result.revision, 2)
+})
+
+test('a dashboard-depth page applies root duplicate/delete through the real route', async () => {
+  assert.deepEqual(DEEP_TREE.stats, { nodeCount: 83, maxDepth: 6 }, 'the fixture is the real dashboard shape')
+  assert.equal(DEEP_TREE.limitsExceeded, undefined)
+  const m = mount()
+  await seed(m, DEEP_DASHBOARD_PROGRAM)
+  const root = node(DEEP_TREE, DEEP_TREE.rootNodeId)
+  const thirdCard = node(DEEP_TREE, root.children[2])
+  assert.equal(thirdCard.componentType, 'Card')
+  const duplicated = await postStructure(m.structureRoute(), {
+    body: structureBody({ operations: [duplicateOp(DEEP_TREE, thirdCard.nodeId, thirdCard.childIndex + 1)] }),
+  })
+  assert.equal(duplicated.status, 201)
+  assert.equal(duplicated.body?.ok, true)
+  assert.equal(isArtifactStructureResult(duplicated.body?.result), true)
+  const duplicateResult = duplicated.body.result
+  assert.equal(duplicateResult.revision, 2)
+  assert.equal((duplicateResult.program.match(/板块 1"/g) ?? []).length, 2, 'the root card copy is present')
+  assert.ok(duplicateResult.program.length > DEEP_DASHBOARD_PROGRAM.length, 'the new revision grows by the copy')
+  assert.deepEqual(createArtifactRevisionStore().latestFor('call-original').editedBlockIds, ['b3'])
+  assert.equal(createArtifactProgramStore().lookup('call-original', duplicateResult.revisionId), duplicateResult.program)
+
+  // A second route request records revision 3 and deletes the last root card.
+  // Node ids are revision-scoped, so the delete resolves against the revision
+  // the duplicate produced.
+  const duplicatedTree = buildArtifactTree(duplicateResult.program, ROUTE_TREE_OPTIONS)
+  const duplicatedRoot = node(duplicatedTree, duplicatedTree.rootNodeId)
+  const lastCard = node(duplicatedTree, duplicatedRoot.children.at(-1))
+  const deleted = await postStructure(m.structureRoute(), {
+    body: structureBody({
+      baseRevisionId: duplicateResult.revisionId,
+      operations: [deleteOp(duplicatedTree, lastCard.nodeId)],
+    }),
+  })
+  assert.equal(deleted.status, 201)
+  const deleteResult = deleted.body.result
+  assert.equal(deleteResult.revision, 3)
+  assert.equal(deleteResult.program.includes('板块 5'), false, 'the deleted root card is gone')
+  assert.equal((deleteResult.program.match(/板块 1"/g) ?? []).length, 2, 'the earlier duplicate survives the delete')
+  assert.equal(createArtifactRevisionStore().latestFor('call-original').revisionId, deleteResult.revisionId)
+})
+
+test('a page past the supported depth is rejected by the real route without a revision', async () => {
+  assert.equal(VERY_DEEP_TREE.limitsExceeded, 'too_deep', 'the fixture is one level past the supported depth')
+  const m = mount()
+  await seed(m, VERY_DEEP_PROGRAM)
+  const root = node(VERY_DEEP_TREE, VERY_DEEP_TREE.rootNodeId)
+  const firstBlock = node(VERY_DEEP_TREE, root.children[0])
+  const rejected = await postStructure(m.structureRoute(), {
+    body: structureBody({ operations: [duplicateOp(VERY_DEEP_TREE, firstBlock.nodeId, firstBlock.childIndex + 1)] }),
+  })
+  assert.equal(rejected.status, 400)
+  assert.equal(rejected.body?.error?.code, 'invalid_input')
+  assert.match(rejected.body?.error?.message ?? '', /too large or nested too deeply/)
+  assert.equal(createArtifactRevisionStore().latestFor('call-original'), undefined, 'no revision is recorded')
+  assert.equal(existsSync(ledgerFile(m.home)), false, 'a rejected batch writes no operation ledger entry')
 })
 
 test('move reorders one block within its parent slot and preserves all sources', async () => {

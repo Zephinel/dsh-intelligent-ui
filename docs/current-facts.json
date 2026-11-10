@@ -1,7 +1,7 @@
 {
-  "nodeTotal": 756,
-  "host": 303,
-  "client": 430,
+  "nodeTotal": 765,
+  "host": 305,
+  "client": 437,
   "packaging": 23,
   "browserSuites": 9,
   "artifactEditChecks": 882,
@@ -10,6 +10,6 @@
   "clientJsMb": 3.94,
   "clientCssKb": 242.6,
   "packFiles": 65,
-  "packedBytes": 6075021,
-  "unpackedBytes": 13069881
+  "packedBytes": 6075285,
+  "unpackedBytes": 13070892
 }

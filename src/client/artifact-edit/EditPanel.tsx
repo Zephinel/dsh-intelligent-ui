@@ -29,7 +29,7 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
+import { blockKindLabel, type ApplyOutcomeNotice, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
 import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
 import { canBatchMove, hasArtifactEditContent, isCurrentStyleTarget } from './store.ts'
 import { MAX_PENDING_STRUCTURE_OPS } from './remap.ts'
@@ -1070,6 +1070,15 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       default: return t('edit.applyConflict.unresolved', { block })
     }
   }
+  /** Locale key of one post-Apply notice. */
+  const applyNoticeKey = (notice: ApplyOutcomeNotice): string => {
+    switch (notice) {
+      case 'submitted': return 'edit.applyNotice.submitted'
+      case 'manual': return 'edit.applyNotice.manual'
+      case 'extraText': return 'edit.applyNotice.extraText'
+      case 'rebaseFailed': return 'edit.applyNotice.rebaseFailed'
+    }
+  }
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -1650,7 +1659,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     return () => { window.cancelAnimationFrame(frame) }
   }, [moveMenu])
 
-  // A structural operation (including moveBlockTo) cancels transient menus.
+  // A structural operation cancels transient menus.
   useEffect(() => {
     if (!structureBusy) return
     clearDeleteConfirm()
@@ -1795,9 +1804,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   useEffect(() => {
     const notice = session.applyNotice
     if (notice === undefined) return
-    announce(t(notice === 'submitted'
-      ? 'edit.applyNotice.submitted'
-      : notice === 'manual' ? 'edit.applyNotice.manual' : 'edit.applyNotice.extraText'))
+    announce(t(applyNoticeKey(notice)))
   }, [session.applyNotice])
 
   // A structural operation disables the actions and cancels a pending confirm.
@@ -2895,9 +2902,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         {session.applyNotice === undefined ? null : (
           <div className="dsh-iui-edit-apply-notice" role="status" data-dsh-iui-edit-apply-notice data-notice={session.applyNotice}>
             <span className="dsh-iui-edit-apply-notice-text">
-              {t(session.applyNotice === 'submitted'
-                ? 'edit.applyNotice.submitted'
-                : session.applyNotice === 'manual' ? 'edit.applyNotice.manual' : 'edit.applyNotice.extraText')}
+              {t(applyNoticeKey(session.applyNotice))}
             </span>
             <button
               type="button"

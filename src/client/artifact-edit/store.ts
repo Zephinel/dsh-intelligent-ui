@@ -2209,12 +2209,22 @@ export function dismissArtifactApplyNotice(key: string): void {
   publish()
 }
 
-/** One structure Apply result turned into a fresh edit session on the new revision. */
-interface RebaseOutcome {
-  readonly key: string
-  readonly referenceId: string
-  readonly session: ArtifactEditSession
-}
+/**
+ * Result of moving a draft onto a new structure revision.
+ *
+ * Failures are explicit so every caller has to decide what happens to the
+ * recorded revision and the old draft: a structure Apply keeps the queue and
+ * reports a conflict, a quick-props revision keeps the draft on its old base and
+ * shows a dismissible notice instead of silently leaving a stale canvas.
+ */
+export type RebaseResult =
+  | {
+      readonly ok: true
+      readonly key: string
+      readonly referenceId: string
+      readonly session: ArtifactEditSession
+    }
+  | { readonly ok: false; readonly reason: 'mapping' | 'queue' }
 
 /**
  * Move one draft onto the revision a structure batch produced.
@@ -2229,14 +2239,14 @@ interface RebaseOutcome {
  * @param appliedOps - queued operations that produced the revision, or
  *   `undefined` when the revision came from another route (quick props) and the
  *   queued operations must be carried over (remapped) instead of consumed.
- * @returns the new key/reference/session.
+ * @returns the new key/reference/session, or the reason the draft cannot move.
  */
 function rebaseDraftAfterStructure(
   oldKey: string,
   oldSession: ArtifactEditSession,
   result: ArtifactStructureResult,
   appliedOps: readonly PendingStructureOp[] | undefined,
-): RebaseOutcome | undefined {
+): RebaseResult {
   const rootExtraction = blocksForProgram(result.program)
   const wrappedProgram = wrapProgramForBlockEditing(result.program, rootExtraction)
   const nested = nestedBlocksForProgram(result.program)
@@ -2245,12 +2255,15 @@ function rebaseDraftAfterStructure(
   const mapping = mapOldToNewBlocks(oldBlocks, newBlocks, appliedOps ?? [])
   // Never drop a saved request/addition because the post-batch structure cannot
   // be paired: the caller keeps the old draft and reports the conflict instead.
-  if (appliedOps !== undefined && (remapConflictsFor(oldSession, result.program).length > 0 || !mapping.reliable)) return undefined
+  if (appliedOps !== undefined && (remapConflictsFor(oldSession, result.program).length > 0 || !mapping.reliable)) {
+    return { ok: false, reason: 'mapping' }
+  }
   if (appliedOps === undefined) {
     // Quick-props revisions keep the queue; every queued op must remap cleanly.
     const queueMapped = pendingStructureOpsFor(oldSession).every(op => mapping.mapping.has(op.blockId)
       && (op.targetParentBlockId === undefined || op.targetParentBlockId === 'root' || mapping.mapping.has(op.targetParentBlockId)))
-    if (!mapping.reliable || !queueMapped) return undefined
+    if (!mapping.reliable) return { ok: false, reason: 'mapping' }
+    if (!queueMapped) return { ok: false, reason: 'queue' }
   }
   const selection = remapSelection(oldSession.selection, mapping.mapping).selection
   const additions = remapAdditions(oldSession.additions ?? [], mapping.mapping).additions
@@ -2325,7 +2338,7 @@ function rebaseDraftAfterStructure(
   scheduleDraftPersist(key)
   publish()
   scheduleChipSync(oldSession.sessionId, true)
-  return { key, referenceId: reference, session: next }
+  return { ok: true, key, referenceId: reference, session: next }
 }
 
 /** One authoritative structure batch: request and validate without recording a revision. */
@@ -2463,7 +2476,7 @@ export async function applyEditRound(key: string, turn?: number): Promise<ApplyR
   const current = sessions.get(key)
   if (current === undefined) return { status: 'error', error: translate('edit.structureFailed') }
   const rebased = rebaseDraftAfterStructure(key, current, outcome.result, ops)
-  if (rebased === undefined) {
+  if (!rebased.ok) {
     // The Host result disagreed with the preflight; keep the draft/queue and
     // surface the conflict instead of writing a half-mapped request.
     const latest = sessions.get(key) ?? current
@@ -2646,7 +2659,13 @@ export async function applyArtifactBlockProps(key: string, blockId: string, prop
     recordStructureRevision(session, outcome.result, turn, 'props')
     const current = sessions.get(key) ?? session
     if (hasModelRequestContent(current) || pendingStructureOpsFor(current).length > 0) {
-      rebaseDraftAfterStructure(key, current, outcome.result, undefined)
+      const rebased = rebaseDraftAfterStructure(key, current, outcome.result, undefined)
+      if (!rebased.ok) {
+        // The revision is recorded, but the saved draft cannot move onto it. Keep
+        // the draft/chip on the old revision and explain it; silently leaving the
+        // canvas on a stale base would make the next request fail without context.
+        noteArtifactApplyOutcome(key, 'rebaseFailed')
+      }
     } else {
       markSubmitted(key)
     }

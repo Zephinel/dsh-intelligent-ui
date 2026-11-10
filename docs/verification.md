@@ -873,16 +873,16 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **深层页面**：`MAX_CST_DEPTH` 从 4 提升到 **10**（root 为 depth 0；真实 dashboard 为 depth 5–6、83 个 CST 节点），客户端嵌套映射与 Host 结构路由共享该常量；`nestedBlocksForProgram` 不可用时回退到与 Host 同构的根级 block 表解析根级 delete/duplicate/move；超过支持深度/节点上限的页面给 `depth` 冲突（不再显示「已不在当前修订中」），嵌套 move 给 `nestedTarget` 冲突。
 - **props**：Divider/Spacer 快捷属性成功后同样 rebase，不再提示丢弃草稿，已保存需求与队列保留；旧 B2「丢弃草稿并应用」警告随旧预览弹窗一并移除。
 - **无障碍与 locale**：保存/入队/取消/Apply/自动发送均有 `aria-live` 播报；总预览对话框初始焦点在取消、Tab 焦点陷阱、Escape 关闭、关闭后焦点回到触发按钮；中英 key 完整；窄面板下批量工具栏、待执行行与 Apply bar 换行不溢出。
-- **测试**：`remap.ts` 纯函数 15 条单测（副本排除、容器派生标题、nestedOrder 锚点插入、duplicate+move 不可靠）+ store 队列/预览/apply/rebase/chip rekey 与 20 上限拒绝单测 + 深层页面根级结构单测；E2E 迁移 25/25b/25c/25d/27/31/33/36 到新语义并新增 57–64（auto-submit、手动发送降级、刷新恢复 pendingOps、冲突阻止、depth-6/83 节点 dashboard 根级批量 Apply、超深页面 depth/nestedTarget 冲突、同签名 Text 副本不抢需求、第 21 条入队拒绝且不丢草稿）；artifact-edit 790 → **882 checks**。E2E 的 mock preview/apply 由真实 `applyStructureBatch`（Node bridge）生成，preview 与 apply program 与 Host 完全一致。
-- **已知限制**：自动发送依赖 composer plain 阶段（busy/发送中降级手动），隔离真实 GUI 23 phase 已验证（含自动发送）；Turn 关闭仍由既有 `reconcileArtifactSubmissions` 确认提交，Host 冲突沿用既有冲突横幅；单次最多 20 条结构操作（第 21 条被拒绝并提示，不截断、不丢草稿）；同一父级不能混合操作种类；结构操作支持 CST 深度 ≤10、节点 ≤200；映射依赖显示身份，duplicate+move 混合或无法唯一对齐时阻止 Apply；编辑面板（中文）与 composer chip/dock（英文）在混合 locale 下语言可能不一致，属既有 chip locale seat 行为，非本特性引入。
+- **测试**：`remap.ts` 纯函数 15 条单测（副本排除、容器派生标题、nestedOrder 锚点插入、duplicate+move 不可靠）+ store 队列/预览/apply/rebase/chip rekey 与 20 上限拒绝单测 + 深层页面根级结构单测 + props 失败契约单测（mock 结构不一致 props 结果 → 本地修订已记录、旧草稿/chip 保留、`applyNotice='rebaseFailed'` 可关闭）+ 恢复的 batch-order 单测（6 条：up/down/top/bottom、只改 targetOrder/orderChanged、nested 按父独立、no-op）+ Host 路由深度用例（depth 6/83 节点根级 duplicate/delete 成功并记录修订；depth 11 被路由拒绝且无修订/账本）；E2E 迁移 25/25b/25c/25d/27/31/33/36 到新语义并新增 57–64（auto-submit、手动发送降级、刷新恢复 pendingOps、冲突阻止、depth-6/83 节点 dashboard 根级批量 Apply、超深页面 depth/nestedTarget 冲突、同签名 Text 副本不抢需求、第 21 条入队拒绝且不丢草稿）；artifact-edit 790 → **882 checks**。E2E 的 mock preview/apply 由真实 `applyStructureBatch`（Node bridge）生成，preview 与 apply program 与 Host 完全一致。
+- **已知限制**：自动发送依赖 composer plain 阶段（busy/发送中降级手动），隔离真实 GUI 23 phase 已验证（含自动发送）；Turn 关闭仍由既有 `reconcileArtifactSubmissions` 确认提交，Host 冲突沿用既有冲突横幅；单次最多 20 条结构操作（第 21 条被拒绝并提示，不截断、不丢草稿）；同一父级不能混合操作种类；结构操作支持 CST 深度 ≤10、节点 ≤200，Host 结构路由对更深页面整体拒绝（含根级），客户端以 `depth` 冲突提前阻止；映射依赖显示身份，duplicate+move 混合或无法唯一对齐时阻止 Apply；props 修订已记录但草稿无法迁移时保留旧草稿/chip 并显示可关闭的 `rebaseFailed` notice；「移动到根级」仍受既有 Host move 校验限制（目标必须是可写容器）；编辑面板（中文）与 composer chip/dock（英文）在混合 locale 下语言可能不一致，属既有 chip locale seat 行为，非本特性引入；E2E 结构 mock 经本地 Node bridge 直接调用共享 `applyStructureBatch`，绕过 Host 路由鉴权/base registry/幂等账本（由 host 单测覆盖）；E2E 的异步 bridge 仍有少量时序等待，套件存在非零 flake 概率。
 
 ### 自动化结果
 
 | 命令 / 检查 | 本轮结果 |
 | --- | --- |
-| `npm run check` | PASS；Node **756/756** = Host **303** + Client **430** + packaging **23**；build host **841 kB**、client **4.18 MB**（js 3.94 / CSS 242.6 kB） |
+| `npm run check` | PASS；Node **765/765** = Host **305** + Client **437** + packaging **23**；build host **841 kB**、client **4.18 MB**（js 3.94 / CSS 242.6 kB） |
 | `npm run typecheck` / `npm run test:renderer` | PASS |
 | `node test/browser/artifact-edit.e2e.mjs` | PASS；**882 checks**（迁移场景 + 新增 57–64） |
 | `npm run test:browser` | PASS；**9/9** 套件；`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,021** 字节，解包 **13,069,881** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,285** 字节，解包 **13,070,892** 字节 |
 | 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

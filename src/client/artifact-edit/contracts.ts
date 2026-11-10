@@ -191,7 +191,7 @@ export interface ApplyRoundResult {
  * queue: sent automatically, left in the composer for a manual Send, or left
  * there because the composer already held user prose.
  */
-export type ApplyOutcomeNotice = 'submitted' | 'manual' | 'extraText'
+export type ApplyOutcomeNotice = 'submitted' | 'manual' | 'extraText' | 'rebaseFailed'
 
 /** Result of queueing structure operations (the queue never silently truncates). */
 export type SavePendingOpsResult =

@@ -46,6 +46,7 @@ import {
   closeArtifactEditor,
   chipLabelForSession,
   discardDraft,
+  dismissArtifactApplyNotice,
   draftSessionFor,
   draftSessionsFor,
   editChipLabel,
@@ -887,6 +888,57 @@ test('store: a quick-props revision rebases and keeps requests plus the queue', 
   assert.equal(pendingStructureOpsFor(next).length, 1, 'the unapplied queue survives the props revision')
   assert.equal(pendingStructureOpsFor(next)[0].blockId, 'b1', 'the queue block id is remapped to the new revision')
   assert.equal(hasArtifactEditContent(next), true)
+})
+
+test('store: a props revision that cannot remap keeps the draft and reports it', async () => {
+  // The mocked Host records a props revision whose program no longer contains
+  // the Spacer block the draft references, so the post-batch pairing is
+  // unreliable and the draft cannot be moved onto the new revision.
+  const STRUCTURALLY_DIFFERENT = `root = Col([head, rule, note])
+head = Title("属性调整样例", "lg")
+rule = Divider("info", "60%", 2)
+note = Text("调整分割线和间距。", "sm", "muted")`
+  const calls = []
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) {
+      return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
+      calls.push(body)
+      const result = {
+        artifactId: 'props-fail', revisionId: 'struct_props_fail', baseRevisionId: body.baseRevisionId,
+        revision: 2, operationId: body.operationId, program: STRUCTURALLY_DIFFERENT, title: PROPS_TITLE, style: 'card',
+      }
+      return new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 500 })
+  })
+  assert.deepEqual(openArtifactEditor('s-props-fail', {
+    callId: 'props-fail', program: PROPS_PROGRAM, title: PROPS_TITLE, style: 'card', running: false,
+  }), { ok: true })
+  await settleRoute()
+  const key = editKey('s-props-fail', 'props-fail')
+  saveArtifactBlockInstruction(key, 'b1', '标题改短')
+  const chipEventsBefore = chip.events.length
+  await applyArtifactBlockProps(key, 'b2', { color: 'info' })
+  assert.equal(calls.length, 1, 'the quick-props apply sends one deterministic request')
+  // The revision is authoritative and recorded...
+  assert.equal(localRevisionsFor('s-props-fail').length, 1)
+  assert.equal(localRevisionsFor('s-props-fail')[0].revisionId, 'struct_props_fail')
+  // ...but the draft stays on its old base with its content and chip, and the
+  // failure is surfaced instead of silently leaving a stale canvas.
+  const draft = draftSessionFor(key)
+  assert.notEqual(draft, undefined, 'the old draft is kept')
+  assert.equal(draft.baseRevisionId, 'props-fail', 'the draft keeps its old base revision')
+  assert.deepEqual(draft.selection.map(entry => [entry.blockId, entry.instruction]), [['b1', '标题改短']], 'the saved request survives')
+  assert.equal(draft.propsBusy, false, 'the busy flag is cleared')
+  assert.equal(draft.applyNotice, 'rebaseFailed', 'the failure is reported explicitly')
+  assert.equal(editSessionFor('s-props-fail', 'struct_props_fail'), undefined, 'no half-rebased draft is created')
+  assert.equal(chip.events.length, chipEventsBefore, 'the chip stays attached to the kept draft')
+  // The notice can be dismissed and the draft remains usable.
+  dismissArtifactApplyNotice(key)
+  assert.equal(draftSessionFor(key).applyNotice, undefined, 'the notice is dismissible')
+  assert.deepEqual(draftSessionFor(key).selection.map(entry => entry.instruction), ['标题改短'], 'dismissing keeps the draft content')
 })
 
 /**
