@@ -3390,8 +3390,12 @@
   gap: 4px 6px;
   max-height: 84px;
   margin: 0;
-  padding: 0;
-  overflow: auto;
+  /* Keep the scrollbar from touching the wrapping chips: reserve a small right
+     gutter and a stable scrollbar gutter on platforms with classic scrollbars. */
+  padding: 0 8px 0 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
 }
 
@@ -4100,4 +4104,353 @@
   .dsh-iui-draft-dock .dsh-iui-edit-draft-actions {
     transition: none;
   }
+}
+
+/* -------------------------------------------------------------------------
+ * Apply round (task-11): batch draft, pending queue, global save, Apply bar.
+ * ---------------------------------------------------------------------- */
+
+.dsh-iui-edit-batch-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 5px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-batch-pending-label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-batch-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dsh-iui-edit-batch-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-batch-pending-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-batch-pending-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.dsh-iui-edit-batch-pending-remove:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-iui-edit-batch-save {
+  border-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  background: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  color: var(--dsw-alias-bg-base, #fff);
+}
+
+.dsh-iui-edit-batch-save:hover:not(:disabled) {
+  border-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)) 88%, var(--dsw-alias-label-primary));
+  color: var(--dsw-alias-bg-base, #fff);
+}
+
+.dsh-iui-edit-pending {
+  padding-top: 2px;
+}
+
+.dsh-iui-edit-pending-empty {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dsh-iui-edit-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-edit-pending-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-pending-remove {
+  flex: none;
+}
+
+.dsh-iui-edit-global-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-global-state {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-global[data-dirty='true'] .dsh-iui-edit-global-state {
+  color: var(--dsw-alias-state-warn-primary, var(--dsw-alias-label-secondary));
+}
+
+.dsh-iui-edit-global-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dsh-iui-edit-global-save {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-global-save:hover:not(:disabled) {
+  border-color: var(--dsw-alias-state-business-primary, var(--dsw-alias-border-l3));
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-edit-global-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dsh-iui-edit-apply-bar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px 12px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-iui-edit-apply-hint,
+.dsh-iui-edit-apply-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-apply-hint {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-edit-apply-error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-iui-edit-apply-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dsh-iui-edit-apply-notice[data-notice='manual'],
+.dsh-iui-edit-apply-notice[data-notice='extraText'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary, var(--dsw-alias-border-l2)) 45%, var(--dsw-alias-border-l1));
+}
+
+.dsh-iui-edit-apply-notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-apply-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-apply-summary {
+  flex: 1 1 140px;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-apply-button {
+  flex: none;
+  height: 30px;
+  padding: 0 18px;
+  border: 1px solid var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary));
+  color: var(--dsw-alias-bg-base, #fff);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 28px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-iui-edit-apply-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)) 88%, var(--dsw-alias-label-primary));
+}
+
+.dsh-iui-edit-apply-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dsh-iui-edit-apply-button:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-edit-apply-dialog {
+  max-height: min(78vh, 720px);
+}
+
+.dsh-iui-edit-apply-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dsh-iui-edit-apply-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dsh-iui-edit-apply-item {
+  display: flex;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-edit-apply-item-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-iui-edit-apply-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, var(--dsw-alias-border-l1));
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, transparent);
+}
+
+.dsh-iui-edit-apply-conflicts-title {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.dsh-iui-edit-apply-conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.dsh-iui-edit-apply-conflict {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-edit-apply-preview-retry {
+  align-self: flex-start;
 }

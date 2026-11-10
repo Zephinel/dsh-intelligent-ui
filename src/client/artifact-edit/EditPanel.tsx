@@ -29,9 +29,10 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode } from './contracts.ts'
+import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
 import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
 import { canBatchMove, hasArtifactEditContent, isCurrentStyleTarget } from './store.ts'
+import { MAX_PENDING_STRUCTURE_OPS } from './remap.ts'
 import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
 import { styleSwitchBlocker as describeStyleSwitchBlocker, styleTargetDisableReason } from './style-targets.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
@@ -370,6 +371,14 @@ interface MoveTarget {
 /** Focusable descendants used by the preview dialog focus trap. */
 const PREVIEW_FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+/** One structure operation kept in the panel-local batch draft. */
+interface BatchStructureOp {
+  /** Panel-local id (the store assigns the persisted id on save). */
+  readonly id: string
+  readonly op: 'delete' | 'duplicate'
+  readonly blockId: string
+}
+
 /** Menu geometry used for placement and viewport clamping. */
 const MOVE_MENU_WIDTH = 228
 const MOVE_MENU_MAX_HEIGHT = 280
@@ -707,7 +716,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
  * @param props - locale seat, list scope, selection facts and handlers.
  * @returns the toolbar rendered below the arrangement hint.
  */
-function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisabled, structureHint, overLimit, onSelectAll, onClear, onExit, onOrder, onStructure }: {
+function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisabled, structureHint, overLimit, pendingOps, pendingLabels, onSelectAll, onClear, onSave, onCancel, onRemovePending, onOrder, onStructure }: {
   readonly t: Translate
   readonly nested: boolean
   readonly count: number
@@ -716,9 +725,13 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
   readonly structureDisabled: boolean
   readonly structureHint?: string
   readonly overLimit: boolean
+  readonly pendingOps: number
+  readonly pendingLabels: readonly { readonly id: string; readonly label: string }[]
   readonly onSelectAll: () => void
   readonly onClear: () => void
-  readonly onExit: () => void
+  readonly onSave: () => void
+  readonly onCancel: () => void
+  readonly onRemovePending: (id: string) => void
   readonly onOrder: (mode: BatchOrderMode) => void
   readonly onStructure: (op: 'delete' | 'duplicate', anchor: HTMLElement) => void
 }): ReactElement {
@@ -749,14 +762,6 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
           title={t('edit.batchClear')}
           onClick={onClear}
         >{t('edit.batchClear')}</button>
-        <button
-          type="button"
-          className="dsh-iui-edit-batch-action dsh-iui-edit-batch-exit"
-          {...hook('exit')}
-          aria-label={t('edit.batchExit')}
-          title={t('edit.batchExit')}
-          onClick={onExit}
-        >{t('edit.batchExit')}</button>
       </div>
       <div className="dsh-iui-edit-batch-group" role="group" aria-label={t('edit.batchOrderGroup')}>
         {BATCH_ORDER_ACTIONS.map(action => {
@@ -804,6 +809,49 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
           {t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count })}
         </p>
       ) : null}
+      <div className="dsh-iui-edit-batch-pending" {...hook('pending')} role="status" aria-live="polite">
+        <span className="dsh-iui-edit-batch-pending-label">
+          {t('edit.batchPending', { count: pendingOps })}
+        </span>
+        {pendingLabels.length === 0 ? null : (
+          <ul className="dsh-iui-edit-batch-pending-list">
+            {pendingLabels.map(entry => (
+              <li key={entry.id} className="dsh-iui-edit-batch-pending-item" {...hook('pending-item')} data-op-id={entry.id} title={entry.label}>
+                <span className="dsh-iui-edit-batch-pending-text">{entry.label}</span>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-batch-pending-remove"
+                  {...hook('pending-remove')}
+                  data-op-id={entry.id}
+                  aria-label={`${t('edit.batchPendingRemove')}: ${entry.label}`}
+                  title={t('edit.batchPendingRemove')}
+                  onClick={() => { onRemovePending(entry.id) }}
+                >
+                  <CloseGlyph />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="dsh-iui-edit-batch-actions">
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action"
+          {...hook('cancel')}
+          aria-label={t('edit.batchCancel')}
+          title={t('edit.batchCancel')}
+          onClick={onCancel}
+        >{t('edit.batchCancel')}</button>
+        <button
+          type="button"
+          className="dsh-iui-edit-batch-action dsh-iui-edit-batch-save"
+          {...hook('save')}
+          aria-label={t('edit.batchSave')}
+          title={t('edit.batchSave')}
+          onClick={onSave}
+        >{t('edit.batchSave')}</button>
+      </div>
     </div>
   )
 }
@@ -812,7 +860,7 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
 export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false, styleSwitchSupported = false, styleTargets = [], onPreviewStyleTarget }: EditPanelProps): ReactElement {
   const globalId = useId()
   const stylePanelId = useId()
-  const previewTitleId = useId()
+  const applyTitleId = useId()
   const [styleOpen, setStyleOpen] = useState(false)
   const styleToggleRef = useRef<HTMLButtonElement>(null)
   const styleTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -845,35 +893,44 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   )
   const structureBusy = session.structureBusy === true
   const structureError = session.structureError
-  const applyStructure = actions.applyStructure
-  const preview = session.structurePreview
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [previewConfirming, setPreviewConfirming] = useState(false)
   const [dismissedStructureError, setDismissedStructureError] = useState<string | null>(null)
   const [addFormParentId, setAddFormParentId] = useState<string | null>(null)
   const [addDraft, setAddDraft] = useState('')
   const [moveMenu, setMoveMenu] = useState<MoveMenuState | null>(null)
   // Batch arrangement modes are transient panel UI state: they never persist and
   // each selection is a list of display block ids only. The root and nested
-  // modes are mutually exclusive.
+  // modes are mutually exclusive. Structure operations selected in batch mode
+  // stay in a panel-local draft until "保存批量操作" queues them.
   const [batchMode, setBatchMode] = useState(false)
   const [batchSelection, setBatchSelection] = useState<readonly string[]>([])
+  const [batchOps, setBatchOps] = useState<readonly BatchStructureOp[]>([])
   const batchToggleRef = useRef<HTMLButtonElement>(null)
+  const batchOrderSnapshot = useRef<readonly string[] | null>(null)
+  const batchOpSeq = useRef(0)
   const [nestedBatchMode, setNestedBatchMode] = useState(false)
   const [nestedBatchSelection, setNestedBatchSelection] = useState<readonly string[]>([])
+  const [nestedBatchOps, setNestedBatchOps] = useState<readonly BatchStructureOp[]>([])
   const nestedBatchToggleRef = useRef<HTMLButtonElement>(null)
-  const deleteTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
-  const previewTriggerRef = useRef<HTMLElement | null>(null)
-  const previewRestoreFocusRef = useRef<HTMLElement | null>(null)
-  const previewHadOpenRef = useRef(false)
+  const nestedOrderSnapshot = useRef<Readonly<Record<string, readonly string[]>> | null>(null)
+  // The total Apply preview replaces the old single-operation preview dialog.
+  const applyTriggerRef = useRef<HTMLElement | null>(null)
+  const applyRestoreFocusRef = useRef<HTMLElement | null>(null)
+  const applyHadOpenRef = useRef(false)
+  const [applyBusy, setApplyBusy] = useState(false)
+  const [applyError, setApplyError] = useState<string | undefined>(undefined)
+  const [applyHint, setApplyHint] = useState('')
+  // The global instruction is a local draft: only the explicit Save writes the
+  // session (and therefore the composer chip summary).
+  const [globalDraft, setGlobalDraft] = useState(session.globalInstruction)
   const [liveMessage, setLiveMessage] = useState('')
   const liveSequenceRef = useRef(0)
   const a11yHintId = useId()
   const moveMenuHintId = useId()
   const addHintId = useId()
   const moveMenuRef = useRef<HTMLDivElement>(null)
-  const previewDialogRef = useRef<HTMLDivElement>(null)
-  const previewCancelRef = useRef<HTMLButtonElement>(null)
+  const applyDialogRef = useRef<HTMLDivElement>(null)
+  const applyCancelRef = useRef<HTMLButtonElement>(null)
   const moveAnchorRef = useRef<HTMLButtonElement | null>(null)
   // Nested edit mode: one group per container with at least two editable
   // direct children. The pending order falls back to the base order, and any
@@ -958,33 +1015,61 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     return targets
   }
   const moveTargets = moveMenu === null ? [] : moveTargetsFor(moveMenu.blockId)
-  const previewSummaryCount = preview?.changedBlockIds?.length ?? preview?.diff?.filter(line => line.kind !== 'same').length ?? 0
-  const previewBlock = preview === undefined ? undefined : blocks.get(preview.blockId)
-  const previewTarget = preview?.targetParentBlockId === undefined || preview.targetParentBlockId === 'root'
-    ? undefined
-    : blocks.get(preview.targetParentBlockId)
-  const previewBlockTitle = previewBlock === undefined
-    ? undefined
-    : previewBlock.title !== undefined && previewBlock.title.trim() !== '' ? previewBlock.title : blockKindLabel(previewBlock.kind, t)
-  const previewTargetTitle = preview?.targetParentBlockId === undefined
-    ? undefined
-    : preview.targetParentBlockId === 'root' ? t('edit.nestedRoot') : previewTarget?.title !== undefined && previewTarget.title.trim() !== '' ? previewTarget.title : previewTarget === undefined ? undefined : blockKindLabel(previewTarget.kind, t)
-  const previewBatchTitles = preview?.batch === true && preview.blockIds !== undefined
-    ? preview.blockIds.map(blockId => {
-        const block = blocks.get(blockId)
-        if (block === undefined) return blockId
-        return block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
-      })
-    : []
-  // A batch structural revision submits and closes the draft, so unsent content
-  // would be lost; the preview says so explicitly before the user confirms.
-  const previewBatchDraftWarning = preview?.batch === true && hasArtifactEditContent(session)
-  const previewConfirmLabel = previewBatchDraftWarning ? t('edit.batchDiscardApply') : t('edit.previewConfirm')
-  const previewOperationLabel = preview === undefined
-    ? ''
-    : preview.batch === true
-      ? preview.kind === 'delete' ? t('edit.batchDelete') : preview.kind === 'duplicate' ? t('edit.batchDuplicate') : t('edit.moveBlock')
-      : preview.kind === 'delete' ? t('edit.structureDelete') : preview.kind === 'duplicate' ? t('edit.structureDuplicate') : t('edit.moveBlock')
+  /** Localized display name of one block in the current canvas. */
+  const blockLabel = (blockId: string): string => {
+    const block = blocks.get(blockId)
+    if (block === undefined) return blockId
+    return block.title !== undefined && block.title.trim() !== '' ? block.title : blockKindLabel(block.kind, t)
+  }
+  const pendingOps = session.pendingOps ?? []
+  const pendingOpEntries = pendingOps.map(op => ({
+    id: op.id,
+    label: `${t(`edit.pendingOp.${op.op}`)} · ${blockLabel(op.blockId)}`,
+  }))
+  const batchPendingEntries = batchOps.map(op => ({
+    id: op.id,
+    label: `${t(`edit.pendingOp.${op.op}`)} · ${blockLabel(op.blockId)}`,
+  }))
+  const nestedBatchPendingEntries = nestedBatchOps.map(op => ({
+    id: op.id,
+    label: `${t(`edit.pendingOp.${op.op}`)} · ${blockLabel(op.blockId)}`,
+  }))
+  const globalDirty = globalDraft !== session.globalInstruction
+  const hasSavedContent = hasArtifactEditContent(session)
+  const hasBlockOrGlobalContent = session.selection.length > 0
+    || (session.additions?.length ?? 0) > 0
+    || session.orderChanged
+    || session.nestedOrderChanged === true
+    || session.globalInstruction.trim() !== ''
+  const styleOnly = session.styleInstruction.trim() !== '' && !hasBlockOrGlobalContent
+  const hasModelContent = hasBlockOrGlobalContent || session.styleInstruction.trim() !== ''
+  const batchUnsaved = batchMode || nestedBatchMode
+  const canApply = hasSavedContent && !structureBusy && !applyBusy
+  const applyPreview = session.applyPreview
+  const applyPreviewReady = applyPreview !== undefined && applyPreview.status === 'ready'
+  const applyConflicts = applyPreview?.conflicts ?? []
+  const applyBlocked = applyConflicts.length > 0 || applyPreview?.structureReady === false
+  const applyConfirmLabel = applyPreview === undefined || applyPreview.ops.length === 0
+    ? t('edit.applyPreviewConfirmModel')
+    : hasModelContent ? t('edit.applyPreviewConfirmMixed') : t('edit.applyPreviewConfirm')
+  /** One localized conflict line for the preview dialog. */
+  const conflictText = (conflict: PendingApplyConflict): string => {
+    const block = conflict.blockId === undefined ? '' : blockLabel(conflict.blockId)
+    switch (conflict.kind) {
+      case 'selection': return t('edit.applyConflict.selection', { block })
+      case 'addition': return t('edit.applyConflict.addition', { block })
+      case 'styleMixed': return t('edit.applyConflict.styleMixed')
+      case 'overlap': return t('edit.applyConflict.overlap')
+      case 'duplicate': return t('edit.applyConflict.duplicate', { block })
+      case 'limit': return t('edit.applyConflict.limit', { max: MAX_PENDING_STRUCTURE_OPS })
+      case 'unresolved': return t('edit.applyConflict.unresolved', { block })
+      case 'target': return t('edit.applyConflict.target', { block })
+      case 'order': return t('edit.applyConflict.order')
+      case 'depth': return t('edit.applyConflict.depth')
+      case 'nestedTarget': return t('edit.applyConflict.nestedTarget')
+      default: return t('edit.applyConflict.unresolved', { block })
+    }
+  }
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
   const hoverBlock = hoverBlockId === null ? undefined : blocks.get(hoverBlockId)
   const removedName = (() => {
@@ -1140,7 +1225,6 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }, [closing])
 
   useEffect(() => () => {
-    deleteTriggerRefs.current.clear()
     dragCleanup.current?.()
     clearHoverTimers()
     for (const timer of flashTimers.current.values()) window.clearTimeout(timer)
@@ -1148,18 +1232,28 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }, [])
 
   // Switching the edited revision (or leaving nested mode) closes the matching
-  // batch mode and drops its selection; neither mode is ever persisted
-  // (unmounting the panel clears them as well).
+  // batch mode and drops its local structure draft; neither mode is ever
+  // persisted (unmounting the panel clears them as well).
   useEffect(() => {
     setBatchMode(false)
     setBatchSelection(current => current.length === 0 ? current : [])
+    setBatchOps(current => current.length === 0 ? current : [])
+    batchOrderSnapshot.current = null
     setNestedBatchMode(false)
     setNestedBatchSelection(current => current.length === 0 ? current : [])
+    setNestedBatchOps(current => current.length === 0 ? current : [])
+    nestedOrderSnapshot.current = null
+    setApplyBusy(false)
+    setApplyError(undefined)
+    setApplyHint('')
+    setGlobalDraft(session.globalInstruction)
   }, [session.key])
 
   useEffect(() => {
     setNestedBatchMode(false)
     setNestedBatchSelection(current => current.length === 0 ? current : [])
+    setNestedBatchOps(current => current.length === 0 ? current : [])
+    nestedOrderSnapshot.current = null
   }, [session.nestedMode])
 
   // Escape closes the hover card (the instruction popover owns its own Escape).
@@ -1191,25 +1285,32 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const clearDeleteConfirm = (): void => {
     setConfirmDeleteId(null)
   }
-  const previewBusy = preview !== undefined && preview.status === 'loading'
-  const rowActionsBusy = structureBusy || previewBusy || previewConfirming
-  const startStructurePreview = (blockId: string, op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
-    previewTriggerRef.current = anchor
+  const applyDialogBusy = applyPreview?.status === 'loading'
+  const rowActionsBusy = structureBusy || applyBusy || applyDialogBusy
+  /** Queue one structure operation and announce it; nothing is written yet. */
+  const enqueueStructure = (inputs: readonly { readonly op: PendingStructureOp['op']; readonly blockId: string; readonly targetParentBlockId?: string }[]): void => {
+    if (inputs.length === 0) return
+    const saved = actions.savePendingOps(inputs)
     clearDeleteConfirm()
-    if (actions.previewStructure !== undefined) {
-      actions.previewStructure(blockId, op)
+    setApplyHint('')
+    if (saved.ok === false) {
+      // The queue refused the operation: keep the draft untouched and say so
+      // instead of announcing a success the user cannot see.
+      const message = t('edit.pendingLimit', { max: saved.max })
+      setApplyError(message)
+      announce(message)
       return
     }
-    // Older stores without the dry-run API keep the direct apply path.
-    applyStructure(blockId, op)
+    setApplyError(undefined)
+    const labels = inputs.map(input => `${t(`edit.pendingOp.${input.op}`)} · ${blockLabel(input.blockId)}`)
+    announce(t('edit.a11yQueued', { items: labels.join(t('edit.listSeparator')) }))
   }
-  const duplicateBlock = (blockId: string, anchor: HTMLElement | null): void => {
+  const duplicateBlock = (blockId: string): void => {
     if (rowActionsBusy) return
-    startStructurePreview(blockId, 'duplicate', anchor)
+    enqueueStructure([{ op: 'duplicate', blockId }])
   }
-  const requestDeleteBlock = (blockId: string, anchor: HTMLButtonElement | null): void => {
+  const requestDeleteBlock = (blockId: string, _anchor: HTMLButtonElement | null): void => {
     if (rowActionsBusy) return
-    if (anchor !== null) deleteTriggerRefs.current.set(blockId, anchor)
     // Persistent two-step confirmation: no timeout, only an explicit cancel,
     // delete, outside interaction, Escape, preview or busy state ends it.
     setConfirmDeleteId(blockId)
@@ -1220,10 +1321,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }
   const confirmDeleteBlock = (blockId: string): void => {
     if (confirmDeleteId !== blockId) return
-    const anchor = deleteTriggerRefs.current.get(blockId) ?? null
-    deleteTriggerRefs.current.delete(blockId)
-    startStructurePreview(blockId, 'delete', anchor)
-    clearDeleteConfirm()
+    enqueueStructure([{ op: 'delete', blockId }])
+    // The confirmation lives inside the row menu; put focus back on the row's
+    // overflow trigger once that menu closes.
+    window.requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-dsh-iui-edit-arrangement-row][data-block-id="${blockId}"], [data-dsh-iui-edit-nested-row][data-block-id="${blockId}"]`)
+      row?.querySelector<HTMLElement>('[data-dsh-iui-edit-row-menu]')?.focus({ preventScroll: true })
+    })
   }
 
   const closeAddForm = (): void => {
@@ -1294,15 +1398,11 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }
   const chooseMoveTarget = (targetId: string): void => {
     if (moveMenu === null) return
-    const target = moveTargets.find(candidate => candidate.id === targetId)
-    previewTriggerRef.current = moveAnchorRef.current
+    const blockId = moveMenu.blockId
+    const anchor = moveAnchorRef.current
     closeMoveMenu()
-    announce(t('edit.a11yMoved', { target: target?.title ?? t('edit.blockFallback') }))
-    if (actions.previewMoveBlockTo !== undefined) {
-      actions.previewMoveBlockTo(moveMenu.blockId, targetId)
-      return
-    }
-    actions.moveBlockTo(moveMenu.blockId, targetId)
+    enqueueStructure([{ op: 'move', blockId, targetParentBlockId: targetId }])
+    window.requestAnimationFrame(() => { if (anchor !== null && anchor.isConnected) anchor.focus({ preventScroll: true }) })
   }
 
   // Batch selection is pruned against the live arrangement draft, so a block
@@ -1355,46 +1455,138 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       ? t('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: nestedBatchSelected.length })
       : nestedBatchSelected.length === 0 ? t('edit.batchNeedSelection') : undefined
 
-  const exitBatchMode = (restoreFocus: boolean): void => {
-    setBatchMode(false)
+  /** Restore one order snapshot by moving only the blocks that moved. */
+  const restoreTargetOrder = (snapshot: readonly string[], current: readonly string[]): void => {
+    const working = [...current]
+    snapshot.forEach((blockId, index) => {
+      const from = working.indexOf(blockId)
+      if (from < 0 || from === index) return
+      actions.moveBlock(blockId, index)
+      working.splice(from, 1)
+      working.splice(index, 0, blockId)
+    })
+  }
+  const restoreNestedOrder = (snapshot: Readonly<Record<string, readonly string[]>>): void => {
+    for (const [parentId, order] of Object.entries(snapshot)) {
+      const current = session.nestedOrder?.[parentId] ?? session.nestedOriginalOrder?.[parentId] ?? []
+      const working = [...current]
+      order.forEach((blockId, index) => {
+        const from = working.indexOf(blockId)
+        if (from < 0 || from === index) return
+        actions.moveNestedBlock(parentId, blockId, index)
+        working.splice(from, 1)
+        working.splice(index, 0, blockId)
+      })
+    }
+  }
+  const clearBatchDraft = (): void => {
     setBatchSelection([])
+    setBatchOps([])
+    batchOrderSnapshot.current = null
+  }
+  const clearNestedBatchDraft = (): void => {
+    setNestedBatchSelection([])
+    setNestedBatchOps([])
+    nestedOrderSnapshot.current = null
+  }
+  /** Cancel the root batch mode: restore the order snapshot and drop the draft. */
+  const cancelBatchMode = (restoreFocus: boolean): void => {
+    const snapshot = batchOrderSnapshot.current
+    if (snapshot !== null) restoreTargetOrder(snapshot, session.targetOrder)
+    clearBatchDraft()
+    setBatchMode(false)
     clearDeleteConfirm()
     closeHover()
-    announce(t('edit.a11yBatchExited'))
+    announce(t('edit.a11yBatchCancelled'))
     if (!restoreFocus) return
     window.requestAnimationFrame(() => { batchToggleRef.current?.focus({ preventScroll: true }) })
   }
-  const exitNestedBatchMode = (restoreFocus: boolean): void => {
+  const cancelNestedBatchMode = (restoreFocus: boolean): void => {
+    const snapshot = nestedOrderSnapshot.current
+    if (snapshot !== null) restoreNestedOrder(snapshot)
+    clearNestedBatchDraft()
     setNestedBatchMode(false)
-    setNestedBatchSelection([])
     clearDeleteConfirm()
     closeHover()
-    announce(t('edit.a11yBatchExited'))
+    announce(t('edit.a11yBatchCancelled'))
     if (!restoreFocus) return
     window.requestAnimationFrame(() => { nestedBatchToggleRef.current?.focus({ preventScroll: true }) })
   }
-  const toggleBatchMode = (): void => {
-    if (batchMode) { exitBatchMode(true); return }
-    // The two batch modes are mutually exclusive.
+  /** Save the root batch draft: order is already in the draft, ops join the queue. */
+  const saveBatchMode = (): void => {
+    if (rowActionsBusy) return
+    const saved = batchOps.length > 0 ? actions.savePendingOps(batchOps) : { ok: true }
+    if (saved.ok === false) {
+      const message = t('edit.pendingLimit', { max: saved.max })
+      setApplyError(message)
+      announce(message)
+      return
+    }
+    clearBatchDraft()
+    setBatchMode(false)
+    clearDeleteConfirm()
+    closeHover()
+    setApplyHint('')
+    setApplyError(undefined)
+    announce(t('edit.a11yBatchSaved'))
+    window.requestAnimationFrame(() => { batchToggleRef.current?.focus({ preventScroll: true }) })
+  }
+  const saveNestedBatchMode = (): void => {
+    if (rowActionsBusy) return
+    const saved = nestedBatchOps.length > 0 ? actions.savePendingOps(nestedBatchOps) : { ok: true }
+    if (saved.ok === false) {
+      const message = t('edit.pendingLimit', { max: saved.max })
+      setApplyError(message)
+      announce(message)
+      return
+    }
+    clearNestedBatchDraft()
     setNestedBatchMode(false)
-    setNestedBatchSelection([])
+    clearDeleteConfirm()
+    closeHover()
+    setApplyHint('')
+    setApplyError(undefined)
+    announce(t('edit.a11yBatchSaved'))
+    window.requestAnimationFrame(() => { nestedBatchToggleRef.current?.focus({ preventScroll: true }) })
+  }
+  const toggleBatchMode = (): void => {
+    if (batchMode) { cancelBatchMode(true); return }
+    // The two batch modes are mutually exclusive.
+    if (nestedBatchMode) cancelNestedBatchMode(false)
     closeHover()
     clearDeleteConfirm()
     closeMoveMenu()
+    batchOrderSnapshot.current = [...session.targetOrder]
     setBatchMode(true)
     setBatchSelection([])
+    setBatchOps([])
     announce(t('edit.a11yBatchEntered'))
   }
   const toggleNestedBatchMode = (): void => {
-    if (nestedBatchMode) { exitNestedBatchMode(true); return }
-    setBatchMode(false)
-    setBatchSelection([])
+    if (nestedBatchMode) { cancelNestedBatchMode(true); return }
+    if (batchMode) cancelBatchMode(false)
     closeHover()
     clearDeleteConfirm()
     closeMoveMenu()
+    nestedOrderSnapshot.current = Object.fromEntries(
+      nestedGroups.map(group => [group.parent.blockId, [...group.childIds]]),
+    )
     setNestedBatchMode(true)
     setNestedBatchSelection([])
+    setNestedBatchOps([])
     announce(t('edit.a11yBatchEntered'))
+  }
+  /** Append selected blocks to the panel-local batch draft (no Host request). */
+  const queueBatchStructure = (op: 'delete' | 'duplicate', selected: readonly string[], nested: boolean): void => {
+    if (selected.length === 0) return
+    const entries = selected.map(blockId => {
+      batchOpSeq.current += 1
+      return { id: `batch_${batchOpSeq.current}`, op, blockId }
+    })
+    if (nested) setNestedBatchOps(current => [...current, ...entries])
+    else setBatchOps(current => [...current, ...entries])
+    const labels = entries.map(entry => `${t(`edit.pendingOp.${entry.op}`)} · ${blockLabel(entry.blockId)}`)
+    announce(t('edit.a11yBatchQueued', { items: labels.join(t('edit.listSeparator')) }))
   }
   const toggleBatchBlock = (blockId: string): void => {
     setBatchSelection(current => current.includes(blockId)
@@ -1403,17 +1595,20 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   }
   const selectAllBatchBlocks = (): void => { setBatchSelection([...session.targetOrder]) }
   const clearBatchSelection = (): void => { setBatchSelection([]) }
+  const removeBatchOp = (id: string, nested: boolean): void => {
+    if (nested) setNestedBatchOps(current => current.filter(entry => entry.id !== id))
+    else setBatchOps(current => current.filter(entry => entry.id !== id))
+  }
   const runBatchOrder = (mode: BatchOrderMode): void => {
     if (batchSelected.length === 0) return
     actions.moveBlocks(batchSelected, mode)
     announce(t('edit.a11yBatchReordered'))
   }
-  const runBatchStructure = (op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
+  const runBatchStructure = (op: 'delete' | 'duplicate', _anchor: HTMLElement | null): void => {
     if (batchStructureDisabled) return
-    previewTriggerRef.current = anchor
     clearDeleteConfirm()
     closeHover()
-    actions.previewBatchStructure(batchSelected, op)
+    queueBatchStructure(op, batchSelected, false)
   }
   const toggleNestedBatchBlock = (blockId: string): void => {
     setNestedBatchSelection(current => current.includes(blockId)
@@ -1427,12 +1622,11 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     actions.moveNestedBlocks(nestedBatchSelected, mode)
     announce(t('edit.a11yBatchReordered'))
   }
-  const runNestedBatchStructure = (op: 'delete' | 'duplicate', anchor: HTMLElement | null): void => {
+  const runNestedBatchStructure = (op: 'delete' | 'duplicate', _anchor: HTMLElement | null): void => {
     if (nestedBatchStructureDisabled) return
-    previewTriggerRef.current = anchor
     clearDeleteConfirm()
     closeHover()
-    actions.previewBatchStructure(nestedBatchSelected, op)
+    queueBatchStructure(op, nestedBatchSelected, true)
   }
 
   // The add form only belongs to nested mode; escaping it cancels the draft.
@@ -1492,19 +1686,61 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     }
   }, [moveMenu])
 
-  const confirmPreview = (): void => {
-    if (previewConfirming || structureBusy || preview === undefined || preview.status !== 'ready') return
-    setPreviewConfirming(true)
-    actions.confirmStructurePreview()
+  /** Open the total Apply preview (fetches the authoritative structure dry-run). */
+  const openApplyPreview = (trigger: HTMLElement | null): void => {
+    if (rowActionsBusy) return
+    if (batchUnsaved) {
+      setApplyHint(t('edit.applyHintBatch'))
+      announce(t('edit.a11yApplyBlocked'))
+      return
+    }
+    if (globalDirty) {
+      setApplyHint(t('edit.applyHintGlobal'))
+      announce(t('edit.a11yApplyBlocked'))
+      return
+    }
+    if (!hasSavedContent) {
+      setApplyHint(t('edit.applyHintEmpty'))
+      return
+    }
+    setApplyHint('')
+    setApplyError(undefined)
+    applyTriggerRef.current = trigger
+    actions.dismissApplyNotice()
+    announce(t('edit.a11yApplyPreviewOpened'))
+    void actions.previewApply()
   }
-  const cancelPreview = (): void => {
-    if (previewConfirming) return
-    actions.cancelStructurePreview()
-    announce(t('edit.a11yPreviewClosed'))
+  const retryApplyPreview = (): void => {
+    if (applyDialogBusy || applyBusy) return
+    setApplyError(undefined)
+    void actions.previewApply()
   }
-  const trapPreviewFocus = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+  const cancelApplyPreview = (): void => {
+    if (applyBusy) return
+    actions.cancelApplyPreview()
+    announce(t('edit.a11yApplyPreviewClosed'))
+  }
+  const confirmApply = async (): Promise<void> => {
+    if (applyBusy || applyPreview === undefined || applyPreview.status !== 'ready' || applyBlocked) return
+    setApplyBusy(true)
+    setApplyError(undefined)
+    announce(t('edit.a11yApplyStarted'))
+    // Keep the confirmed preview on the session while the round starts: the
+    // store reuses its program as the Apply preflight, so confirming a total
+    // preview sends one dry-run and one real apply instead of charging the Host
+    // a second dry-run. A successful round clears the preview itself (the
+    // dialog closes immediately); the model-only path keeps it until here.
+    const result = await actions.applyRound()
+    if (result.status !== 'error') actions.cancelApplyPreview()
+    setApplyBusy(false)
+    if (result.status === 'error') {
+      setApplyError(result.error ?? t('edit.structureFailed'))
+      announce(t('edit.a11yApplyFailed'))
+    }
+  }
+  const trapApplyFocus = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== 'Tab') return
-    const dialog = previewDialogRef.current
+    const dialog = applyDialogRef.current
     if (dialog === null) return
     const focusable = [...dialog.querySelectorAll<HTMLElement>(PREVIEW_FOCUSABLE)]
     if (focusable.length === 0) { event.preventDefault(); return }
@@ -1517,49 +1753,52 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
     if (document.activeElement === last || !dialog.contains(document.activeElement)) { event.preventDefault(); first.focus() }
   }
 
-  // Preview dialog: remember the trigger, move focus in (non-destructive first),
-  // and restore it when the dialog disappears.
+  // Apply preview dialog: remember the trigger, move focus in (non-destructive
+  // first) and restore it when the dialog disappears.
   useEffect(() => {
-    const current = session.structurePreview
+    const current = session.applyPreview
     if (current !== undefined) {
-      if (!previewHadOpenRef.current) {
-        previewHadOpenRef.current = true
+      if (!applyHadOpenRef.current) {
+        applyHadOpenRef.current = true
         const active = document.activeElement
-        previewRestoreFocusRef.current = previewTriggerRef.current ?? (active instanceof HTMLElement ? active : null)
+        applyRestoreFocusRef.current = applyTriggerRef.current ?? (active instanceof HTMLElement ? active : null)
         clearDeleteConfirm()
-        announce(t('edit.a11yPreviewOpened'))
-        window.requestAnimationFrame(() => { previewCancelRef.current?.focus({ preventScroll: true }) })
+        closeMoveMenu()
+        window.requestAnimationFrame(() => { applyCancelRef.current?.focus({ preventScroll: true }) })
       }
-      closeMoveMenu()
       return
     }
-    if (!previewHadOpenRef.current) return
-    previewHadOpenRef.current = false
-    setPreviewConfirming(false)
-    const restore = previewRestoreFocusRef.current
-    previewRestoreFocusRef.current = null
-    previewTriggerRef.current = null
+    if (!applyHadOpenRef.current) return
+    applyHadOpenRef.current = false
+    const restore = applyRestoreFocusRef.current
+    applyRestoreFocusRef.current = null
+    applyTriggerRef.current = null
     if (restore !== null && restore.isConnected) window.requestAnimationFrame(() => { restore.focus({ preventScroll: true }) })
-  }, [session.structurePreview])
+  }, [session.applyPreview])
 
   // Escape cancels the preview unless an apply is already in flight.
   useEffect(() => {
-    if (session.structurePreview === undefined) return
+    if (session.applyPreview === undefined) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      if (previewConfirming) return
-      cancelPreview()
+      if (applyBusy) return
+      cancelApplyPreview()
     }
     document.addEventListener('keydown', onKey, true)
     return () => { document.removeEventListener('keydown', onKey, true) }
-  }, [session.structurePreview, previewConfirming])
+  }, [session.applyPreview, applyBusy])
 
-  // A failed preview or a closed dialog clears the in-flight confirm state.
+  // The post-Apply notice arrives on the rekeyed draft (a different panel
+  // instance), so announce it here as well as rendering it in the Apply bar.
   useEffect(() => {
-    if (session.structurePreview === undefined || session.structurePreview.status === 'failed') setPreviewConfirming(false)
-  }, [session.structurePreview])
+    const notice = session.applyNotice
+    if (notice === undefined) return
+    announce(t(notice === 'submitted'
+      ? 'edit.applyNotice.submitted'
+      : notice === 'manual' ? 'edit.applyNotice.manual' : 'edit.applyNotice.extraText'))
+  }, [session.applyNotice])
 
   // A structural operation disables the actions and cancels a pending confirm.
   useEffect(() => {
@@ -2063,12 +2302,12 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           data-dsh-iui-edit-batch-mode={batchMode ? 'true' : undefined}
           onKeyDown={event => {
             if (event.key !== 'Escape' || !batchMode) return
-            // The preview dialog and row menus own their own Escape handling;
-            // batch mode only exits when none of them sits above the panel.
-            if (session.structurePreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
+            // Dialogs and row menus own their own Escape handling; batch mode
+            // only cancels when none of them sits above the panel.
+            if (session.applyPreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
             event.preventDefault()
             event.stopPropagation()
-            exitBatchMode(true)
+            cancelBatchMode(true)
           }}
         >
           <div className="dsh-iui-edit-section-head">
@@ -2130,9 +2369,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               structureDisabled={batchStructureDisabled}
               structureHint={batchStructureHint}
               overLimit={batchOverLimit}
+              pendingOps={batchOps.length}
+              pendingLabels={batchPendingEntries}
               onSelectAll={selectAllBatchBlocks}
               onClear={clearBatchSelection}
-              onExit={() => exitBatchMode(true)}
+              onSave={saveBatchMode}
+              onCancel={() => { cancelBatchMode(true) }}
+              onRemovePending={id => { removeBatchOp(id, false) }}
               onOrder={runBatchOrder}
               onStructure={runBatchStructure}
             />
@@ -2254,10 +2497,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
             onKeyDown={event => {
               if (event.key !== 'Escape' || !nestedBatchMode) return
               // Dialogs and row menus own their own Escape handling.
-              if (session.structurePreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
+              if (session.applyPreview !== undefined || confirmDeleteId !== null || moveMenu !== null) return
               event.preventDefault()
               event.stopPropagation()
-              exitNestedBatchMode(true)
+              cancelNestedBatchMode(true)
             }}
           >
             <div className="dsh-iui-edit-section-head">
@@ -2299,9 +2542,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                 structureDisabled={nestedBatchStructureDisabled}
                 structureHint={nestedBatchStructureHint}
                 overLimit={nestedBatchOverLimit}
+                pendingOps={nestedBatchOps.length}
+                pendingLabels={nestedBatchPendingEntries}
                 onSelectAll={selectAllNestedBatchBlocks}
                 onClear={clearNestedBatchSelection}
-                onExit={() => exitNestedBatchMode(true)}
+                onSave={saveNestedBatchMode}
+                onCancel={() => { cancelNestedBatchMode(true) }}
+                onRemovePending={id => { removeBatchOp(id, true) }}
                 onOrder={runNestedBatchOrder}
                 onStructure={runNestedBatchStructure}
               />
@@ -2520,34 +2767,73 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
 
         <div className="dsh-iui-edit-divider" aria-hidden="true" />
 
-        <div className="dsh-iui-edit-global">
-          <label className="dsh-iui-edit-global-label" htmlFor={globalId}>{t('edit.global')}</label>
-          <textarea
-            id={globalId}
-            className="dsh-iui-edit-textarea"
-            data-dsh-iui-edit-global
-            rows={4}
-            maxLength={4000}
-            value={session.globalInstruction}
-            placeholder={t('edit.globalPlaceholder')}
-            onChange={event => { actions.setGlobalInstruction(event.target.value) }}
-          />
-        </div>
-
-        <div className="dsh-iui-edit-info" data-dsh-iui-edit-send-info>
-          <p className="dsh-iui-edit-info-title">{t('edit.sendInfoTitle')}</p>
+        <section
+          className="dsh-iui-edit-section dsh-iui-edit-pending"
+          aria-label={t('edit.pendingTasks')}
+          data-dsh-iui-edit-pending-tasks
+          data-dsh-iui-edit-send-info
+        >
+          <div className="dsh-iui-edit-section-head">
+            <span className="dsh-iui-edit-section-title">{t('edit.pendingTasks')}</span>
+            <span className="dsh-iui-edit-section-meta" data-dsh-iui-edit-pending-count>
+              {t('edit.pendingTaskCount', { ops: pendingOps.length, count: session.selection.length })}
+            </span>
+            <span className="dsh-iui-edit-section-spacer" />
+            {pendingOps.length === 0 ? null : (
+              <button
+                type="button"
+                className="dsh-iui-edit-section-action"
+                data-dsh-iui-edit-pending-clear
+                aria-label={t('edit.pendingClearOps')}
+                title={t('edit.pendingClearOps')}
+                onClick={() => { actions.clearPendingOps(); setApplyHint(''); announce(t('edit.a11yPendingCleared')) }}
+              >
+                {t('edit.pendingClearOps')}
+              </button>
+            )}
+          </div>
+          {pendingOps.length === 0 ? (
+            <p className="dsh-iui-edit-pending-empty" data-dsh-iui-edit-pending-empty>{t('edit.pendingOpsEmpty')}</p>
+          ) : (
+            <ul className="dsh-iui-edit-pending-list" data-dsh-iui-edit-pending-ops>
+              {pendingOpEntries.map(entry => (
+                <li key={entry.id} className="dsh-iui-edit-pending-row" data-dsh-iui-edit-pending-op data-op-id={entry.id}>
+                  <span className="dsh-iui-edit-pending-label" title={entry.label}>{entry.label}</span>
+                  <button
+                    type="button"
+                    className="dsh-iui-edit-icon-button dsh-iui-edit-pending-remove"
+                    data-dsh-iui-edit-pending-op-remove
+                    data-op-id={entry.id}
+                    aria-label={`${t('edit.pendingOpRemove')}: ${entry.label}`}
+                    title={t('edit.pendingOpRemove')}
+                    onClick={() => { actions.removePendingOp(entry.id); setApplyHint(''); announce(t('edit.a11yPendingRemoved')) }}
+                  >
+                    <TrashGlyph />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <dl className="dsh-iui-edit-summary">
             <div className="dsh-iui-edit-summary-row">
               <dt>{t('edit.summaryEdits')}</dt>
               <dd>{t('edit.summaryCountValue', { count: session.selection.length })}</dd>
             </div>
+            {(session.additions?.length ?? 0) === 0 ? null : (
+              <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-summary-additions>
+                <dt>{t('edit.summaryAdditions')}</dt>
+                <dd>{t('edit.summaryCountValue', { count: session.additions?.length ?? 0 })}</dd>
+              </div>
+            )}
             <div className="dsh-iui-edit-summary-row">
               <dt>{t('edit.summaryOrder')}</dt>
-              <dd>{session.orderChanged ? t('edit.summaryOrderChanged') : t('edit.summaryOrderSame')}</dd>
+              <dd>{session.orderChanged || session.nestedOrderChanged === true ? t('edit.summaryOrderChanged') : t('edit.summaryOrderSame')}</dd>
             </div>
-            <div className="dsh-iui-edit-summary-row">
+            <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-summary-global>
               <dt>{t('edit.summaryGlobal')}</dt>
-              <dd>{session.globalInstruction.trim() !== '' ? t('edit.summaryFilled') : t('edit.summaryEmpty')}</dd>
+              <dd>{globalDirty
+                ? t('edit.globalUnsaved')
+                : session.globalInstruction.trim() !== '' ? t('edit.summaryFilled') : t('edit.summaryEmpty')}</dd>
             </div>
             {styleHasContent ? (
               <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-summary-style>
@@ -2557,6 +2843,92 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
             ) : null}
           </dl>
           <p className="dsh-iui-edit-info-note">{t('edit.sendInfoNote')}</p>
+        </section>
+
+        <div className="dsh-iui-edit-global" data-dirty={globalDirty ? 'true' : undefined}>
+          <div className="dsh-iui-edit-global-head">
+            <label className="dsh-iui-edit-global-label" htmlFor={globalId}>{t('edit.global')}</label>
+            <span className="dsh-iui-edit-global-state" data-dsh-iui-edit-global-state data-state={globalDirty ? 'dirty' : 'saved'}>
+              {globalDirty
+                ? t('edit.globalUnsaved')
+                : session.globalInstruction.trim() !== '' ? t('edit.globalSaved') : t('edit.summaryEmpty')}
+            </span>
+          </div>
+          <textarea
+            id={globalId}
+            className="dsh-iui-edit-textarea"
+            data-dsh-iui-edit-global
+            rows={4}
+            maxLength={4000}
+            value={globalDraft}
+            placeholder={t('edit.globalPlaceholder')}
+            onChange={event => { setGlobalDraft(event.target.value); setApplyHint('') }}
+          />
+          <div className="dsh-iui-edit-global-actions">
+            <button
+              type="button"
+              className="dsh-iui-edit-section-action dsh-iui-edit-global-save"
+              data-dsh-iui-edit-global-save
+              disabled={!globalDirty}
+              aria-label={t('edit.globalSave')}
+              title={t('edit.globalSave')}
+              onClick={() => {
+                actions.setGlobalInstruction(globalDraft)
+                setApplyHint('')
+                setApplyError(undefined)
+                announce(t('edit.a11yGlobalSaved'))
+              }}
+            >
+              {t('edit.globalSave')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="dsh-iui-edit-apply-bar" data-dsh-iui-edit-apply-bar data-busy={applyBusy ? 'true' : undefined}>
+        {applyHint === '' ? null : (
+          <p className="dsh-iui-edit-apply-hint" role="status" data-dsh-iui-edit-apply-hint>{applyHint}</p>
+        )}
+        {applyError === undefined ? null : (
+          <p className="dsh-iui-edit-apply-error" role="alert" data-dsh-iui-edit-apply-error>{applyError}</p>
+        )}
+        {session.applyNotice === undefined ? null : (
+          <div className="dsh-iui-edit-apply-notice" role="status" data-dsh-iui-edit-apply-notice data-notice={session.applyNotice}>
+            <span className="dsh-iui-edit-apply-notice-text">
+              {t(session.applyNotice === 'submitted'
+                ? 'edit.applyNotice.submitted'
+                : session.applyNotice === 'manual' ? 'edit.applyNotice.manual' : 'edit.applyNotice.extraText')}
+            </span>
+            <button
+              type="button"
+              className="dsh-iui-edit-link"
+              data-dsh-iui-edit-apply-notice-dismiss
+              onClick={() => { actions.dismissApplyNotice() }}
+            >
+              {t('edit.applyNoticeDismiss')}
+            </button>
+          </div>
+        )}
+        <div className="dsh-iui-edit-apply-row">
+          <span className="dsh-iui-edit-apply-summary" data-dsh-iui-edit-apply-summary>
+            {pendingOps.length > 0
+              ? t('edit.applySummary', { ops: pendingOps.length, count: session.selection.length })
+              : styleOnly
+                ? t('edit.applySummaryStyle')
+                : hasModelContent ? t('edit.applySummaryModel', { count: session.selection.length }) : t('edit.applySummaryEmpty')}
+          </span>
+          <button
+            type="button"
+            className="dsh-iui-edit-apply-button"
+            data-dsh-iui-edit-apply
+            disabled={!hasSavedContent || structureBusy}
+            aria-busy={applyBusy || structureBusy ? true : undefined}
+            aria-label={t('edit.apply')}
+            title={hasSavedContent ? t('edit.applyHint') : t('edit.applyEmpty')}
+            onClick={event => { openApplyPreview(event.currentTarget) }}
+          >
+            {applyBusy || structureBusy ? t('edit.applyBusy') : t('edit.apply')}
+          </button>
         </div>
       </div>
 
@@ -2605,65 +2977,79 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         </div>,
         document.body,
       )}
-      {preview === undefined ? null : createPortal(
+      {applyPreview === undefined ? null : createPortal(
         <div
           className="dsh-iui-edit-preview-backdrop"
-          data-dsh-iui-edit-preview-backdrop
-          onPointerDown={event => { if (event.target === event.currentTarget) cancelPreview() }}
+          data-dsh-iui-edit-apply-preview-backdrop
+          onPointerDown={event => { if (event.target === event.currentTarget) cancelApplyPreview() }}
         >
           <div
-            ref={previewDialogRef}
-            className="dsh-iui-edit-preview-dialog"
-            data-dsh-iui-edit-structure-preview
+            ref={applyDialogRef}
+            className="dsh-iui-edit-preview-dialog dsh-iui-edit-apply-dialog"
+            data-dsh-iui-edit-apply-preview
+            data-status={applyPreview.status}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={previewTitleId}
-            onKeyDown={trapPreviewFocus}
+            aria-labelledby={applyTitleId}
+            onKeyDown={trapApplyFocus}
           >
             <div className="dsh-iui-edit-preview-head">
-              <h2 id={previewTitleId} className="dsh-iui-edit-preview-title">{preview.batch === true ? t('edit.batchPreviewTitle') : t('edit.previewTitle')}</h2>
+              <h2 id={applyTitleId} className="dsh-iui-edit-preview-title">{t('edit.applyPreviewTitle')}</h2>
               <p className="dsh-iui-edit-preview-subtitle">
-                <span className="dsh-iui-edit-preview-operation">{previewOperationLabel}</span>
-                {preview.batch === true ? (
-                  <span className="dsh-iui-edit-preview-block" data-dsh-iui-edit-preview-block-count>
-                    {t('edit.batchSelectedCount', { count: previewBatchTitles.length })}
-                  </span>
-                ) : previewBlockTitle === undefined ? null : <span className="dsh-iui-edit-preview-block">{previewBlockTitle}</span>}
-                {preview.batch === true || previewTargetTitle === undefined ? null : <span className="dsh-iui-edit-preview-target">→ {previewTargetTitle}</span>}
+                <span className="dsh-iui-edit-preview-operation" data-dsh-iui-edit-apply-ops-count>
+                  {t('edit.applyPreviewOpsCount', { count: applyPreview.ops.length })}
+                </span>
+                <span className="dsh-iui-edit-preview-block" data-dsh-iui-edit-apply-model-count>
+                  {t('edit.applyPreviewModelCount', { count: applyPreview.model.requestCount })}
+                </span>
               </p>
             </div>
-            {!previewBatchDraftWarning ? null : (
-              <p className="dsh-iui-edit-preview-draft-warning" role="alert" data-dsh-iui-edit-preview-draft-warning>
-                {t('edit.batchDraftWarning')}
-              </p>
-            )}
-            {preview.batch !== true || previewBatchTitles.length === 0 ? null : (
-              <div className="dsh-iui-edit-preview-batch" data-dsh-iui-edit-preview-blocks>
-                <span className="dsh-iui-edit-preview-batch-label">{t('edit.batchPreviewBlocks')}</span>
-                <ul className="dsh-iui-edit-preview-batch-list">
-                  {previewBatchTitles.map((title, index) => (
-                    <li key={`${index}:${title}`} className="dsh-iui-edit-preview-batch-item" data-dsh-iui-edit-preview-batch-item title={title}>{title}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {preview.status === 'loading' ? (
-              <div className="dsh-iui-edit-preview-loading" data-dsh-iui-edit-preview-loading role="status">
+            {applyPreview.status === 'loading' ? (
+              <div className="dsh-iui-edit-preview-loading" data-dsh-iui-edit-apply-preview-loading role="status">
                 <span className="dsh-iui-edit-preview-spinner" aria-hidden="true" />
                 {t('edit.previewLoading')}
               </div>
             ) : null}
-            {preview.status === 'failed' ? (
-              <div className="dsh-iui-edit-preview-failed" data-dsh-iui-edit-preview-failed role="alert">
-                {preview.error ?? t('edit.previewFailed')}
+            {applyPreview.status === 'failed' ? (
+              <div className="dsh-iui-edit-preview-failed" data-dsh-iui-edit-apply-preview-failed role="alert">
+                <span>{applyPreview.error ?? t('edit.previewFailed')}</span>
+                <button
+                  type="button"
+                  className="dsh-iui-edit-section-action"
+                  data-dsh-iui-edit-apply-preview-retry
+                  onClick={retryApplyPreview}
+                >
+                  {t('edit.applyPreviewRetry')}
+                </button>
               </div>
             ) : null}
-            {preview.status === 'ready' ? (
+            {applyPreview.status === 'ready' ? (
               <>
-                <p className="dsh-iui-edit-preview-summary">{t('edit.previewSummary', { count: previewSummaryCount })}</p>
-                {(preview.diff ?? []).length === 0 ? null : (
-                  <ol className="dsh-iui-edit-preview-diff" data-dsh-iui-edit-preview-diff>
-                    {(preview.diff ?? []).map((line, index) => (
+                {applyPreview.ops.length === 0 ? null : (
+                  <div className="dsh-iui-edit-apply-section" data-dsh-iui-edit-apply-ops>
+                    <span className="dsh-iui-edit-preview-batch-label">{t('edit.applyPreviewOpsTitle')}</span>
+                    <ul className="dsh-iui-edit-apply-list">
+                      {applyPreview.ops.map(op => (
+                        <li key={op.id} className="dsh-iui-edit-apply-item" data-dsh-iui-edit-apply-op data-op={op.op} data-block-id={op.blockId}>
+                          <span className="dsh-iui-edit-apply-item-label">{op.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(applyPreview.changedBlockIds?.length ?? 0) === 0 ? null : (
+                  <div className="dsh-iui-edit-apply-section" data-dsh-iui-edit-apply-blocks>
+                    <span className="dsh-iui-edit-preview-batch-label">{t('edit.applyPreviewBlocks')}</span>
+                    <ul className="dsh-iui-edit-preview-batch-list">
+                      {(applyPreview.changedBlockIds ?? []).map(blockId => (
+                        <li key={blockId} className="dsh-iui-edit-preview-batch-item" data-dsh-iui-edit-apply-block>{blockLabel(blockId)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(applyPreview.diff ?? []).length === 0 ? null : (
+                  <ol className="dsh-iui-edit-preview-diff" data-dsh-iui-edit-apply-diff>
+                    {(applyPreview.diff ?? []).map((line, index) => (
                       <li key={`${line.kind}:${index}`} className="dsh-iui-edit-preview-line" data-diff={line.kind}>
                         <span className="dsh-iui-edit-preview-mark" aria-hidden="true">
                           {line.kind === 'add' ? `+ ${t('edit.previewAdd')}` : line.kind === 'remove' ? `- ${t('edit.previewRemove')}` : '·'}
@@ -2673,32 +3059,79 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
                     ))}
                   </ol>
                 )}
+                <div className="dsh-iui-edit-apply-section" data-dsh-iui-edit-apply-model>
+                  <span className="dsh-iui-edit-preview-batch-label">{t('edit.applyPreviewModelTitle')}</span>
+                  <dl className="dsh-iui-edit-summary">
+                    <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-apply-model-requests>
+                      <dt>{t('edit.applyPreviewRequests')}</dt>
+                      <dd>{applyPreview.model.titles.length === 0
+                        ? t('edit.summaryEmpty')
+                        : applyPreview.model.titles.join(t('edit.listSeparator'))}</dd>
+                    </div>
+                    <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-apply-model-global>
+                      <dt>{t('edit.summaryGlobal')}</dt>
+                      <dd>{applyPreview.model.globalInstruction.trim() === ''
+                        ? t('edit.summaryEmpty')
+                        : t('edit.applyPreviewGlobalValue', { text: applyPreview.model.globalInstruction })}</dd>
+                    </div>
+                    <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-apply-model-order>
+                      <dt>{t('edit.summaryOrder')}</dt>
+                      <dd>{applyPreview.model.orderChanged || applyPreview.model.nestedOrderChanged
+                        ? t('edit.summaryOrderChanged') : t('edit.summaryOrderSame')}</dd>
+                    </div>
+                    {applyPreview.model.additions.length === 0 ? null : (
+                      <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-apply-model-additions>
+                        <dt>{t('edit.summaryAdditions')}</dt>
+                        <dd>{applyPreview.model.additions.map(addition => addition.instruction).join(t('edit.listSeparator'))}</dd>
+                      </div>
+                    )}
+                    {applyPreview.model.styleInstruction.trim() === '' ? null : (
+                      <div className="dsh-iui-edit-summary-row" data-dsh-iui-edit-apply-model-style>
+                        <dt>{t('edit.summaryStyle')}</dt>
+                        <dd>{t('edit.applyPreviewStyleValue', { text: applyPreview.model.styleInstruction })}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+                {applyConflicts.length === 0 ? null : (
+                  <div className="dsh-iui-edit-apply-conflicts" role="alert" data-dsh-iui-edit-apply-conflicts>
+                    <p className="dsh-iui-edit-apply-conflicts-title">{t('edit.applyPreviewConflictsTitle')}</p>
+                    <ul className="dsh-iui-edit-apply-conflict-list">
+                      {applyConflicts.map((conflict, index) => (
+                        <li key={`${conflict.kind}:${conflict.blockId ?? index}`} className="dsh-iui-edit-apply-conflict" data-dsh-iui-edit-apply-conflict data-kind={conflict.kind}>
+                          {conflictText(conflict)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </>
             ) : null}
             <div className="dsh-iui-edit-preview-actions">
               <button
-                ref={previewCancelRef}
+                ref={applyCancelRef}
                 type="button"
                 className="dsh-iui-edit-preview-cancel"
-                data-dsh-iui-edit-preview-cancel
-                disabled={previewConfirming}
+                data-dsh-iui-edit-apply-preview-cancel
+                disabled={applyBusy}
                 aria-label={t('edit.previewCancel')}
-                onClick={cancelPreview}
+                onClick={cancelApplyPreview}
               >
                 {t('edit.previewCancel')}
               </button>
-              {preview.status === 'ready' ? (
+              {applyPreview.status !== 'ready' ? null : (
                 <button
                   type="button"
                   className="dsh-iui-edit-preview-confirm"
-                  data-dsh-iui-edit-preview-confirm
-                  disabled={previewConfirming || structureBusy}
-                  aria-label={previewConfirmLabel}
-                  onClick={confirmPreview}
+                  data-dsh-iui-edit-apply-preview-confirm
+                  disabled={applyBusy || structureBusy || applyBlocked}
+                  aria-label={applyBlocked ? t('edit.applyPreviewConflictBlocked') : applyConfirmLabel}
+                  title={applyBlocked ? t('edit.applyPreviewConflictBlocked') : undefined}
+                  onClick={() => { void confirmApply() }}
                 >
-                  {previewConfirmLabel}
+                  {applyBlocked ? t('edit.applyPreviewConflictBlocked') : applyConfirmLabel}
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         </div>,

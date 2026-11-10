@@ -58,6 +58,7 @@ import {
   describeStyleTargetProblem,
   isArtifactStructurePreview,
   isArtifactStructureResult,
+  type ArtifactStructureResult,
   type ArtifactStyleTarget,
 } from '../../shared/artifact-structure.ts'
 import { ensureArtifactBase, invalidateArtifactBase, type ArtifactBaseOutcome } from './artifact-base.ts'
@@ -65,7 +66,8 @@ import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
-import type { ArtifactBlockPropsPreview, ArtifactEditSession, ArtifactStructurePreviewLine, ArtifactStructurePreviewState, BatchOrderMode, OpenEditorResult } from './contracts.ts'
+import type { ApplyModelSummary, ApplyOutcomeNotice, ApplyPreviewOp, ApplyPreviewState, ApplyRoundResult, ArtifactBlockPropsPreview, ArtifactEditSession, ArtifactStructurePreviewLine, ArtifactStructurePreviewState, BatchOrderMode, OpenEditorResult, PendingApplyConflict, PendingStructureOp } from './contracts.ts'
+import { MAX_PENDING_STRUCTURE_OPS, detectPendingConflicts, mapOldToNewBlocks, remapAdditions, remapNestedOrder, remapSelection, remapTargetOrder, validateStructureRemap, type RemapBlock } from './remap.ts'
 
 /** Composer integration the store talks to; registered by the chip module. */
 export interface ArtifactComposerBridge {
@@ -144,9 +146,10 @@ export function isArtifactStyleEditSupported(): boolean | undefined {
 
 /** Whether one draft currently holds unsent edit content. */
 export function hasArtifactEditContent(
-  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction'> & { readonly nestedOrderChanged?: boolean },
+  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction'> & { readonly nestedOrderChanged?: boolean; readonly pendingOps?: readonly unknown[] },
 ): boolean {
-  return session.selection.length > 0
+  return (session.pendingOps?.length ?? 0) > 0
+    || session.selection.length > 0
     || (session.additions?.length ?? 0) > 0
     || session.orderChanged
     || session.nestedOrderChanged === true
@@ -255,6 +258,8 @@ interface PersistedDraft {
   readonly globalInstruction: string
   /** Optional for drafts persisted before style editing existed. */
   readonly styleInstruction?: string
+  /** Queued structure operations (task-11); absent on older records. */
+  readonly pendingOps?: readonly { readonly id: string; readonly op: 'delete' | 'duplicate' | 'move'; readonly blockId: string; readonly targetParentBlockId?: string; readonly createdAt: number }[]
   readonly attached: boolean
 }
 
@@ -345,6 +350,7 @@ function serializePersistedDraft(session: ArtifactEditSession): string | undefin
     })),
     globalInstruction: session.globalInstruction,
     ...session.styleInstruction.trim() === '' ? {} : { styleInstruction: session.styleInstruction },
+    ...(session.pendingOps?.length ?? 0) === 0 ? {} : { pendingOps: session.pendingOps },
     attached: session.attached,
   }
   try {
@@ -450,6 +456,24 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
   const styleInstruction = typeof record.styleInstruction === 'string'
     ? record.styleInstruction.slice(0, MAX_STYLE_INSTRUCTION_CHARS)
     : ''
+  // Queued structure operations are optional for older records. A corrupt shape
+  // still rejects the draft, but an oversized (legacy) queue is trimmed to the
+  // current cap so the rest of the user's draft survives the reload.
+  const pendingOps: NonNullable<PersistedDraft['pendingOps']>[number][] = []
+  if ('pendingOps' in record && record.pendingOps !== undefined) {
+    if (!Array.isArray(record.pendingOps)) return undefined
+    for (const entry of record.pendingOps) {
+      if (entry === null || typeof entry !== 'object') return undefined
+      const candidate = entry as Record<string, unknown>
+      if (typeof candidate.id !== 'string' || candidate.id === '') return undefined
+      if (candidate.op !== 'delete' && candidate.op !== 'duplicate' && candidate.op !== 'move') return undefined
+      if (typeof candidate.blockId !== 'string' || !/^b[1-9][0-9.]{0,12}$/.test(candidate.blockId)) return undefined
+      if ('targetParentBlockId' in candidate && candidate.targetParentBlockId !== undefined && typeof candidate.targetParentBlockId !== 'string') return undefined
+      if (typeof candidate.createdAt !== 'number' || !Number.isFinite(candidate.createdAt)) return undefined
+      pendingOps.push({ id: candidate.id, op: candidate.op, blockId: candidate.blockId, ...candidate.targetParentBlockId === undefined ? {} : { targetParentBlockId: candidate.targetParentBlockId as string }, createdAt: candidate.createdAt })
+      if (pendingOps.length >= MAX_PENDING_STRUCTURE_OPS) break
+    }
+  }
   if (!Array.isArray(record.selection)) return undefined
   const selection: PersistedDraft['selection'][number][] = []
   for (const entry of record.selection) {
@@ -478,6 +502,7 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
     selection,
     globalInstruction: record.globalInstruction,
     ...styleInstruction === '' ? {} : { styleInstruction },
+    ...pendingOps.length === 0 ? {} : { pendingOps },
     attached: record.attached,
   }
 }
@@ -543,6 +568,7 @@ export function ensureArtifactDraft(key: string): ArtifactEditSession | undefine
     status: 'ready',
     activeDraft: '',
     activeDirty: false,
+    ...record.pendingOps === undefined || record.pendingOps.length === 0 ? {} : { pendingOps: record.pendingOps },
   }
   sessions.set(key, session)
   persistedDrafts.set(key, raw)
@@ -1770,43 +1796,317 @@ function propsFallbackFor(code: string | undefined): 'base_missing' | 'artifact_
   return code === 'base_missing' ? 'base_missing' : code === 'artifact_missing' ? 'artifact_missing' : undefined
 }
 
-/** One deterministic structure dry-run: its wire batch plus the dialog identity. */
-interface StructurePreviewRequest {
-  readonly kind: 'delete' | 'duplicate' | 'move'
-  readonly blockId: string
-  /** Every selected block id when the preview covers a batch, in arrangement order. */
-  readonly blockIds?: readonly string[]
-  readonly operations: readonly DeterministicOperation[]
-  readonly targetParentBlockId?: string
+// ---------------------------------------------------------------------------
+// Save → total preview → Apply pipeline (task-11)
+// ---------------------------------------------------------------------------
+
+/** Build one fresh queued-operation id. */
+function pendingOpId(): string {
+  return `op_${newRequestId().slice(4)}`
 }
 
-/** Preview state shell shared by the loading/failed/ready transitions. */
-function structurePreviewState(
-  request: StructurePreviewRequest,
-  status: ArtifactStructurePreviewState['status'],
-  extra: Pick<ArtifactStructurePreviewState, 'afterProgram' | 'changedBlockIds' | 'diff' | 'error'> = {},
-): ArtifactStructurePreviewState {
-  return {
-    kind: request.kind,
-    blockId: request.blockId,
-    ...request.blockIds === undefined ? {} : { batch: true as const, blockIds: request.blockIds },
-    ...request.targetParentBlockId === undefined ? {} : { targetParentBlockId: request.targetParentBlockId },
-    status,
-    ...extra,
-  }
+/** Queued structure operations of one draft (never undefined). */
+export function pendingStructureOpsFor(session: Pick<ArtifactEditSession, 'pendingOps'>): readonly PendingStructureOp[] {
+  return session.pendingOps ?? []
 }
 
-/** Preview one deterministic structure operation batch without recording a revision. */
-async function previewStructureOperation(key: string, request: StructurePreviewRequest, failureKey: string): Promise<void> {
+/** Whether the draft has model-request content besides queued structure ops. */
+export function hasModelRequestContent(
+  session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly unknown[] },
+): boolean {
+  return session.selection.length > 0
+    || (session.additions?.length ?? 0) > 0
+    || session.orderChanged
+    || session.nestedOrderChanged === true
+    || session.globalInstruction.trim() !== ''
+    || session.styleInstruction.trim() !== ''
+}
+
+/**
+ * Queue structure operations for the Apply round.
+ * @param key - edit-session key.
+ * @param inputs - operations without their generated id/timestamp.
+ */
+export function savePendingStructureOps(
+  key: string,
+  inputs: readonly { readonly op: PendingStructureOp['op']; readonly blockId: string; readonly targetParentBlockId?: string }[],
+): SavePendingOpsResult {
   const session = sessions.get(key)
-  if (session === undefined || session.status === 'submitted') return
-  sessions.set(key, { ...session, structurePreview: structurePreviewState(request, 'loading'), structureError: undefined })
-  publish()
-  await ensureBaseForSession(session)
-  const fail = (message: string): void => {
-    sessions.set(key, { ...session, structurePreview: structurePreviewState(request, 'failed', { error: message }) })
-    publish()
+  if (session === undefined || session.status === 'submitted') return { ok: true }
+  const current = pendingStructureOpsFor(session)
+  const appended = inputs
+    .filter(input => input.blockId !== '')
+    .map(input => ({ id: pendingOpId(), op: input.op, blockId: input.blockId, ...input.targetParentBlockId === undefined ? {} : { targetParentBlockId: input.targetParentBlockId }, createdAt: Date.now() }))
+  if (appended.length === 0) return { ok: true }
+  // The limit is enforced here, before writing anything: a caller that queues a
+  // 21st operation must hear about it instead of losing the operation silently.
+  if (current.length + appended.length > MAX_PENDING_STRUCTURE_OPS) {
+    return { ok: false, reason: 'limit', current: current.length, max: MAX_PENDING_STRUCTURE_OPS }
   }
+  sessions.set(key, {
+    ...session,
+    pendingOps: [...current, ...appended],
+    applyPreview: undefined,
+    structureError: undefined,
+  })
+  publish()
+  scheduleDraftPersist(key)
+  scheduleChipSync(session.sessionId, true)
+  return { ok: true }
+}
+
+/** Remove one queued operation (queue UI). */
+export function removePendingStructureOp(key: string, id: string): boolean {
+  const session = sessions.get(key)
+  if (session === undefined) return false
+  const current = pendingStructureOpsFor(session)
+  const next = current.filter(op => op.id !== id)
+  if (next.length === current.length) return false
+  sessions.set(key, { ...session, pendingOps: next.length === 0 ? undefined : next, applyPreview: undefined })
+  publish()
+  scheduleDraftPersist(key)
+  scheduleChipSync(session.sessionId, true)
+  return true
+}
+
+/** Drop every queued operation (cancel batch / start a new round). */
+export function clearPendingStructureOps(key: string): boolean {
+  const session = sessions.get(key)
+  if (session === undefined || (session.pendingOps?.length ?? 0) === 0) return false
+  sessions.set(key, { ...session, pendingOps: undefined, applyPreview: undefined })
+  publish()
+  scheduleDraftPersist(key)
+  scheduleChipSync(session.sessionId, true)
+  return true
+}
+
+/** Localized label of one queued operation (display block title when known). */
+function pendingOpLabel(op: PendingStructureOp, session: ArtifactEditSession): string {
+  const block = nestedBlocksForProgram(session.program)?.blocks.find(candidate => candidate.blockId === op.blockId)
+    ?? session.blocks.find(candidate => candidate.blockId === op.blockId)
+  const name = block?.title !== undefined && block.title.trim() !== '' ? block.title.trim() : op.blockId
+  return `${translate(`edit.pendingOp.${op.op}`)} · ${name}`
+}
+
+/** Dialog-facing view of the queue. */
+function pendingOpPreviews(session: ArtifactEditSession): ApplyPreviewOp[] {
+  return pendingStructureOpsFor(session).map(op => ({
+    id: op.id,
+    op: op.op,
+    blockId: op.blockId,
+    label: pendingOpLabel(op, session),
+    ...op.targetParentBlockId === undefined ? {} : { targetParentBlockId: op.targetParentBlockId },
+  }))
+}
+
+/** Model-request summary shown in the total preview (and the "need send" decision). */
+function modelSummaryOf(session: ArtifactEditSession): ApplyModelSummary {
+  const titles = session.selection.map(entry => {
+    const block = nestedBlocksForProgram(session.program)?.blocks.find(candidate => candidate.blockId === entry.blockId)
+      ?? session.blocks.find(candidate => candidate.blockId === entry.blockId)
+    return block?.title !== undefined && block.title.trim() !== '' ? block.title.trim() : entry.blockId
+  })
+  return {
+    requestCount: session.selection.length,
+    titles,
+    globalInstruction: session.globalInstruction,
+    additions: (session.additions ?? []).map(addition => ({ parentBlockId: addition.parentBlockId, instruction: addition.instruction })),
+    orderChanged: session.orderChanged,
+    nestedOrderChanged: session.nestedOrderChanged === true,
+    styleInstruction: session.styleInstruction,
+    branch: session.branch === true,
+  }
+}
+
+/** One structure-capable block plus its revision-scoped CST identity. */
+interface StructureBlockTarget {
+  readonly blockId: string
+  readonly nodeId?: string
+  readonly sourceDigest?: string
+  readonly parentBlockId?: string
+}
+
+/** Structure-capable display blocks of one draft program. */
+interface StructureBlockTable {
+  readonly blocks: readonly StructureBlockTarget[]
+  /** CST node id of the root `Col`, used as the move target for the page root. */
+  readonly rootNodeId: string
+  /** Whether `blocks` is the full nested display map (nested targets usable). */
+  readonly nested: boolean
+}
+
+/**
+ * Structure-capable block table for one draft program.
+ *
+ * The nested display map is authoritative whenever it can be built. When it
+ * cannot be built (for example a page nested beyond the supported depth or one
+ * over the node cap), fall back to the direct root children of a CST built with
+ * the same container whitelist as the Host: their node ids and digests match
+ * the Host's tree, so root-level delete/duplicate/move stay resolvable and the
+ * preview can report a precise depth conflict instead of claiming the block
+ * disappeared. Nested targets are not addressable in fallback mode.
+ * @param program - draft base program.
+ * @returns the table, plus whether the page exceeded the supported depth/nodes.
+ */
+function structureBlockTable(program: string): { readonly table?: StructureBlockTable; readonly tooDeep: boolean } {
+  const nested = nestedBlocksForProgram(program)
+  if (nested !== undefined) return { table: { blocks: nested.blocks, rootNodeId: nested.rootNodeId, nested: true }, tooDeep: false }
+  const tree = buildArtifactTree(program, { containerTypes: [...NESTED_CONTAINER_TYPES] })
+  if (tree.limitsExceeded !== undefined) return { tooDeep: true }
+  const root = tree.nodes.get(tree.rootNodeId)
+  if (root === undefined) return { tooDeep: false }
+  const blocks: { blockId: string; nodeId: string; sourceDigest: string }[] = []
+  let ordinal = 0
+  for (const childId of root.children) {
+    const node = tree.nodes.get(childId)
+    if (node === undefined || !node.editable || node.problem !== undefined) continue
+    ordinal += 1
+    blocks.push({ blockId: `b${ordinal}`, nodeId: node.nodeId, sourceDigest: node.digest })
+  }
+  return blocks.length === 0
+    ? { tooDeep: false }
+    : { table: { blocks, rootNodeId: tree.rootNodeId, nested: false }, tooDeep: false }
+}
+
+/**
+ * Resolve queued display operations into one stable atomic Host batch.
+ *
+ * This is the single builder used by both the total preview and the real Apply,
+ * so the two requests can never drift.
+ *
+ * Ordering strategy:
+ * - operations are grouped by their source parent, groups keep their first
+ *   queue position;
+ * - one parent group must contain a single operation kind (delete, duplicate or
+ *   move); mixing kinds in one container would make sibling indices ambiguous,
+ *   so it is rejected with an `order` conflict instead of guessed;
+ * - delete/duplicate groups are emitted in descending base editable index (the
+ *   old batch helper's rule), which keeps earlier siblings stable and lets every
+ *   duplicate land directly after its own source;
+ * - one parent accepts at most one move (append-to-end), also rejected with
+ *   `order` when violated;
+ * - the Host re-resolves each base nodeId/sourceDigest, so different parents
+ *   cannot shift each other.
+ * @param program - draft base program.
+ * @param ops - queued operations in queue order.
+ * @returns wire operations plus conflicts (unresolved/order/ancestor overlap).
+ */
+export function resolvePendingStructureOperations(
+  program: string,
+  ops: readonly PendingStructureOp[],
+): { readonly operations: readonly DeterministicOperation[]; readonly conflicts: PendingApplyConflict[] } {
+  const conflicts: PendingApplyConflict[] = []
+  const { table, tooDeep } = structureBlockTable(program)
+  if (table === undefined) {
+    // The page cannot be read at all (too deep/large, or an unsupported root):
+    // every op is blocked, and a nested move says why instead of pretending the
+    // block vanished from the revision.
+    return {
+      operations: [],
+      conflicts: ops.map(op => ({
+        kind: tooDeep
+          ? op.targetParentBlockId !== undefined && op.targetParentBlockId !== 'root' ? 'nestedTarget' : 'depth'
+          : 'unresolved',
+        blockId: op.blockId,
+      })),
+    }
+  }
+  interface Target { readonly op: PendingStructureOp; readonly nodeId: string; readonly sourceDigest: string; readonly parentKey: string; readonly index: number }
+  const targets: Target[] = []
+  for (const op of ops) {
+    // Root-level fallback mode cannot address nested blocks or nested move
+    // targets; report that precisely instead of a misleading "unresolved".
+    if (!table.nested && (op.blockId.includes('.') || (op.targetParentBlockId !== undefined && op.targetParentBlockId !== 'root'))) {
+      conflicts.push({ kind: 'nestedTarget', blockId: op.blockId })
+      continue
+    }
+    const block = table.blocks.find(candidate => candidate.blockId === op.blockId)
+    if (block?.nodeId === undefined || block.sourceDigest === undefined) { conflicts.push({ kind: 'unresolved', blockId: op.blockId }); continue }
+    const parentKey = block.parentBlockId ?? 'root'
+    const siblings = table.blocks.filter(candidate => (candidate.parentBlockId ?? 'root') === parentKey)
+    const index = siblings.findIndex(candidate => candidate.blockId === block.blockId)
+    targets.push({ op, nodeId: block.nodeId, sourceDigest: block.sourceDigest, parentKey, index })
+  }
+  const groups = new Map<string, Target[]>()
+  for (const target of targets) {
+    const group = groups.get(target.parentKey) ?? []
+    group.push(target)
+    groups.set(target.parentKey, group)
+  }
+  const operations: DeterministicOperation[] = []
+  for (const [parentKey, group] of groups) {
+    if (group.length > 1) {
+      const kinds = new Set(group.map(target => target.op.op))
+      if (kinds.size > 1) { conflicts.push({ kind: 'order', detail: parentKey }); continue }
+      if (kinds.has('move')) { conflicts.push({ kind: 'order', detail: parentKey }); continue }
+    }
+    const ordered = [...group].sort((left, right) => right.index - left.index)
+    for (const target of ordered) {
+      if (target.op.op === 'move') {
+        const targetParentNodeId = target.op.targetParentBlockId === undefined || target.op.targetParentBlockId === 'root'
+          ? table.rootNodeId
+          : table.blocks.find(candidate => candidate.blockId === target.op.targetParentBlockId)?.nodeId
+        if (targetParentNodeId === undefined) { conflicts.push({ kind: 'unresolved', blockId: target.op.blockId }); continue }
+        const targetParentKey = target.op.targetParentBlockId ?? 'root'
+        const targetChildCount = targetParentKey === 'root'
+          ? table.blocks.filter(candidate => candidate.parentBlockId === undefined).length
+          : table.blocks.filter(candidate => candidate.parentBlockId === targetParentKey).length
+        // A move inside the current parent appends after the moved block is
+        // removed, so the Host validates toIndex against count-1 and requires
+        // the redundant toParentNodeId to be omitted.
+        const sameParent = target.parentKey === targetParentKey
+        const toIndex = targetChildCount - (sameParent ? 1 : 0)
+        operations.push(sameParent
+          ? { op: 'move', nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex }
+          : { op: 'move', nodeId: target.nodeId, sourceDigest: target.sourceDigest, toParentNodeId: targetParentNodeId, toIndex })
+        continue
+      }
+      operations.push(target.op.op === 'duplicate'
+        ? { op: 'duplicate', nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: target.index + 1 }
+        : { op: 'delete', nodeId: target.nodeId, sourceDigest: target.sourceDigest })
+    }
+  }
+  return { operations, conflicts }
+}
+
+/** Resolve queued display operations into one atomic Host batch. */
+function pendingWireOperations(session: ArtifactEditSession): { readonly operations: readonly DeterministicOperation[]; readonly conflicts: PendingApplyConflict[] } {
+  const blocks = nestedBlocksForProgram(session.program)?.blocks ?? session.blocks
+  const conflicts: PendingApplyConflict[] = [...detectPendingConflicts({
+    ops: pendingStructureOpsFor(session),
+    blocks,
+    selection: session.selection,
+    additions: session.additions,
+    styleInstruction: session.styleInstruction,
+  })]
+  const resolved = resolvePendingStructureOperations(session.program, pendingStructureOpsFor(session))
+  conflicts.push(...resolved.conflicts)
+  return { operations: resolved.operations, conflicts }
+}
+
+/** Display blocks of one program for cross-revision mapping. */
+function remapBlocksOf(program: string): readonly RemapBlock[] {
+  return (nestedBlocksForProgram(program)?.blocks ?? blocksForProgram(program).blocks) as readonly RemapBlock[]
+}
+
+/** Conflicts that block Apply because saved draft references cannot be remapped. */
+function remapConflictsFor(session: ArtifactEditSession, afterProgram: string): PendingApplyConflict[] {
+  return validateStructureRemap({
+    oldBlocks: remapBlocksOf(session.program),
+    newBlocks: remapBlocksOf(afterProgram),
+    ops: pendingStructureOpsFor(session),
+    selection: session.selection,
+    additions: session.additions,
+    nestedOrder: session.nestedOrder,
+  })
+}
+
+/** Fetch one authoritative structure dry-run for the preview dialog (no revision). */
+async function fetchStructureDryRun(
+  session: ArtifactEditSession,
+  operations: readonly DeterministicOperation[],
+): Promise<{ readonly ok: true; readonly program: string; readonly changedBlockIds: readonly string[] } | { readonly ok: false; readonly message: string }> {
+  await ensureBaseForSession(session)
   try {
     const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
       method: 'POST',
@@ -1816,7 +2116,7 @@ async function previewStructureOperation(key: string, request: StructurePreviewR
         artifactId: session.artifactId,
         baseRevisionId: session.baseRevisionId,
         operationId: newRequestId(),
-        operations: request.operations,
+        operations,
         preview: true,
         ...session.branch === true ? { branch: true } : {},
         ...session.title === undefined ? {} : { title: session.title },
@@ -1829,128 +2129,352 @@ async function previewStructureOperation(key: string, request: StructurePreviewR
     if (!response.ok) {
       const code = failureCodeOf(value)
       invalidateBaseAfterMiss(session, code)
-      fail(structureFailureMessage({ code, surface: 'structure', failureKey }))
-      return
+      return { ok: false, message: structureFailureMessage({ code, surface: 'structure', failureKey: 'edit.structureFailed' }) }
     }
-    if (!isArtifactStructurePreview(value)) {
-      fail(translate(failureKey))
-      return
-    }
-    sessions.set(key, {
-      ...session,
-      structurePreview: structurePreviewState(request, 'ready', {
-        afterProgram: value.preview.program,
-        changedBlockIds: value.preview.changedBlockIds,
-        diff: diffProgramLines(session.program, value.preview.program),
-      }),
-    })
-    publish()
+    if (!isArtifactStructurePreview(value)) return { ok: false, message: translate('edit.structureFailed') }
+    return { ok: true, program: value.preview.program, changedBlockIds: value.preview.changedBlockIds }
   } catch {
-    fail(translate(failureKey))
+    return { ok: false, message: translate('edit.structureFailed') }
   }
-}
-
-/** Open a diff confirmation for a delete/duplicate operation. */
-export function previewArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate'): void {
-  const session = sessions.get(key)
-  if (session === undefined) return
-  const built = structureOperationForBlock(session, blockId, op)
-  if (built === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
-    publish()
-    return
-  }
-  void previewStructureOperation(key, {
-    kind: op,
-    blockId,
-    operations: [built.operation],
-  }, 'edit.structureFailed')
 }
 
 /**
- * Open a diff confirmation for one batch delete/duplicate.
- *
- * Works for top-level and nested selections. The whole selection is validated up
- * front: a selection above the Host's per-request cap, one containing a container
- * together with one of its nested blocks, or one containing a block without a
- * resolvable CST node/digest shows the inline structure error and never sends a
- * request.
+ * Build the total Apply preview: queued structure operations, their dry-run
+ * diff, the model-request summary and every blocking conflict.
  * @param key - edit-session key.
- * @param blockIds - selected display ids (root or nested).
- * @param op - batch operation kind.
+ * @returns the preview state stored on the session (also returned for the caller).
  */
-export function previewBatchArtifactStructure(key: string, blockIds: readonly string[], op: 'delete' | 'duplicate'): void {
+export async function previewPendingStructureOps(key: string): Promise<ApplyPreviewState | undefined> {
   const session = sessions.get(key)
-  if (session === undefined) return
-  const requested = [...new Set(blockIds)]
-  if (requested.length === 0) return
-  if (requested.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
-    sessions.set(key, {
-      ...session,
-      structureError: translate('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: requested.length }),
-    })
+  if (session === undefined || session.status === 'submitted') return undefined
+  const ops = pendingStructureOpsFor(session)
+  const model = modelSummaryOf(session)
+  const previewOps = pendingOpPreviews(session)
+  if (ops.length === 0) {
+    const state: ApplyPreviewState = { status: 'ready', ops: [], model, conflicts: [], structureReady: true }
+    sessions.set(key, { ...session, applyPreview: state })
     publish()
-    return
+    return state
   }
-  const built = batchStructureOperations(session, requested, op)
-  if (built === undefined) {
-    const overlap = requested.some(blockId => requested.some(other => other !== blockId && other.startsWith(`${blockId}.`)))
-    sessions.set(key, { ...session, structureError: translate(overlap ? 'edit.batchNestedOverlap' : 'edit.batchUnresolved') })
-    publish()
-    return
-  }
-  void previewStructureOperation(key, {
-    kind: op,
-    blockId: built.blockIds[0],
-    blockIds: built.blockIds,
-    operations: built.operations,
-  }, 'edit.structureFailed')
-}
-
-/** Open a diff confirmation for a cross-container move. */
-export function previewMoveArtifactBlockTo(key: string, blockId: string, targetParentBlockId: string | 'root'): void {
-  const session = sessions.get(key)
-  if (session === undefined) return
-  const built = moveOperationForBlock(session, blockId, targetParentBlockId)
-  if (built === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
-    publish()
-    return
-  }
-  void previewStructureOperation(key, {
-    kind: 'move',
-    blockId,
-    targetParentBlockId,
-    operations: [built.operation],
-  }, 'edit.moveBlockFailed')
-}
-
-/** Apply the currently previewed operation, then surface the local revision card. */
-export function confirmArtifactStructurePreview(key: string, turn?: number): void {
-  const session = sessions.get(key)
-  const preview = session?.structurePreview
-  if (session === undefined || preview === undefined || preview.status !== 'ready') return
-  const built = preview.kind === 'move'
-    ? moveOperationForBlock(session, preview.blockId, preview.targetParentBlockId ?? 'root')
-    : preview.batch === true && preview.blockIds !== undefined
-      ? batchStructureOperations(session, preview.blockIds, preview.kind)
-      : structureOperationForBlock(session, preview.blockId, preview.kind)
-  const operations = built === undefined ? undefined : 'operations' in built ? built.operations : [built.operation]
-  if (operations === undefined || operations.length === 0) {
-    sessions.set(key, { ...session, structurePreview: { ...preview, status: 'failed', error: translate('edit.structureFailed') } })
-    publish()
-    return
-  }
-  sessions.set(key, { ...session, structurePreview: undefined })
-  void submitStructureOperation(key, operations, turn, preview.kind === 'move' ? 'edit.moveBlockFailed' : 'edit.structureFailed')
-}
-
-/** Dismiss the structure preview without applying it. */
-export function cancelArtifactStructurePreview(key: string): void {
-  const session = sessions.get(key)
-  if (session === undefined || session.structurePreview === undefined) return
-  sessions.set(key, { ...session, structurePreview: undefined })
+  const built = pendingWireOperations(session)
+  const loading: ApplyPreviewState = { status: 'loading', ops: previewOps, model, conflicts: built.conflicts, structureReady: built.conflicts.length === 0 }
+  sessions.set(key, { ...session, applyPreview: loading })
   publish()
+  if (built.conflicts.length > 0) {
+    const state: ApplyPreviewState = { ...loading, status: 'ready' }
+    sessions.set(key, { ...sessions.get(key) ?? session, applyPreview: state })
+    publish()
+    return state
+  }
+  const dryRun = await fetchStructureDryRun(session, built.operations)
+  const current = sessions.get(key)
+  if (current === undefined) return undefined
+  const remapConflicts = dryRun.ok ? remapConflictsFor(current, dryRun.program) : []
+  const conflicts = [...built.conflicts, ...remapConflicts]
+  const state: ApplyPreviewState = dryRun.ok
+    ? { status: 'ready', ops: previewOps, model, conflicts, structureReady: conflicts.length === 0, afterProgram: dryRun.program, changedBlockIds: dryRun.changedBlockIds, diff: diffProgramLines(current.program, dryRun.program) }
+    : { status: 'failed', ops: previewOps, model, conflicts: built.conflicts, structureReady: true, error: dryRun.message }
+  sessions.set(key, { ...current, applyPreview: state, structureError: undefined })
+  publish()
+  return state
+}
+
+/** Close the total Apply preview without applying anything. */
+export function cancelApplyPreview(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.applyPreview === undefined) return
+  sessions.set(key, { ...session, applyPreview: undefined })
+  publish()
+}
+
+/**
+ * Record what happened to the model request after a structural Apply. The
+ * draft has already been rekeyed, so the notice is stored on the new session
+ * and survives the card swap that the new revision triggers.
+ * @param key - edit-session key (the rekeyed draft).
+ * @param outcome - auto-submit result.
+ */
+export function noteArtifactApplyOutcome(key: string, outcome: ApplyOutcomeNotice): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.applyNotice === outcome) return
+  sessions.set(key, { ...session, applyNotice: outcome })
+  publish()
+}
+
+/** Dismiss the post-Apply notice of one draft. */
+export function dismissArtifactApplyNotice(key: string): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.applyNotice === undefined) return
+  sessions.set(key, { ...session, applyNotice: undefined })
+  publish()
+}
+
+/** One structure Apply result turned into a fresh edit session on the new revision. */
+interface RebaseOutcome {
+  readonly key: string
+  readonly referenceId: string
+  readonly session: ArtifactEditSession
+}
+
+/**
+ * Move one draft onto the revision a structure batch produced.
+ *
+ * New session/reference/chip are established first, then the old draft is
+ * removed (session, reference, persisted record, chip). That order guarantees
+ * the composer never shows a chip pointing at a deleted draft, which the
+ * auto-submit probe relies on.
+ * @param oldKey - draft key before the batch.
+ * @param oldSession - draft snapshot before the batch.
+ * @param result - authoritative structure result.
+ * @param appliedOps - queued operations that produced the revision, or
+ *   `undefined` when the revision came from another route (quick props) and the
+ *   queued operations must be carried over (remapped) instead of consumed.
+ * @returns the new key/reference/session.
+ */
+function rebaseDraftAfterStructure(
+  oldKey: string,
+  oldSession: ArtifactEditSession,
+  result: ArtifactStructureResult,
+  appliedOps: readonly PendingStructureOp[] | undefined,
+): RebaseOutcome | undefined {
+  const rootExtraction = blocksForProgram(result.program)
+  const wrappedProgram = wrapProgramForBlockEditing(result.program, rootExtraction)
+  const nested = nestedBlocksForProgram(result.program)
+  const oldBlocks = nestedBlocksForProgram(oldSession.program)?.blocks ?? oldSession.blocks
+  const newBlocks = nested?.blocks ?? rootExtraction.blocks
+  const mapping = mapOldToNewBlocks(oldBlocks, newBlocks, appliedOps ?? [])
+  // Never drop a saved request/addition because the post-batch structure cannot
+  // be paired: the caller keeps the old draft and reports the conflict instead.
+  if (appliedOps !== undefined && (remapConflictsFor(oldSession, result.program).length > 0 || !mapping.reliable)) return undefined
+  if (appliedOps === undefined) {
+    // Quick-props revisions keep the queue; every queued op must remap cleanly.
+    const queueMapped = pendingStructureOpsFor(oldSession).every(op => mapping.mapping.has(op.blockId)
+      && (op.targetParentBlockId === undefined || op.targetParentBlockId === 'root' || mapping.mapping.has(op.targetParentBlockId)))
+    if (!mapping.reliable || !queueMapped) return undefined
+  }
+  const selection = remapSelection(oldSession.selection, mapping.mapping).selection
+  const additions = remapAdditions(oldSession.additions ?? [], mapping.mapping).additions
+  const rootIds = rootExtraction.blocks.map(block => block.blockId)
+  const target = remapTargetOrder(oldSession.targetOrder, mapping.mapping, rootExtraction.blocks)
+  const nestedState = remapNestedOrder({ nestedOrder: oldSession.nestedOrder, mapping: mapping.mapping, newBlocks })
+  // A consumed Apply round never replays its operations. A quick-props revision
+  // is a different route: the queue is still pending, so remap it onto the new
+  // block ids instead of dropping it.
+  const pendingOps: PendingStructureOp[] = appliedOps !== undefined
+    ? []
+    : pendingStructureOpsFor(oldSession).flatMap(op => {
+        const blockId = mapping.mapping.get(op.blockId)
+        if (blockId === undefined) return []
+        const targetParentBlockId = op.targetParentBlockId === undefined || op.targetParentBlockId === 'root'
+          ? op.targetParentBlockId
+          : mapping.mapping.get(op.targetParentBlockId)
+        return [{
+          id: op.id,
+          op: op.op,
+          blockId,
+          ...targetParentBlockId === undefined ? {} : { targetParentBlockId },
+          createdAt: op.createdAt,
+        }]
+      })
+  const key = editKey(oldSession.sessionId, result.revisionId)
+  const reference = referenceForSession(key)
+  const next: ArtifactEditSession = {
+    key,
+    sessionId: oldSession.sessionId,
+    artifactId: result.artifactId,
+    baseRevisionId: result.revisionId,
+    baseRevision: result.revision,
+    requestId: newRequestId(),
+    attached: true,
+    branch: oldSession.branch ?? false,
+    latestRevision: result.revision,
+    ...(result.title ?? oldSession.title) === undefined ? {} : { title: result.title ?? oldSession.title },
+    style: result.style,
+    ...result.styleId === undefined ? {} : { styleId: result.styleId },
+    ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
+    program: result.program,
+    ...oldSession.nestedMode === true ? { nestedMode: true as const } : {},
+    ...oldSession.strict === true ? { strict: true as const } : {},
+    ...wrappedProgram === undefined ? {} : { wrappedProgram },
+    blocks: rootExtraction.blocks,
+    originalOrder: rootIds,
+    targetOrder: target.targetOrder.length === 0 ? rootIds : [...target.targetOrder],
+    orderChanged: target.targetOrder.length === 0 ? false : target.orderChanged,
+    ...nestedState.nestedOrderChanged ? { nestedOrder: nestedState.nestedOrder, nestedOriginalOrder: nestedState.nestedOriginalOrder, nestedOrderChanged: true } : {},
+    selection,
+    ...additions.length === 0 ? {} : { additions },
+    ...pendingOps.length === 0 ? {} : { pendingOps },
+    globalInstruction: oldSession.globalInstruction,
+    styleInstruction: oldSession.styleInstruction,
+    editing: true,
+    drawerOpen: false,
+    status: 'ready',
+    activeDraft: '',
+    activeDirty: false,
+  }
+  sessions.set(key, next)
+  if (bridge !== undefined && next.attached && hasArtifactEditContent(next)) {
+    bridge.upsertChip(next.sessionId, reference, chipLabelForSession(next))
+  }
+  const oldReference = referenceOf(oldKey)
+  sessions.delete(oldKey)
+  references.delete(oldReference)
+  removePersistedDraft(oldKey, oldSession.sessionId)
+  if (bridge !== undefined) bridge.removeChip(oldSession.sessionId, oldReference)
+  activeKeys.set(oldSession.sessionId, key)
+  scheduleDraftPersist(key)
+  publish()
+  scheduleChipSync(oldSession.sessionId, true)
+  return { key, referenceId: reference, session: next }
+}
+
+/** One authoritative structure batch: request and validate without recording a revision. */
+async function requestStructureOperation(
+  session: ArtifactEditSession,
+  operations: readonly DeterministicOperation[],
+  failureKey: string,
+  surface: 'structure' | 'props' = 'structure',
+): Promise<{ readonly ok: true; readonly result: ArtifactStructureResult } | { readonly ok: false; readonly message: string; readonly code?: string; readonly fallback?: 'base_missing' | 'artifact_missing' }> {
+  await ensureBaseForSession(session)
+  try {
+    const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        artifactId: session.artifactId,
+        baseRevisionId: session.baseRevisionId,
+        operationId: newRequestId(),
+        operations,
+        ...session.branch === true ? { branch: true } : {},
+        ...session.title === undefined ? {} : { title: session.title },
+        style: session.style,
+        ...session.styleId === undefined ? {} : { styleId: session.styleId },
+        ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
+      }),
+    })
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => undefined)
+      const code = failureCodeOf(body)
+      invalidateBaseAfterMiss(session, code)
+      return {
+        ok: false,
+        message: structureFailureMessage({ code, surface, failureKey }),
+        ...code === undefined ? {} : { code },
+        ...surface === 'props' && propsFallbackFor(code) !== undefined ? { fallback: propsFallbackFor(code) } : {},
+      }
+    }
+    const value: unknown = await response.json()
+    if (value !== null && typeof value === 'object' && (value as { ok?: unknown }).ok === true) {
+      const result = (value as { result?: unknown }).result
+      if (isArtifactStructureResult(result)) return { ok: true, result }
+    }
+    return { ok: false, message: translate(failureKey) }
+  } catch {
+    return { ok: false, message: translate(failureKey) }
+  }
+}
+
+/** Record one structure result as the local revision card of the current Turn. */
+function recordStructureRevision(session: ArtifactEditSession, result: ArtifactStructureResult, turn: number | undefined, kind: 'structure' | 'props'): void {
+  addLocalRevision(session.sessionId, {
+    kind,
+    artifactId: result.artifactId,
+    sourceRevisionId: result.baseRevisionId,
+    revisionId: result.revisionId,
+    revision: result.revision,
+    program: result.program,
+    ...result.title === undefined ? {} : { title: result.title },
+    style: result.style,
+    ...result.styleId === undefined ? {} : { styleId: result.styleId },
+    ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
+    ...turn === undefined ? {} : { turn },
+    createdAt: Date.now(),
+  })
+}
+
+/**
+ * Apply the current edit round.
+ * @param key - edit-session key.
+ * @param turn - latest loaded Turn (places the local revision card).
+ * @returns what the card should do next.
+ */
+export async function applyEditRound(key: string, turn?: number): Promise<ApplyRoundResult> {
+  const session = sessions.get(key)
+  if (session === undefined || session.status === 'submitted' || session.structureBusy === true) {
+    return { status: 'error', error: translate('edit.structureFailed') }
+  }
+  const ops = pendingStructureOpsFor(session)
+  if (ops.length === 0) {
+    // No structure revision is produced, so the draft keeps its key and chip;
+    // the card only needs the reference to auto-submit the model request.
+    return hasModelRequestContent(session)
+      ? { status: 'needSend', newKey: key, referenceId: referenceForSession(key) }
+      : { status: 'done' }
+  }
+  const built = pendingWireOperations(session)
+  if (built.conflicts.length > 0) {
+    const state: ApplyPreviewState = { status: 'ready', ops: pendingOpPreviews(session), model: modelSummaryOf(session), conflicts: built.conflicts, structureReady: false }
+    sessions.set(key, { ...sessions.get(key) ?? session, applyPreview: state })
+    publish()
+    return { status: 'error', conflicts: built.conflicts }
+  }
+  // A total preview the user just confirmed already carries the authoritative
+  // dry-run program; capture it before clearing the dialog state below, then
+  // reuse it as the preflight so the dialog + Apply does not charge the Host a
+  // second dry-run. The queue identity is re-checked below against the current
+  // pending ops, so a preview that no longer matches is never trusted.
+  const currentPreview = session.applyPreview
+  sessions.set(key, { ...session, structureBusy: true, structureError: undefined, applyPreview: undefined })
+  publish()
+  const previewMatchesQueue = currentPreview?.status === 'ready'
+    && currentPreview.structureReady
+    && currentPreview.afterProgram !== undefined
+    && currentPreview.ops.length === ops.length
+    && currentPreview.ops.every((op, index) => op.id === ops[index].id)
+  const preflight = previewMatchesQueue
+    ? { ok: true as const, program: currentPreview.afterProgram as string, changedBlockIds: currentPreview.changedBlockIds ?? [] }
+    : await fetchStructureDryRun(session, built.operations)
+  if (!preflight.ok) {
+    const current = sessions.get(key)
+    if (current !== undefined) {
+      sessions.set(key, { ...current, structureBusy: false, structureError: preflight.message })
+      publish()
+    }
+    return { status: 'error', error: preflight.message }
+  }
+  const preflightConflicts = [...built.conflicts, ...remapConflictsFor(sessions.get(key) ?? session, preflight.program)]
+  if (preflightConflicts.length > 0) {
+    const current = sessions.get(key) ?? session
+    const state: ApplyPreviewState = { status: 'ready', ops: pendingOpPreviews(current), model: modelSummaryOf(current), conflicts: preflightConflicts, structureReady: false, afterProgram: preflight.program, changedBlockIds: preflight.changedBlockIds, diff: diffProgramLines(current.program, preflight.program) }
+    sessions.set(key, { ...current, structureBusy: false, applyPreview: state })
+    publish()
+    return { status: 'error', conflicts: preflightConflicts }
+  }
+  const outcome = await requestStructureOperation(session, built.operations, 'edit.structureFailed')
+  if (!outcome.ok) {
+    const current = sessions.get(key)
+    if (current !== undefined) {
+      sessions.set(key, { ...current, structureBusy: false, structureError: outcome.message })
+      publish()
+    }
+    return { status: 'error', error: outcome.message }
+  }
+  const current = sessions.get(key)
+  if (current === undefined) return { status: 'error', error: translate('edit.structureFailed') }
+  const rebased = rebaseDraftAfterStructure(key, current, outcome.result, ops)
+  if (rebased === undefined) {
+    // The Host result disagreed with the preflight; keep the draft/queue and
+    // surface the conflict instead of writing a half-mapped request.
+    const latest = sessions.get(key) ?? current
+    sessions.set(key, { ...latest, structureBusy: false, structureError: translate('edit.mappingBlocked') })
+    publish()
+    return { status: 'error', error: translate('edit.mappingBlocked') }
+  }
+  recordStructureRevision(session, outcome.result, turn, 'structure')
+  if (hasModelRequestContent(rebased.session)) return { status: 'needSend', newKey: rebased.key, referenceId: rebased.referenceId }
+  markSubmitted(rebased.key)
+  return { status: 'done', newKey: rebased.key, referenceId: rebased.referenceId }
 }
 
 /** One structural block whose properties the quick adjust controls can rewrite. */
@@ -2077,11 +2601,6 @@ export function clearArtifactBlockPropsPreview(key: string): void {
 export async function applyArtifactBlockProps(key: string, blockId: string, props: ArtifactBlockProps, turn?: number): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted' || session.propsBusy === true) return
-  if (hasArtifactEditContent(session)) {
-    sessions.set(key, { ...session, propsError: translate('edit.propsDirty') })
-    publish()
-    return
-  }
   const target = blockPropsState(session, blockId)
   if (target === undefined || !target.support.ok) {
     sessions.set(key, { ...session, propsError: translate('edit.propsFailed') })
@@ -2102,12 +2621,35 @@ export async function applyArtifactBlockProps(key: string, blockId: string, prop
   sessions.set(key, { ...session, propsPreview: undefined, propsError: undefined, propsBusy: true })
   publish()
   try {
-    await submitStructureOperation(key, [{
+    const outcome = await requestStructureOperation(session, [{
       op: 'props',
       nodeId: target.nodeId,
       sourceDigest: target.sourceDigest,
       props,
-    }], turn, 'edit.propsFailed', 'props')
+    }], 'edit.propsFailed', 'props')
+    if (!outcome.ok) {
+      const current = sessions.get(key)
+      if (current !== undefined) {
+        sessions.set(key, {
+          ...current,
+          propsBusy: false,
+          ...outcome.fallback === undefined ? {} : { propsFallback: outcome.fallback },
+          propsError: outcome.message,
+        })
+        publish()
+      }
+      return
+    }
+    // The revision is authoritative now; keep every saved request by moving the
+    // draft onto it instead of dropping the draft (task-11). The queue is not
+    // consumed by a props revision, so its operations are remapped, not dropped.
+    recordStructureRevision(session, outcome.result, turn, 'props')
+    const current = sessions.get(key) ?? session
+    if (hasModelRequestContent(current) || pendingStructureOpsFor(current).length > 0) {
+      rebaseDraftAfterStructure(key, current, outcome.result, undefined)
+    } else {
+      markSubmitted(key)
+    }
   } finally {
     const current = sessions.get(key)
     if (current !== undefined && current.status !== 'submitted' && current.propsBusy === true) {
@@ -2117,158 +2659,9 @@ export async function applyArtifactBlockProps(key: string, blockId: string, prop
   }
 }
 
-/** Submit one structural operation and turn the result into a local revision card. */
-/** One deterministic operation the structure route accepts. */
 type DeterministicOperation =
   | { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string }
   | { op: 'props'; nodeId: string; sourceDigest: string; props: ArtifactBlockProps }
-
-async function submitStructureOperation(
-  key: string,
-  operations: readonly DeterministicOperation[],
-  turn: number | undefined,
-  failureKey: string,
-  surface: 'structure' | 'props' = 'structure',
-): Promise<void> {
-  const session = sessions.get(key)
-  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
-  // Async failures must patch the *current* session, never the snapshot taken
-  // before the request: the draft may have been closed or replaced meanwhile.
-  const fail = (message: string, extra?: Pick<ArtifactEditSession, 'propsFallback'>): void => {
-    const current = sessions.get(key)
-    if (current === undefined) return
-    sessions.set(key, {
-      ...current,
-      ...extra,
-      structureBusy: false,
-      ...surface === 'props' ? { propsError: message } : { structureError: message },
-    })
-    publish()
-  }
-  sessions.set(key, { ...session, structureBusy: true, structureError: undefined })
-  publish()
-  await ensureBaseForSession(session)
-  try {
-    const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        schemaVersion: 1,
-        artifactId: session.artifactId,
-        baseRevisionId: session.baseRevisionId,
-        operationId: newRequestId(),
-        operations,
-        ...session.branch === true ? { branch: true } : {},
-        ...session.title === undefined ? {} : { title: session.title },
-        style: session.style,
-        ...session.styleId === undefined ? {} : { styleId: session.styleId },
-        ...session.temporaryStyle === undefined ? {} : { temporaryStyle: session.temporaryStyle },
-      }),
-    })
-    if (!response.ok) {
-      const body: unknown = await response.json().catch(() => undefined)
-      const code = failureCodeOf(body)
-      invalidateBaseAfterMiss(session, code)
-      const fallback = surface === 'props' ? propsFallbackFor(code) : undefined
-      fail(structureFailureMessage({ code, surface, failureKey }),
-        fallback === undefined ? undefined : { propsFallback: fallback })
-      return
-    }
-    const value: unknown = await response.json()
-    if (value !== null && typeof value === 'object' && (value as { ok?: unknown }).ok === true) {
-      const result = (value as { result?: unknown }).result
-      if (isArtifactStructureResult(result)) {
-        addLocalRevision(session.sessionId, {
-          kind: operations[0]?.op === 'props' ? 'props' : 'structure',
-          artifactId: result.artifactId,
-          sourceRevisionId: result.baseRevisionId,
-          revisionId: result.revisionId,
-          revision: result.revision,
-          program: result.program,
-          ...result.title === undefined ? {} : { title: result.title },
-          style: result.style,
-          ...result.styleId === undefined ? {} : { styleId: result.styleId },
-          ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
-          ...turn === undefined ? {} : { turn },
-          createdAt: Date.now(),
-        })
-        markSubmitted(key)
-        return
-      }
-    }
-    fail(translate(failureKey))
-  } catch {
-    fail(translate(failureKey))
-  }
-}
-
-/**
- * Apply one deterministic structural operation (delete or duplicate) through the
- * Host's authoritative revision route, then surface the result as a local
- * revision card in the current Turn. No model turn is involved.
- * @param key - edit-session key.
- * @param blockId - display block id inside the current canvas.
- * @param op - operation kind.
- * @param turn - latest loaded Turn, used to place the local card.
- */
-export async function applyArtifactStructure(key: string, blockId: string, op: 'delete' | 'duplicate', turn?: number): Promise<void> {
-  const session = sessions.get(key)
-  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
-  const nested = nestedBlocksForProgram(session.program)
-  const target = nested?.blocks.find(block => block.blockId === blockId)
-  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.structureFailed') })
-    publish()
-    return
-  }
-  const group = target.parentBlockId === undefined
-    ? nested.blocks.filter(block => block.parentBlockId === undefined)
-    : nested.blocks.filter(block => block.parentBlockId === target.parentBlockId)
-  const index = group.findIndex(block => block.blockId === blockId)
-  const operation = op === 'duplicate'
-    ? { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) }
-    : { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
-  await submitStructureOperation(key, [operation], turn, 'edit.structureFailed')
-}
-
-/**
- * Move one block into another container (or the page root) as a structural
- * revision. The target index appends at the end of the destination's editable
- * children; the Host revalidates ancestry/scope.
- * @param key - edit-session key.
- * @param blockId - display id of the moved block.
- * @param targetParentBlockId - target display container id, or 'root'.
- * @param turn - latest loaded Turn for the local revision card.
- */
-export async function moveArtifactBlockTo(key: string, blockId: string, targetParentBlockId: string | 'root', turn?: number): Promise<void> {
-  const session = sessions.get(key)
-  if (session === undefined || session.structureBusy === true || session.status === 'submitted') return
-  const nested = nestedBlocksForProgram(session.program)
-  const target = nested?.blocks.find(block => block.blockId === blockId)
-  if (nested === undefined || target?.nodeId === undefined || target.sourceDigest === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
-    publish()
-    return
-  }
-  const targetParentNodeId = targetParentBlockId === 'root'
-    ? nested.rootNodeId
-    : nested.blocks.find(block => block.blockId === targetParentBlockId)?.nodeId
-  if (targetParentNodeId === undefined) {
-    sessions.set(key, { ...session, structureError: translate('edit.moveBlockFailed') })
-    publish()
-    return
-  }
-  const children = targetParentBlockId === 'root'
-    ? nested.blocks.filter(block => block.parentBlockId === undefined)
-    : nested.blocks.filter(block => block.parentBlockId === targetParentBlockId)
-  await submitStructureOperation(key, [{
-    op: 'move',
-    nodeId: target.nodeId,
-    sourceDigest: target.sourceDigest,
-    toParentNodeId: targetParentNodeId,
-    toIndex: children.length,
-  }], turn, 'edit.moveBlockFailed')
-}
 
 /**
  * Whether one deterministic style target is already the revision's identity.
@@ -2871,13 +3264,15 @@ export function editChipLabel(facts: EditChipFacts): string {
  * @param session - draft whose chip label is requested.
  * @returns the localized label.
  */
-export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[] }): string {
+export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' | 'baseRevision' | 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction' | 'branch'> & { readonly nestedOrderChanged?: boolean; readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[]; readonly pendingOps?: readonly unknown[] }): string {
   const t = translate
   const title = session.title !== undefined && session.title.trim() !== '' ? session.title : t('edit.panelTitle')
   const count = session.selection.length + (session.additions?.length ?? 0)
   const reordered = session.orderChanged || session.nestedOrderChanged === true
   const hasGlobal = session.globalInstruction.trim() !== ''
   const hasStyle = session.styleInstruction.trim() !== ''
+  const opsCount = session.pendingOps?.length ?? 0
+  const hasModelContent = hasStyle || count > 0 || reordered || hasGlobal
   let summary = hasStyle
     ? t('edit.chipTail.style')
     : count > 0 && reordered
@@ -2888,6 +3283,11 @@ export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' |
           ? t('edit.chipTail.order')
           : t('edit.chipTail.global')
   if (!hasStyle && hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
+  // A queue-only draft says so instead of pretending to be a global note.
+  if (opsCount > 0) {
+    const ops = t('edit.chipTail.ops', { count: opsCount })
+    summary = hasModelContent ? `${summary} · ${ops}` : ops
+  }
   const branchSuffix = session.branch === true ? t('edit.chip.branchSuffix') : ''
   return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}${branchSuffix}`
 }

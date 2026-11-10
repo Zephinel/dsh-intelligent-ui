@@ -863,3 +863,26 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,064,656** 字节，解包 **13,016,644** 字节 |
 | 构建 | host 841 kB；client 4.14 MB（js 3.91 / css 236.1 kB）；standalone 3.35 MB + 523.0 kB |
 | 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — 编辑流水线：结构操作队列、显式保存与总预览 Apply
+
+- **用户问题**：在 Artifact 编辑面板填好整体说明与区块需求后执行批量/逐行结构操作，结构操作立即提交并关闭编辑器，草稿丢失。改为「先排队、再预览、最后一次性应用」。
+- **新流程**：所有结构操作进入本轮待执行队列；批量模式内先记面板本地草稿，点「保存批量操作」才入队，取消/Esc 恢复顺序快照并清空草稿；逐行菜单 delete 保留两段确认后入队，duplicate/move 直接入队并 aria-live 播报。面板新增「本轮待执行」区（队列单条删除、已保存需求/新增、整体说明显式保存与状态、顺序状态）；整体说明改为显式「保存整体说明」；所有保存后 composer chip 与 dock 摘要立即更新，队列数量计入摘要。
+- **总预览 Apply**：底部固定「应用」按钮（`data-dsh-iui-edit-apply`，无已保存内容时禁用），点击重新拉取 Host 权威 dry-run 并打开总预览对话框（结构操作、diff、涉及区块、模型摘要、冲突列表；loading/failed/ready；aria-modal + 焦点陷阱 + Escape + 焦点返回）。冲突（删除块仍被已保存需求/addition 引用、样式与结构混合、重复、容器重叠、超限、无法解析等）时 confirm 禁用并逐条说明，且不发送任何 Host 请求。
+- **执行与重映射**：确认后一次原子 batch 生成一条 `kind:'structure'` 本地修订（确认过的总预览复用其 dry-run program 作为 Apply preflight，因此一次 Apply 只发一次 dry-run + 一次真实 batch），再把草稿 rekey 到新修订：`remap.ts` 先模拟 batch 后的兄弟顺序（delete 移除槽位、duplicate 副本紧跟源、move 追加到目标父），再与 Host 权威结果逐位对齐；副本槽位不参与映射（同签名副本不会抢走后续兄弟的已保存需求），容器块（Col/Row/Box/Grid/Card/Carousel）按类型+位置配对（其显示标题派生自首个子块），nestedOrder 把 batch 新建子块按 base 位置插入锚点（纯 duplicate 不会被误报为顺序改动）；selection/addition/targetOrder/nestedOrder 全部迁移，整体说明/样式/branch/strict/嵌套模式保留；新 chip 先建后删旧 chip，无悬空引用。任何 unmapped 需求/addition/嵌套子块或不可靠映射（如 duplicate+move 混合）在预览与 Apply 双重校验中阻止 Apply，绝不静默丢弃。剩余模型请求在 composer 为 plain 时自动 submit；输入框有用户正文或发送失败时保留 chip 并显示「模型请求在输入框，请手动发送」。
+- **深层页面**：`MAX_CST_DEPTH` 从 4 提升到 **10**（root 为 depth 0；真实 dashboard 为 depth 5–6、83 个 CST 节点），客户端嵌套映射与 Host 结构路由共享该常量；`nestedBlocksForProgram` 不可用时回退到与 Host 同构的根级 block 表解析根级 delete/duplicate/move；超过支持深度/节点上限的页面给 `depth` 冲突（不再显示「已不在当前修订中」），嵌套 move 给 `nestedTarget` 冲突。
+- **props**：Divider/Spacer 快捷属性成功后同样 rebase，不再提示丢弃草稿，已保存需求与队列保留；旧 B2「丢弃草稿并应用」警告随旧预览弹窗一并移除。
+- **无障碍与 locale**：保存/入队/取消/Apply/自动发送均有 `aria-live` 播报；总预览对话框初始焦点在取消、Tab 焦点陷阱、Escape 关闭、关闭后焦点回到触发按钮；中英 key 完整；窄面板下批量工具栏、待执行行与 Apply bar 换行不溢出。
+- **测试**：`remap.ts` 纯函数 15 条单测（副本排除、容器派生标题、nestedOrder 锚点插入、duplicate+move 不可靠）+ store 队列/预览/apply/rebase/chip rekey 与 20 上限拒绝单测 + 深层页面根级结构单测；E2E 迁移 25/25b/25c/25d/27/31/33/36 到新语义并新增 57–64（auto-submit、手动发送降级、刷新恢复 pendingOps、冲突阻止、depth-6/83 节点 dashboard 根级批量 Apply、超深页面 depth/nestedTarget 冲突、同签名 Text 副本不抢需求、第 21 条入队拒绝且不丢草稿）；artifact-edit 790 → **882 checks**。E2E 的 mock preview/apply 由真实 `applyStructureBatch`（Node bridge）生成，preview 与 apply program 与 Host 完全一致。
+- **已知限制**：自动发送依赖 composer plain 阶段（busy/发送中降级手动），隔离真实 GUI 23 phase 已验证（含自动发送）；Turn 关闭仍由既有 `reconcileArtifactSubmissions` 确认提交，Host 冲突沿用既有冲突横幅；单次最多 20 条结构操作（第 21 条被拒绝并提示，不截断、不丢草稿）；同一父级不能混合操作种类；结构操作支持 CST 深度 ≤10、节点 ≤200；映射依赖显示身份，duplicate+move 混合或无法唯一对齐时阻止 Apply；编辑面板（中文）与 composer chip/dock（英文）在混合 locale 下语言可能不一致，属既有 chip locale seat 行为，非本特性引入。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **756/756** = Host **303** + Client **430** + packaging **23**；build host **841 kB**、client **4.18 MB**（js 3.94 / CSS 242.6 kB） |
+| `npm run typecheck` / `npm run test:renderer` | PASS |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**882 checks**（迁移场景 + 新增 57–64） |
+| `npm run test:browser` | PASS；**9/9** 套件；`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,021** 字节，解包 **13,069,881** 字节 |
+| 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |

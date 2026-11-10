@@ -113,6 +113,72 @@ export function verifyArtifactChipAttachment(access: ArtifactChipAccess, session
   noteArtifactChipMissing(referenceId)
 }
 
+/** Polling cadence of the post-Apply auto-submit probe (ms). */
+const AUTO_SUBMIT_INTERVAL_MS = 400
+/** Number of auto-submit probes before giving up and asking for a manual Send. */
+const AUTO_SUBMIT_RETRIES = 12
+
+/**
+ * Whether the composer holds text outside its reference chips.
+ *
+ * A chip occupies its label length inside the draft text, so subtracting every
+ * occurrence's length leaves the user-authored text. The post-Apply probe must
+ * not auto-send when that remainder is non-empty: joining user prose to a model
+ * request would silently change what the user is writing.
+ * @param state - current composer state.
+ * @returns true when text other than chips remains.
+ */
+export function composerHasPlainText(state: { readonly draft: string; readonly occurrences: readonly { readonly length: number }[] }): boolean {
+  const chipChars = state.occurrences.reduce((sum, occurrence) => sum + Math.max(0, occurrence.length), 0)
+  return state.draft.trim().length > chipChars
+}
+
+/** Composer access needed by the post-Apply auto-submit probe. */
+export interface ArtifactSubmitAccess extends ArtifactChipAccess {
+  /** Submit the current draft through the normal Send path; absent when the host has no Send verb. */
+  readonly submit?: () => void
+}
+
+/**
+ * Submit the remapped model request after a structural Apply.
+ *
+ * A structural Apply replaces the draft key, so the composer chip has just been
+ * re-inserted. Submitting before the composer is back to its plain phase would
+ * send an empty request; this probe waits for both conditions (plain phase and
+ * the new chip occurrence) before pressing Send. It never clears the draft on
+ * failure: the caller keeps the chip and tells the user to send manually.
+ * @param access - composer access plus the Send verb.
+ * @param sessionId - chat session owning the composer.
+ * @param referenceId - chip reference of the remapped draft.
+ * @param options - retry count/interval overrides (tests).
+ * @returns whether the draft was submitted.
+ */
+export async function requestArtifactAutoSubmit(
+  access: ArtifactSubmitAccess,
+  sessionId: string,
+  referenceId: string,
+  options: { readonly retries?: number; readonly intervalMs?: number } = {},
+): Promise<boolean> {
+  const retries = options.retries ?? AUTO_SUBMIT_RETRIES
+  const intervalMs = options.intervalMs ?? AUTO_SUBMIT_INTERVAL_MS
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const submit = access.submit
+    if (typeof submit !== 'function') return false
+    const state = access.readInput(sessionId)
+    if (state !== undefined && state.phase === 'plain' && chipForRef(state, referenceId) !== undefined) {
+      try {
+        submit()
+        return true
+      } catch {
+        return false
+      }
+    }
+    if (attempt === retries) break
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  return false
+}
+
 /**
  * Insert or refresh the chip of one draft.
  *

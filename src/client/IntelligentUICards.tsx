@@ -66,29 +66,30 @@ import {
   useArtifactEditStore,
   blocksForProgram,
   closeArtifactBlockEditor,
-  applyArtifactStructure,
+  applyEditRound,
+  cancelApplyPreview as cancelArtifactApplyPreview,
+  clearPendingStructureOps,
   closeArtifactEditor,
   clearAllArtifactEdits,
+  previewPendingStructureOps,
+  removePendingStructureOp,
+  savePendingStructureOps,
   clearArtifactBlockInstruction,
   discardDraft as discardArtifactDraft,
   enableBranch as enableArtifactBranch,
+  dismissArtifactApplyNotice,
   hasArtifactEditContent,
+  noteArtifactApplyOutcome,
   moveArtifactBlock,
   moveArtifactBlocks,
   moveArtifactNestedBlock,
   moveArtifactNestedBlocks,
   moveArtifactNestedBlockBy,
-  moveArtifactBlockTo,
   applyArtifactBlockProps,
   applyArtifactStyleSwitch,
   setArtifactStyleSwitchTarget,
   clearArtifactBlockPropsPreview,
   previewArtifactBlockProps,
-  cancelArtifactStructurePreview,
-  confirmArtifactStructurePreview,
-  previewArtifactStructure,
-  previewBatchArtifactStructure,
-  previewMoveArtifactBlockTo,
   moveArtifactBlockBy,
   openArtifactBlockEditor,
   openArtifactEditor,
@@ -112,6 +113,7 @@ import {
   useArtifactEditSession,
   useArtifactEditStore,
 } from './artifact-edit/store.ts'
+import { composerHasPlainText, requestArtifactAutoSubmit } from './artifact-edit/composer.ts'
 
 /** Runtime kept mounted after exit so the panel can play its exit animation. */
 const EDITOR_CLOSE_ANIMATION_MS = 320
@@ -289,6 +291,8 @@ export function IntelligentUICards({
           renderedRevisionIds={renderedRevisionIds}
           styleActions={styleActions}
           styles={styles}
+          readInput={readInput}
+          inputActions={inputActions}
         />
       ))}
     </div>
@@ -361,6 +365,9 @@ interface ArtifactVersionGateProps {
   readonly renderedRevisionIds: ReadonlySet<string>
   readonly styleActions: StyleActions
   readonly styles: StyleCatalog
+  /** Composer reader plus Send verb for the post-Apply auto-submit probe. */
+  readonly readInput?: ComposerAccess['readInput']
+  readonly inputActions?: InputActions
 }
 
 /**
@@ -526,6 +533,8 @@ function ArtifactVersionGate(props: ArtifactVersionGateProps): ReactElement | nu
       // Snapshot theme wins; a theme-less snapshot inherits the session's
       // selected template, then the built-in theme.
       themeStyle={theme === undefined ? undefined : resolveStyleThemeVars(theme, props.scheme) as CSSProperties}
+      readInput={props.readInput}
+      inputActions={props.inputActions}
     />
   )
 }
@@ -579,6 +588,9 @@ interface IntelligentUICardProps {
   readonly versionBarAvailable?: boolean
   /** Displayed revision to auto-capture as a version-bar thumbnail. */
   readonly captureThumbnail?: { readonly artifactId: string; readonly revisionId: string; readonly scheme: 'light' | 'dark' }
+  /** Composer reader plus Send verb for the post-Apply auto-submit probe. */
+  readonly readInput?: ComposerAccess['readInput']
+  readonly inputActions?: InputActions
 }
 
 /**
@@ -588,7 +600,7 @@ interface IntelligentUICardProps {
  * @param props - extracted program, the composer continuation callback, and the locale seat.
  * @returns the card.
  */
-function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, artifactIdentity, stageVisible, onStageVisibleChange, staleHint, readOnly = false, templates, sessionStyle, versionBarAvailable = false, captureThumbnail }: IntelligentUICardProps): ReactElement {
+function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, themeStyle, scheme, onAdjust, saveAction, styleEditSupported = false, styleSwitchSupported = false, styleTargets, refreshStyleCatalog, resolveImage, localRevisionIds, draftRevisionIds, fallbackTargetIds, renderedRevisionIds, versionRole, artifactIdentity, stageVisible, onStageVisibleChange, staleHint, readOnly = false, templates, sessionStyle, versionBarAvailable = false, captureThumbnail, readInput, inputActions }: IntelligentUICardProps): ReactElement {
   const [collapsed, setCollapsed] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -758,23 +770,39 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     retryCheck: () => { retryArtifactRevisionCheck(editKey) },
     setNestedMode: (key, enabled) => { setArtifactNestedMode(key, enabled) },
     setStrictMode: (key, enabled) => { setArtifactStrictMode(key, enabled) },
-    applyStructure: (blockId, op) => { void applyArtifactStructure(editKey, blockId, op, turnNumber) },
     moveNestedBlock: (parentBlockId, blockId, toIndex) => { moveArtifactNestedBlock(editKey, parentBlockId, blockId, toIndex) },
     moveNestedBlockBy: (parentBlockId, blockId, delta) => { moveArtifactNestedBlockBy(editKey, parentBlockId, blockId, delta) },
     resetNestedOrder: () => { resetArtifactNestedOrder(editKey) },
     saveBlockAddition: (parentBlockId, instruction) => { saveArtifactBlockAddition(editKey, parentBlockId, instruction) },
     removeBlockAddition: (parentBlockId) => { removeArtifactBlockAddition(editKey, parentBlockId) },
-    moveBlockTo: (blockId, targetParentBlockId) => { moveArtifactBlockTo(editKey, blockId, targetParentBlockId, turnNumber) },
-    previewStructure: (blockId, op) => { previewArtifactStructure(editKey, blockId, op) },
-    previewBatchStructure: (blockIds, op) => { previewBatchArtifactStructure(editKey, blockIds, op) },
-    previewMoveBlockTo: (blockId, targetParentBlockId) => { previewMoveArtifactBlockTo(editKey, blockId, targetParentBlockId) },
-    confirmStructurePreview: () => { confirmArtifactStructurePreview(editKey, turnNumber) },
-    cancelStructurePreview: () => { cancelArtifactStructurePreview(editKey) },
+    savePendingOps: inputs => savePendingStructureOps(editKey, inputs),
+    removePendingOp: id => { removePendingStructureOp(editKey, id) },
+    clearPendingOps: () => { clearPendingStructureOps(editKey) },
+    previewApply: () => previewPendingStructureOps(editKey),
+    cancelApplyPreview: () => { cancelArtifactApplyPreview(editKey) },
+    applyRound: async () => {
+      const result = await applyEditRound(editKey, turnNumber)
+      if (result.status !== 'needSend' || result.referenceId === undefined || result.newKey === undefined) return result
+      const state = readInput?.()
+      if (state !== undefined && composerHasPlainText(state)) {
+        noteArtifactApplyOutcome(result.newKey, 'extraText')
+        return { ...result, autoSubmit: 'extraText' as const }
+      }
+      const submitted = await requestArtifactAutoSubmit({
+        readInput: () => readInput?.(),
+        ...(inputActions as { submit?: () => void } | undefined)?.submit === undefined
+          ? {}
+          : { submit: (inputActions as { submit: () => void }).submit },
+      }, sessionId, result.referenceId)
+      noteArtifactApplyOutcome(result.newKey, submitted ? 'submitted' : 'manual')
+      return { ...result, autoSubmit: submitted ? 'submitted' as const : 'manual' as const }
+    },
+    dismissApplyNotice: () => { dismissArtifactApplyNotice(editKey) },
     enableBranch: () => { enableArtifactBranch(editKey) },
     activateDraft: key => { activateArtifactDraft(key) },
     attachDraft: key => { attachArtifactDraft(key) },
     discardDraft: key => { discardArtifactDraft(key) },
-  }), [editKey, turnNumber, refreshStyleCatalog])
+  }), [editKey, turnNumber, refreshStyleCatalog, readInput, inputActions, sessionId])
 
   // Capture one thumbnail for the revision the stage displays (M2/D9): fonts,
   // two frames and the capture module's short settle budget run asynchronously;

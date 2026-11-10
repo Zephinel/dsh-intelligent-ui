@@ -21,7 +21,15 @@ import { createParser, type ElementNode } from '@openuidev/lang-core'
 import librarySpec from '../../vendor/spec.json' with { type: 'json' }
 
 export const MAX_CST_PROGRAM_CHARS = 200_000
-export const MAX_CST_DEPTH = 4
+/**
+ * Maximum CST node depth supported by structural operations (the root `Col` is
+ * depth 0). Real dashboard pages nest root -> Section -> Col -> Row -> Card ->
+ * Col -> Text (depth 5-6), so the historical limit of 4 made their root-level
+ * structure operations impossible. The node cap below still bounds total work;
+ * this only bounds recursion depth. Nested editing UI offers children up to
+ * display depth 4 regardless.
+ */
+export const MAX_CST_DEPTH = 10
 export const MAX_CST_NODES = 200
 export const MAX_CST_OPERATIONS = 20
 

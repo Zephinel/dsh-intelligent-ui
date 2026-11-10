@@ -12,6 +12,7 @@
  *   node test/browser/artifact-edit.e2e.mjs
  */
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,11 +20,14 @@ import { build } from 'esbuild'
 import { connectCdp, launchChrome, startStaticServer } from '../support/browser.mjs'
 import { DST_PROGRAM, DST_TITLE } from './fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM } from './fixtures/nested-artifact.ts'
+import { DEEP_DASHBOARD_PROGRAM, DEEP_DASHBOARD_TITLE, VERY_DEEP_PROGRAM, VERY_DEEP_TITLE } from './fixtures/deep-artifact.ts'
 import { PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_PROGRAM_APPLIED } from './fixtures/props-artifact.ts'
 import { extractArtifactBlocks, reorderProgramToTargetOrder } from '../../src/shared/artifact-blocks.ts'
+import { applyStructureBatch } from '../../src/host/artifact-structure.ts'
 
 const root = new URL('../../', import.meta.url).pathname
 const temp = await mkdtemp(join(tmpdir(), 'iui-artifact-edit-e2e-'))
+const structureBridge = await startStructureBridge()
 let server, browser, cdp
 let checks = 0
 const check = (value, expected, message) => { assert.deepEqual(value, expected, message); checks += 1 }
@@ -33,6 +37,92 @@ const DIGITAL_PROGRAM = DST_PROGRAM
   .replace(/^clockCard = .*$/m, 'clockCard = Card([Title("同一时刻，两个读数", "sm"), Text("选一个状态，看同一时刻的数字时间。", "sm", "muted"), SegmentedControl($clock, ["冬令时", "夏令时"], true), Col([Title($clock == "夏令时" ? "08:00" : "07:00", "2xl"), Text("2026-11-04", "sm", "muted")], 1)])')
   .replace(/^rulesTable = .*$/m, 'rulesTable = Table(["地区", "首次实施年份", "切换规则", "状态"], [["欧盟", "1980", "3 月最后一个周日 → 10 月最后一个周日", "实行"], ["中国", "1986", "1986–1991 年实行，1992 年起取消", "不实行"]])')
 const ARTICLE_PROGRAM = 'root = Col([toc, section])\ntoc = Toc(["Intro"])\nsection = Section("Intro", [Markdown("Body.")])'
+
+/**
+ * Local bridge that answers the mocked structure route with the real Host batch
+ * engine (`applyStructureBatch`), so the preview program and the applied program
+ * are byte-identical to what the Host would produce for the posted operations.
+ * The page mocks POST the draft base program plus the wire operations here.
+ * @returns the bridge URL and its close hook.
+ */
+async function startStructureBridge() {
+  const server = createServer(async (request, response) => {
+    response.setHeader('access-control-allow-origin', '*')
+    response.setHeader('access-control-allow-headers', 'content-type')
+    response.setHeader('access-control-allow-methods', 'POST, OPTIONS')
+    if (request.method === 'OPTIONS') {
+      response.writeHead(204)
+      response.end()
+      return
+    }
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    try {
+      const { program, operations } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(applyStructureBatch(program, operations)))
+    } catch (error) {
+      response.writeHead(500, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ ok: false, message: String(error) }))
+    }
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${server.address().port}/`, close: () => server.close() }
+}
+
+/**
+ * Page-side structure-route mock whose preview and apply answers come from the
+ * real batch engine, so the client-side remap validation runs against exactly
+ * the structure the Host would return. Request bodies are still recorded on the
+ * named window array for the existing call-count assertions.
+ * @param bridgeUrl - Node bridge URL from `startStructureBridge`.
+ * @param options - call log name, optional chained fetch name, base program and
+ *   the revision identity the fake Host records.
+ * @returns a script string for `read(...)`.
+ */
+function structureMockScript(bridgeUrl, options) {
+  const { calls, chain, program, artifactId, title, revisionId, revision = '2' } = options
+  const capture = chain === undefined
+    ? 'const original = window.fetch.bind(window);'
+    : `window.${chain} = window.fetch;\n    const original = window.${chain};`
+  return `(() => {
+    window.${calls} = [];
+    ${capture}
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.${calls}.push(body);
+        return window.__nativeFetch(${JSON.stringify(bridgeUrl)}, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ program: ${JSON.stringify(program)}, operations: body.operations }),
+        }).then(async response => {
+          const applied = await response.json();
+          if (applied.ok !== true) {
+            return new Response(JSON.stringify({ error: { code: 'operation_conflict', message: applied.message ?? 'structure batch failed' } }), { status: 400, headers: { 'content-type': 'application/json' } });
+          }
+          if (body.preview === true) {
+            return new Response(JSON.stringify({ ok: true, preview: { program: applied.program, operations: body.operations, changedBlockIds: applied.affectedRootBlockIds, touched: applied.touched } }), { status: 200, headers: { 'content-type': 'application/json' } });
+          }
+          const seq = (window.__mockStructureApplySeq = (window.__mockStructureApplySeq ?? 0) + 1);
+          return new Response(JSON.stringify({ ok: true, result: {
+            artifactId: ${JSON.stringify(artifactId)},
+            revisionId: ${JSON.stringify(revisionId)} + '_' + seq,
+            baseRevisionId: body.baseRevisionId,
+            revision: ${revision},
+            operationId: body.operationId,
+            program: applied.program,
+            title: ${JSON.stringify(title)},
+            style: 'card',
+          } }), { status: 201, headers: { 'content-type': 'application/json' } });
+        });
+      }
+      return original(input, init);
+    };
+    return true;
+  })()`
+}
 
 /** Platform primitives stub: the shell seeds the real module at runtime. */
 const PRIMITIVES_STUB = `
@@ -138,10 +228,40 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const chipLabel = () => read(`document.querySelector('[data-chip="artifact-edit"]')?.getAttribute('data-chip-label') ?? null`)
   const arrangementSelector = id => `[data-dsh-iui-edit-arrangement-row][data-block-id="${id}"]`
   const rowMenu = async selector => {
-    if (await count('[data-dsh-iui-edit-row-menu-panel]')) return
-    await click(`${selector} [data-dsh-iui-edit-row-menu]`)
+    // A panel that is closing after a previous action can swallow the toggle
+    // click. Close any open panel first (Escape), then open this row's menu with
+    // a short retry so the helper never races the React commit.
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (await count('[data-dsh-iui-edit-row-menu-panel]')) {
+        await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+        try { await wait('!document.querySelector("[data-dsh-iui-edit-row-menu-panel]")', 'previous row menu closed', { timeout: 1000 }) } catch { /* retry */ }
+        continue
+      }
+      await click(`${selector} [data-dsh-iui-edit-row-menu]`)
+      try {
+        await wait('!!document.querySelector("[data-dsh-iui-edit-row-menu-panel]")', 'row action menu', { timeout: 1000 })
+        return
+      } catch { /* retry the toggle */ }
+    }
     await wait('!!document.querySelector("[data-dsh-iui-edit-row-menu-panel]")', 'row action menu')
   }
+  const applyPreviewOpen = async (label = 'total apply preview') => {
+    await click('[data-dsh-iui-edit-apply]')
+    await wait('!!document.querySelector("[data-dsh-iui-edit-apply-preview]")', label)
+    // A structure dry-run goes through the real Host batch engine in the mock, so
+    // the dialog settles asynchronously; wait for its final state before reading
+    // operations/conflicts.
+    await wait(`document.querySelector('[data-dsh-iui-edit-apply-preview]')?.getAttribute('data-status') !== 'loading'`, `${label} settled`)
+  }
+  const applyPreviewConfirm = async () => {
+    await wait('!!document.querySelector("[data-dsh-iui-edit-apply-preview-confirm]")', 'apply preview confirm')
+    await click('[data-dsh-iui-edit-apply-preview-confirm]')
+  }
+  const applyPreviewCancel = async () => {
+    await click('[data-dsh-iui-edit-apply-preview-cancel]')
+    await wait('!document.querySelector("[data-dsh-iui-edit-apply-preview]")', 'apply preview closed')
+  }
+  const pendingOpLabels = () => read(`[...document.querySelectorAll('[data-dsh-iui-edit-pending-op]')].map(row => row.textContent.trim())`)
   const openArrangementEditor = async id => {
     await wait(`!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'previous editor settled')
     await rowMenu(arrangementSelector(id))
@@ -484,7 +604,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read('document.querySelector("[data-dsh-iui-block=\\"b3\\"]").getAttribute("data-dsh-iui-block-order")'), '1', 'reset keeps numbering')
   check(await read(`document.querySelector('[data-dsh-iui-block]').getAttribute('data-dsh-iui-block')`), 'b1', 'reset restores the canvas preview order')
   await typeInto('[data-dsh-iui-edit-global]', '保持页面其余内容不变')
-  check((await text('[data-dsh-iui-edit-send-info]')).includes('已填写'), true, 'summary reports the global instruction')
+  check((await text('[data-dsh-iui-edit-global-state]')).includes('未保存'), true, 'typing the global instruction marks it unsaved')
+  check((await text('[data-dsh-iui-edit-send-info]')).includes('未保存'), true, 'the summary waits for the explicit save')
+  await click('[data-dsh-iui-edit-global-save]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-global-state]').getAttribute('data-state') === 'saved'`, 'global instruction saved')
+  check((await text('[data-dsh-iui-edit-global-state]')).includes('已保存'), true, 'saving the global instruction flips its state')
+  check((await text('[data-dsh-iui-edit-send-info]')).includes('已填写'), true, 'summary reports the saved global instruction')
+  await wait(`document.querySelector('[data-chip="artifact-edit"]')?.getAttribute('data-chip-label')?.includes('整体说明') === true`, 'chip reports the global instruction')
 
   // 10. Reorder again and send edits + order + global in one envelope.
   await moveWithKeyboard('b5', 'ArrowUp', 4)
@@ -550,6 +676,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(conflictText.includes('最新版本是修订'), true, 'background probe shows the conflict banner')
   check(conflictText.includes('不会覆盖修订'), true, 'conflict banner explains the non-destructive branch action')
   check(conflictText.includes('修订 1') && conflictText.includes('修订 3'), true, 'conflict banner names both revisions')
+  const dockConflictText = await text('[data-dsh-iui-edit-draft-switcher]')
+  check(dockConflictText.includes('旧版本冲突'), true, 'the draft dock conflict tag uses the short badge copy')
+  check(dockConflictText.includes('{n}'), false, 'the draft dock conflict tag has no unformatted placeholder')
   const conflict = await read('window.__serializeChip().then(() => null, error => String(error))')
   check(conflict.includes('Artifact 在编辑期间更新了'), true, 'conflict blocks the send')
   check(await count('[data-dsh-iui-edit-view]'), 1, 'edit mode stays after a blocked send')
@@ -885,45 +1014,35 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(nestedOrderEnvelope.includes('"orderByParent"'), true, 'envelope carries the hierarchical order')
   check(nestedOrderEnvelope.includes('"targetOrder"'), true, 'envelope keeps the legacy root target order')
 
-  // 25. Deterministic structure operation: duplicate a block, local revision card.
-  await read(`(() => {
-    window.__structureCalls = [];
-    const original = window.fetch.bind(window);
-    window.fetch = (input, init) => {
-      const url = typeof input === 'string' ? input : String(input?.url ?? '');
-      if (url.includes('/api/intelligent-ui/artifact-structure')) {
-        const body = JSON.parse(init.body);
-        window.__structureCalls.push(body);
-        if (body.preview === true) {
-          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nmockPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1'], touched: [{ nodeId: body.operations[0].nodeId, nodePath: 'root/children[0]', op: body.operations[0].op }] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
-        }
-        const result = {
-          artifactId: 'nested-call-1',
-          revisionId: 'struct_e2e_duplicate',
-          baseRevisionId: JSON.parse(init.body).baseRevisionId,
-          revision: 2,
-          operationId: JSON.parse(init.body).operationId,
-          program: ${JSON.stringify(NESTED_PROGRAM)},
-          style: 'card',
-          title: '嵌套区块样例',
-        };
-        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
-      }
-      return original(input, init);
-    };
-  })()`)
+  // 25. Deterministic structure operation: the row menu queues a duplicate and
+  // the total Apply preview turns it into one local revision card.
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__structureCalls', program: NESTED_PROGRAM,
+    artifactId: 'nested-call-1', title: '嵌套区块样例', revisionId: 'struct_e2e_duplicate',
+  }))
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'structure editor')
   await rowMenu('[data-dsh-iui-edit-arrangement-row]')
   await click('[data-dsh-iui-edit-structure-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'structure preview dialog')
-  check(await read(`document.querySelector('[data-dsh-iui-edit-structure-preview]').getAttribute('aria-modal')`), 'true', 'preview dialog is modal')
-  await wait(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`, 'preview initial focus')
-  check(await read(`document.activeElement?.getAttribute('data-dsh-iui-edit-preview-cancel') !== null`), true, 'initial focus is on cancel')
-  check((await count('[data-dsh-iui-edit-preview-diff] [data-diff="add"]')) > 0, true, 'preview shows added diff rows')
-  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'a single-block preview shows no batch draft warning')
-  check((await text('[data-dsh-iui-edit-preview-confirm]')), '应用修改', 'the single-block confirm keeps its label')
-  await click('[data-dsh-iui-edit-preview-confirm]')
+  // Queueing is local: no Host request, no dialog and no editor close.
+  await wait('document.querySelectorAll("[data-dsh-iui-edit-pending-op]").length === 1', 'queued duplicate row')
+  check((await pendingOpLabels())[0].includes('复制'), true, 'the queued row names the operation and its block')
+  check((await read('window.__structureCalls')).length, 0, 'queueing a structure operation sends no Host request')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), true, 'queueing keeps the editor open')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`, 'chip queue summary')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`), true, 'the composer chip reports the queued structure operation')
+  await wait(`document.querySelector('[data-dsh-iui-edit-draft-switcher]')?.textContent?.includes('结构操作 1 项') === true`, 'draft dock queue summary')
+  check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('结构操作 1 项'), true, 'the draft dock reports the queued structure operation')
+  await applyPreviewOpen()
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview]').getAttribute('role')`), 'dialog', 'the total Apply preview is a dialog')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview]').getAttribute('aria-modal')`), 'true', 'the total Apply preview is modal')
+  await wait(`document.activeElement?.getAttribute('data-dsh-iui-edit-apply-preview-cancel') !== null`, 'apply preview initial focus')
+  check(await read(`document.activeElement?.getAttribute('data-dsh-iui-edit-apply-preview-cancel') !== null`), true, 'initial focus is on cancel')
+  check(await count('[data-dsh-iui-edit-apply-op]'), 1, 'the preview lists the queued operation')
+  check(await count('[data-dsh-iui-edit-apply-diff] [data-diff="add"]') > 0, true, 'the preview shows added diff rows')
+  check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '应用', 'a pure structure Apply keeps the short confirm label')
+  await shot('harness-apply-preview.png')
+  await applyPreviewConfirm()
   await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local structural revision card')
   const structureCalls = await read('window.__structureCalls')
   check(structureCalls.length, 2, 'preview then apply requests were sent')
@@ -935,35 +1054,14 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(structureCalls[0].operations[0].toIndex, 1, 'duplicate inserts after the source block')
   check((await text('[data-dsh-iui-local-revision]')).includes('结构操作修订'), true, 'local card is labelled as a structural revision')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the structural revision')
-  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after the structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'editor closes after a pure structural revision')
 
-  // 25b. Batch arrangement mode: selection controls, toolbar order ops, batch duplicate.
-  await read(`(() => {
-    window.__batchPreviousFetch = window.fetch;
-    window.__batchStructureCalls = [];
-    window.fetch = (input, init) => {
-      const url = typeof input === 'string' ? input : String(input?.url ?? '');
-      if (url.includes('/api/intelligent-ui/artifact-structure')) {
-        const body = JSON.parse(init.body);
-        window.__batchStructureCalls.push(body);
-        if (body.preview === true) {
-          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nbatchPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1', 'b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
-        }
-        const result = {
-          artifactId: 'nested-call-1',
-          revisionId: 'struct_e2e_batch',
-          baseRevisionId: body.baseRevisionId,
-          revision: 2,
-          operationId: body.operationId,
-          program: ${JSON.stringify(NESTED_PROGRAM)},
-          style: 'card',
-          title: '嵌套区块样例',
-        };
-        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
-      }
-      return window.__batchPreviousFetch(input, init);
-    };
-  })()`)
+  // 25b. Batch arrangement mode: selection controls, toolbar order ops, and a
+  // panel-local structure draft that only "保存批量操作" turns into queue items.
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__batchStructureCalls', chain: '__batchPreviousFetch', program: NESTED_PROGRAM,
+    artifactId: 'nested-call-1', title: '嵌套区块样例', revisionId: 'struct_e2e_batch',
+  }))
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'batch editor')
   await wait('!!document.querySelector("[data-dsh-iui-edit-batch-toggle]")', 'batch toggle')
@@ -982,18 +1080,17 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-batch-order="up"]').disabled`), true, 'order actions are disabled without a selection')
   await shot('harness-batch-empty.png')
 
-  // Clean draft: a batch preview offers no discard warning and keeps the normal label.
+  // Selecting a row and batch-duplicating keeps the op in the panel draft.
   await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
-  await wait(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected') === 'true'`, 'clean preview selection')
+  await wait(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected') === 'true'`, 'batch draft selection')
   await click('[data-dsh-iui-edit-batch-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'clean batch preview dialog')
-  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'a clean draft sees no discard warning')
-  check((await text('[data-dsh-iui-edit-preview-confirm]')), '应用修改', 'a clean draft keeps the normal confirm label')
-  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 1 个区块', 'the clean preview names one selected block')
-  await click('[data-dsh-iui-edit-preview-cancel]')
-  await wait('!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'clean preview cancelled')
-  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 0, 'cancelling closes the clean preview')
-  await read('window.__batchStructureCalls = []')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-pending-item]').length === 1`, 'batch draft pending row')
+  check((await text('[data-dsh-iui-edit-batch-pending]')).includes('待保存结构操作 1 项'), true, 'the batch draft counts the unsaved operation')
+  check((await text('[data-dsh-iui-edit-batch-pending]')).includes('复制'), true, 'the batch draft names the operation')
+  check((await read('window.__batchStructureCalls')).length, 0, 'queueing a batch draft operation sends no Host request')
+  check(await read(`!!document.querySelector('[data-dsh-iui-edit-batch-pending] [data-dsh-iui-edit-batch-pending-remove]')`), true, 'the batch draft operation can be removed before saving')
+  await click('[data-dsh-iui-edit-batch-pending-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-pending-item]').length === 0`, 'batch draft op removed')
   await click('[data-dsh-iui-edit-batch-clear]')
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 0`, 'clean selection cleared')
 
@@ -1037,38 +1134,66 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
       barOverflow: bar.scrollWidth - bar.clientWidth,
       inside: br.left >= sr.left - 1 && br.right <= sr.right + 1,
       headInside: document.querySelector('.dsh-iui-edit-arrangement .dsh-iui-edit-section-head').scrollWidth <= section.clientWidth + 1,
+      saveInside: (() => { const save = document.querySelector('[data-dsh-iui-edit-batch-save]').getBoundingClientRect(); return save.left >= sr.left - 1 && save.right <= sr.right + 1; })(),
+      apply: (() => {
+        const bar = document.querySelector('[data-dsh-iui-edit-apply-bar]');
+        const button = document.querySelector('[data-dsh-iui-edit-apply]');
+        const br = bar.getBoundingClientRect();
+        const ab = button.getBoundingClientRect();
+        return {
+          overflow: bar.scrollWidth - bar.clientWidth,
+          inside: br.left >= window.innerWidth - 1 - 292 && br.right <= window.innerWidth - 1,
+          buttonInside: ab.left >= br.left - 1 && ab.right <= br.right + 1 && ab.bottom <= br.bottom + 1,
+        };
+      })(),
     };
   })()`)
   check(batchLayout.sectionOverflow <= 1, true, 'batch mode does not overflow the narrow rail')
   check(batchLayout.barOverflow <= 1 && batchLayout.inside, true, 'the batch toolbar wraps inside the rail')
   check(batchLayout.headInside, true, 'the arrangement section head still fits the narrow rail')
+  check(batchLayout.saveInside, true, 'the batch save action fits the narrow rail')
+  check(batchLayout.apply.overflow <= 1, true, 'the fixed Apply bar does not overflow the narrow rail')
+  check(batchLayout.apply.buttonInside, true, 'the Apply button stays inside the narrow Apply bar')
   await shot('harness-batch-narrow.png')
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 1000, deviceScaleFactor: 1, mobile: false })
   await new Promise(resolve => setTimeout(resolve, 200))
 
-  // Leave one unsent order change so the batch preview has to warn about the draft.
+  // Cancelling the batch restores the order snapshot captured on entry.
   await click('[data-dsh-iui-edit-batch-order="down"]')
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'dirty batch reorder')
+  await click('[data-dsh-iui-edit-batch-cancel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'cancel leaves batch mode')
+  check((await arrangementOrder()).slice(0, 2), ['b1', 'b2'], 'cancel restores the order snapshot')
+  check((await chipLabel()).includes('调整区块顺序'), false, 'cancel drops the unsent reorder from the chip')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已取消批量操作并恢复原顺序')`, 'batch cancel announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已取消批量操作并恢复原顺序'), true, 'cancelling the batch is announced')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'cancel clears the pressed state')
 
-  // Select every block and duplicate the batch: one preview, one apply, one revision.
+  // Saving the batch queues both operations; Apply then runs one atomic revision.
+  await click('[data-dsh-iui-edit-batch-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'batch editor again')
   await click('[data-dsh-iui-edit-batch-select-all]')
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 2`, 'select all blocks')
   check((await text('[data-dsh-iui-edit-batch-count]')).includes('已选 2 个区块'), true, 'select all updates the live status')
   const localBeforeBatch = await count('[data-dsh-iui-local-revision]')
   await click('[data-dsh-iui-edit-batch-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'batch preview dialog')
-  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 1, 'a pending draft makes the batch preview warn')
-  check((await text('[data-dsh-iui-edit-preview-draft-warning]')).includes('未发送'), true, 'the warning names the unsent content')
-  check((await text('[data-dsh-iui-edit-preview-confirm]')), '丢弃草稿并应用', 'the confirm button names the draft discard')
-  check(await read(`!!document.querySelector('[data-dsh-iui-edit-structure-preview]')`), true, 'batch preview uses the existing preview dialog shell')
-  check((await text('.dsh-iui-edit-preview-title')), '预览批量结构修改', 'the dialog says it is a batch preview')
-  check((await text('.dsh-iui-edit-preview-operation')), '复制所选', 'the batch operation label is explicit')
-  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 2 个区块', 'the dialog names the batch size')
-  check(await count('[data-dsh-iui-edit-preview-blocks] [data-dsh-iui-edit-preview-batch-item]'), 2, 'the dialog lists the involved blocks')
-  check((await text('[data-dsh-iui-edit-preview-blocks]')).includes('外层卡片'), true, 'the involved-block list carries the titles')
-  check((await count('[data-dsh-iui-edit-preview-diff] [data-diff="add"]')) > 0, true, 'the batch preview keeps the shared diff list')
-  await shot('harness-batch-preview.png')
-  await click('[data-dsh-iui-edit-preview-confirm]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-pending-item]').length === 2`, 'two batch draft rows')
+  await click('[data-dsh-iui-edit-batch-save]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'save leaves batch mode')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 2`, 'two queued operations')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'save clears the pressed state')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 2 项'))`, 'batch chip queue summary')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 2 项'))`), true, 'the chip reports the saved batch queue')
+  check(await count('[data-dsh-iui-local-revision]'), localBeforeBatch, 'saving the batch creates no revision')
+  check((await read('window.__batchStructureCalls')).length, 0, 'saving the batch sends no Host request')
+  await applyPreviewOpen()
+  check((await text('.dsh-iui-edit-preview-title')), '应用本轮修改', 'the total preview titles the Apply round')
+  check(await count('[data-dsh-iui-edit-apply-op]'), 2, 'the preview lists both queued operations')
+  check((await text('[data-dsh-iui-edit-apply-ops-count]')), '2 项结构操作', 'the preview names the structure batch size')
+  check(await count('[data-dsh-iui-edit-apply-diff] [data-diff="add"]') > 0, true, 'the preview keeps the shared diff list')
+  check((await text('[data-dsh-iui-edit-apply-model-requests]')).includes('未填写'), true, 'the preview reports no model edit requests')
+  await shot('harness-batch-apply-preview.png')
+  await applyPreviewConfirm()
   await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeBatch + 1}`, 'batch structural revision card')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the batch revision')
   const batchCalls = await read('window.__batchStructureCalls')
@@ -1081,16 +1206,20 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(batchCalls[0].operations.map(operation => operation.toIndex), [2, 1], 'duplicates are sent in descending page order for stable placement')
   check((await count('[data-dsh-iui-local-revision]')), localBeforeBatch + 1, 'the batch produces exactly one local revision card')
   check((await read(`[...document.querySelectorAll('[data-dsh-iui-local-revision]')].at(-1).textContent`)).includes('结构操作修订'), true, 'the batch revision card is labelled as a structural revision')
-  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a batch structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a pure batch structural revision')
   await read('window.fetch = window.__batchPreviousFetch; delete window.__batchPreviousFetch')
 
-  // 25c. Escape exits batch mode and returns focus to the toggle.
+  // 25c. Escape cancels batch mode, restores the captured order and returns focus.
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'batch escape editor')
   await click('[data-dsh-iui-edit-batch-toggle]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'batch escape toolbar')
   await click(`${arrangementSelector('b1')} [data-dsh-iui-edit-batch-check]`)
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-check][aria-checked="true"]').length === 1`, 'batch escape selection')
+  await click('[data-dsh-iui-edit-batch-order="down"]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b2'`, 'batch escape reorder')
+  await click('[data-dsh-iui-edit-batch-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-batch-pending-item]').length === 1`, 'batch escape local op')
   await read(`(() => {
     const toggle = document.querySelector('[data-dsh-iui-edit-batch-toggle]');
     toggle.focus();
@@ -1100,38 +1229,19 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'Escape clears the pressed state')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-batch-toggle')`), true, 'Escape returns focus to the batch toggle')
   check(await count('[data-dsh-iui-edit-batch-check]'), 0, 'leaving batch mode restores the grips')
-  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已退出批量操作模式')`, 'batch exit announcement')
-  check((await text('[data-dsh-iui-edit-live]')).includes('已退出批量操作模式'), true, 'leaving batch mode is announced')
+  check((await arrangementOrder()).slice(0, 2), ['b1', 'b2'], 'Escape restores the order snapshot')
+  check(await count('[data-dsh-iui-edit-pending-op]'), 0, 'Escape drops the unsaved batch operations')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已取消批量操作并恢复原顺序')`, 'batch escape announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已取消批量操作并恢复原顺序'), true, 'leaving batch mode is announced')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'batch scenario closed')
 
-  // 25d. Nested arrangement batch mode: per-parent order moves and one nested batch duplicate.
-  await read(`(() => {
-    window.__nestedBatchPreviousFetch = window.fetch;
-    window.__nestedBatchStructureCalls = [];
-    window.fetch = (input, init) => {
-      const url = typeof input === 'string' ? input : String(input?.url ?? '');
-      if (url.includes('/api/intelligent-ui/artifact-structure')) {
-        const body = JSON.parse(init.body);
-        window.__nestedBatchStructureCalls.push(body);
-        if (body.preview === true) {
-          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify(NESTED_PROGRAM + '\nnestedBatchPreview = Text("preview", "sm")')}, operations: body.operations, changedBlockIds: ['b1', 'b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
-        }
-        const result = {
-          artifactId: 'nested-call-1',
-          revisionId: 'struct_e2e_nested_batch',
-          baseRevisionId: body.baseRevisionId,
-          revision: 2,
-          operationId: body.operationId,
-          program: ${JSON.stringify(NESTED_PROGRAM)},
-          style: 'card',
-          title: '嵌套区块样例',
-        };
-        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
-      }
-      return window.__nestedBatchPreviousFetch(input, init);
-    };
-  })()`)
+  // 25d. Nested arrangement batch mode: per-parent order moves and a nested batch
+  // draft that is saved into the queue and applied as one revision.
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__nestedBatchStructureCalls', chain: '__nestedBatchPreviousFetch', program: NESTED_PROGRAM,
+    artifactId: 'nested-call-1', title: '嵌套区块样例', revisionId: 'struct_e2e_nested_batch',
+  }))
   await click('[data-dsh-iui-call-id="nested-call-1"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested batch editor')
   await click('[data-dsh-iui-edit-nested]')
@@ -1177,7 +1287,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await nestedRowsOf('b2.2'), ['b2.2.1', 'b2.2.2'], 'top restores the other group too')
   await shot('harness-nested-batch-reordered.png')
 
-  // Escape leaves the nested batch mode and returns focus to its toggle.
+  // Escape cancels the nested batch and restores every group's order.
+  await click('[data-dsh-iui-edit-nested-batch-order="down"]')
   await read(`(() => {
     const toggle = document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]');
     toggle.focus();
@@ -1186,10 +1297,12 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'Escape leaves nested batch mode')
   check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'Escape clears the nested pressed state')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-nested-batch-toggle')`), true, 'Escape returns focus to the nested batch toggle')
-  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已退出批量操作模式')`, 'nested batch exit announcement')
-  check((await text('[data-dsh-iui-edit-live]')).includes('已退出批量操作模式'), true, 'leaving nested batch mode is announced')
+  check(await nestedRowsOf('b1.2'), ['b1.2.1', 'b1.2.2', 'b1.2.3'], 'Escape restores the nested order snapshot')
+  check(await nestedRowsOf('b2.2'), ['b2.2.1', 'b2.2.2'], 'Escape restores every nested group')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已取消批量操作并恢复原顺序')`, 'nested batch cancel announcement')
+  check((await text('[data-dsh-iui-edit-live]')).includes('已取消批量操作并恢复原顺序'), true, 'cancelling the nested batch is announced')
 
-  // A dirty draft (reordered above) warns before a nested batch duplicate applies.
+  // A valid nested selection is saved into the queue and applied as one revision.
   await click('[data-dsh-iui-edit-nested-batch-toggle]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'nested batch toolbar for duplicate')
   await selectNestedRow('b1.2.1')
@@ -1212,14 +1325,21 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-nested-batch-duplicate]').disabled`), false, 'a valid nested selection enables the structure action')
   const localBeforeNestedBatch = await count('[data-dsh-iui-local-revision]')
   await click('[data-dsh-iui-edit-nested-batch-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'nested batch preview dialog')
-  check((await text('.dsh-iui-edit-preview-title')), '预览批量结构修改', 'the nested batch preview says it is a batch')
-  check((await text('[data-dsh-iui-edit-preview-block-count]')), '已选 5 个区块', 'the nested preview names the batch size')
-  check(await count('[data-dsh-iui-edit-preview-blocks] [data-dsh-iui-edit-preview-batch-item]'), 5, 'the nested preview lists the involved blocks')
-  check(await count('[data-dsh-iui-edit-preview-draft-warning]'), 1, 'the dirty draft warns before a nested batch applies')
-  check((await text('[data-dsh-iui-edit-preview-confirm]')), '丢弃草稿并应用', 'the nested batch confirm names the draft discard')
-  await shot('harness-nested-batch-preview.png')
-  await click('[data-dsh-iui-edit-preview-confirm]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-nested-batch-pending-item]').length === 5`, 'nested batch draft rows')
+  check((await text('[data-dsh-iui-edit-nested-batch-pending]')).includes('待保存结构操作 5 项'), true, 'the nested batch draft counts its operations')
+  await click('[data-dsh-iui-edit-nested-batch-save]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-nested-batch-bar]")', 'nested batch saved')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 5`, 'nested queued operations')
+  check(await count('[data-dsh-iui-local-revision]'), localBeforeNestedBatch, 'saving the nested batch creates no revision')
+  // Keep this Apply pure: the exploratory per-parent reorder is reset first.
+  await click('[data-dsh-iui-edit-reset-nested]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-reset-nested]').disabled === true`, 'nested order reset before apply')
+  await applyPreviewOpen()
+  check((await text('.dsh-iui-edit-preview-title')), '应用本轮修改', 'the nested batch preview titles the Apply round')
+  check((await text('[data-dsh-iui-edit-apply-ops-count]')), '5 项结构操作', 'the nested preview names the batch size')
+  check(await count('[data-dsh-iui-edit-apply-op]'), 5, 'the nested preview lists every operation')
+  await shot('harness-nested-batch-apply-preview.png')
+  await applyPreviewConfirm()
   await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeNestedBatch + 1}`, 'nested batch structural revision card')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'editor closed after the nested batch revision')
   const nestedBatchCalls = await read('window.__nestedBatchStructureCalls')
@@ -1231,7 +1351,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(nestedBatchCalls[1].operations.map(operation => operation.toIndex), [1, 3, 1, 1, 1], 'each parent group keeps its own descending index base')
   check((await count('[data-dsh-iui-local-revision]')), localBeforeNestedBatch + 1, 'the nested batch produces exactly one local revision card')
   check((await read(`[...document.querySelectorAll('[data-dsh-iui-local-revision]')].at(-1).textContent`)).includes('结构操作修订'), true, 'the nested batch revision card is labelled as a structural revision')
-  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a nested batch structural revision')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), false, 'the editor closes after a pure nested batch structural revision')
   await read('window.fetch = window.__nestedBatchPreviousFetch; delete window.__nestedBatchPreviousFetch')
 
   // 26. Container expansion: Box/Grid/Section/Carousel children are selectable.
@@ -1300,9 +1420,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(moveTargets.length > 0, true, 'move menu offers a valid container')
   const moveTarget = moveTargets[0]
   await click(`[data-dsh-iui-edit-move-target][data-target-id="${moveTarget}"]`)
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'move preview dialog')
-  await click('[data-dsh-iui-edit-preview-confirm]')
-  await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'local move revision card')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'move queued row')
+  check((await pendingOpLabels())[0].includes('移动'), true, 'the queued move row names the operation')
+  await applyPreviewOpen()
+  check(await count('[data-dsh-iui-edit-apply-op]'), 1, 'the total preview lists the move operation')
+  const localBeforeMove = await count('[data-dsh-iui-local-revision]')
+  await applyPreviewConfirm()
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeMove + 1}`, 'local move revision card')
   const moveCalls = await read('window.__structureCalls')
   check(moveCalls.length, 2, 'move preview then apply requests were sent')
   check(moveCalls[0].preview, true, 'move preview is a dry run')
@@ -1517,9 +1641,14 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-structure-delete]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'delete confirmation reopened')
   await click('[data-dsh-iui-edit-structure-confirm-delete]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-confirm]")', 'delete preview opened')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'delete queued instead of applied')
   check(await count('[data-dsh-iui-edit-row-menu-panel]'), 0, 'confirming delete closes the row menu')
-  await click('[data-dsh-iui-edit-preview-cancel]')
+  check((await pendingOpLabels())[0].includes('删除'), true, 'the queued delete row names the operation')
+  await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-row-menu') === true`, 'delete focus returns to the row trigger')
+  check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-row-menu')`), true, 'queueing returns focus to the row trigger')
+  check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), true, 'queueing a delete keeps the editor open')
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queued delete removed')
   await new Promise(resolve => setTimeout(resolve, 200))
   await shot('harness-polish-delete-confirm.png')
   const scrollBeforeLocate = await read('window.scrollY')
@@ -1846,9 +1975,33 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await read('window.fetch = window.__legacySavedFetch')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy auto editor closed')
 
-  // 31. A pending block instruction blocks the property apply with inline copy.
+  // 31. A saved block instruction no longer blocks a property apply: the props
+  // revision rekeys the draft and keeps both the instruction and the queue.
   await read('window.__addPropsCard("props-call-2", "属性调整样例 2")')
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="props-call-2"]\')', 'dirty props card')
+  await read(`(() => {
+    window.__dirtyPropCalls = [];
+    window.__dirtySavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__dirtyPropCalls.push(body);
+        const result = {
+          artifactId: 'props-call-2',
+          revisionId: 'struct_dirty_props_1',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify(PROPS_PROGRAM_APPLIED)},
+          title: '属性调整样例 2',
+          style: 'card',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__dirtySavedFetch(input, init);
+    };
+  })()`)
   await click('[data-dsh-iui-call-id="props-call-2"] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty editor')
   await wait('document.querySelectorAll("[data-dsh-iui-block]").length === 4', 'dirty blocks')
@@ -1862,15 +2015,32 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   })()`)
   await click('[data-dsh-iui-edit-save]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-request-row]")', 'saved instruction row')
+  // A queued operation must survive the props revision as well.
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'props scenario queued op')
   await clickBlock('b2')
   await wait('!!document.querySelector("[data-dsh-iui-edit-props]")', 'quick props with pending instruction')
   await chooseQuickOption('[data-dsh-iui-edit-prop="color"]', 'danger')
+  const localBeforeDirtyProps = await count('[data-dsh-iui-local-revision]')
   await click('[data-dsh-iui-edit-props-apply]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-props-error]")', 'dirty guard error')
-  check((await text('[data-dsh-iui-edit-props-error]')).includes('请先发送'), true, 'a pending instruction is reported before applying properties')
-  await click('[data-dsh-iui-edit-cancel]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeDirtyProps + 1}`, 'props rebase revision card')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'props revision keeps the editor open')
+  const dirtyProps = await read('window.__dirtyPropCalls')
+  check(dirtyProps.length, 1, 'the property revision sends one deterministic request')
+  check(dirtyProps[0].operations[0].op, 'props', 'the property revision carries a props operation')
+  check(await count('[data-dsh-iui-edit-props-error]'), 0, 'a saved instruction no longer blocks the property apply')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-request-row]")', 'request list after the props rebase')
+  check(await count('[data-dsh-iui-edit-request-row]'), 1, 'the saved block instruction survives the props revision')
+  check((await text('[data-dsh-iui-edit-request-row]')).includes('把标题改短'), true, 'the rekeyed draft keeps the saved instruction')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'queued op survives the props rebase')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`, 'props rebase chip queue summary')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`), true, 'the chip still reports the queued operation after the rebase')
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'props scenario queue cleared')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty editor closed')
+  await read('window.fetch = window.__dirtySavedFetch; delete window.__dirtySavedFetch')
 
   // 32. Nested Divider quick adjust previews on the nested canvas.
   await read('window.__addNestedPropsCard()')
@@ -2008,14 +2178,17 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!!document.querySelector("[data-dsh-iui-edit-props-fallback]")', 'missing-artifact fallback note')
   check((await text('[data-dsh-iui-edit-props-fallback]')).includes('找不到这张卡片的记录'), true, 'artifact_missing gets its own explanation')
   await click('[data-dsh-iui-edit-cancel]')
-  // A duplicate preview failure now preserves the Host error code: the dialog
-  // explains the missing authoritative program instead of a generic failure.
+  // A queued duplicate meets the total Apply preview: the dry-run failure keeps
+  // the Host error code in the dialog instead of a generic failure.
   await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
   await click('[data-dsh-iui-edit-structure-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-failed]")', 'legacy duplicate preview failed')
-  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('权威程序记录'), true, 'the duplicate preview explains the missing authoritative program')
-  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('重新渲染'), true, 'the duplicate preview offers the re-render fallback')
-  await click('[data-dsh-iui-edit-preview-cancel]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'legacy queued duplicate')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-preview-failed]")', 'legacy duplicate preview failed')
+  check((await text('[data-dsh-iui-edit-apply-preview-failed]')).includes('权威程序记录'), true, 'the duplicate preview explains the missing authoritative program')
+  check((await text('[data-dsh-iui-edit-apply-preview-failed]')).includes('重新渲染'), true, 'the duplicate preview offers the re-render fallback')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-pending-op-remove]')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor closed')
   // Old Host without the registration route: the card degrades without blocking,
@@ -2044,9 +2217,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(baseCallsFor3.every((call, index) => call.seq < structureCallsFor3[index].seq), true, 'each legacy re-registration precedes the authoritative request it enables')
   await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
   await click('[data-dsh-iui-edit-structure-duplicate]')
-  await wait('!!document.querySelector("[data-dsh-iui-edit-preview-failed]")', 'old-host duplicate preview failed')
-  check((await text('[data-dsh-iui-edit-preview-failed]')).includes('权威程序记录'), true, 'the old-Host preview still explains the missing base')
-  await click('[data-dsh-iui-edit-preview-cancel]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'old-host queued duplicate')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-preview-failed]")', 'old-host duplicate preview failed')
+  check((await text('[data-dsh-iui-edit-apply-preview-failed]')).includes('权威程序记录'), true, 'the old-Host preview still explains the missing base')
+  await applyPreviewCancel()
   const structureCallsFor4 = (await read('window.__structureCalls')).filter(call => call.artifactId === 'props-call-4')
   check(structureCallsFor4.length, 1, 'the old-host card sent its duplicate preview request')
   check(baseCallsFor4[0].seq < structureCallsFor4[0].seq, true, 'the old-host registration precedes its duplicate preview request')
@@ -2116,6 +2291,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 2, y: 2 }] })
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await wait('!document.querySelector("[data-dsh-iui-edit-row-menu-panel]")', 'touch outside closes the row menu')
+  // The edit round can add local revision cards above the canvas; bring the
+  // header hint into view before computing touch coordinates.
+  await read(`document.querySelector('[data-dsh-iui-info-tip="nested"]').scrollIntoView({ block: 'center' })`)
+  await new Promise(resolve => setTimeout(resolve, 120))
   const touchTip = await read(`document.querySelector('[data-dsh-iui-info-tip="nested"]').getBoundingClientRect().toJSON()`)
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchTip.x + touchTip.width / 2, y: touchTip.y + touchTip.height / 2 }] })
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
@@ -2191,6 +2370,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(String(mixedStyleError).includes('不能与区块修改同时发送'), true, 'a mixed style send is blocked with the section copy')
   await click('[data-dsh-iui-edit-clear-all]')
   await wait('!document.querySelector("[data-dsh-iui-edit-style-mixed]")', 'mixed warning clears with block edits')
+
+  // Style-only Apply: the bar summary names the style change instead of
+  // reporting zero edit requests, and the preview lists the style instruction.
+  check((await text('[data-dsh-iui-edit-apply-summary]')), '样式调整', 'the Apply bar names a style-only draft')
+  await applyPreviewOpen()
+  check((await text('[data-dsh-iui-edit-apply-model-count]')), '0 项编辑需求', 'the style-only preview reports no block requests')
+  check((await text('[data-dsh-iui-edit-apply-model-style]')).includes('换成更冷静的配色'), true, 'the style-only preview shows the style instruction')
+  check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '发送修改', 'a style-only Apply sends the model request')
+  await applyPreviewCancel()
 
   // Style-only send: the envelope carries kind/styleInstruction and no block
   // fields; drop the remaining unrelated chip so the send picks the style one.
@@ -2941,6 +3129,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'draft editor')
   await typeInto('[data-dsh-iui-edit-global]', 'draft for the stage revision')
+  await click('[data-dsh-iui-edit-global-save]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-global-state]').getAttribute('data-state') === 'saved'`, 'stage draft global saved')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'draft editor closed')
   await click(versionTrigger)
@@ -2953,6 +3143,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]')
   await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'draft cleanup editor')
   await typeInto('[data-dsh-iui-edit-global]', '')
+  await click('[data-dsh-iui-edit-global-save]')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'draft cleanup closed')
 
@@ -3351,10 +3542,373 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'stored local revision details closed')
   await read('window.__setArtifactStageEnabled(false)')
 
+  // 57. Apply round with a queued structure operation, saved block requests and a
+  // saved global instruction: one structure revision, then the remapped model
+  // request is auto-submitted with new block ids.
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-intelligent-ui=\\"card\\"]")', 'cards cleared for the apply round')
+  const PIPE_PROGRAM = 'root = Col([Title("流水线样例", "md"), Text("第一段", "sm"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])'
+  const PIPE_PROGRAM_AFTER = 'root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])'
+  await read(`window.__addCard('pipeline-call-1', '流水线样例', ${JSON.stringify(PIPE_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="pipeline-call-1"]\')', 'pipeline card')
+  await read(`(() => {
+    window.__pipelineCalls = [];
+    window.__pipelineSavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__pipelineCalls.push(body);
+        if (body.preview === true) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify('root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])')}, operations: body.operations, changedBlockIds: ['b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        }
+        const result = {
+          artifactId: 'pipeline-call-1',
+          revisionId: 'pipeline-rev-2',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify('root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])')},
+          title: '流水线样例',
+          style: 'card',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__pipelineSavedFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="pipeline-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'pipeline editor')
+  await clickBlock('b3')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-instruction]")', 'pipeline second-text editor')
+  await saveInstruction('把第二段改短')
+  await clickBlock('b5')
+  await saveInstruction('结尾更简洁')
+  await typeInto('[data-dsh-iui-edit-global]', '保持风格统一')
+  await click('[data-dsh-iui-edit-global-save]')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'pipeline delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'pipeline queued delete')
+  const submitsBefore = await read('window.__submits ?? 0')
+  const localBeforePipeline = await count('[data-dsh-iui-local-revision]')
+  await applyPreviewOpen()
+  check(await count('[data-dsh-iui-edit-apply-op]'), 1, 'pipeline preview lists the queued delete')
+  check((await text('[data-dsh-iui-edit-apply-model-count]')), '2 项编辑需求', 'pipeline preview names the model edit requests')
+  check((await text('[data-dsh-iui-edit-apply-model-global]')).includes('保持风格统一'), true, 'pipeline preview shows the saved global instruction')
+  check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '应用并生成', 'a mixed Apply labels its confirm as apply-and-generate')
+  await applyPreviewConfirm()
+  await wait(`(window.__submits ?? 0) === ${submitsBefore + 1}`, 'model request auto-submitted')
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforePipeline + 1}`, 'pipeline structure revision card')
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'submitted'`, 'auto-submit notice on the rekeyed draft')
+  check((await text('[data-dsh-iui-edit-apply-notice]')).includes('已发送'), true, 'the notice reports the automatic send')
+  check(await count('[data-dsh-iui-edit-pending-op]'), 0, 'the applied structure batch leaves the queue empty')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例 · 修订 2'))`, 'rekeyed chip label')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例 · 修订 2'))`), true, 'the rebuilt chip targets the new revision')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例') && (el.getAttribute('data-chip-label') ?? '').includes('结构操作'))`), false, 'the rekeyed chip no longer reports consumed operations')
+  check((await read('window.__pipelineCalls')).length, 2, 'the round sends exactly one dry-run and one apply, never a replay')
+  const pipelineEnvelope = await read(`window.__serializeChipMatching('流水线样例')`)
+  check(pipelineEnvelope.includes('"baseRevisionId":"pipeline-rev-2"'), true, 'the serialized request targets the new revision')
+  check(pipelineEnvelope.includes('"blockId":"b2"'), true, 'the first saved request was remapped onto the new block id')
+  check(pipelineEnvelope.includes('"blockId":"b4"'), true, 'the second saved request was remapped onto the new block id')
+  check(pipelineEnvelope.includes('"blockId":"b3"'), false, 'no saved request keeps its stale block id')
+  check(pipelineEnvelope.includes('保持风格统一'), true, 'the global instruction survives the rebase')
+  check(pipelineEnvelope.includes('Text("第二段", "sm")'), true, 'the request carries the post-structure program')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'pipeline editor closed after the send')
+  await read('window.fetch = window.__pipelineSavedFetch; delete window.__pipelineSavedFetch')
+
+  // 58. User prose in the composer keeps the model request manual: the chip and
+  // the text stay in the composer and the panel explains what to do.
+  await read(`window.__addCard('pipeline-call-2', '流水线手动样例', ${JSON.stringify(PIPE_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="pipeline-call-2"]\')', 'manual pipeline card')
+  await read(`(() => {
+    window.__manualCalls = [];
+    window.__manualSavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) {
+        const body = JSON.parse(init.body);
+        window.__manualCalls.push(body);
+        if (body.preview === true) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true, preview: { program: ${JSON.stringify('root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])')}, operations: body.operations, changedBlockIds: ['b2'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        }
+        const result = {
+          artifactId: 'pipeline-call-2',
+          revisionId: 'pipeline2-rev-2',
+          baseRevisionId: body.baseRevisionId,
+          revision: 2,
+          operationId: body.operationId,
+          program: ${JSON.stringify('root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])')},
+          title: '流水线手动样例',
+          style: 'card',
+        };
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return window.__manualSavedFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="pipeline-call-2"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'manual pipeline editor')
+  await clickBlock('b3')
+  await saveInstruction('第二段更短')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'manual delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'manual queued delete')
+  const manualSubmitsBefore = await read('window.__submits ?? 0')
+  await applyPreviewOpen()
+  await read(`window.__setDraft('请同时解释这次删改的原因')`)
+  await applyPreviewConfirm()
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'extraText'`, 'manual-send notice')
+  check((await read('window.__submits ?? 0')), manualSubmitsBefore, 'user prose prevents the automatic send')
+  check((await text('[data-dsh-iui-edit-apply-notice]')).includes('请手动发送'), true, 'the manual notice explains the fallback')
+  check((await read('window.__input().draft')).includes('请同时解释这次删改的原因'), true, 'the user prose stays in the composer')
+  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线手动样例 · 修订 2'))`), true, 'the rekeyed chip stays in the composer')
+  await click('[data-dsh-iui-edit-apply-notice-dismiss]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-apply-notice]")', 'manual notice dismissed')
+  check(await count('[data-dsh-iui-edit-apply-notice]'), 0, 'dismissing removes the manual notice')
+  const manualEnvelope = await read(`window.__serializeChipMatching('流水线手动样例')`)
+  check(manualEnvelope.includes('"baseRevisionId":"pipeline2-rev-2"'), true, 'the manual chip still serializes against the new revision')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'manual pipeline editor closed at send')
+  await read('window.fetch = window.__manualSavedFetch; delete window.__manualSavedFetch')
+
+  // 59. Queued structure operations survive a reload (persisted draft record).
+  await read('sessionStorage.clear()')
+  await cdp.send('Page.reload', { ignoreCache: true })
+  await wait('document.readyState === "complete"', 'queue persistence reload')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'queue persistence harness ready')
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'queue persistence editor')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'queue persistence op')
+  await new Promise(resolve => setTimeout(resolve, 500))
+  await cdp.send('Page.reload', { ignoreCache: true })
+  await wait('document.readyState === "complete"', 'queue persistence reloaded')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-entry]")', 'queue persistence ready again')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].length >= 1`, 'queue persistence chip')
+  await click('[data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'queue persistence editor restored')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'queued op restored after reload')
+  check((await pendingOpLabels())[0].includes('复制'), true, 'the restored queue row keeps its operation')
+  check((await text('[data-dsh-iui-edit-pending-count]')).includes('1'), true, 'the restored pending section counts the operation')
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queue persistence op removed')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'queue persistence editor closed')
+
+  // 60. Conflicts block Apply before any Host request: a delete that would remove
+  // a still-referenced block, a duplicated queue entry, and mixed style+structure.
+  await read('window.__resetCards()')
+  await read(`window.__addCard('conflict-call-1', '冲突样例', ${JSON.stringify('root = Col([Title("冲突样例", "md"), Text("第一段", "sm"), Text("第二段", "sm")])')})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="conflict-call-1"]\')', 'conflict card')
+  await read(`(() => {
+    window.__conflictCalls = [];
+    window.__conflictSavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) window.__conflictCalls.push(JSON.parse(init.body));
+      return window.__conflictSavedFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="conflict-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'conflict editor')
+  await clickBlock('b2')
+  await saveInstruction('保留这段的编辑')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b2"]')
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'conflict delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'conflict queued delete')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-conflicts]")', 'selection conflict list')
+  check(await count('[data-dsh-iui-edit-apply-conflict]') >= 1, true, 'the preview lists the blocking selection conflict')
+  check((await text('[data-dsh-iui-edit-apply-conflicts]')).includes('编辑需求'), true, 'the conflict explains the saved edit request')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'conflicts disable the Apply confirm')
+  check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '存在冲突，暂时不能应用', 'the disabled confirm explains the block')
+  check((await read('window.__conflictCalls')).length, 0, 'a conflicting round sends no Host request')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'conflict queue cleared')
+  // Duplicate queue entries are rejected the same way.
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 2`, 'duplicated queue entries')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-conflicts]")', 'duplicate conflict list')
+  check(await count('[data-dsh-iui-edit-apply-conflict]') >= 1, true, 'the duplicate conflict uses the shared conflict list')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'duplicate')`), true, 'the duplicate queue entry is reported as a conflict')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-pending-clear]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'duplicate queue cleared')
+  // A style instruction cannot be mixed with structure operations.
+  await read('window.__project({ styleEdit: true })')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style-toggle]")', 'conflict style section')
+  await click('[data-dsh-iui-edit-style-toggle]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-style]")', 'conflict style field')
+  // The style disclosure moves focus into its field on the next frame; let that
+  // settle so it cannot steal focus from the row menu opened right after.
+  await wait('document.activeElement?.hasAttribute("data-dsh-iui-edit-style") === true', 'conflict style focus settled')
+  await typeInto('[data-dsh-iui-edit-style]', '整体更简洁')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'style mixed queued op')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-conflicts]")', 'style conflict list')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'styleMixed')`), true, 'the mixed style instruction is reported as a conflict')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-style-clear]')
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await read('window.__project({ styleEdit: false })')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'conflict editor closed')
+  await read('window.fetch = window.__conflictSavedFetch; delete window.__conflictSavedFetch')
+
+  // 61. Deep dashboard page (depth 6, 83 CST nodes, the shape of the real page
+  // that used to be rejected by MAX_CST_DEPTH=4): the root batch previews
+  // without conflicts and applies as exactly one structure revision.
+  await read('window.__resetCards()')
+  await read('window.__addDeepDashboardCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="deep-call-1"]\')', 'deep dashboard card')
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__deepCalls', chain: '__deepPreviousFetch', program: DEEP_DASHBOARD_PROGRAM,
+    artifactId: 'deep-call-1', title: DEEP_DASHBOARD_TITLE, revisionId: 'struct_deep_1',
+  }))
+  await click('[data-dsh-iui-call-id="deep-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'deep dashboard editor')
+  check(await count('[data-dsh-iui-edit-arrangement-row]'), 7, 'the deep page lists its seven root blocks')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b3"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'deep page queued duplicate')
+  const localBeforeDeep = await count('[data-dsh-iui-local-revision]')
+  await applyPreviewOpen()
+  check(await count('[data-dsh-iui-edit-apply-conflict]'), 0, 'the deep page preview has no conflict')
+  check(await count('[data-dsh-iui-edit-apply-op]'), 1, 'the deep page preview lists the duplicate')
+  await shot('harness-deep-page-preview.png')
+  await applyPreviewConfirm()
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforeDeep + 1}`, 'deep page structural revision')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'deep page editor closed')
+  const deepCalls = await read('window.__deepCalls')
+  check(deepCalls.length, 2, 'the deep page sends one dry-run and one apply')
+  check(deepCalls[0].preview, true, 'the deep page first request is the dry run')
+  check(deepCalls[1].preview === undefined, true, 'the deep page second request is the apply')
+  check(deepCalls[1].operations[0].op, 'duplicate', 'the deep page applies the root duplicate')
+  await read('window.fetch = window.__deepPreviousFetch; delete window.__deepPreviousFetch; delete window.__deepCalls')
+
+  // 62. A page nested past the supported depth (11 levels) must report an
+  // accurate depth conflict, not the misleading "no longer in this revision",
+  // and must never send a Host request. Nested moves get their own copy.
+  await read('window.__resetCards()')
+  await read('window.__addVeryDeepCard()')
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="very-deep-call-1"]\')', 'very deep card')
+  await read(`(() => {
+    window.__veryDeepCalls = [];
+    window.__veryDeepSavedFetch = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : String(input?.url ?? '');
+      if (url.includes('/api/intelligent-ui/artifact-structure')) window.__veryDeepCalls.push(JSON.parse(init.body));
+      return window.__veryDeepSavedFetch(input, init);
+    };
+  })()`)
+  await click('[data-dsh-iui-call-id="very-deep-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'very deep editor')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'very deep queued duplicate')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-conflicts]")', 'very deep depth conflict')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'depth')`), true, 'the very deep page reports a depth conflict')
+  check((await text('[data-dsh-iui-edit-apply-conflicts]')).includes('层级过深'), true, 'the depth conflict explains the nesting limit')
+  check((await text('[data-dsh-iui-edit-apply-conflicts]')).includes('已不在当前修订中'), false, 'the conflict is not the misleading missing-block copy')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'the depth conflict disables Apply')
+  check((await read('window.__veryDeepCalls')).length, 0, 'the depth conflict sends no Host request')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'very deep queue cleared')
+  await read(`window.__queueStructureOp('very-deep-call-1', { op: 'move', blockId: 'b1', targetParentBlockId: 'b2' })`)
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'very deep queued nested move')
+  await applyPreviewOpen()
+  await wait('!!document.querySelector("[data-dsh-iui-edit-apply-conflicts]")', 'very deep nested-target conflict')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'nestedTarget')`), true, 'the nested move reports the nested-target conflict')
+  check((await text('[data-dsh-iui-edit-apply-conflicts]')).includes('暂不支持移动到嵌套容器'), true, 'the nested-target conflict explains the depth limitation')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'the nested-target conflict disables Apply')
+  check((await read('window.__veryDeepCalls')).length, 0, 'the nested-target conflict sends no Host request')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'very deep move queue cleared')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'very deep editor closed')
+  await read('window.fetch = window.__veryDeepSavedFetch; delete window.__veryDeepSavedFetch; delete window.__veryDeepCalls')
+
+  // 63. MAJOR-1 end-to-end: two identical untitled Text blocks; duplicate the
+  // first while a saved request sits on the second. The remapped request must
+  // stay on the original second block (b3), never on the inserted copy (b2).
+  await read('window.__resetCards()')
+  const IDENTICAL_PROGRAM = 'root = Col([Text("x"), Text("x")])'
+  await read(`window.__addCard('identical-call-1', '同签名样例', ${JSON.stringify(IDENTICAL_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="identical-call-1"]\')', 'identical blocks card')
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__identicalCalls', chain: '__identicalPreviousFetch', program: IDENTICAL_PROGRAM,
+    artifactId: 'identical-call-1', title: '同签名样例', revisionId: 'struct_identical_1',
+  }))
+  await click('[data-dsh-iui-call-id="identical-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'identical blocks editor')
+  await clickBlock('b2')
+  await saveInstruction('第二块的需求')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'identical duplicate queued')
+  const identicalSubmitsBefore = await read('window.__submits ?? 0')
+  await applyPreviewOpen()
+  check(await count('[data-dsh-iui-edit-apply-conflict]'), 0, 'the identical-text duplicate maps reliably')
+  await applyPreviewConfirm()
+  await wait(`(window.__submits ?? 0) === ${identicalSubmitsBefore + 1}`, 'identical duplicate auto-submits the model request')
+  const identicalEnvelope = await read(`window.__serializeChipMatching('同签名样例')`)
+  check(identicalEnvelope.includes('"blockId":"b3"'), true, 'the saved request follows the original second block')
+  check(identicalEnvelope.includes('"blockId":"b2"'), false, 'the saved request never lands on the duplicated copy')
+  check(identicalEnvelope.includes('第二块的需求'), true, 'the request keeps its instruction')
+  await read('window.fetch = window.__identicalPreviousFetch; delete window.__identicalPreviousFetch; delete window.__identicalCalls')
+
+  // 64. MAJOR-2 end-to-end: the 21st queued operation is refused with visible
+  // copy; the queue and the saved model content are untouched.
+  await read('window.__resetCards()')
+  const LIMIT_PROGRAM = 'root = Col([Title("队列上限", "md"), Text("一", "sm"), Text("二", "sm")])'
+  await read(`window.__addCard('limit-call-1', '队列上限样例', ${JSON.stringify(LIMIT_PROGRAM)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="limit-call-1"]\')', 'queue limit card')
+  await click('[data-dsh-iui-call-id="limit-call-1"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'queue limit editor')
+  await clickBlock('b2')
+  await saveInstruction('保留的编辑需求')
+  await typeInto('[data-dsh-iui-edit-global]', '保留整体说明')
+  await click('[data-dsh-iui-edit-global-save]')
+  for (let index = 0; index < 20; index += 1) {
+    await read(`window.__queueStructureOp('limit-call-1', { op: 'delete', blockId: 'b1' })`)
+  }
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 20`, 'twenty queued operations')
+  await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
+  await click('[data-dsh-iui-edit-structure-duplicate]')
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-error]')?.textContent.includes('20') === true`, 'queue limit copy shown')
+  check(await count('[data-dsh-iui-edit-pending-op]'), 20, 'the refused 21st operation is not queued')
+  check((await text('[data-dsh-iui-edit-apply-error]')).includes('最多 20 项'), true, 'the inline error explains the cap')
+  await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('最多 20 项') === true`, 'queue limit announced')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('最多 20 项') === true`), true, 'the cap is announced through the live region')
+  check((await text('[data-dsh-iui-edit-request-list]')).includes('保留的编辑需求'), true, 'the saved block request survives the refusal')
+  check((await read(`document.querySelector('[data-dsh-iui-edit-global]')?.value ?? ''`)).includes('保留整体说明'), true, 'the saved global instruction survives the refusal')
+  check((await text('[data-dsh-iui-edit-global-state]')).includes('已保存'), true, 'the global instruction stays saved after the refusal')
+  await click('[data-dsh-iui-edit-pending-clear]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queue limit queue cleared')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'queue limit editor closed')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }
   await browser?.cleanup()
   server?.close()
+  structureBridge.close()
   await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
 }

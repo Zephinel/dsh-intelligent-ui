@@ -317,7 +317,12 @@ test('structure limits, opaque syntax and oversized programs are rejected', () =
   const huge = `${' '.repeat(MAX_CST_PROGRAM_CHARS + 1)}\nroot = Col([Title("x")])`
   expectFailure(replaceNode(huge, 'n1', 'Col([])'), 'program_too_large')
   const deep = 'root = Col([a])\na = Card([Col([a2])])\na2 = Card([Col([a3])])\na3 = Card([Col([a4])])\na4 = Card([Col([a5])])\na5 = Text("x")'
-  assert.equal(buildArtifactTree(deep).limitsExceeded, 'too_deep')
+  assert.equal(buildArtifactTree(deep, { maxDepth: 4 }).limitsExceeded, 'too_deep')
+  // The default depth supports real dashboard nesting (root -> Card -> Col ->
+  // Row -> Card -> Col -> Text is depth 6) and still rejects deeper pages.
+  assert.equal(buildArtifactTree(deep).limitsExceeded, undefined)
+  const tooDeep = 'root = Col([a0])\na0 = Col([a1])\na1 = Col([a2])\na2 = Col([a3])\na3 = Col([a4])\na4 = Col([a5])\na5 = Col([a6])\na6 = Col([a7])\na7 = Col([a8])\na8 = Col([a9])\na9 = Col([a10])\na10 = Text("x")'
+  assert.equal(buildArtifactTree(tooDeep).limitsExceeded, 'too_deep')
 })
 
 test('applyOperations is atomic, order-stable and bounded', () => {

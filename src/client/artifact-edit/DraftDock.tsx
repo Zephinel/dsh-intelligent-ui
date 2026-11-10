@@ -41,9 +41,12 @@ function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
       || draft.globalInstruction.trim() !== ''
     return t(hasBlockContent ? 'edit.styleMixed' : 'edit.summaryStyle')
   }
+  const ops = draft.pendingOps?.length ?? 0
+  const opsLabel = ops > 0 ? t('edit.summaryOps', { count: ops }) : ''
   const count = draft.selection.length
-  if (count > 0) return t('edit.requestsCount', { count })
-  if (draft.orderChanged) return t('edit.summaryOrderChanged')
+  if (count > 0) return opsLabel === '' ? t('edit.requestsCount', { count }) : `${opsLabel} · ${t('edit.requestsCount', { count })}`
+  if (draft.orderChanged || draft.nestedOrderChanged === true) return opsLabel === '' ? t('edit.summaryOrderChanged') : `${opsLabel} · ${t('edit.summaryOrderChanged')}`
+  if (opsLabel !== '') return opsLabel
   return t('edit.summaryGlobal')
 }
 
@@ -103,7 +106,7 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
                     {t('edit.revision', { n: draft.baseRevision })} · {draftSummaryLabel(draft, t)}
                   </span>
                 </span>
-                {conflict ? <span className="dsh-iui-edit-draft-tag is-conflict">{t('edit.conflictTitle')}</span> : null}
+                {conflict ? <span className="dsh-iui-edit-draft-tag is-conflict">{t('edit.conflictBadge')}</span> : null}
                 {draft.submitFailed === true ? <span className="dsh-iui-edit-draft-tag is-failed" title={t('edit.draftFailedHint')}>{t('edit.draftFailed')}</span> : null}
                 {draft.attached ? null : <span className="dsh-iui-edit-draft-tag">{t('edit.draftDetached')}</span>}
               </button>

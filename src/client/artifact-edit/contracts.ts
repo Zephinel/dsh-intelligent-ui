@@ -44,22 +44,6 @@ export interface ArtifactStructurePreviewLine {
   readonly text: string
 }
 
-/** Client state for one deterministic structure dry-run. */
-export interface ArtifactStructurePreviewState {
-  readonly kind: 'delete' | 'duplicate' | 'move'
-  readonly blockId: string
-  /** Set when the preview covers a batch (selection toolbar action). */
-  readonly batch?: true
-  /** Every selected block id when the preview covers a batch, in arrangement order. */
-  readonly blockIds?: readonly string[]
-  readonly targetParentBlockId?: string
-  readonly status: 'loading' | 'ready' | 'failed'
-  readonly afterProgram?: string
-  readonly changedBlockIds?: readonly string[]
-  readonly diff?: readonly ArtifactStructurePreviewLine[]
-  readonly error?: string
-}
-
 /** Batch arrangement move: one step, or straight to the first/last position. */
 export type BatchOrderMode = 'up' | 'down' | 'top' | 'bottom'
 
@@ -147,8 +131,12 @@ export interface ArtifactEditSession {
   /** When this draft was submitted, for bounded retention. */
   readonly submittedAt?: number
   readonly error?: string
-  /** Structure operation dry-run preview awaiting confirmation. */
-  readonly structurePreview?: ArtifactStructurePreviewState
+  /** Queued deterministic structure operations waiting for Apply. */
+  readonly pendingOps?: readonly PendingStructureOp[]
+  /** Total Apply preview (queued ops + model request summary + conflicts). */
+  readonly applyPreview?: ApplyPreviewState
+  /** Post-Apply notice shown on the rekeyed draft (auto-submit result). */
+  readonly applyNotice?: ApplyOutcomeNotice
   /** Pending model-generated additions, one per target container in v1. */
   readonly additions?: readonly { readonly parentBlockId: string; readonly instruction: string }[]
   /** Canvas-only property preview for one quick-adjustable block (Divider/Spacer). */
@@ -175,6 +163,83 @@ export interface ArtifactEditSession {
   readonly styleSwitchBusy?: boolean
   /** Last deterministic style switch failure, shown inline in the style section. */
   readonly styleSwitchError?: string
+}
+
+/** One deterministic structure operation waiting to be applied (task-11 M4 pipeline). */
+export interface PendingStructureOp {
+  /** Stable queue id; survives persistence and is unique per draft. */
+  readonly id: string
+  readonly op: 'delete' | 'duplicate' | 'move'
+  /** Display block id in the draft's base revision. */
+  readonly blockId: string
+  /** Move target parent display id; absent/`'root'` means the page root. */
+  readonly targetParentBlockId?: string
+  readonly createdAt: number
+}
+
+/** Outcome of one Apply round, shared by the store, the card and the panel. */
+export interface ApplyRoundResult {
+  readonly status: 'needSend' | 'done' | 'error'
+  readonly newKey?: string
+  readonly referenceId?: string
+  readonly conflicts?: readonly PendingApplyConflict[]
+  readonly error?: string
+}
+
+/**
+ * What happened to the model request after a structural Apply consumed the
+ * queue: sent automatically, left in the composer for a manual Send, or left
+ * there because the composer already held user prose.
+ */
+export type ApplyOutcomeNotice = 'submitted' | 'manual' | 'extraText'
+
+/** Result of queueing structure operations (the queue never silently truncates). */
+export type SavePendingOpsResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'limit'; readonly current: number; readonly max: number }
+
+/** Why one queued structure operation blocks Apply until the user fixes it. */
+export interface PendingApplyConflict {
+  readonly kind: 'selection' | 'addition' | 'styleMixed' | 'overlap' | 'duplicate' | 'limit' | 'unresolved' | 'target' | 'order' | 'depth' | 'nestedTarget'
+  /** Block the conflict is about, when it has one. */
+  readonly blockId?: string
+  /** Human-readable detail for the preview dialog (localized by the view). */
+  readonly detail?: string
+}
+
+/** Model request summary shown in the total Apply preview. */
+export interface ApplyModelSummary {
+  readonly requestCount: number
+  readonly titles: readonly string[]
+  readonly globalInstruction: string
+  readonly additions: readonly { readonly parentBlockId: string; readonly instruction: string }[]
+  readonly orderChanged: boolean
+  readonly nestedOrderChanged: boolean
+  readonly styleInstruction: string
+  readonly branch: boolean
+}
+
+/** One structure operation shown in the total Apply preview. */
+export interface ApplyPreviewOp {
+  readonly id: string
+  readonly op: PendingStructureOp['op']
+  readonly blockId: string
+  readonly label: string
+  readonly targetParentBlockId?: string
+}
+
+/** Complete state of the total Apply preview dialog. */
+export interface ApplyPreviewState {
+  readonly status: 'loading' | 'ready' | 'failed'
+  readonly ops: readonly ApplyPreviewOp[]
+  readonly model: ApplyModelSummary
+  readonly conflicts: readonly PendingApplyConflict[]
+  readonly afterProgram?: string
+  readonly changedBlockIds?: readonly string[]
+  readonly diff?: readonly ArtifactStructurePreviewLine[]
+  readonly error?: string
+  /** True when the queued structure batch itself is ready to apply. */
+  readonly structureReady: boolean
 }
 
 /** One selectable durable style target resolved for the picker. */
@@ -250,23 +315,16 @@ export interface ArtifactEditActions {
   /** Restore every nested group to its base order. */
   resetNestedOrder(): void
   /** Apply one deterministic delete/duplicate operation without a model turn. */
-  applyStructure(blockId: string, op: 'delete' | 'duplicate'): void
   /** Preview a delete/duplicate operation and open its diff confirmation. */
-  previewStructure(blockId: string, op: 'delete' | 'duplicate'): void
   /** Preview one batch delete/duplicate and open its diff confirmation. */
-  previewBatchStructure(blockIds: readonly string[], op: 'delete' | 'duplicate'): void
   /** Preview moving a block into another container / the page root. */
-  previewMoveBlockTo(blockId: string, targetParentBlockId: string | 'root'): void
   /** Apply the currently previewed structure operation. */
-  confirmStructurePreview(): void
   /** Dismiss the current structure preview without applying it. */
-  cancelStructurePreview(): void
   /** Save (or replace) a model-generated addition for one nested container. */
   saveBlockAddition(parentBlockId: string, instruction: string): void
   /** Remove the pending addition of one nested container. */
   removeBlockAddition(parentBlockId: string): void
   /** Move a block into another container (or the page root) as a structural revision. */
-  moveBlockTo(blockId: string, targetParentBlockId: string | 'root'): void
   /** Re-run the revision check after a conflict or error. */
   retryCheck(): void
   /** Turn the conflict into a branch edit based on this (older) revision. */
@@ -281,6 +339,24 @@ export interface ArtifactEditActions {
   selectStyleTarget(target: ArtifactStyleTarget | undefined, layout?: RenderLayout): void
   /** Apply the selected deterministic style switch (zero model turn). */
   applyStyleSwitch(): void
+  /** Queue deterministic structure operations (row menu / saved batch). */
+  savePendingOps(inputs: readonly { readonly op: PendingStructureOp['op']; readonly blockId: string; readonly targetParentBlockId?: string }[]): SavePendingOpsResult
+  /** Remove one queued operation (queue row action). */
+  removePendingOp(id: string): void
+  /** Drop every queued operation (cancel round). */
+  clearPendingOps(): void
+  /** Build the total Apply preview (queued ops + model request summary). */
+  previewApply(): Promise<ApplyPreviewState | undefined>
+  /** Close the total Apply preview without applying. */
+  cancelApplyPreview(): void
+  /**
+   * Apply the current round: structure batch first, then auto-submit the remapped
+   * model request. `autoSubmit` explains whether the send happened, was skipped
+   * because the composer holds user text, or failed (chip kept for manual Send).
+   */
+  applyRound(): Promise<ApplyRoundResult & { readonly autoSubmit?: ApplyOutcomeNotice }>
+  /** Dismiss the post-Apply notice. */
+  dismissApplyNotice(): void
 }
 
 /** Full props of the edit view. */

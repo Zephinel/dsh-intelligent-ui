@@ -6,7 +6,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DST_PROGRAM, DST_TITLE } from '../browser/fixtures/dst-artifact.ts'
-import { PROPS_PROGRAM, PROPS_TITLE } from '../browser/fixtures/props-artifact.ts'
+import { NESTED_PROGRAM } from '../browser/fixtures/nested-artifact.ts'
+import { PROPS_PROGRAM, PROPS_PROGRAM_APPLIED, PROPS_TITLE } from '../browser/fixtures/props-artifact.ts'
 import {
   ARTIFACT_EDIT_SOURCE,
   ARTIFACT_STYLE_EDIT_KIND,
@@ -30,14 +31,16 @@ import {
 } from '../../src/shared/artifact-edit.ts'
 import { ARTIFACT_BASE_ROUTE_PATH } from '../../src/shared/artifact-base.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH } from '../../src/shared/artifact-structure.ts'
+import { applyStructureBatch } from '../../src/host/artifact-structure.ts'
+import { extractArtifactBlocks } from '../../src/shared/artifact-blocks.ts'
 import {
   ARTIFACT_DRAFT_INDEX_PREFIX,
   ARTIFACT_DRAFT_STORAGE_PREFIX,
   activateDraft,
   activeDraftKeyFor,
   applyArtifactBlockProps,
-  applyArtifactStructure,
   applyArtifactStyleSwitch,
+  applyEditRound,
   attachDraft,
   clearAllArtifactEdits,
   closeArtifactEditor,
@@ -55,16 +58,22 @@ import {
   hasArtifactEditContent,
   hydrateArtifactDrafts,
   installArtifactComposerBridge,
+  hasModelRequestContent,
   isCurrentStyleTarget,
   moveArtifactBlock,
   moveArtifactBlockBy,
   noteArtifactChipMissing,
   openArtifactBlockEditor,
   openArtifactEditor,
-  previewArtifactStructure,
+  pendingStructureOpsFor,
+  previewPendingStructureOps,
   probeArtifactRevisionStatus,
+  removePendingStructureOp,
+  savePendingStructureOps,
+  clearPendingStructureOps,
   referenceForSession,
   removeArtifactSelection,
+  resolvePendingStructureOperations,
   resetArtifactOrder,
   saveArtifactBlockAddition,
   updateArtifactBlockDraft,
@@ -194,11 +203,11 @@ function stubFetch(handler) {
 const baseCalls = () => fetchLog.filter(entry => entry.url === ARTIFACT_BASE_ROUTE_PATH)
 
 /** Record composer chip traffic (one chip per attached draft). */
-const chip = { upserts: [], removes: [] }
+const chip = { upserts: [], removes: [], events: [] }
 installArtifactComposerBridge({
   canEditChip: () => true,
-  upsertChip: (sessionId, referenceId, label) => { chip.upserts.push({ sessionId, referenceId, label }) },
-  removeChip: (sessionId, referenceId) => { chip.removes.push({ sessionId, referenceId }) },
+  upsertChip: (sessionId, referenceId, label) => { chip.upserts.push({ sessionId, referenceId, label }); chip.events.push({ type: 'upsert', referenceId }) },
+  removeChip: (sessionId, referenceId) => { chip.removes.push({ sessionId, referenceId }); chip.events.push({ type: 'remove', referenceId }) },
   openRequest: () => true,
 }, translate(en))
 
@@ -822,6 +831,62 @@ test('chip label helper covers every request shape', () => {
   // A style edit labels first and is never combined with block facts.
   assert.equal(editChipLabel({ count: 0, reordered: false, hasGlobal: false, style: true }), en['edit.chipTail.style'])
   assert.equal(editChipLabel({ count: 2, reordered: true, hasGlobal: true, style: true }), en['edit.chipTail.style'])
+})
+
+test('chip label reports queue-only and queued+mixed drafts', () => {
+  const base = {
+    title: '样例', baseRevision: 1, selection: [], orderChanged: false,
+    globalInstruction: '', styleInstruction: '', branch: false,
+  }
+  const ops = count => en['edit.chipTail.ops'].replace('{count}', String(count))
+  const queueOnly = chipLabelForSession({ ...base, pendingOps: [{}, {}] })
+  assert.equal(queueOnly.includes(ops(2)), true, 'a queue-only draft reports the structure operations')
+  assert.equal(queueOnly.includes(en['edit.chipTail.global']), false, 'a queue-only draft is not mislabelled as a global note')
+  const mixed = chipLabelForSession({
+    ...base,
+    selection: [{ blockId: 'b1', order: 1, instruction: 'x' }],
+    globalInstruction: '保持风格',
+    pendingOps: [{}],
+  })
+  assert.equal(mixed.includes(en['edit.chipTail.edits'].replace('{count}', '1')), true)
+  assert.equal(mixed.includes(en['edit.chipTail.suffix']), true, 'the global suffix survives a queued operation')
+  assert.equal(mixed.includes(ops(1)), true, 'a mixed draft appends the queued operations')
+})
+
+test('store: a quick-props revision rebases and keeps requests plus the queue', async () => {
+  const calls = []
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) {
+      return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
+      calls.push(body)
+      const result = {
+        artifactId: 'props-draft', revisionId: 'struct_props_rebase', baseRevisionId: body.baseRevisionId,
+        revision: 2, operationId: body.operationId, program: PROPS_PROGRAM_APPLIED, title: PROPS_TITLE, style: 'card',
+      }
+      return new Response(JSON.stringify({ ok: true, result }), { status: 201, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 500 })
+  })
+  assert.deepEqual(openArtifactEditor('s-props-rebase', {
+    callId: 'props-draft', program: PROPS_PROGRAM, title: PROPS_TITLE, style: 'card', running: false,
+  }), { ok: true })
+  await settleRoute()
+  const key = editKey('s-props-rebase', 'props-draft')
+  saveArtifactBlockInstruction(key, 'b1', '标题改短')
+  savePendingStructureOps(key, [{ op: 'duplicate', blockId: 'b1' }])
+  assert.equal(pendingStructureOpsFor(editSessionFor('s-props-rebase', 'props-draft')).length, 1)
+  await applyArtifactBlockProps(key, 'b2', { color: 'info' })
+  assert.equal(calls.length, 1, 'the quick-props apply sends one deterministic request')
+  assert.equal(calls[0].operations[0].op, 'props')
+  const next = editSessionFor('s-props-rebase', 'struct_props_rebase')
+  assert.notEqual(next, undefined, 'the draft was rekeyed onto the props revision')
+  assert.equal(draftSessionFor(key), undefined, 'the old draft key is gone')
+  assert.deepEqual(next.selection.map(entry => [entry.blockId, entry.instruction]), [['b1', '标题改短']], 'the saved request survives')
+  assert.equal(pendingStructureOpsFor(next).length, 1, 'the unapplied queue survives the props revision')
+  assert.equal(pendingStructureOpsFor(next)[0].blockId, 'b1', 'the queue block id is remapped to the new revision')
+  assert.equal(hasArtifactEditContent(next), true)
 })
 
 /**
@@ -1573,150 +1638,6 @@ test('store: opening the editor registers the rendered base once with its revisi
   assert.equal(revisionCalls[1].body.revisionId, 'call_base_open_2')
 })
 
-test('store: a structure preview waits for the base registration before it POSTs', async () => {
-  let releaseBase
-  const baseGate = new Promise(resolve => { releaseBase = resolve })
-  stubFetch((url, body) => {
-    if (url === ARTIFACT_BASE_ROUTE_PATH) {
-      // Hold the registration open: without `await ensureBaseForSession` the
-      // structure POST below would race ahead and fail the assertion.
-      return baseGate.then(() => new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } }))
-    }
-    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
-      return new Response(JSON.stringify({
-        ok: true,
-        preview: { program: `${DST_PROGRAM}\npreviewMarker = Text("preview")`, operations: body.operations, changedBlockIds: ['b3'], touched: [] },
-      }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
-    return new Response(JSON.stringify({
-      artifactId: 'call_structure_order',
-      revisionId: 'call_structure_order',
-      revision: 1,
-      latestRevisionId: 'call_structure_order',
-      latestRevision: 1,
-      conflict: false,
-    }), { status: 200, headers: { 'content-type': 'application/json' } })
-  })
-  assert.deepEqual(openArtifactEditor('s-structure-order', programFor('call_structure_order')), { ok: true })
-  await settleRoute()
-  assert.equal(fetchLog.filter(entry => entry.url === ARTIFACT_BASE_ROUTE_PATH).length, 1, 'opening the editor started the registration')
-  assert.equal(fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH).length, 0, 'no structure request before the preview call')
-  previewArtifactStructure(editKey('s-structure-order', 'call_structure_order'), 'b3', 'duplicate')
-  await settleRoute()
-  assert.equal(
-    fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH).length,
-    0,
-    'the structure preview must not POST while the base registration is unresolved',
-  )
-  releaseBase()
-  await settleRoute()
-  const baseIndex = fetchLog.findIndex(entry => entry.url === ARTIFACT_BASE_ROUTE_PATH)
-  const structureIndex = fetchLog.findIndex(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH)
-  assert.ok(baseIndex >= 0, 'the base registration ran first')
-  assert.ok(structureIndex > baseIndex, 'the structure preview POST follows the base registration')
-  const structureCalls = fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH)
-  assert.equal(structureCalls.length, 1)
-  assert.equal(structureCalls[0].body.preview, true)
-  assert.equal('program' in structureCalls[0].body, false, 'structure requests never carry a client program')
-  assert.equal(structureCalls[0].body.baseRevisionId, 'call_structure_order')
-  assert.equal(structureCalls[0].body.operations[0].op, 'duplicate')
-  const session = editSessionFor('s-structure-order', 'call_structure_order')
-  assert.equal(session.structurePreview.status, 'ready')
-})
-
-test('store: a reported missing base invalidates the cached registration so reopening re-posts it', async () => {
-  let baseAttempts = 0
-  stubFetch(url => {
-    if (url === ARTIFACT_BASE_ROUTE_PATH) {
-      baseAttempts += 1
-      return new Response(JSON.stringify({ ok: true, registered: baseAttempts === 1 }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
-    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
-      return new Response(JSON.stringify({ error: { code: 'base_missing', message: 'missing' } }), {
-        status: 404, headers: { 'content-type': 'application/json' },
-      })
-    }
-    return new Response(JSON.stringify({
-      artifactId: 'call_invalidate',
-      revisionId: 'call_invalidate',
-      revision: 1,
-      latestRevisionId: 'call_invalidate',
-      latestRevision: 1,
-      conflict: false,
-    }), { status: 200, headers: { 'content-type': 'application/json' } })
-  })
-  const card = 'call_invalidate'
-  assert.deepEqual(openArtifactEditor('s-invalidate', programFor(card)), { ok: true })
-  await settleRoute()
-  let baseIndexes = fetchLog.flatMap((entry, index) => entry.url === ARTIFACT_BASE_ROUTE_PATH ? [index] : [])
-  assert.equal(baseIndexes.length, 1, 'the first open registered the base')
-  await applyArtifactStructure(editKey('s-invalidate', card), 'b3', 'duplicate')
-  assert.equal(editSessionFor('s-invalidate', card).structureError, en['edit.structureBaseMissing'])
-  const missIndex = fetchLog.findIndex(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH)
-  assert.ok(missIndex >= 0, 'the apply reached the structure route')
-  // The Host said the base program is gone: closing and reopening the canvas
-  // must re-post the rendered program instead of serving the stale success.
-  closeArtifactEditor(editKey('s-invalidate', card))
-  assert.deepEqual(openArtifactEditor('s-invalidate', programFor(card)), { ok: true })
-  await settleRoute()
-  baseIndexes = fetchLog.flatMap((entry, index) => entry.url === ARTIFACT_BASE_ROUTE_PATH ? [index] : [])
-  assert.equal(baseIndexes.length, 2, 'exactly one re-registration after the miss')
-  assert.equal(baseAttempts, 2)
-  assert.ok(baseIndexes[1] > missIndex, 'the second base POST happens after the missing-base failure')
-})
-
-test('store: preview, apply and quick adjust share the actionable missing-base copy', async () => {
-  const missingBase = code => new Response(JSON.stringify({ error: { code, message: 'missing' } }), {
-    status: 404, headers: { 'content-type': 'application/json' },
-  })
-  for (const code of ['artifact_missing', 'base_missing']) {
-    stubFetch((url, body) => {
-      if (url === ARTIFACT_BASE_ROUTE_PATH) {
-        return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
-      }
-      if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) return missingBase(code)
-      return new Response(JSON.stringify({}), { status: 500 })
-    })
-    // Preview failure now preserves the Host error code instead of a generic message.
-    const previewCard = `call_preview_${code}`
-    assert.deepEqual(openArtifactEditor('s-missing-preview', programFor(previewCard)), { ok: true })
-    await settleRoute()
-    previewArtifactStructure(editKey('s-missing-preview', previewCard), 'b3', 'duplicate')
-    await settleRoute()
-    const previewSession = editSessionFor('s-missing-preview', previewCard)
-    assert.equal(previewSession.structurePreview.status, 'failed')
-    assert.equal(previewSession.structurePreview.error, en['edit.structureBaseMissing'])
-    assert.equal(previewSession.structurePreview.error.includes('re-render'), true, 'the copy offers the re-render path')
-    assert.equal(previewSession.structurePreview.error.includes('instruction edit'), true, 'the copy offers the instruction path')
-
-    // Apply failure uses the same copy.
-    const applyCard = `call_apply_${code}`
-    assert.deepEqual(openArtifactEditor('s-missing-apply', programFor(applyCard)), { ok: true })
-    await settleRoute()
-    await applyArtifactStructure(editKey('s-missing-apply', applyCard), 'b3', 'duplicate')
-    const applySession = editSessionFor('s-missing-apply', applyCard)
-    assert.equal(applySession.structureError, en['edit.structureBaseMissing'])
-    assert.equal(applySession.structureError.includes('re-render'), true)
-  }
-  // Quick adjust (props surface) explains the missing program/card record.
-  for (const [code, key] of [['base_missing', 'edit.propsNoBase'], ['artifact_missing', 'edit.propsMissingArtifact']]) {
-    stubFetch(url => url === ARTIFACT_BASE_ROUTE_PATH
-      ? new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
-      : missingBase(code))
-    const card = `props-missing-${code}`
-    assert.deepEqual(openArtifactEditor('s-missing-props', {
-      callId: card, program: PROPS_PROGRAM, title: PROPS_TITLE, style: 'card', running: false,
-    }), { ok: true })
-    await settleRoute()
-    await applyArtifactBlockProps(editKey('s-missing-props', card), 'b2', { color: 'info' })
-    const session = editSessionFor('s-missing-props', card)
-    assert.equal(session.propsError, en[key])
-    assert.equal(session.propsFallback, code)
-    assert.equal(session.propsError.includes('instruction edit'), true, 'quick adjust also points at instruction editing')
-  }
-})
-
-/** Stub the Host routes used by one deterministic style switch. */
 function stubStyleSwitch(options = {}) {
   const calls = { structure: [], base: [] }
   const cardId = options.cardId ?? 'call_style_a'
@@ -2037,4 +1958,315 @@ test('store: a malformed style result fails without recording a local card', asy
   await applyArtifactStyleSwitch(editKey(sessionId, cardId), 1)
   assert.equal(draftSessionFor(editKey(sessionId, cardId)).styleSwitchError, en['edit.styleSwitchFailed'])
   assert.equal(localRevisionsFor(sessionId).length, 0)
+})
+
+
+test('store: queued structure operations persist, feed the chip label and hydrate again', async () => {
+  stubRevision(false)
+  const opened = openArtifactEditor('s-pending', programFor('call_p'))
+  assert.deepEqual(opened, { ok: true })
+  await settle()
+  const key = editKey('s-pending', 'call_p')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b3' }])
+  let session = editSessionFor('s-pending', 'call_p')
+  assert.equal(pendingStructureOpsFor(session).length, 1)
+  assert.equal(hasArtifactEditContent(session), true, 'a queued op counts as unsent content')
+  assert.equal(chip.upserts.at(-1).label, chipLabelForSession(session))
+  assert.match(chip.upserts.at(-1).label, /structure op/i)
+  assert.deepEqual(session.targetOrder, BASE_ORDER, 'queueing does not touch the arrangement draft')
+
+  // Persisted record carries the queue and rehydrates it.
+  flushArtifactDraftPersistence()
+  const raw = JSON.parse(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`))
+  assert.equal(raw.pendingOps.length, 1)
+  // A fresh persisted draft (as after a page reload) rehydrates its queue.
+  putStoredDraft('s-hydrate', 's-hydrate:call_h', {
+    pendingOps: [{ id: 'op_hydrate', op: 'duplicate', blockId: 'b3', createdAt: 7 }],
+  })
+  const restored = editSessionFor('s-hydrate', 'call_h')
+  assert.equal(restored?.pendingOps?.length, 1, 'the queue survives a reload')
+  assert.equal(restored?.pendingOps?.[0].op, 'duplicate')
+  assert.equal(hasArtifactEditContent(restored), true)
+  assert.equal(chip.upserts.some(entry => entry.referenceId === referenceForSession('s-hydrate:call_h')), false, 'hydrate chip sync is scheduled, not immediate')
+
+  // Removing/clearing updates content and the chip.
+  const current = editSessionFor('s-pending', 'call_p')
+  assert.equal(removePendingStructureOp(key, current.pendingOps[0].id), true)
+  assert.equal(hasArtifactEditContent(editSessionFor('s-pending', 'call_p')), false)
+  assert.equal(clearPendingStructureOps(key), false, 'an already empty queue is a no-op')
+})
+
+test('store: an oversized persisted queue is trimmed without losing the rest of the draft', () => {
+  putStoredDraft('s-badops', 's-badops:call_bad', {
+    pendingOps: Array.from({ length: 21 }, (_, index) => ({ id: `op_${index}`, op: 'delete', blockId: 'b3', createdAt: 1 })),
+    selection: [{ blockId: 'b3', order: 1, instruction: '保留的修改' }],
+    globalInstruction: '保留整体说明',
+  })
+  const restored = editSessionFor('s-badops', 'call_bad')
+  assert.ok(restored, 'the draft survives; only the oversized queue is trimmed')
+  assert.equal(restored.pendingOps.length, 20)
+  assert.deepEqual(restored.selection.map(entry => [entry.blockId, entry.instruction]), [['b3', '保留的修改']])
+  assert.equal(restored.globalInstruction, '保留整体说明')
+  putStoredDraft('s-badtype', 's-badtype:call_bad', {
+    pendingOps: [{ id: 'op_1', op: 'rename', blockId: 'b3', createdAt: 1 }],
+  })
+  assert.equal(editSessionFor('s-badtype', 'call_bad'), undefined, 'a corrupt op shape still rejects the draft')
+})
+
+test('MAJOR-2: queueing past the 20-op cap is refused without touching the queue', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-limit', programFor('call_a'))
+  await settle()
+  const key = editKey('s-limit', 'call_a')
+  setArtifactGlobalInstruction(key, '保留整体说明')
+  for (let index = 0; index < 20; index += 1) {
+    assert.deepEqual(savePendingStructureOps(key, [{ op: 'delete', blockId: 'b3' }]), { ok: true })
+  }
+  const refused = savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  assert.deepEqual(refused, { ok: false, reason: 'limit', current: 20, max: 20 })
+  const session = editSessionFor('s-limit', 'call_a')
+  assert.equal(session.pendingOps.length, 20, 'the 21st operation is not written')
+  assert.equal(session.globalInstruction, '保留整体说明', 'saved model content is untouched')
+  assert.equal(session.pendingOps.some(op => op.blockId === 'b8'), false)
+})
+
+test('store: total preview shows ops/diff/summary and blocks conflicting deletions', async () => {
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(DST_PROGRAM, body.operations), operations: body.operations, changedBlockIds: ['b8'], touched: [] } }), { status: 200 })
+    }
+    return new Response(JSON.stringify({ ok: false, error: { code: 'invalid_operation', message: 'no' } }), { status: 400 })
+  })
+  openArtifactEditor('s-preview', programFor('call_a'))
+  await settle()
+  const key = editKey('s-preview', 'call_a')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.equal(preview.structureReady, true)
+  assert.equal(preview.ops.length, 1)
+  assert.equal(preview.model.requestCount, 0)
+  assert.notEqual(preview.afterProgram, DST_PROGRAM)
+  assert.equal(preview.structureReady, true)
+  assert.equal(preview.changedBlockIds[0], 'b8')
+  assert.ok(preview.diff.length > 0)
+  assert.equal(fetchLog.some(entry => entry.body?.preview === true), true)
+
+  // A queued delete of a block that still has a saved request must block Apply.
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', '需要保留的修改')
+  removePendingStructureOp(key, pendingStructureOpsFor(editSessionFor('s-preview', 'call_a'))[0].id)
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b3' }])
+  const conflicted = await previewPendingStructureOps(key)
+  assert.equal(conflicted.structureReady, false)
+  assert.equal(conflicted.conflicts.some(conflict => conflict.kind === 'selection'), true)
+  const blocked = await applyEditRound(key, 1)
+  assert.equal(blocked.status, 'error')
+  assert.equal(blocked.conflicts.some(conflict => conflict.kind === 'selection'), true)
+})
+
+test('store: Apply submits one batch, rebases the model request and rekeys the chip', async () => {
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(DST_PROGRAM, body.operations), operations: body.operations, changedBlockIds: ['b8'], touched: [] } }), { status: 200 })
+    }
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) return structureResultResponse(DST_PROGRAM, body, 'call_a', 'call_a_r2')
+    return new Response(JSON.stringify({ ok: false }), { status: 500 })
+  })
+  openArtifactEditor('s-apply', programFor('call_a'))
+  await settle()
+  const key = editKey('s-apply', 'call_a')
+  openArtifactBlockEditor(key, 'b3')
+  saveArtifactBlockInstruction(key, 'b3', '保持这个修改')
+  setArtifactGlobalInstruction(key, '保持其余内容不变')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  const before = editSessionFor('s-apply', 'call_a')
+  assert.equal(hasModelRequestContent(before), true)
+
+  const outcome = await applyEditRound(key, 1)
+  assert.equal(outcome.status, 'needSend')
+  assert.equal(outcome.newKey, editKey('s-apply', 'call_a_r2'))
+  assert.equal(outcome.referenceId, referenceForSession(outcome.newKey))
+  // Old draft/reference/chip gone; new chip upserted before the old one was removed.
+  assert.equal(draftSessionFor(key), undefined)
+  assert.equal(chip.removes.some(entry => entry.referenceId === `artifact-edit:${key}`), true)
+  const upsertIndex = chip.events.findIndex(entry => entry.type === 'upsert' && entry.referenceId === outcome.referenceId)
+  const removeIndex = chip.events.findIndex(entry => entry.type === 'remove' && entry.referenceId === `artifact-edit:${key}`)
+  assert.ok(upsertIndex !== -1 && removeIndex !== -1 && upsertIndex < removeIndex, 'new chip is created before the old chip is removed')
+  const next = draftSessionFor(outcome.newKey)
+  assert.equal(next.status, 'ready')
+  assert.deepEqual(next.selection.map(entry => entry.blockId), ['b3'])
+  assert.equal(next.globalInstruction, '保持其余内容不变')
+  assert.equal(next.pendingOps, undefined)
+  assert.equal(next.baseRevisionId, 'call_a_r2')
+  assert.equal(next.baseRevision, 2)
+  assert.equal(clipRevision(localRevisionsFor('s-apply')).length, 1)
+  assert.equal(localRevisionsFor('s-apply')[0].kind, 'structure')
+  const applyCall = fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview !== true).at(-1)
+  assert.equal(applyCall.body.operations.length, 1)
+  assert.equal(applyCall.body.preview, undefined)
+
+  // A rebased draft with only model content reports a plain model send that
+  // keeps its key/reference, so the card can auto-submit (or retry) the request.
+  const second = await applyEditRound(outcome.newKey, 1)
+  assert.equal(second.status, 'needSend')
+  assert.equal(second.newKey, outcome.newKey)
+  assert.equal(typeof second.referenceId, 'string')
+})
+
+/** Identity helper for one local revision list (avoids a deep equal on timestamps). */
+function clipRevision(revisions) { return revisions.map(revision => revision.revisionId) }
+
+/** Let the real Host batch engine produce the authoritative post-structure program. */
+function applyOperationsToProgram(program, operations) {
+  const result = applyStructureBatch(program, operations)
+  assert.equal(result.ok, true, `host batch rejected: ${JSON.stringify(result)}`)
+  return result.program
+}
+
+/** Stub response builder for one authoritative structure result. */
+function structureResultResponse(program, body, artifactId, revisionId, revision = 2) {
+  return new Response(JSON.stringify({ ok: true, result: {
+    artifactId,
+    revisionId,
+    baseRevisionId: artifactId,
+    revision,
+    operationId: 'req_apply0001',
+    program: applyOperationsToProgram(program, body.operations),
+    style: 'card',
+  } }), { status: 200 })
+}
+
+
+test('H1-lifecycle: an applied duplicate queue is consumed and never re-applied', async () => {
+  const DUP_PROGRAM = 'root = Col([Text("a"), Text("b"), Text("c"), Text("d")])'
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(DUP_PROGRAM, body.operations), operations: body.operations, changedBlockIds: [], touched: [] } }), { status: 200 })
+    }
+    return structureResultResponse(DUP_PROGRAM, body, 'call_a', 'call_a_r2')
+  })
+  openArtifactEditor('s-dup', programFor('call_a', { program: DUP_PROGRAM }))
+  await settle()
+  const key = editKey('s-dup', 'call_a')
+  openArtifactBlockEditor(key, 'b2')
+  saveArtifactBlockInstruction(key, 'b2', '保留的需求')
+  setArtifactGlobalInstruction(key, '保留整体说明')
+  savePendingStructureOps(key, [{ op: 'duplicate', blockId: 'b3' }])
+  const structureCalls = () => fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview !== true)
+  const previewCalls = () => fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview === true)
+  const first = await applyEditRound(key, 1)
+  assert.equal(first.status, 'needSend')
+  assert.equal(structureCalls().length, 1)
+  const next = draftSessionFor(first.newKey)
+  assert.equal(next.pendingOps, undefined, 'the applied duplicate is cleared from the new draft')
+  const second = await applyEditRound(first.newKey, 1)
+  assert.equal(second.status, 'needSend', 'a consumed queue falls through to the plain model send')
+  assert.equal(structureCalls().length, 1, 'no second structure request is sent')
+  assert.equal(previewCalls().length, 1, 'only the Apply preflight dry-run is issued')
+})
+
+test('H1-lifecycle: a mixed delete + duplicate queue applies once and both are consumed', async () => {
+  const MIX_PROGRAM = 'root = Col([Text("a"), Box([Text("b"), Text("c")]), Text("d")])'
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(MIX_PROGRAM, body.operations), operations: body.operations, changedBlockIds: [], touched: [] } }), { status: 200 })
+    }
+    return structureResultResponse(MIX_PROGRAM, body, 'call_mix', 'call_mix_r2')
+  })
+  openArtifactEditor('s-mix', programFor('call_mix', { program: MIX_PROGRAM }))
+  await settle()
+  const key = editKey('s-mix', 'call_mix')
+  setArtifactGlobalInstruction(key, '保留')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b3' }, { op: 'duplicate', blockId: 'b2.1' }])
+  const outcome = await applyEditRound(key, 1)
+  assert.equal(outcome.status, 'needSend')
+  assert.equal(draftSessionFor(outcome.newKey).pendingOps, undefined, 'both queued operations are consumed')
+  const applyCalls = fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview !== true)
+  assert.equal(applyCalls.length, 1)
+  assert.equal(applyCalls[0].body.operations.length, 2, 'delete + duplicate are sent as one atomic batch')
+  const second = await applyEditRound(outcome.newKey, 1)
+  assert.equal(second.status, 'needSend')
+  assert.equal(fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview !== true).length, 1)
+})
+
+test('MAJOR-1: a saved request on the identical-text second block stays on the original after duplicating the first', async () => {
+  const IDENTICAL = 'root = Col([Text("x"), Text("x")])'
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(IDENTICAL, body.operations), operations: body.operations, changedBlockIds: [], touched: [] } }), { status: 200 })
+    }
+    return structureResultResponse(IDENTICAL, body, 'call_same', 'call_same_r2')
+  })
+  openArtifactEditor('s-identical', programFor('call_same', { program: IDENTICAL }))
+  await settle()
+  const key = editKey('s-identical', 'call_same')
+  openArtifactBlockEditor(key, 'b2')
+  saveArtifactBlockInstruction(key, 'b2', '第二块的需求')
+  savePendingStructureOps(key, [{ op: 'duplicate', blockId: 'b1' }])
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.structureReady, true, 'the identical-text duplicate still maps reliably')
+  const outcome = await applyEditRound(key, 1)
+  assert.equal(outcome.status, 'needSend')
+  const next = draftSessionFor(outcome.newKey)
+  assert.deepEqual(next.selection.map(entry => [entry.blockId, entry.instruction]), [['b3', '第二块的需求']], 'the request follows the original second block, not the copy')
+})
+
+test('MAJOR-1: an unreliable duplicate+move mapping blocks Apply before any Host write', async () => {
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: applyOperationsToProgram(NESTED_PROGRAM, body.operations), operations: body.operations, changedBlockIds: [], touched: [] } }), { status: 200 })
+    }
+    return structureResultResponse(NESTED_PROGRAM, body, 'call_nested', 'call_nested_r2')
+  })
+  openArtifactEditor('s-unreliable', programFor('call_nested', { program: NESTED_PROGRAM }))
+  await settle()
+  const key = editKey('s-unreliable', 'call_nested')
+  // Different parents keep the builder happy; the post-batch pairing itself is
+  // what cannot be proven, because a duplicate and a move are mixed.
+  assert.deepEqual(savePendingStructureOps(key, [
+    { op: 'duplicate', blockId: 'b1.1' },
+    { op: 'move', blockId: 'b2.1', targetParentBlockId: 'b1' },
+  ]), { ok: true })
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.equal(preview.structureReady, false, 'the duplicate+move mapping is not trusted')
+  assert.equal(preview.conflicts.some(conflict => conflict.kind === 'target'), true, 'the preview reports the mapping conflict')
+  const applyCalls = () => fetchLog.filter(entry => entry.url === ARTIFACT_STRUCTURE_ROUTE_PATH && entry.body?.preview !== true)
+  const outcome = await applyEditRound(key, 1)
+  assert.equal(outcome.status, 'error', 'Apply is blocked instead of guessing')
+  assert.equal(applyCalls().length, 0, 'no structure revision is written')
+  assert.equal(editSessionFor('s-unreliable', 'call_nested').pendingOps.length, 2, 'the queue is kept for the user to fix')
+})
+
+test('H1-order: one parent rejects mixed delete/duplicate and move batches conservatively', () => {
+  const program = 'root = Col([Text("a"), Text("b"), Text("c")])'
+  const block = (blockId, op) => ({ id: `op_${blockId}_${op}`, op, blockId, createdAt: 1 })
+  const mixed = resolvePendingStructureOperations(program, [block('b1', 'delete'), block('b2', 'duplicate')])
+  assert.equal(mixed.conflicts.some(conflict => conflict.kind === 'order'), true, 'same-parent mixed kinds are rejected')
+  const moves = resolvePendingStructureOperations(program, [
+    { id: 'm1', op: 'move', blockId: 'b1', targetParentBlockId: 'root', createdAt: 1 },
+    { id: 'm2', op: 'move', blockId: 'b2', targetParentBlockId: 'root', createdAt: 1 },
+  ])
+  assert.equal(moves.conflicts.some(conflict => conflict.kind === 'order'), true, 'multiple moves in one parent are rejected')
+})
+
+test('H1-order: duplicate wire operations descend by base index and the real Host batch lands copies correctly', () => {
+  const program = 'root = Col([Text("a"), Text("b"), Text("c")])'
+  const ops = [
+    { id: 'd1', op: 'duplicate', blockId: 'b1', createdAt: 1 },
+    { id: 'd3', op: 'duplicate', blockId: 'b3', createdAt: 2 },
+  ]
+  const resolved = resolvePendingStructureOperations(program, ops)
+  assert.deepEqual(resolved.operations.map(operation => operation.toIndex), [3, 1], 'higher base index is sent first')
+  const host = applyStructureBatch(program, resolved.operations)
+  assert.equal(host.ok, true, 'the real Host accepts the client-built batch')
+  const blocks = extractArtifactBlocks(host.program).blocks.map(entry => entry.title?.trim() ?? entry.componentType)
+  assert.deepEqual(blocks, ['a', 'a', 'b', 'c', 'c'], 'each copy lands directly after its own source')
 })

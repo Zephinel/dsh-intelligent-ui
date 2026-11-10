@@ -18,8 +18,9 @@ import { DST_PROGRAM, DST_TITLE } from '../fixtures/dst-artifact.ts'
 import { NESTED_PROGRAM, NESTED_TITLE } from '../fixtures/nested-artifact.ts'
 import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/nested-containers.ts'
 import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_LEGACY_AUTO_PROGRAM, PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
+import { DEEP_DASHBOARD_PROGRAM, DEEP_DASHBOARD_TITLE, VERY_DEEP_PROGRAM, VERY_DEEP_TITLE } from '../fixtures/deep-artifact.ts'
 import { templates } from './style-fixtures.ts'
-import { submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
+import { savePendingStructureOps, submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 import { addLocalRevision, clearLocalRevisions } from '../../../src/client/artifact-edit/local-revisions.ts'
 import { clearRevisionFallbacks } from '../../../src/client/artifact-edit/revision-fallbacks.ts'
 import { artifactVersionFor, registerArtifactRevision, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
@@ -182,6 +183,10 @@ w.__project = (patch: Partial<IntelligentUIModeView>) => { view = { ...view, ...
 w.__lang = 'zh'
 w.__language = (lang: string) => { w.__lang = lang; update() }
 w.__token = clientToken()
+// The suite wraps `window.fetch` per scenario to intercept the structure route;
+// keep the pristine fetch so those wrappers can delegate to the real Host
+// structure engine without recursing into another wrapper.
+w.__nativeFetch = window.fetch.bind(window)
 w.__renderKey = 0
 w.__remount = () => {
   w.__renderKey += 1
@@ -332,6 +337,28 @@ w.__addLargePageCard = (callId: string = 'large-page-call-1', title: string = LA
   }]
   update()
 }
+w.__addDeepDashboardCard = (callId: string = 'deep-call-1', title: string = DEEP_DASHBOARD_TITLE) => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program: DEEP_DASHBOARD_PROGRAM, title, style: 'card' }) },
+    },
+  }]
+  update()
+}
+w.__addVeryDeepCard = (callId: string = 'very-deep-call-1', title: string = VERY_DEEP_TITLE) => {
+  nodes = [...nodes, {
+    root: {
+      kind: 'tool-result', callId, name: 'render_ui', isError: false,
+      call: { name: 'render_ui', argsRaw: JSON.stringify({ program: VERY_DEEP_PROGRAM, title, style: 'card' }) },
+    },
+  }]
+  update()
+}
+/** Queue one structure operation directly (nested moves are not reachable from
+ * the root arrangement UI on a page whose nested display map cannot be built). */
+w.__queueStructureOp = (artifactId: string, input: { op: 'delete' | 'duplicate' | 'move'; blockId: string; targetParentBlockId?: string }) =>
+  savePendingStructureOps(`${SESSION}:${artifactId}`, [input])
 w.__addTempCard = (callId: string = 'temp-call-1', title: string = '临时卡片') => {
   nodes = [...nodes, {
     root: {
