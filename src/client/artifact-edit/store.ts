@@ -54,6 +54,7 @@ import { nestedBlocksForProgram } from './nested.ts'
 import { addLocalRevision } from './local-revisions.ts'
 import {
   ARTIFACT_STRUCTURE_ROUTE_PATH,
+  MAX_ARTIFACT_STRUCTURE_OPERATIONS,
   describeStyleTargetProblem,
   isArtifactStructurePreview,
   isArtifactStructureResult,
@@ -64,7 +65,7 @@ import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
 import type { IntelligentUIProgram } from '../../shared/intelligent-ui.ts'
 import { isStyleSnapshot, type StyleSnapshot } from '../../shared/style-templates.ts'
 import { fallbackT, type Translate } from '../../shared/locales.ts'
-import type { ArtifactBlockPropsPreview, ArtifactEditSession, ArtifactStructurePreviewLine, OpenEditorResult } from './contracts.ts'
+import type { ArtifactBlockPropsPreview, ArtifactEditSession, ArtifactStructurePreviewLine, ArtifactStructurePreviewState, BatchOrderMode, OpenEditorResult } from './contracts.ts'
 
 /** Composer integration the store talks to; registered by the chip module. */
 export interface ArtifactComposerBridge {
@@ -1245,6 +1246,53 @@ function applyTargetOrder(key: string, session: ArtifactEditSession, targetOrder
 }
 
 /**
+ * Next target order for a batch arrangement move, or undefined when it cannot change.
+ *
+ * Top/bottom keep the selected blocks' relative order. Up/down move every
+ * selected block exactly one slot without crossing another selected block:
+ * upward moves run in ascending index order and downward moves in descending
+ * order, so each selected block only ever swaps with an unselected neighbour.
+ * @param order - current target order.
+ * @param blockIds - selected block ids; unknown ids are ignored.
+ * @param mode - batch move direction.
+ * @returns the next order, or undefined for an empty/no-op move.
+ */
+export function batchMoveTarget(
+  order: readonly string[],
+  blockIds: readonly string[],
+  mode: BatchOrderMode,
+): readonly string[] | undefined {
+  const selected = new Set(blockIds)
+  const picked = order.filter(blockId => selected.has(blockId))
+  if (picked.length === 0) return undefined
+  let next: string[]
+  if (mode === 'top') {
+    next = [...picked, ...order.filter(blockId => !selected.has(blockId))]
+  } else if (mode === 'bottom') {
+    next = [...order.filter(blockId => !selected.has(blockId)), ...picked]
+  } else {
+    next = [...order]
+    const indices = order.flatMap((blockId, index) => selected.has(blockId) ? [index] : [])
+    const steps = mode === 'up' ? indices : [...indices].reverse()
+    const delta = mode === 'up' ? -1 : 1
+    for (const index of steps) {
+      const swapWith = index + delta
+      if (swapWith < 0 || swapWith >= next.length) continue
+      if (selected.has(next[swapWith])) continue
+      const moved = next[index]
+      next[index] = next[swapWith]
+      next[swapWith] = moved
+    }
+  }
+  return next.join('\n') === order.join('\n') ? undefined : next
+}
+
+/** Whether one batch arrangement move would change the order. */
+export function canBatchMove(order: readonly string[], blockIds: readonly string[], mode: BatchOrderMode): boolean {
+  return batchMoveTarget(order, blockIds, mode) !== undefined
+}
+
+/**
  * Move one block to an absolute index of the arrangement draft.
  * @param key - edit-session key.
  * @param blockId - block being moved.
@@ -1275,6 +1323,22 @@ export function moveArtifactBlockBy(key: string, blockId: string, delta: number)
   const from = session.targetOrder.indexOf(blockId)
   if (from < 0) return
   moveArtifactBlock(key, blockId, from + delta)
+}
+
+/**
+ * Move a batch of blocks in the arrangement draft without touching edits,
+ * their numbers/colours or the program. Only `targetOrder`/`orderChanged`
+ * change, through the same persistence and chip-sync path as one-block moves.
+ * @param key - edit-session key.
+ * @param blockIds - selected block ids in arrangement order.
+ * @param mode - one step up/down, or straight to the top/bottom.
+ */
+export function moveArtifactBlocks(key: string, blockIds: readonly string[], mode: BatchOrderMode): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const next = batchMoveTarget(session.targetOrder, blockIds, mode)
+  if (next === undefined) return
+  applyTargetOrder(key, session, next)
 }
 
 /**
@@ -1456,6 +1520,42 @@ export function moveArtifactNestedBlockBy(key: string, parentBlockId: string, bl
   moveArtifactNestedBlock(key, parentBlockId, blockId, from + delta)
 }
 
+/**
+ * Move a batch of nested blocks, each inside its own parent group.
+ *
+ * The selection is partitioned per parent container; every group then applies
+ * the same semantics as the top-level batch move (top/bottom keep the selected
+ * relative order, up runs ascending and down descending, and a selected block
+ * only swaps with an unselected sibling). Groups without a movable selection
+ * are left untouched, and the chip/persistence path is the existing nested-order
+ * one, so edit request numbers and colours are unaffected.
+ * @param key - edit-session key.
+ * @param blockIds - selected nested display ids.
+ * @param mode - one step up/down, or straight to the top/bottom.
+ */
+export function moveArtifactNestedBlocks(key: string, blockIds: readonly string[], mode: BatchOrderMode): void {
+  const session = sessions.get(key)
+  if (session === undefined || session.nestedOrder === undefined) return
+  const selected = new Set(blockIds)
+  const groups = orderGroups(session.blocks)
+  const next: Record<string, readonly string[]> = { ...session.nestedOrder }
+  let changed = false
+  for (const [parentId, childIds] of Object.entries(groups)) {
+    const order = session.nestedOrder[parentId] ?? childIds
+    const picked = order.filter(blockId => selected.has(blockId))
+    if (picked.length === 0) continue
+    const target = batchMoveTarget(order, picked, mode)
+    if (target === undefined) continue
+    next[parentId] = [...target]
+    changed = true
+  }
+  if (!changed) return
+  sessions.set(key, { ...session, nestedOrder: next, nestedOrderChanged: nestedOrdersDiffer(next, session.nestedOriginalOrder) })
+  publish()
+  scheduleChipSync(session.sessionId, true)
+  scheduleDraftPersist(key)
+}
+
 /** Restore every nested group to its base order. */
 export function resetArtifactNestedOrder(key: string): void {
   const session = sessions.get(key)
@@ -1518,6 +1618,79 @@ function moveOperationForBlock(
       toIndex: children.length,
     },
   }
+}
+
+/** One resolved display block of a batch structure operation. */
+interface BatchStructureTarget {
+  readonly blockId: string
+  readonly nodeId: string
+  readonly sourceDigest: string
+  /** Parent display id; empty for root-level blocks. */
+  readonly parentKey: string
+  /** Index among the parent's editable children in the base program order. */
+  readonly index: number
+}
+
+/**
+ * Build the wire operations of one batch delete/duplicate.
+ *
+ * Top-level and nested blocks are both supported. The Host applies one batch
+ * atomically in request order and re-resolves every target by base identity, so
+ * duplicate targets are grouped per parent container and emitted in descending
+ * base-index order within each group with `toIndex = base editable index + 1`:
+ * every copy lands directly after its own source, earlier indices stay stable and
+ * different parents cannot shift each other. A selection holding a container
+ * together with one of its nested blocks is refused (the Host rejects such
+ * ancestor pairs), as is any block without a resolvable node id/digest.
+ * @param session - edit session whose base program is authoritative.
+ * @param blockIds - selected display ids (root or nested).
+ * @param op - batch operation kind.
+ * @returns send-ordered operations plus display ids in page order, or undefined when the selection cannot be resolved.
+ */
+function batchStructureOperations(
+  session: ArtifactEditSession,
+  blockIds: readonly string[],
+  op: 'delete' | 'duplicate',
+): { operations: { op: 'delete' | 'duplicate'; nodeId: string; sourceDigest: string; toIndex?: number }[]; blockIds: readonly string[] } | undefined {
+  const nested = nestedBlocksForProgram(session.program)
+  if (nested === undefined) return undefined
+  const requested = [...new Set(blockIds)]
+  if (requested.length === 0) return undefined
+  const selected = new Set(requested)
+  // Nested display ids are hierarchical (`b1.2.1`), so a container/descendant
+  // overlap is detectable before parsing the program.
+  if (requested.some(blockId => requested.some(other => other !== blockId && other.startsWith(`${blockId}.`)))) return undefined
+  const byId = new Map(nested.blocks.map(block => [block.blockId, block] as const))
+  const targets: BatchStructureTarget[] = []
+  for (const blockId of requested) {
+    const block = byId.get(blockId)
+    if (block?.nodeId === undefined || block.sourceDigest === undefined) return undefined
+    const siblings = nested.blocks.filter(candidate => candidate.parentBlockId === block.parentBlockId)
+    const index = siblings.findIndex(candidate => candidate.blockId === blockId)
+    if (index < 0) return undefined
+    targets.push({ blockId, nodeId: block.nodeId, sourceDigest: block.sourceDigest, parentKey: block.parentBlockId ?? '', index })
+  }
+  const targetById = new Map(targets.map(target => [target.blockId, target] as const))
+  const pageOrder = nested.blocks.filter(block => selected.has(block.blockId)).map(block => block.blockId)
+  if (op === 'delete') {
+    return {
+      operations: pageOrder.map(blockId => {
+        const target = targetById.get(blockId) as BatchStructureTarget
+        return { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
+      }),
+      blockIds: pageOrder,
+    }
+  }
+  const groups = new Map<string, BatchStructureTarget[]>()
+  for (const target of targets) {
+    const group = groups.get(target.parentKey) ?? []
+    group.push(target)
+    groups.set(target.parentKey, group)
+  }
+  const operations = [...groups.values()].flatMap(group => [...group]
+    .sort((left, right) => right.index - left.index)
+    .map(target => ({ op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: target.index + 1 })))
+  return { operations, blockIds: pageOrder }
 }
 
 /** Minimal line diff; enough to review a structure change. */
@@ -1597,29 +1770,43 @@ function propsFallbackFor(code: string | undefined): 'base_missing' | 'artifact_
   return code === 'base_missing' ? 'base_missing' : code === 'artifact_missing' ? 'artifact_missing' : undefined
 }
 
-/** Preview one deterministic structure operation without recording a revision. */
-async function previewStructureOperation(
-  key: string,
-  kind: 'delete' | 'duplicate' | 'move',
-  blockId: string,
-  targetParentBlockId: string | 'root' | undefined,
-  operation: { op: 'delete' | 'duplicate' | 'move'; nodeId: string; sourceDigest: string; toIndex?: number; toParentNodeId?: string },
-  failureKey: string,
-): Promise<void> {
+/** One deterministic structure dry-run: its wire batch plus the dialog identity. */
+interface StructurePreviewRequest {
+  readonly kind: 'delete' | 'duplicate' | 'move'
+  readonly blockId: string
+  /** Every selected block id when the preview covers a batch, in arrangement order. */
+  readonly blockIds?: readonly string[]
+  readonly operations: readonly DeterministicOperation[]
+  readonly targetParentBlockId?: string
+}
+
+/** Preview state shell shared by the loading/failed/ready transitions. */
+function structurePreviewState(
+  request: StructurePreviewRequest,
+  status: ArtifactStructurePreviewState['status'],
+  extra: Pick<ArtifactStructurePreviewState, 'afterProgram' | 'changedBlockIds' | 'diff' | 'error'> = {},
+): ArtifactStructurePreviewState {
+  return {
+    kind: request.kind,
+    blockId: request.blockId,
+    ...request.blockIds === undefined ? {} : { batch: true as const, blockIds: request.blockIds },
+    ...request.targetParentBlockId === undefined ? {} : { targetParentBlockId: request.targetParentBlockId },
+    status,
+    ...extra,
+  }
+}
+
+/** Preview one deterministic structure operation batch without recording a revision. */
+async function previewStructureOperation(key: string, request: StructurePreviewRequest, failureKey: string): Promise<void> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted') return
-  sessions.set(key, {
-    ...session,
-    structurePreview: {
-      kind,
-      blockId,
-      ...targetParentBlockId === undefined ? {} : { targetParentBlockId },
-      status: 'loading',
-    },
-    structureError: undefined,
-  })
+  sessions.set(key, { ...session, structurePreview: structurePreviewState(request, 'loading'), structureError: undefined })
   publish()
   await ensureBaseForSession(session)
+  const fail = (message: string): void => {
+    sessions.set(key, { ...session, structurePreview: structurePreviewState(request, 'failed', { error: message }) })
+    publish()
+  }
   try {
     const response = await fetch(ARTIFACT_STRUCTURE_ROUTE_PATH, {
       method: 'POST',
@@ -1629,7 +1816,7 @@ async function previewStructureOperation(
         artifactId: session.artifactId,
         baseRevisionId: session.baseRevisionId,
         operationId: newRequestId(),
-        operations: [operation],
+        operations: request.operations,
         preview: true,
         ...session.branch === true ? { branch: true } : {},
         ...session.title === undefined ? {} : { title: session.title },
@@ -1642,41 +1829,24 @@ async function previewStructureOperation(
     if (!response.ok) {
       const code = failureCodeOf(value)
       invalidateBaseAfterMiss(session, code)
-      const message = structureFailureMessage({ code, surface: 'structure', failureKey })
-      sessions.set(key, {
-        ...session,
-        structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: message },
-      })
-      publish()
+      fail(structureFailureMessage({ code, surface: 'structure', failureKey }))
       return
     }
     if (!isArtifactStructurePreview(value)) {
-      sessions.set(key, {
-        ...session,
-        structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: translate(failureKey) },
-      })
-      publish()
+      fail(translate(failureKey))
       return
     }
     sessions.set(key, {
       ...session,
-      structurePreview: {
-        kind,
-        blockId,
-        ...targetParentBlockId === undefined ? {} : { targetParentBlockId },
-        status: 'ready',
+      structurePreview: structurePreviewState(request, 'ready', {
         afterProgram: value.preview.program,
         changedBlockIds: value.preview.changedBlockIds,
         diff: diffProgramLines(session.program, value.preview.program),
-      },
+      }),
     })
     publish()
   } catch {
-    sessions.set(key, {
-      ...session,
-      structurePreview: { kind, blockId, ...targetParentBlockId === undefined ? {} : { targetParentBlockId }, status: 'failed', error: translate(failureKey) },
-    })
-    publish()
+    fail(translate(failureKey))
   }
 }
 
@@ -1690,7 +1860,51 @@ export function previewArtifactStructure(key: string, blockId: string, op: 'dele
     publish()
     return
   }
-  void previewStructureOperation(key, op, blockId, undefined, built.operation, 'edit.structureFailed')
+  void previewStructureOperation(key, {
+    kind: op,
+    blockId,
+    operations: [built.operation],
+  }, 'edit.structureFailed')
+}
+
+/**
+ * Open a diff confirmation for one batch delete/duplicate.
+ *
+ * Works for top-level and nested selections. The whole selection is validated up
+ * front: a selection above the Host's per-request cap, one containing a container
+ * together with one of its nested blocks, or one containing a block without a
+ * resolvable CST node/digest shows the inline structure error and never sends a
+ * request.
+ * @param key - edit-session key.
+ * @param blockIds - selected display ids (root or nested).
+ * @param op - batch operation kind.
+ */
+export function previewBatchArtifactStructure(key: string, blockIds: readonly string[], op: 'delete' | 'duplicate'): void {
+  const session = sessions.get(key)
+  if (session === undefined) return
+  const requested = [...new Set(blockIds)]
+  if (requested.length === 0) return
+  if (requested.length > MAX_ARTIFACT_STRUCTURE_OPERATIONS) {
+    sessions.set(key, {
+      ...session,
+      structureError: translate('edit.batchLimit', { max: MAX_ARTIFACT_STRUCTURE_OPERATIONS, count: requested.length }),
+    })
+    publish()
+    return
+  }
+  const built = batchStructureOperations(session, requested, op)
+  if (built === undefined) {
+    const overlap = requested.some(blockId => requested.some(other => other !== blockId && other.startsWith(`${blockId}.`)))
+    sessions.set(key, { ...session, structureError: translate(overlap ? 'edit.batchNestedOverlap' : 'edit.batchUnresolved') })
+    publish()
+    return
+  }
+  void previewStructureOperation(key, {
+    kind: op,
+    blockId: built.blockIds[0],
+    blockIds: built.blockIds,
+    operations: built.operations,
+  }, 'edit.structureFailed')
 }
 
 /** Open a diff confirmation for a cross-container move. */
@@ -1703,7 +1917,12 @@ export function previewMoveArtifactBlockTo(key: string, blockId: string, targetP
     publish()
     return
   }
-  void previewStructureOperation(key, 'move', blockId, targetParentBlockId, built.operation, 'edit.moveBlockFailed')
+  void previewStructureOperation(key, {
+    kind: 'move',
+    blockId,
+    targetParentBlockId,
+    operations: [built.operation],
+  }, 'edit.moveBlockFailed')
 }
 
 /** Apply the currently previewed operation, then surface the local revision card. */
@@ -1713,14 +1932,17 @@ export function confirmArtifactStructurePreview(key: string, turn?: number): voi
   if (session === undefined || preview === undefined || preview.status !== 'ready') return
   const built = preview.kind === 'move'
     ? moveOperationForBlock(session, preview.blockId, preview.targetParentBlockId ?? 'root')
-    : structureOperationForBlock(session, preview.blockId, preview.kind)
-  if (built === undefined) {
+    : preview.batch === true && preview.blockIds !== undefined
+      ? batchStructureOperations(session, preview.blockIds, preview.kind)
+      : structureOperationForBlock(session, preview.blockId, preview.kind)
+  const operations = built === undefined ? undefined : 'operations' in built ? built.operations : [built.operation]
+  if (operations === undefined || operations.length === 0) {
     sessions.set(key, { ...session, structurePreview: { ...preview, status: 'failed', error: translate('edit.structureFailed') } })
     publish()
     return
   }
   sessions.set(key, { ...session, structurePreview: undefined })
-  void submitStructureOperation(key, built.operation, turn, preview.kind === 'move' ? 'edit.moveBlockFailed' : 'edit.structureFailed')
+  void submitStructureOperation(key, operations, turn, preview.kind === 'move' ? 'edit.moveBlockFailed' : 'edit.structureFailed')
 }
 
 /** Dismiss the structure preview without applying it. */
@@ -1880,12 +2102,12 @@ export async function applyArtifactBlockProps(key: string, blockId: string, prop
   sessions.set(key, { ...session, propsPreview: undefined, propsError: undefined, propsBusy: true })
   publish()
   try {
-    await submitStructureOperation(key, {
+    await submitStructureOperation(key, [{
       op: 'props',
       nodeId: target.nodeId,
       sourceDigest: target.sourceDigest,
       props,
-    }, turn, 'edit.propsFailed', 'props')
+    }], turn, 'edit.propsFailed', 'props')
   } finally {
     const current = sessions.get(key)
     if (current !== undefined && current.status !== 'submitted' && current.propsBusy === true) {
@@ -1903,7 +2125,7 @@ type DeterministicOperation =
 
 async function submitStructureOperation(
   key: string,
-  operation: DeterministicOperation,
+  operations: readonly DeterministicOperation[],
   turn: number | undefined,
   failureKey: string,
   surface: 'structure' | 'props' = 'structure',
@@ -1935,7 +2157,7 @@ async function submitStructureOperation(
         artifactId: session.artifactId,
         baseRevisionId: session.baseRevisionId,
         operationId: newRequestId(),
-        operations: [operation],
+        operations,
         ...session.branch === true ? { branch: true } : {},
         ...session.title === undefined ? {} : { title: session.title },
         style: session.style,
@@ -1957,7 +2179,7 @@ async function submitStructureOperation(
       const result = (value as { result?: unknown }).result
       if (isArtifactStructureResult(result)) {
         addLocalRevision(session.sessionId, {
-          kind: operation.op === 'props' ? 'props' : 'structure',
+          kind: operations[0]?.op === 'props' ? 'props' : 'structure',
           artifactId: result.artifactId,
           sourceRevisionId: result.baseRevisionId,
           revisionId: result.revisionId,
@@ -2006,7 +2228,7 @@ export async function applyArtifactStructure(key: string, blockId: string, op: '
   const operation = op === 'duplicate'
     ? { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest, toIndex: Math.max(0, index + 1) }
     : { op, nodeId: target.nodeId, sourceDigest: target.sourceDigest }
-  await submitStructureOperation(key, operation, turn, 'edit.structureFailed')
+  await submitStructureOperation(key, [operation], turn, 'edit.structureFailed')
 }
 
 /**
@@ -2039,13 +2261,13 @@ export async function moveArtifactBlockTo(key: string, blockId: string, targetPa
   const children = targetParentBlockId === 'root'
     ? nested.blocks.filter(block => block.parentBlockId === undefined)
     : nested.blocks.filter(block => block.parentBlockId === targetParentBlockId)
-  await submitStructureOperation(key, {
+  await submitStructureOperation(key, [{
     op: 'move',
     nodeId: target.nodeId,
     sourceDigest: target.sourceDigest,
     toParentNodeId: targetParentNodeId,
     toIndex: children.length,
-  }, turn, 'edit.moveBlockFailed')
+  }], turn, 'edit.moveBlockFailed')
 }
 
 /**

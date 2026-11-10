@@ -48,6 +48,10 @@ export interface ArtifactStructurePreviewLine {
 export interface ArtifactStructurePreviewState {
   readonly kind: 'delete' | 'duplicate' | 'move'
   readonly blockId: string
+  /** Set when the preview covers a batch (selection toolbar action). */
+  readonly batch?: true
+  /** Every selected block id when the preview covers a batch, in arrangement order. */
+  readonly blockIds?: readonly string[]
   readonly targetParentBlockId?: string
   readonly status: 'loading' | 'ready' | 'failed'
   readonly afterProgram?: string
@@ -55,6 +59,9 @@ export interface ArtifactStructurePreviewState {
   readonly diff?: readonly ArtifactStructurePreviewLine[]
   readonly error?: string
 }
+
+/** Batch arrangement move: one step, or straight to the first/last position. */
+export type BatchOrderMode = 'up' | 'down' | 'top' | 'bottom'
 
 export interface ArtifactEditSession {
   /** `${sessionId}:${baseRevisionId}`. */
@@ -218,6 +225,10 @@ export interface ArtifactEditActions {
   moveBlock(blockId: string, toIndex: number): void
   /** Move one block by a relative number of positions (keyboard reordering). */
   moveBlockBy(blockId: string, delta: number): void
+  /** Move every selected block one step or to an end, keeping their relative order. */
+  moveBlocks(blockIds: readonly string[], mode: BatchOrderMode): void
+  /** Move every selected nested block inside its own parent group. */
+  moveNestedBlocks(blockIds: readonly string[], mode: BatchOrderMode): void
   /** Restore the target order to the base revision's page order (keeps edits/numbers/global). */
   resetOrder(): void
   /** Remove every saved block request but keep the arrangement draft and global instruction. */
@@ -242,6 +253,8 @@ export interface ArtifactEditActions {
   applyStructure(blockId: string, op: 'delete' | 'duplicate'): void
   /** Preview a delete/duplicate operation and open its diff confirmation. */
   previewStructure(blockId: string, op: 'delete' | 'duplicate'): void
+  /** Preview one batch delete/duplicate and open its diff confirmation. */
+  previewBatchStructure(blockIds: readonly string[], op: 'delete' | 'duplicate'): void
   /** Preview moving a block into another container / the page root. */
   previewMoveBlockTo(blockId: string, targetParentBlockId: string | 'root'): void
   /** Apply the currently previewed structure operation. */
