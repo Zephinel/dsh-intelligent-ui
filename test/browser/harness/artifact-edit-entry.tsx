@@ -457,7 +457,7 @@ w.__appendRevision = (callId: string, program: string, meta: Record<string, unkn
   nodes = [...nodes, cardNode(callId, program, meta, title)]
   update()
 }
-w.__appendLocalRevision = (input: { artifactId: string; sourceRevisionId: string; revisionId: string; revision: number; program: string; title?: string; kind?: 'restore' | 'structure' | 'props' | 'style' }) => {
+w.__appendLocalRevision = (input: { artifactId: string; sourceRevisionId: string; revisionId: string; revision: number; program: string; title?: string; kind?: 'restore' | 'structure' | 'props' | 'style'; turn?: number; registerStore?: boolean }) => {
   addLocalRevision(SESSION, {
     artifactId: input.artifactId,
     sourceRevisionId: input.sourceRevisionId,
@@ -467,9 +467,23 @@ w.__appendLocalRevision = (input: { artifactId: string; sourceRevisionId: string
     ...input.title === undefined ? {} : { title: input.title },
     style: 'card',
     ...input.kind === undefined ? {} : { kind: input.kind },
-    turn: 1,
+    turn: input.turn ?? 1,
     createdAt: Date.now(),
   })
+  // Regression lock for the stage/local-card distinction: a stored local
+  // revision whose card lives in an unrendered Turn still enters
+  // localRevisionIds, so it distinguishes the two renderedRevisionLocal
+  // formulas. registerStore mirrors the version store entry.
+  if (input.registerStore === true) {
+    w.__registerLocalRevision(input.artifactId, {
+      revisionId: input.revisionId,
+      revision: input.revision,
+      program: input.program,
+      ...input.title === undefined ? {} : { title: input.title },
+      ...input.kind === undefined ? {} : { kind: input.kind },
+      sourceRevisionId: input.sourceRevisionId,
+    })
+  }
   update()
 }
 w.__resetStageHarness = () => {

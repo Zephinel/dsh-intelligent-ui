@@ -2997,6 +2997,59 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait('!document.querySelector("[data-dsh-iui-history]")', 'local revision details closed')
   await read('window.__setArtifactStageEnabled(false)')
 
+  // 56. Regression lock for renderedRevisionLocal. Unlike scenario 55, this local
+  // revision is ALSO persisted in localStorage (so localRevisionIds contains it)
+  // while its local card lives in an unrendered Turn (999). The stage displays it,
+  // so treating the stage program as a local card would skip the fallback and leave
+  // the redirected stage editable. Only the `callId === revisionId` formula passes.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card]")', 'render-local stage cleared')
+  await read('window.__forgetDeletedRevisions()')
+  const RL_V1 = 'root = Col([Card([Title("存储本地修订旧版", "sm")])])'
+  const RL_V2 = 'root = Col([Card([Title("存储本地修订当前版", "sm")])])'
+  await read(`window.__setHistory('solo5', [
+    { revisionId: 'local-struct-2', revision: 2, baseRevisionId: 'solo5-rev-1', title: '单卡存储本地修订', style: 'card', createdAt: 1763200011000, source: 'structure', hasProgram: true },
+    { revisionId: 'solo5-rev-1', revision: 1, title: '单卡存储本地修订', style: 'card', createdAt: 1763200010000, source: 'initial', hasProgram: true },
+  ], { 'solo5-rev-1': ${JSON.stringify(RL_V1)} })`)
+  await read(`window.__appendRevision('solo5', ${JSON.stringify(RL_V1)}, { artifactId: 'solo5', revisionId: 'solo5-rev-1', revision: 1 }, '单卡存储本地修订')`)
+  await read(`window.__appendLocalRevision({ artifactId: 'solo5', sourceRevisionId: 'solo5-rev-1', revisionId: 'local-struct-2', revision: 2, program: ${JSON.stringify(RL_V2)}, title: '单卡存储本地修订', kind: 'structure', turn: 999, registerStore: true })`)
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\\"solo5\\"]")', 'render-local stage card')
+  await wait(`document.querySelectorAll('[data-dsh-intelligent-ui="card"]').length === 1`, 'the stored local revision has no mounted card (unrendered Turn)')
+  check(await read(`(JSON.parse(localStorage.getItem('dsh-intelligent-ui-local-revisions:v1:e2e-session') ?? '[]')).some(item => item.revisionId === 'local-struct-2')`), true, 'the deleted revision is also stored in localStorage (localRevisionIds contains it)')
+  await read(`window.__selectArtifactRevision('solo5', 'local-struct-2')`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('存储本地修订当前版')`, 'stage displays the stored local revision')
+  check(await read(`window.__artifactVersionState('solo5').selected`), 'local-struct-2', 'the stored local revision is selected on the stage')
+  const renderLocalStageCallId = await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`)
+  check(renderLocalStageCallId, 'solo5', 'the stage card identity is pinned before the stored local revision deletion')
+  check(await text('[data-dsh-iui-history-count]'), '2', 'the stage badge shows the stored local revision number')
+  const renderLocalTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  await click(renderLocalTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'stored local revision details bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'stored local revision details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="local-struct-2"] [data-dsh-iui-history-delete]`)', 'stored local revision delete row ready')
+  check(await count('[data-dsh-iui-history-delete-error]'), 0, 'the displayed stored local revision offers a working delete')
+  await click('[data-dsh-iui-history-revision="local-struct-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'stored local revision deletion confirmation')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('存储本地修订旧版')`, 'stage follows the stored local revision fallback')
+  const renderLocalState = await read(`window.__artifactVersionState('solo5')`)
+  check(renderLocalState.latest, 'solo5-rev-1', 'the fallback revision becomes latest')
+  check(renderLocalState.selected, 'solo5-rev-1', 'the fallback revision becomes selected')
+  check(renderLocalState.stage, 'solo5', 'the same stage card survives the stored local revision fallback')
+  check(renderLocalState.redirected['solo5-rev-1'], 'local-struct-2', 'the fallback record remembers the deleted stored local revision')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), renderLocalStageCallId, 'the stored local revision fallback keeps the same stage card')
+  check(await count('[data-dsh-intelligent-ui="card"]'), 1, 'the card count is unchanged (no local card was mounted)')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'stored local revision fallback stage is read-only')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'renderedRevisionLocal: the stage displaying a stored local revision stays read-only after the fallback')
+  await wait('!document.querySelector("[data-dsh-iui-history-count]")', 'the stored local revision badge disappears after the fallback')
+  check(await count('[data-dsh-iui-history-count]'), 0, 'the badge falls back to the initial revision (no number)')
+  check(await read(`(JSON.parse(localStorage.getItem('dsh-intelligent-ui-local-revisions:v1:e2e-session') ?? '[]')).some(item => item.revisionId === 'local-struct-2')`), false, 'the stored local revision is removed with the deletion')
+  await read(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector("[data-dsh-iui-history]")', 'stored local revision details closed')
+  await read('window.__setArtifactStageEnabled(false)')
+
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {
   try { cdp?.close() } catch { /* already closed */ }
