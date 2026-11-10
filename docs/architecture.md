@@ -446,6 +446,13 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - 验证：Node **665/665**（Host 302、Client 340、packaging 23）；浏览器 9/9；`artifact-edit` **566 checks**（菜单/键盘焦点/Tab/forced-colors、输入轨道光晕、圆角/inset、enter/exit 动画名、`data-closing`、删除确认持久 / Cancel / Delete preview、popover 四边 clamp、真实 1180 shell fit、本地/内联图片与错误占位、回退链、跨卡草稿锁、引用锁与本地图导出 settle）；`nested-edit-renderer` 75；`nested-css-contract` 28/28 + 5/5。构建 host 841 kB、client 4.07 MB（js 3.85 / css 222.9 kB）；pack 65 files 6.04 / 12.92 MB。
 - 部署：client 插件改动必须重启 `dsh-web` 后才会加载；页面刷新不足。
 
+### 区块编排批量操作（用户反馈新增）
+
+- 区块编排 section head 在「重置顺序」左侧新增「批量操作」toggle（`data-dsh-iui-edit-batch-toggle`、`aria-pressed`）：激活后每行拖拽柄替换为可 Tab 聚焦的选择控件（Space/Enter 或点击行主体切换），逐行结构菜单与行 hover 卡关闭，选中行有 `is-batch-selected` 视觉态；工具栏提供已选数量（`role=status`）、全选/清除、上移/下移/置顶/置底、复制所选/删除所选与退出；Esc 退出、切换修订或关闭编辑器时清空选择，焦点回到 toggle。
+- 顺序操作只改草稿 `targetOrder`/`orderChanged` 并走既有持久化与 chip 同步，编辑请求编号与颜色不变；置顶/置底保持所选块相对顺序，上移按索引升序、下移按索引降序处理，每个所选块只与未选邻居交换一格。
+- 批量复制/删除复用 `POST /api/intelligent-ui/artifact-structure` 的 `operations[]`（Host 单批上限 20），先 `preview:true` 在既有结构预览弹窗展示批量标题/涉及区块与同一 diff，确认后一次批量 POST 只记录一条 `kind:'structure'` 本地修订并提交草稿；duplicate 按页面降序发送、`toIndex = base 页内可编辑下标 + 1`，保证每份副本紧跟原块。选择超过上限或存在不可解析 nodeId/sourceDigest 的区块时在请求前拦截并显示内联错误。
+- v1 只覆盖顶层 arrangement 列表（嵌套编排不变）；批量结构操作与内容编辑草稿不互斥，与单块结构操作的既有语义一致。
+
 ### 图标系统：统一 Remix Icon
 
 - 插件自身 UI（编辑面板、编排行、画布选中浮层、设置页、样式选择器、composer 芯片、导出菜单、文章/媒体/文本组件控件）的所有图标统一来自 **Remix Icon v4.9.1**，路径数据内联在 `src/lib/components/remix-icon.tsx`（`REMIX_ICON_PATHS` + `<RemixIcon name size className>`，`0 0 24 24` viewBox、`fill=currentColor`）。不新增运行时依赖、不打图标字体，图标随 `currentColor` 继承颜色。
@@ -520,3 +527,9 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - **stage-on 删除当前 transcript revision（D3）**：详细列表删除 stage 当前显示的 transcript revision 时，走既有 revision-fallbacks（记录回退 program）→ `forgetArtifactRevision` 删除记录并把 latest/selected 重指向最近的 live revision；stage 由 fallback 重指向，不悬空、卡片数量不变。当 stage 显示的是从 Host history 拉取的 revision（卡片自身 program 仍是旧 revision）时，store 在回退记录上写 `redirectedFrom`，`stageProgramFor` 据此合成 `fallbackFrom`，回退后的 stage 同样保持只读（真机复验补充场景）。`redirectedFrom` 写在 **fallback target 记录**上且是 sticky 的：该 revision 之后再次被 stage 选中时仍然只读（与既有「回退卡只读」契约一致）；如需恢复可编辑，需选其他 revision，或从 frozen 卡走 branch 编辑。stage 显示 **local revision**（结构操作本地修订）时同样按 transcript 卡语义删除并写 fallback：`renderedRevisionLocal` 只对「callId===revisionId 的真本地卡」为真，`locallyOwned` 也要求打开对话框的卡就是该 local 卡，避免 stage 被误判为本地卡而跳过 fallback。
 - **测试**：新增纯单测 `export-versions.test.mjs`（store 选中优先/未知回退/callId 稳定/多 program 顺序）与 `export-image-targets.test.mjs`（pre-version container 兜底、跨 Turn stage、本 Turn 整卡回退、notice 无 stage 明确错误、混合顺序、stackBoxes 几何）；artifact-edit 套件新增场景 51（stage 选旧 revision → branch：冲突横幅 base=选中修订、envelope `branch:true`/`baseRevisionId`/`artifactId`、无新增卡）、场景 52（删除 stage 当前 transcript revision：fallback 后 latest/selected 正确、仅一个 stage、卡片数不变、行移除）、场景 53（单卡 Turn 删除当前显示 revision：fallbackFrom 继承使回退卡只读、stage 不换卡）、场景 54（单卡 stage 显示从 history 拉取的 revision，删除后经 `redirectedFrom` 保持只读、卡片数不变、版本条回落到旧 revision）、场景 55（单卡 stage 显示 store 中的 local revision，删除当前显示 local revision 后写 fallback、stage 同卡且只读、badge 消失、卡片数不变；本地卡自身的删除仍不写 fallback）与场景 56（同一条 local revision 同时存在于 localStorage/`localRevisionIds` 且其 local 卡位于未渲染 Turn；mutation 验证：旧公式 `program.localRevision === true` 时该场景失败，新公式 `&& callId===revisionId` 通过），套件 632→699 checks；另修复 review 发现的注册语义（同一 cardId 更新而非 unregister→register，frozen 卡在 stage 显示其 revision 时只读）与 stageProgramFor 的 fallbackFrom 继承；导出套件新增 D8 场景：notice-only Turn 的图片导出必须捕获 stage 卡（断言捕获元素带 `data-artifact-id`、内容为 SELECTED 而非 RAW 旧 program）与 HTML 导出嵌入选中 revision program、不嵌入旧记录。
 - **范围/限制**：不改 Host/路由/持久字段；导出仍不支持跨 session 版本 store（仅当前 session）；多 artifact 合成以最大宽度+12px 间距纵向拼接，不同宽度留透明侧边；异步媒体/地图仍以 settled 为准；branch 流程语义未改，仅放开 stage 编辑面；删除修订后被删除版本的 notice 行若仍挂载可能短暂指向旧 revision（revision-fallbacks 会在卡片重渲染时重定向；作为已知限制记录）。验证：Node 722/722（Host 302、Client 397、packaging 23；新增 18 条）；浏览器 9/9；artifact-edit 699 checks；构建 host 841 kB、client 4.12 MB（js 3.89 / css 230.8 kB）。
+
+### 合并验证（2026-11-10，本地 main）
+
+- 本地 `main` 已合并两条功能分支：修订舞台/版本条/导出（`artifact-version-switcher`，快进）与区块编排批量操作（`artifact-batch-version-ui`，merge commit）。合并冲突只涉及 E2E 的 input-orbit 稳定化、共享 plan 文档与文档计数；代码层没有新增 Host 路由或持久字段。
+- 合并后验证：Node **736/736**（Host **303**、Client **410**、packaging **23**）；浏览器 **9/9** 套件，`artifact-edit` **790 checks**、`nested-edit-renderer` 75；构建 host 841 kB、client 4.14 MB（js 3.91 / css 236.1 kB）；pack **65** files **6,064,656** / **13,016,644** 字节；`npm run check:docs-facts` 与 `git diff --check` 通过。
+- 上方各功能章节的验证行记录的是分支时点数字；合并后的当前数字以本节与 README 为准。

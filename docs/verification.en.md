@@ -829,3 +829,57 @@ A fourth pair of fresh independent read-only reviews found no P0/P1 runtime bloc
 | `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **699 checks**, `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,058,652** bytes packed, **12,991,046** bytes unpacked |
 | Structure | the M3 record exists in both languages; `check:docs-facts` passes; `git diff --check` passes |
+
+## 2026-11-09 — Batch arrangement operations (multi-select + batch order/duplicate/delete)
+
+- **Batch mode**: the Block arrangement section head gains a **Batch** toggle left of Reset order (`data-dsh-iui-edit-batch-toggle`, `aria-pressed`, icon + copy). While active each row's drag grip becomes a Tab-focusable selection control (Space/Enter toggles; the row body toggles too), the per-row structure menu is hidden, the row hover card never opens, and selected rows carry an `is-batch-selected`/`data-batch-selected` state. Escape leaves the mode and returns focus to the toggle; switching the edited revision or closing the editor clears the selection.
+- **Batch toolbar**: selected count (`role=status`), select all/clear, move up/down/to top/to bottom, duplicate selected/delete selected and exit; buttons are disabled with aria-label/title when there is no selection or no effect, structure actions disable with a note above the Host's 20-operation cap, and the section head/toolbar wrap without horizontal overflow on the 272px docked rail at 1180px.
+- **Order semantics**: top/bottom keep the selected blocks' relative order; up processes ascending indices and down descending ones so each selected block swaps only with an unselected neighbour and never crosses another selected block. Only the draft `targetOrder`/`orderChanged` change through the existing persistence/chip-sync path; edit request numbers and colours stay untouched.
+- **Batch structure operations**: reuse the `POST /api/intelligent-ui/artifact-structure` batch `operations` (cap 20), first `preview: true` into the existing preview dialog with a batch title/operation label/involved-block list/the same diff, then one real batch POST on confirm that records exactly one local `kind:'structure'` revision and `markSubmitted`. Multiple duplicates are sent in descending page order with `toIndex = base editable index + 1`, so every copy lands directly after its source; the existing Host batch test plus a new host test pin that order. A selection with an unresolvable nodeId/sourceDigest, or one above the cap, reports an inline error before sending anything.
+- **Scope and limits**: v1 affects only the top-level arrangement list (nested arrangement unchanged); batch structure operations do not block content-edit drafts; a structural duplicate follows the revision page order, not the draft order.
+- **Tests**: new `test/client/artifact-edit-batch-ops.test.mjs` (9 cases: order semantics, draft invariants, descending duplicate send tied to the real Host apply placement, one-request/one-revision batch delete, the 20 cap, unresolvable selection, preview cancel, one-block regression); one new multi-duplicate Host test; the browser `artifact-edit` suite gains the batch scenario (toggle/selection/order/narrow rail/batch preview/apply/single revision/Escape focus return) and grows 519 → **564 checks**.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **638/638** Node tests = Host **303** + Client **314** + packaging **21**; build host **837.9 kB**, client **4.06 MB** (js 3.84 / CSS 226.6) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **564 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,035,842** bytes packed, **12,905,416** bytes unpacked |
+| Structure | the new record exists in both languages; `npm run check:docs-facts` passes; `git diff --check` passes |
+
+## 2026-11-09 — Nested arrangement batch operations and batch draft confirmation
+
+- **Nested batch mode (B1)**: the Nested arrangement section head gains its own **Batch** toggle left of Reset nested order (`data-dsh-iui-edit-nested-batch-toggle`, `aria-pressed`), mutually exclusive with the root batch mode. While active every nested row's drag grip becomes a Tab-focusable selection control (Space/Enter or the row body toggles selection), the per-row structure menu is hidden and selected rows carry an `is-batch-selected` state; the toolbar reuses the root batch styling (selected count `role=status`, select all/clear, move up/down/to top/to bottom, duplicate/delete selected, exit). Order actions apply independently per parent container with the root batch semantics (top/bottom keep the group-relative order, up ascending / down descending and only swapping with an unselected sibling; disabled when no group can move); Escape leaves the mode and returns focus to the toggle, and switching the edited revision or leaving nested mode clears the selection.
+- **Nested batch structure operations**: reuse the `POST /api/intelligent-ui/artifact-structure` `operations[]` batch (cap 20): one `preview:true` dry run into the existing preview dialog (batch title/operation label/involved blocks/the same diff), then one real apply recording exactly one local `kind:'structure'` revision. Duplicates are grouped per parent container and sent in descending base editable-index order with `toIndex = base editable index + 1`, so groups cannot shift each other; a container selected together with one of its nested blocks is disabled/refused before the request (`edit.batchNestedOverlap`), as is an unresolvable nodeId/sourceDigest or an over-cap selection.
+- **Batch draft confirmation (B2)**: when the draft still has unsent content (`hasArtifactEditContent`), a batch structure preview shows an explicit unsent-content warning and renames the confirm action to **Discard draft and apply**; a clean draft keeps the previous flow (**Apply change**), and single-block structure operations keep their flow and copy unchanged.
+- **Tests**: `test/client/artifact-edit-batch-ops.test.mjs` gains 4 cases (per-parent nested ordering with untouched groups, nested duplicate grouping/descending index tied to the real Host `applyStructureBatch` placement, nested delete with one request and one revision, overlapping/unresolvable selection refusal); the browser `artifact-edit` suite gains the 25d nested batch scenario (mutual exclusion, per-parent ordering, overlap-disabled select-all, dirty-draft warning, one batch revision) plus the 25b clean/dirty preview checks and the 25 single-block no-warning regression; the suite grows 564 → **610 checks**. The pre-existing input-orbit geometry assertion now waits for the 320ms panel width animation to settle before sampling while still requiring the exact 5px offset, removing a long-suite flake.
+- **Scope and limits**: nested batch ordering rewrites only the pending `nestedOrder`/`nestedOrderChanged`; structural duplicates still follow the revision page order, not the draft order; a container and its descendant must be batched separately; coarse-pointer and real screen-reader checks remain out of scope.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **642/642** Node tests = Host **303** + Client **318** + packaging **21**; build host **837.9 kB**, client **4.06 MB** (js 3.84 / CSS 227.6) |
+| `npm run test:browser` | PASS; 9/9 suites; `artifact-edit` **610 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,037,805** bytes packed, **12,912,720** bytes unpacked |
+| Structure | the new record exists in both languages; `npm run check:docs-facts` passes; `git diff --check` passes |
+
+## 2026-11-10 — Both feature branches merged into local main
+
+Local `main` merged `artifact-version-switcher` (fast-forward) and `artifact-batch-version-ui` (merge commit), then ran the merged-tree gates:
+
+- **Contents**: M1 active revision stage/visibility fallback, M2 recents-style version bar/screenshot thumbnails/FLIP, M3 exports following the displayed revision plus branch/deletion rollback, and the root/nested block-arrangement batch operations (batch ordering, one-revision batch duplicate/delete, unsent-draft confirmation).
+- **Conflicts**: kept main's settled-geometry input-orbit E2E stabilization; kept the newer revision-stage plan document for the add/add plan file; doc counters are synchronized to the measured merged tree in this record. The two changes interact only in the client/test/docs layers; no new Host route or persisted field.
+- **Merged-tree E2E**: `artifact-edit` **790 checks** with both the batch scenarios (25b/25c/25d) and the stage/version-bar/export scenarios (48–56) passing together.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm test` | PASS; Node **736/736** = Host **303** + Client **410** + packaging **23** |
+| `npm run test:renderer` | PASS (CSS/component/nested/typography/media contracts) |
+| `npm run test:browser` | PASS; **9/9** suites; `artifact-edit` **790 checks**, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,064,656** bytes packed, **13,016,644** bytes unpacked |
+| Build | host 841 kB; client 4.14 MB (js 3.91 / css 236.1 kB); standalone 3.35 MB + 523.0 kB |
+| Structure | both languages present; `npm run check:docs-facts` passes; `git diff --check` passes |

@@ -809,3 +809,57 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **699 checks**、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,058,652** 字节，解包 **12,991,046** 字节 |
 | 结构 | M3 记录中英对应；`check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-09 — 区块编排批量操作（多选 + 批量顺序/复制/删除）
+
+- **批量模式**：区块编排 section head 在「重置顺序」左侧新增「批量操作」切换（`data-dsh-iui-edit-batch-toggle`、`aria-pressed`、图标+文案）。激活后每行拖拽 grip 替换为可 Tab 聚焦的选择控件（Space/Enter 切换，点击行主体也可切换），逐行结构操作菜单隐藏、行 hover 卡片不弹出，选中行有 `is-batch-selected`/`data-batch-selected` 视觉态；Esc 退出批量模式并把焦点放回切换按钮，切换修订或关闭编辑器时选择自然清空。
+- **批量工具栏**：已选数量（`role=status`）、全选/清除选择、上移/下移/置顶/置底、复制所选/删除所选、退出批量；无选择或无效果时按钮 disabled 且带 aria-label/title，选择超过 Host 单批上限 20 时结构操作禁用并提示；1180px 档 272px rail 下 section head 与工具栏换行、无水平溢出。
+- **顺序语义**：置顶/置底保持所选块相对顺序；上移按下标升序、下移按降序处理，每个所选块只与未选邻居交换一格（不越过其他所选块）。只改当前草稿 `targetOrder`/`orderChanged` 并走既有持久化与 chip 同步，编辑请求编号与颜色不变。
+- **批量结构操作**：复用 `POST /api/intelligent-ui/artifact-structure` 的批量 `operations`（上限 20），先 `preview: true` 在现有预览弹窗展示批量标题/操作标签/涉及区块列表/同一 diff，确认后一次真实批量 POST，只产生一条 `kind:'structure'` 本地修订并 `markSubmitted`。多个 duplicate 按页面降序发送、`toIndex = 原页内可编辑下标 + 1`，每份副本紧跟原块；Host 既有批量用例与新增 host 测试固定该顺序。所选块无法解析 nodeId/sourceDigest 或超过上限时在请求前报错、不发请求。
+- **范围与限制**：v1 只作用于顶层 arrangement 列表（嵌套编排不变）；批量结构操作与内容编辑草稿不互斥；结构 duplicate 落在修订页序而非草稿顺序。
+- **测试**：新增 `test/client/artifact-edit-batch-ops.test.mjs` 9 个用例（顺序语义、草稿不变性、批量 duplicate 的降序发送与 Host 实际应用位置、批量 delete 单请求单修订、20 上限、不可解析选择、取消预览、单块旧行为回归）；`test/host/artifact-structure.test.mjs` 新增多 duplicate 批量放置用例；浏览器 `artifact-edit` 新增批量场景（切换/选择/顺序/窄面板/批量预览/应用/单修订/Esc 焦点回归），519 → **564 checks**。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **638/638** = Host **303** + Client **314** + packaging **21**；build host **837.9 kB**、client **4.06 MB**（js 3.84 / CSS 226.6） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **564 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,035,842** 字节，解包 **12,905,416** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-09 — 嵌套区块编排批量操作与批量前草稿确认
+
+- **嵌套批量模式（B1）**：嵌套编排 section head 在「重置嵌套顺序」左侧新增「批量操作」toggle（`data-dsh-iui-edit-nested-batch-toggle`、`aria-pressed`），与顶层批量模式互斥。进入后嵌套行 grip 替换为可 Tab 聚焦的选择控件（Space/Enter 或行体切换），逐行结构菜单隐藏、选中行有 `is-batch-selected` 视觉态；工具栏复用顶层批量样式（已选数量 `role=status`、全选/清除、上移/下移/置顶/置底、复制所选/删除所选、退出）。顺序操作按各自父容器独立应用（与顶层语义一致：置顶/置底保持组内相对顺序，上移升序、下移降序且只与未选邻居交换；无任何组可动时禁用）；Esc 退出并把焦点放回 toggle；切换修订或离开嵌套模式时清空选择。
+- **嵌套批量结构操作**：复用 `POST /api/intelligent-ui/artifact-structure` 的 `operations[]`（≤20），一次 `preview:true` → 现有预览弹窗（批量标题/操作标签/涉及区块/同一 diff）→ 一次真实 apply → 只产生一条 `kind:'structure'` 本地修订。duplicate 按父容器分组，组内按 base 可编辑下标降序发送、`toIndex = base 可编辑下标 + 1`，跨父互不影响；容器与其嵌套块同时选中时在请求前禁用/拦截（`edit.batchNestedOverlap`），无法解析 nodeId/sourceDigest 或超限同样不发送请求。
+- **批量前草稿确认（B2）**：草稿存在未发送内容（`hasArtifactEditContent`）时，批量结构预览显示「未发送内容会丢失」警告，确认按钮改为「丢弃草稿并应用」；草稿干净时保持原流程（「应用修改」）；单块结构操作流程与文案不变。
+- **测试**：`test/client/artifact-edit-batch-ops.test.mjs` 新增 4 个用例（嵌套按父容器独立排序与未选组不变、嵌套 duplicate 分组降序并与真实 Host `applyStructureBatch` 落位一致、嵌套 delete 单请求单修订、重叠与不可解析选择预拦截）；浏览器 `artifact-edit` 新增 25d 嵌套批量场景（互斥、跨父独立排序、全选重叠禁用、脏草稿警告、批量 apply 单修订）、25b 干净/脏草稿预览与 25 单块无警告回归；套件 564 → **610 checks**。同时修正既有 input-orbit 几何断言的采样时序（等待 320ms 面板宽度动画稳定后仍断言精确 5px），消除长套件连跑时的偶发假失败。
+- **范围与限制**：嵌套批量顺序只修改 pending `nestedOrder`/`nestedOrderChanged`；结构 duplicate 仍按修订页序而非草稿顺序；容器与后代不能同批，需分开选择；coarse 指针/真实屏幕阅读器仍未单独验证。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **642/642** = Host **303** + Client **318** + packaging **21**；build host **837.9 kB**、client **4.06 MB**（js 3.84 / CSS 227.6） |
+| `npm run test:browser` | PASS；9/9 套件；`artifact-edit` **610 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,037,805** 字节，解包 **12,912,720** 字节 |
+| 结构 | 新增记录中英对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — 合并两条功能分支到本地 main
+
+本地 `main` 合并 `artifact-version-switcher`（快进）与 `artifact-batch-version-ui`（merge commit），并统一跑合并后门禁：
+
+- **合并内容**：M1 活动舞台/可见性回落、M2 最近任务式版本条/截图缩略图/FLIP、M3 导出跟随当前显示版本 + branch/删除回退，以及顶层/嵌套区块编排批量操作（批量排序、批量复制/删除合并为一条修订、未发送草稿确认）。
+- **冲突处理**：E2E input-orbit 稳定化取 main 的 settled-geometry 版本；`docs/plans/artifact-version-switcher/README.md` add/add 取较新的版本条方案；文档计数在本记录中同步为合并后实测值。两批改动只在客户端/测试/文档层交互，未新增 Host 路由或持久字段。
+- **合并后 E2E**：`artifact-edit` **790 checks**，需求 1 的 25b/25c/25d 批量场景与需求 2 的 48–56 舞台/版本条/导出场景全部保留并同时通过。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm test` | PASS；Node **736/736** = Host **303** + Client **410** + packaging **23** |
+| `npm run test:renderer` | PASS（CSS/组件/嵌套/排版/媒体等契约） |
+| `npm run test:browser` | PASS；**9/9** 套件；`artifact-edit` **790 checks**、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,064,656** 字节，解包 **13,016,644** 字节 |
+| 构建 | host 841 kB；client 4.14 MB（js 3.91 / css 236.1 kB）；standalone 3.35 MB + 523.0 kB |
+| 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
