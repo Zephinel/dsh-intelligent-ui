@@ -987,7 +987,7 @@ Local `main` merged `artifact-version-switcher` (fast-forward) and `artifact-bat
 
 - **Empty-draft close/reopen race (review MAJOR)**: the preview generation counter is no longer reset when a draft is removed (discard/close/rebase/submit now only bump it); reopening the same key after an empty-draft close can therefore never collide with an old probe. The close-race test now also asserts that a late old probe cannot clear the reopened session's conflict or replace its fresh preview.
 - **CLI test coverage (review MINOR)**: the testable `runCli(root, io)` now owns the exit code and stderr path, and the temp-root doc-facts test executes the real CLI entry (asserting exit 1 plus the `docs/current-facts.json` failure copy); the Host/Client swap separator set also accepts `/` and `|`.
-- Final measured gate: Node **799/799** (Host **305**, Client **460**, packaging **34**); `artifact-edit` **920 checks**; image export 76; `test:browser` 9/9; pack **65** files **6,079,105** / **13,086,571** bytes; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB).
+- Final measured gate: Node **799/799** (Host **305**, Client **460**, packaging **34**); `artifact-edit` **920 checks**; image export 76; `test:browser` 9/9; pack **65** files **6,079,141** / **13,086,571** bytes; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB).
 
 ### Automated results
 
@@ -996,4 +996,4 @@ Local `main` merged `artifact-version-switcher` (fast-forward) and `artifact-bat
 | `npm run check` | PASS; Node **799/799** = Host **305** + Client **460** + packaging **34** |
 | `node test/browser/artifact-edit.e2e.mjs` | PASS; **920 checks**, two consecutive runs |
 | `npm run test:browser` | PASS; **9/9** suites; 76 image-export assertions, `nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS; **65** files, **6,079,105** bytes packed, **13,086,571** bytes unpacked |
+| `npm run pack:check` | PASS; **65** files, **6,079,141** bytes packed, **13,086,571** bytes unpacked |

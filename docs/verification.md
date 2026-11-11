@@ -967,7 +967,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 - **空草稿关闭→重开竞态（复审 MAJOR）**：preview generation 计数不再随 draft 删除而清零（discard/close/rebase/submit 改为只递增、不 delete），空草稿关闭后同一 key 重开并启动新 preview 时，旧 probe 的 generation 必然过期；扩展关闭竞态单测：旧 probe 晚到后不得清除重开 session 的 conflict，也不得替换新 preview。
 - **CLI 测试覆盖（复审 MINOR）**：抽出可测试的 `runCli(root, io)`（包含退出码与 stderr），doc-facts-guard 的临时根目录测试现在真正执行 CLI 入口并断言 exit 1 与 `docs/current-facts.json` 失败文案；Host/Client 互换分隔符补上 `/`、`|`。
-- 最终实测：Node **799/799**（Host **305**、Client **460**、packaging **34**）；`artifact-edit` **920 checks**；图片导出 76；`test:browser` 9/9；pack **65** 文件 **6,079,105** / **13,086,571** 字节；构建 host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）。
+- 最终实测：Node **799/799**（Host **305**、Client **460**、packaging **34**）；`artifact-edit` **920 checks**；图片导出 76；`test:browser` 9/9；pack **65** 文件 **6,079,141** / **13,086,571** 字节；构建 host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）。
 
 ### 自动化结果
 
@@ -976,4 +976,4 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run check` | PASS；Node **799/799** = Host **305** + Client **460** + packaging **34** |
 | `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
 | `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
-| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,105** 字节，解包 **13,086,571** 字节 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,141** 字节，解包 **13,086,571** 字节 |
