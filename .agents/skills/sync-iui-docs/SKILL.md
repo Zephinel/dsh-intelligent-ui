@@ -64,15 +64,15 @@ Check each as-built claim against its truth source from [`references/doc-map.md`
 
 Claim groups for this extension:
 
-- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.1 (validated on 0.2.1-rc.2), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.3.0-26-10-22`), no `engines.dsh`.
-- **Tool contract**: `render_ui` name, `{ program, style, title?, styleId? | temporaryStyle? }`, success `{ statements, style, styleSource?, styleId?, warnings? }`, model-visible result line, exact error strings.
-- **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria.
+- **Product state and requirements**: default off, three scopes, `/iui` syntax, DSH 0.2.2 (validated on 0.2.2-rc.1), Node 24, browser half requiring `dsh-client-locale`, published on GitHub and npm (`0.5.0`), no `engines.dsh`.
+- **Tool contract**: `render_ui` name, `{ program, style, title?, styleId? | temporaryStyle? }`, success `{ statements, style, styleSource?, styleId?, document?, warnings? }`, model-visible result line, exact error strings (the troubleshooting reference also carries the document-mode rejections).
+- **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria, and the experimental document answer rendered as a chrome-less `section.dsh-iui-document`.
 - **UI copy**: zh/en labels and menu text from `src/shared/locales.ts`; zh docs quote zh labels, English docs quote English labels.
 - **Vocabulary and counts**: 57 components, 73 functions (14 core + 59 library), 5 action steps; component signatures; prompt size (~9.5K tokens, approximate).
-- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 98 / Client 97 / packaging 21, total 216), renderer 42/42 parse and render, typography 22/22, i18n 4 programs, pack 43 files (~4.07 MB tarball, ~10.29 MB unpacked), every screenshot under `assets/` referenced by both READMEs.
-- **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, UI language and Agent Skill; `docs/development*.md` expands install/uninstall, development commands, restart tips, the release layout and the tag-driven Trusted Publishing release flow. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
+- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 309 / Client 461 / packaging 34, total 804), renderer 42/42 parse + 49/49 runtime descriptions + 42/42 render, typography 22/22, i18n 4 programs, pack 65 files (6,126,182 bytes tarball / 13,147,456 bytes unpacked), 34 shipped screenshot assets guarded by `test/packaging/manifest.test.mjs` (language-matched captures are used by their own README, shared fixtures by both).
+- **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, the decision policy and the experimental document mode; `docs/development*.md` expands install/uninstall, development commands, restart tips, the Config fields (including `documentMode`), the release layout and the tag-driven Trusted Publishing release flow. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
 - **Repository and contribution**: the README clone URL is the HTTPS equivalent of `git config remote.origin.url`; GitHub Issues is the contribution channel; `npm run check` is the local gate (there is no PR CI); releases are published by the tag-triggered GitHub Actions Trusted Publishing workflow (`.github/workflows/publish.yml`, OIDC + provenance); docs changes follow `.agents/skills/sync-iui-docs/SKILL.md`.
-- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.3.0-26-10-22`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
+- **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.5.0`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
 - **Release history**: `CHANGELOG.md` (English-only) mirrors the published versions (`package.json` version plus npm publish time); `Unreleased` collects the current main-branch delta; released sections are append-only, and the file is repo-only (not in `package.json` `files`).
 
 Completion criterion: every audited claim is verified, corrected, or listed unresolved; full audits state which docs and claim groups were not covered.
@@ -146,6 +146,6 @@ Questions:
 - [`references/doc-map.md`](references/doc-map.md) — per-doc class, truth source, and existing guard for this repository. Load in step 2.
 - [`references/verification.md`](references/verification.md) — guard commands, expected outputs, README structural checks, and known non-bugs. Load in step 1 and before reporting.
 
-These two references describe the repo as of 2026-10-25. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
+These two references describe the repo as of 2026-11-11. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
 
 This skill lives at `.agents/skills/sync-iui-docs/` for project-local discovery. It is not listed in `package.json` `files` and is not shipped to npm.

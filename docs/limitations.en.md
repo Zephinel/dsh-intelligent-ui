@@ -23,6 +23,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 - KaTeX relies on the DSH shell's global styles; removing them degrades `Math` to plain text.
 - `/iui` Host replies, command-palette descriptions and README screenshots stay English; only browser UI copy follows the DSH language.
 
+- **Experimental document answer:** it only simulates message-body presentation — the page still lives in a turn-tail `render_ui` result rather than in the message; copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing; results replay from what was recorded, so the switch only affects new answers. The switch will be removed once DSH supports in-message UI natively.
 ## Export
 
 - Image export does not include sandboxed iframe content (`HtmlView` mini-games); maps rely on the WebGL buffer and fall back to the map's own degraded view when WebGL is unavailable.
@@ -36,6 +37,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 - Import creates global templates only; session-scope import is not open yet. There are no share codes, live links, batch backups or batch imports.
 - External template names and directives enter the prompt as untrusted text; preview and explicit acknowledgement reduce but do not remove prompt-injection risk. Origin/CSRF and tool-permission auditing are still recommended for real deployments.
 - Custom light/dark themes apply to the renderer host only; portaled Popovers and sandboxed iframes keep the default theme. Interactive-page export freezes the exported scheme.
+- Whether an answer uses a page is a model judgment, not a deterministic rule: the same question may render a page once and answer in Markdown another time; a session style (built-in Auto/Card/Article or a saved template) only decides the layout when a page is rendered and cannot force every answer to render. Auto may choose a free layout directly (no Card/Article shell, recorded by the Host as built-in); a free-layout result has no theme snapshot, so it cannot be saved as a template, and the editor's built-in style-switch targets remain Card/Article. An explicit render request (`/intelligent-ui`, an explicit page/dashboard ask), on-demand generation and artifact edit requests still require a page.
 
 ## On-demand, drafts and tabs
 

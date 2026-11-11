@@ -36,6 +36,14 @@ nodes.push({ root: {
   call: { name: 'render_ui', argsRaw: JSON.stringify({ program: 'root = Card([Text("Inline replay fixture")])', style: 'card', temporaryStyle }) },
 } } as never)
 
+// A settled document-mode answer: the turn-tail list must render it as the
+// chat message body (no card header/shell) and keep its program mounted.
+nodes.push({ root: {
+  kind: 'tool-result', callId: 'document', name: 'render_ui', isError: false,
+  call: { name: 'render_ui', argsRaw: JSON.stringify({ program: 'root = Col([Title("Document answer")])', style: 'free' }) },
+  meta: { style: 'free', styleSource: 'builtin', document: true },
+} } as never)
+
 createRoot(document.getElementById('root')!).render(createElement(IntelligentUICards, {
   turn: { turn: 1 }, inputActions: undefined, sessionId: 'e2e-session', styles, usePrograms: () => nodes,
 } as never))

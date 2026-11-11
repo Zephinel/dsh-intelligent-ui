@@ -152,6 +152,7 @@ export interface IntelligentUIPreferenceConfig {
   readonly globalEnabled?: { get?: () => unknown }
   readonly answerStyle?: { get?: () => unknown }
   readonly freeComposition?: { get?: () => unknown }
+  readonly documentMode?: { get?: () => unknown }
 }
 
 /** Read one live settings ref without letting a settings-provider error break the plugin. */

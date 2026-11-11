@@ -64,7 +64,7 @@
 | 截图 | 输出像素 |
 | --- | --- |
 | `assets/intelligent-ui-components-layout.webp` | 1616 × 4040 |
-| `assets/intelligent-ui-settings.webp` | 1336 × 2690 |
+| `assets/intelligent-ui-settings.webp` | 1336 × 3508 |
 | `assets/intelligent-ui-toggle.png` | 1080 × 800 |
 | `assets/intelligent-ui-style-panel.webp` | 1080 × 1860 |
 | `assets/intelligent-ui-on-demand-hint.webp` | 1520 × 598 |
@@ -977,3 +977,30 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
 | `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,141** 字节，解包 **13,086,571** 字节 |
+
+## 2026-11-11 — Auto 智能格式决策：是否出页面、Card/Article/自由布局
+
+- **策略**：开启会话不再默认「出页面」。模型先按回答判断是否需要页面：有结构、可视化、交互或计算价值时渲染，否则直接用 Markdown；会话样式（Card/Article/Auto）只决定出页面时的版式。`Auto` 可直接选择自由布局（`style: "free"`，无 `styleId`/`temporaryStyle`；Host 记为 `styleSource: "builtin"`，客户端按内置自由版式回放）；强制 Card/Article 会话仍拒绝 `free`。显式渲染请求（`/intelligent-ui`、明确要页面/看板）、按需生成、待处理编辑请求与自然语言样式编辑仍必须出页面。
+- **实现**：决策策略单点维护在生成的提示词前置段（`scripts/generate-prompt.mjs` → `src/generated/prompt.txt`）和运行时前缀（普通轮 / 按需轮两种）；`STYLE_NOTES` 三种样式、`customStyleNote`、`render_ui` 工具描述与 `style` 参数说明、嵌入 Agent Skill 与 integration 参考同步；composer Auto 提示与设置页说明改为「模型决定页面或纯文本」。Host 在 Auto 会话接受 free 渲染，客户端 `programFromArgs` 允许该回放形态。
+- **测试**：更新 guardrails 策略断言、Host auto 样式/free 布局用例、客户端 free 无身份回放用例与旧错误文案；新增 Host「Auto 接受 free 且强制样式仍拒绝」用例。
+- **实测门禁**：`npm run check` PASS；Node **800/800** = Host **306** + Client **460** + packaging **34**；`npm run test:browser` **9/9** 套件，`artifact-edit` **920 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,080,680** 字节，解包 **13,090,208** 字节；构建 host **842 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过。
+- **证据边界**：本轮没有调用真实模型，无法验证模型在新策略下是否稳定地「该出页面时出、该回文字时回」；判断属模型判断，同一问题可能一次出页面、一次回文字。自由布局结果没有主题快照，不能保存为模板，编辑器样式切换的内置目标仍只有 Card/Article。
+
+## 2026-11-11 — 独立复审修复：文档一致性、Skill/troubleshooting、回放守卫与提示词边界
+
+- **复审方式**：两个只读 subagent 分别按 Standards / Spec 两轴审查未提交改动（`git diff HEAD`，23 文件）；无 BLOCKER。本轮修复其 MAJOR/MINOR/NIT 发现。
+- **文档**：README 的旧「有结构的回答默认用卡片」与 `docs/development.md` 的旧策略描述改为与已生效规则一致；README/architecture 的门禁行改为「当前工作区验证（未提交）」；architecture/limitations 的自由布局与显式请求措辞与模型侧契约对齐。
+- **提示词**：静态提示词的 session-note 句覆盖按需轮；显式要求页面/看板/卡片/UI 明确为直接指令；`ARTIFACT_EDIT_NOTE` 声明待处理编辑请求覆盖普通页面/文字决策；各样式注记不再重复回退句（决策只由运行时前缀维护）。
+- **Skill / 设置文案**：free 建议覆盖 Auto-chosen；troubleshooting 补 Auto-free 路径；「自由布局」开关文案改为「布局规范是否降级为建议」，并明确 Auto free 不受该开关限制。
+- **客户端回放**：free 无 `styleId`/`temporaryStyle` 仅在实时调用或记录 meta `styleSource: "builtin"` 时渲染；模板结果缺失/畸形 styleId 重新丢弃。测试同步收窄。
+- **测试**：新增普通/按需前缀、编辑请求覆盖与回放守卫断言（用例数不变）。
+- **实测门禁**：Node **800/800** = Host **306** + Client **460** + packaging **34**；浏览器 **9/9** 套件，`artifact-edit` **920 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,080,849** 字节，解包 **13,090,697** 字节；构建 host **842 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过。
+- **证据边界**：仍无真实模型调用；复审 subagent 为只读（未运行 build/browser），门禁由实现侧重跑。自由布局开关采用「不改 Auto free 语义、只改文案」的处理，未新增 gate。
+
+## 2026-11-11 — 实验性「回答即文档」模式（documentMode）
+
+- **行为**：插件详情页「实验性功能」新增「回答即文档（实验）」开关（Host volatile 字段 `documentMode`，默认关闭）。开启后，普通回答（非按需结果、非 Artifact 编辑、非保存模板）的提示词改用文档契约：整篇内容写进一个 `render_ui` program、`style: "free"`、不写 Markdown 正文；Host 强制 free 并忽略会话模板，成功值与 `presentationMeta` 记录 `document: true` 与 `styleSource: "builtin"`；客户端把该结果渲染为无卡片外壳的 `section.dsh-iui-document`（无标题栏、折叠、边框与卡片操作，也没有编辑入口/修订历史）。按需结果、保存模板与编辑请求仍按卡片渲染；开关只影响之后的回答，已记录的结果按记录回放。
+- **回放修复**：普通 `render_ui` 结果现在总在 `presentationMeta` 记录 `style`/`styleSource`，修复 Auto 自由布局结果在落定/重放时因缺少样式身份被丢弃的问题；`document` 走同一 meta 通道，由客户端 `programFromArgs` 读取。
+- **测试**：Host +3（文档提示词契约、文档模式强制 free 且拒绝 card/styleId、普通结果 meta）；Client +1（document meta 回放），设置页 SSR 断言新增实验开关（共 4 个开关）；`style-theme` 浏览器套件新增一条记录型文档答案（无 header、程序仍挂载、普通卡片保持 header）。
+- **实测门禁**：`npm run check` PASS；Node **804/804** = Host **309** + Client **461** + packaging **34**；`npm run test:browser` **9/9** 套件，`artifact-edit` **920 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,126,182** 字节，解包 **13,147,456** 字节；构建 host **845 kB**、client **4.19 MB**（js 3.95 / CSS 243.1 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过。
+- **证据边界**：未调用真实模型，因此文档模式的模型侧行为（是否严格不写正文、是否稳定用一个 program 承载整篇）未在真实会话验证；浏览器证据是组件级 harness（真实 turn-tail 组件 + 记录参数回放），不是完整 DSH Web 会话；文档模式没有卡片编辑入口与修订历史，复制、搜索、会话导出 Markdown 不包含页面正文，且只有 Web 渲染器显示。真实 GUI 手工点验待真机确认。

@@ -18,6 +18,24 @@
   width: 100%;
 }
 
+/*
+ * Experimental document mode: the rendered page is the chat message body, so it
+ * has no card frame, header or actions. The renderer keeps the readable measure
+ * and theme tokens; the shell must not add its own surface around it.
+ */
+.dsh-iui-document {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-document:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+  border-radius: var(--dsw-radius-sm);
+}
+
 .dsh-iui-card {
   box-sizing: border-box;
   min-width: 0;

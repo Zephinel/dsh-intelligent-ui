@@ -37,7 +37,23 @@ body { margin:20px; } #root { max-width:700px; }
   await cdp.send('Page.enable')
   await cdp.send('Runtime.enable')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] })
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-host").length === 4', 'recorded cards')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-host").length === 5', 'recorded cards')
+
+  const documentAnswer = await cdp.evaluate(`(() => {
+    const section = document.querySelector('[data-dsh-iui-call-id="document"]')
+    const normal = document.querySelector('[data-dsh-iui-call-id="default"]')
+    return {
+      flag: section?.getAttribute('data-dsh-iui-document'), tag: section?.tagName,
+      hasHeader: section?.querySelector('.dsh-iui-header') !== null,
+      hasBody: section?.querySelector('.dsh-iui-host') !== null,
+      normalHeader: normal?.querySelector('.dsh-iui-header') !== null,
+    }
+  })()`)
+  assert.equal(documentAnswer.flag, 'true', 'recorded document mode selects the message-body shell')
+  assert.equal(documentAnswer.tag, 'SECTION', 'the document answer is a plain section')
+  assert.equal(documentAnswer.hasHeader, false, 'the document answer has no card header')
+  assert.equal(documentAnswer.hasBody, true, 'the document answer still mounts its program')
+  assert.equal(documentAnswer.normalHeader, true, 'ordinary cards keep their header')
 
   const read = id => cdp.evaluate(`(() => {
     const card = document.querySelector('[data-dsh-iui-call-id="${id}"]'), host = card.querySelector('.dsh-iui-host'), css = getComputedStyle(host)
@@ -95,7 +111,7 @@ body { margin:20px; } #root { max-width:700px; }
   assert.equal((await read('custom')).canvas, '#edf7ff')
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] })
   await cdp.send('Page.navigate', { url: `${server.url}?dsh` })
-  await cdp.waitFor('!!window.__DSH_BOOT__ && document.querySelectorAll(".dsh-iui-host").length === 4', 'DSH boot fixture')
+  await cdp.waitFor('!!window.__DSH_BOOT__ && document.querySelectorAll(".dsh-iui-host").length === 5', 'DSH boot fixture')
   assert.equal((await read('temporary')).canvas, '#edf7ff', 'fresh replay uses the snapshot with the catalog still pending')
   await cdp.evaluate('window.__loadStyles()')
   await cdp.waitFor(`document.querySelector('[data-dsh-iui-call-id="custom"] .dsh-iui-host').style.colorScheme === 'light'`, 'DSH light ignores dark system preference')
@@ -106,7 +122,7 @@ body { margin:20px; } #root { max-width:700px; }
   assert.equal((await read('temporary')).canvas, '#102030')
   await cdp.evaluate(`document.body.removeAttribute('data-ds-dark-theme')`)
   await cdp.waitFor(`document.querySelector('[data-dsh-iui-call-id="custom"] .dsh-iui-host').style.colorScheme === 'light'`, 'DSH absent attribute is authoritative light')
-  console.log('style-theme E2E: OK (4 recorded cards; inline replay without catalog, light/dark, late/missing/unavailable catalog and recovery)')
+  console.log('style-theme E2E: OK (5 recorded answers; inline replay without catalog, light/dark, late/missing/unavailable catalog, recovery, and a chrome-less document-mode answer)')
 } finally {
   cdp?.close()
   await browser?.cleanup()

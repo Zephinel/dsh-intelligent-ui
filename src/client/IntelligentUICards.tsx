@@ -270,9 +270,19 @@ export function IntelligentUICards({
     return filled ? null : t('onDemand.fillError')
   }
   if (allPrograms.length === 0) return null
+  const documentRendered = allPrograms.some(isDocumentProgram)
   return (
-    <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
-      {allPrograms.map(program => (
+    <div className="dsh-iui-cards" data-dsh-intelligent-ui-list data-dsh-iui-document-mode={documentRendered ? 'true' : undefined}>
+      {allPrograms.map(program => isDocumentProgram(program) ? (
+        <DocumentCard
+          key={program.callId}
+          program={program}
+          scheme={scheme}
+          t={t}
+          onToAssistant={toAssistant}
+          resolveImage={resolveImage}
+        />
+      ) : (
         <ArtifactVersionGate
           key={program.callId}
           sessionId={sessionId}
@@ -300,6 +310,68 @@ export function IntelligentUICards({
         />
       ))}
     </div>
+  )
+}
+
+/**
+ * Whether one recorded program is an experimental document-mode answer. Only an
+ * ordinary free-layout render can be one: on-demand results, artifact revisions
+ * and saved-template pages keep the card chrome their flows depend on.
+ * @param program - the extracted render_ui program.
+ * @returns true when the Host recorded the document answer mode for this render.
+ */
+function isDocumentProgram(program: IntelligentUIProgram): boolean {
+  return program.document === true
+    && program.temporaryStyle === undefined
+    && program.styleId === undefined
+    && program.artifactId === undefined
+    && program.revisionId === undefined
+}
+
+/**
+ * One experimental document-mode answer: the rendered page reads as the chat
+ * message body, so it has no card header, collapse control, border or actions.
+ * @param props - extracted program, theme scheme, continuation callback and locale seat.
+ * @returns the chrome-less document section.
+ */
+function DocumentCard({ program, scheme, onToAssistant, t, resolveImage }: {
+  readonly program: IntelligentUIProgram
+  readonly scheme: 'light' | 'dark'
+  readonly onToAssistant: (message: string) => void
+  readonly t: Translate
+  readonly resolveImage?: ImageSourceResolver
+}): ReactElement {
+  const runtimeProgramRef = useMemo(() => ({
+    artifactId: program.artifactId ?? program.callId,
+    revisionId: program.revisionId ?? program.callId,
+    baseRevisionId: program.baseRevisionId,
+    callId: program.callId,
+  }), [program.artifactId, program.revisionId, program.baseRevisionId, program.callId])
+  const runtimeState = useMemo(() => runtimeStateForProgram(runtimeProgramRef), [runtimeProgramRef])
+  const handleRuntimeStateChange = useCallback((state: Record<string, unknown>) => {
+    recordRuntimeState(runtimeProgramRef, state)
+  }, [runtimeProgramRef])
+  return (
+    <section
+      className="dsh-iui-document"
+      data-dsh-intelligent-ui="document"
+      data-dsh-iui-document="true"
+      data-dsh-iui-call-id={program.callId}
+    >
+      <RendererBoundary t={t}>
+        <OpenUIRenderer
+          program={program.program}
+          title={program.title}
+          scopeId={program.callId}
+          onToAssistant={onToAssistant}
+          scheme={scheme}
+          t={t}
+          runtimeState={runtimeState}
+          onRuntimeStateChange={handleRuntimeStateChange}
+          resolveImage={resolveImage}
+        />
+      </RendererBoundary>
+    </section>
   )
 }
 

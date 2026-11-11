@@ -116,7 +116,7 @@ events but not the full DSH Web integration.
   the M3/M4 plans).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
-- `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
+- `style-theme.e2e.mjs` checks five recorded answers: four cards (inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery) plus a recorded document-mode answer that must render as a chrome-less section with its program mounted and no card header, while ordinary cards keep theirs.
 - `style-panel.e2e.mjs` drives the composer style panel: chip -> menu -> Display style row -> style panel -> back to menu -> scope switch to This session only (asserts no auto-open) -> active entry opens the panel -> built-in/custom preview cards -> composer import entry -> export confirmation for global and session templates -> Escape/focus return, and checks the
   content-sized menu, upright chevron, inset divider and disabled Display style
   row while the switch is off. It renders the real `ToggleControl` in a browser.

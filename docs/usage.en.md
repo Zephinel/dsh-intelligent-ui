@@ -21,7 +21,13 @@ Describe the page and the interactive parts you need, for example:
 - "Turn these tables into a filterable sales dashboard"
 - "Introduce Chinese history with expandable dynasties"
 
-Structured answers use a card by default; long reading answers can use the Article style. You can override the style per session under **UI → Display style**.
+The model decides whether an answer uses a page: it renders one when structure, visuals, interaction or computation help, and answers in Markdown when text serves better. The layout used for a page can be set per session under **UI → Display style** — Card / Article, or Auto (Card, Article or a free layout).
+
+## Answer as a document (experimental)
+
+With **Answer as a document (experimental)** enabled under **Plugins → Intelligent UI → Experimental**, an ordinary rendered answer has no card header, collapse control or frame and reads as this turn's chat message text. The model puts prose, headings, tables and interactive blocks into one page and adds no Markdown outside it; this suits explanations, analyses and debugging answers that should read like a reply rather than a deliverable.
+
+Note: this is a stopgap for in-message UI — the page still lives at the turn tail, and copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing. On-demand generation, saved templates and Artifact edit requests still render as cards. The switch affects future answers only; a recorded document answer keeps its recorded presentation, and new answers go back to Card / Article cards when it is off. See [Known limitations](limitations.en.md) for the full boundaries.
 
 ## Images
 

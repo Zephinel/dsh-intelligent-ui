@@ -128,10 +128,17 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean, meta
   if (typeof program !== 'string' || program.trim() === '') return undefined
   // Replayed model arguments are data too. Do not render a conflicting or invalid snapshot.
   if ('temporaryStyle' in args && (!isStyleSnapshot(temporaryStyle) || temporaryStyle.baseLayout !== style || 'styleId' in args)) return undefined
-  if (style === 'free' && !isStyleSnapshot(temporaryStyle) && !isCustomStyleId(styleId)) return undefined
+  // A free layout with no styleId/temporaryStyle is a valid built-in shape only for a
+  // live call or a recorded Auto choice (result meta styleSource "builtin"). A replayed
+  // template result with a missing or malformed identity stays invalid.
+  if (style === 'free' && !isStyleSnapshot(temporaryStyle) && !isCustomStyleId(styleId)) {
+    const recordedSource = metaField(meta, 'styleSource')
+    if ('styleId' in args || (!running && recordedSource !== 'builtin')) return undefined
+  }
   // A style revision is recorded by the Host from result meta; the model may
   // omit args.title, so the recorded title is the fallback for the card header.
   const recordedTitle = metaTitle(meta)
+  const recordedSource = metaField(meta, 'styleSource')
   const base = {
     callId,
     program,
@@ -140,7 +147,9 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean, meta
     ...isCustomStyleId(styleId) ? { styleId } : {},
     ...isStyleSnapshot(temporaryStyle) ? { temporaryStyle, styleSource: 'temporary' as const }
       : isCustomStyleId(styleId) ? { styleSource: 'template' as const }
-      : styleSource === 'builtin' || styleSource === 'template' ? { styleSource } : {},
+      : styleSource === 'builtin' || styleSource === 'template' ? { styleSource }
+      : recordedSource === 'builtin' || recordedSource === 'template' ? { styleSource: recordedSource } : {},
+    ...metaField(meta, 'document') === true ? { document: true } : {},
     running,
     ...revisionLineage(meta),
   }
@@ -148,6 +157,11 @@ function programFromArgs(argsRaw: string, callId: string, running: boolean, meta
   // is the record the user sees, so render/export/edit from that program.
   const normalized = normalizedProgram(meta)
   return normalized === undefined ? base : { ...base, program: normalized }
+}
+
+/** Read one field from a result-meta projection without trusting its shape. */
+function metaField(meta: unknown, field: 'styleSource' | 'document'): unknown {
+  return typeof meta === 'object' && meta !== null ? (meta as Record<string, unknown>)[field] : undefined
 }
 
 /** Card title recorded on an edited-result meta projection, when present. */

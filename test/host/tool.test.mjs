@@ -71,11 +71,52 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   const enabledText = sections[0].text()
   assert.ok(enabledText.length > 10_000)
   assert.match(enabledText, /Answer style for this session: \*\*Auto\*\*/)
+  assert.match(enabledText, /Pass `style: "card"`, `"article"` or `"free"`/)
+  assert.match(enabledText, /answer in Markdown without calling render_ui/)
+  assert.match(enabledText, /a pending edit request overrides the ordinary page-vs-text decision/)
 })
 
 test('the free-composition preference appends its advisory note to the prompt', () => {
   const { sections } = mount({ freeComposition: { get: () => true } })
   assert.match(sections[0].text(), /Free-form layout is on/)
+})
+
+test('document mode replaces the style note with the whole-answer document contract', () => {
+  const { sections } = mount({ documentMode: { get: () => true }, answerStyle: { get: () => 'card' } })
+  const prompt = sections[0].text()
+  assert.match(prompt, /document mode: when a page serves the answer, the page itself is the reply/)
+  assert.match(prompt, /Pass style: "free"; omit styleId and temporaryStyle/)
+  assert.match(prompt, /Do not write any Markdown reply outside the tool call/)
+  assert.match(prompt, /Document mode is on for this deployment/)
+  assert.doesNotMatch(prompt, /Answer style for this session: \*\*/)
+  assert.doesNotMatch(prompt, /Free-form layout is on/)
+})
+
+test('document mode renders ordinary answers as one free document and rejects card-style calls', async () => {
+  const { tool } = mount({ answerStyle: { get: () => 'card' }, documentMode: { get: () => true } })
+  const result = await tool.execute({ program: VALID, style: 'free' })
+  assert.equal(result.style, 'free')
+  assert.equal(result.document, true)
+  assert.equal(result.styleSource, 'builtin')
+  const meta = tool.output.presentationMeta({ program: VALID, style: 'free' }, result)
+  assert.deepEqual(meta, { style: 'free', styleSource: 'builtin', document: true })
+  await assert.rejects(
+    () => tool.execute({ program: VALID, style: 'card' }),
+    /document mode renders the answer as one free-layout document/,
+  )
+  await assert.rejects(
+    () => tool.execute({ program: VALID, style: 'free', styleId: 'cs_abcdef' }),
+    /document mode does not use saved templates/,
+  )
+})
+
+test('ordinary renders record their resolved layout for replay', async () => {
+  const { tool } = mount({ answerStyle: { get: () => 'auto' } })
+  const free = await tool.execute({ program: VALID, style: 'free' })
+  assert.deepEqual(tool.output.presentationMeta({}, free), { style: 'free', styleSource: 'builtin' })
+  const card = await tool.execute({ program: VALID, style: 'card' })
+  assert.deepEqual(tool.output.presentationMeta({}, card), { style: 'card', styleSource: 'builtin' })
+  assert.equal(card.document, undefined)
 })
 
 test('accepts a valid program and reports statement count and style', async () => {
@@ -90,8 +131,17 @@ test('requires a style argument', async () => {
   const { tool } = mount({ globalEnabled: { get: () => true }, answerStyle: { get: () => 'auto' } })
   await assert.rejects(
     () => tool.execute({ program: VALID }),
-    /pass style "card" or "article"/,
+    /pass style "card", "article" or "free"/,
   )
+})
+
+test('auto style accepts the free layout and records it as a built-in style', async () => {
+  const { tool } = mount({ globalEnabled: { get: () => true }, answerStyle: { get: () => 'auto' } })
+  const result = await tool.execute({ program: VALID, style: 'free' })
+  assert.equal(result.style, 'free')
+  assert.equal(result.styleSource, 'builtin')
+  assert.equal(result.styleId, undefined)
+  assert.equal(result.temporaryStyle, undefined)
 })
 
 test('rejects an invalid program with a model-readable error', async () => {
@@ -505,11 +555,14 @@ test('a bound on-demand turn rejects a plain render instead of silently bypassin
   assert.equal(m.view().onDemand.status, 'running', 'rejected renders do not complete or replace the operation')
 })
 
-test('authorized free on-demand snapshots override every session shell', async () => {
+test('an Auto free page renders before the on-demand bind, and an authorized snapshot then overrides every session shell', async () => {
   for (const selected of ['auto', 'card', 'article', template().id]) {
     const m = onDemandMount({ selected, templates: [template({ baseLayout: 'article' })] })
     const temporaryStyle = { ...SNAPSHOT, baseLayout: 'free' }
-    await assert.rejects(() => m.execute({ style: 'free' }), /pass style/)
+    // An Auto session may render a free page before the on-demand operation binds;
+    // a forced Card/Article or selected template still rejects it.
+    if (selected === 'auto') assert.equal((await m.execute({ style: 'free' })).style, 'free')
+    else await assert.rejects(() => m.execute({ style: 'free' }), /pass style/)
     await assert.rejects(() => m.execute({ style: 'free', temporaryStyle }), /requires a bound/)
     m.bind()
     const prompt = m.sections[0].text({ agent: m.agent })
@@ -568,8 +621,10 @@ test('selected free templates prompt and render without a shell or temporary sou
   }
 })
 
-test('free layout cannot bypass built-in or Card/Article template selections', async () => {
-  for (const baseLayout of ['auto', 'card', 'article']) {
+test('free layout is an Auto choice but cannot bypass forced Card/Article or template selections', async () => {
+  const auto = mount({ answerStyle: { get: () => 'auto' } })
+  assert.equal((await auto.tool.execute({ program: VALID, style: 'free' })).style, 'free')
+  for (const baseLayout of ['card', 'article']) {
     const { tool } = mount({ answerStyle: { get: () => baseLayout } })
     await assert.rejects(() => tool.execute({ program: VALID, style: 'free' }), /pass style/)
     await assert.rejects(() => tool.execute({ program: VALID, style: 'free', styleId: template().id }), /pass style/)

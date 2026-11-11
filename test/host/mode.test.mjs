@@ -243,6 +243,7 @@ test('style overrides are persisted and forced styles are enforced on the tool',
   assert.match(style.text, /article/)
   assert.equal(viewOf(rec, 's1').style, 'article')
   assert.match(rec.sections[0].text(promptContext('s1')), /Answer style for this session: \*\*Article\*\*/)
+  assert.match(rec.sections[0].text(promptContext('s1')), /For each ordinary answer/, 'ordinary turns carry the page-vs-text decision')
   assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')).styles, { s1: 'article' })
 
   await assert.rejects(
@@ -262,13 +263,16 @@ test('style overrides are persisted and forced styles are enforced on the tool',
   assert.equal(inherited.style, 'card')
 })
 
-test('auto style accepts a chosen card/article style and records it', async () => {
+test('auto style accepts a chosen card/article/free style and records it', async () => {
   const { rec } = mount({ settings: { globalEnabled: true, answerStyle: 'auto' } })
   const s1 = makeAgent(rec, 's1')
   assert.equal((await rec.tool.execute({ program: ARTICLE, style: 'article' }, { agent: s1 })).style, 'article')
+  const free = await rec.tool.execute({ program: VALID, style: 'free' }, { agent: s1 })
+  assert.equal(free.style, 'free')
+  assert.equal(free.styleSource, 'builtin')
   await assert.rejects(
     () => rec.tool.execute({ program: ARTICLE, style: 'auto' }, { agent: s1 }),
-    /pass style "card" or "article"/,
+    /pass style "card", "article" or "free"/,
   )
   assert.equal((await rec.tool.execute({ program: ARTICLE, style: 'article' }, { agent: s1 })).style, 'article')
 })
@@ -420,6 +424,8 @@ test('on-demand commands, projection and prompt are transient and session-bound'
   assert.equal(viewOf(rec, 's1').onDemand.status, 'running')
   assert.match(invoke('').text, /On-demand UI: running/)
   assert.match(prompt(), /ON-DEMAND UI/)
+  assert.match(prompt(), /This turn is an on-demand UI request/, 'a bound on-demand turn requires a page')
+  assert.doesNotMatch(prompt(), /For each ordinary answer/, 'the ordinary page-vs-text decision is replaced on demand')
   assert.match(prompt(), /style: "free"/)
   assert.doesNotMatch(prompt(), /Answer style for this session/, 'on-demand prompt must not force the session shell')
   assert.doesNotMatch(rec.sections[0].text(promptContext('s2')), /ON-DEMAND UI/)

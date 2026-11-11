@@ -46,10 +46,11 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ![输入框右侧的 UI 控件：三档开关与分隔线下的 Display style](../assets/intelligent-ui-toggle.png)
 
-- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article 或已保存的全局模板）、「自由布局」开关，以及导出的默认值（图片背景色、1x/2x、图片/交互页面是否移除 `@ToAssistant` 追问控件及其表单字段（含正文的卡片保留正文，只有纯追问区块整块消失；默认移除））。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **我的样式** / **编排方式** / **导出** 分组。
+- **全局默认**：插件详情页提供「在所有会话中启用」开关、回答样式（Auto / Card / Article 或已保存的全局模板）、「自由布局」开关、实验性「回答即文档」开关，以及导出的默认值（图片背景色、1x/2x、图片/交互页面是否移除 `@ToAssistant` 追问控件及其表单字段（含正文的卡片保留正文，只有纯追问区块整块消失；默认移除））。新会话默认继承这些设置。页面按 **可用性** / **回答样式** / **我的样式** / **编排方式** / **实验性功能** / **导出** 分组。
 - **会话覆盖**：输入框 UI 控件只改当前会话。`/iui on` / `off` / `inherit` 设置启用覆盖；`/iui style auto|card|article|inherit|<cs_id>` 设置样式覆盖。会话覆盖优先于全局，`inherit` 跟随全局。
-- **答案样式**：`Card` 为紧凑交互卡片；`Article` 为 `render_ui` 卡片内的阅读版式（`Toc` + 可折叠 `Section` + 长 Markdown 正文）；`Auto` 由模型按请求选择。Article 的 `Section` 正文是一个嵌套 flow，块间距使用 group 级节奏；页面级 flow 只靠 margin 排版，不再叠加 flex gap，避免 section 前后出现双倍留白。
-- 状态：全局启用/样式/自由布局在 Host 设置文档；会话启用、关闭与样式覆盖原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`（`sessions`、`offSessions`、`styles`）。旧版 `{ "global": true, "sessions": [...] }` 仍可读取为全局/会话迁移值。
+- **答案样式**：会话样式是「出页面时的版式偏好」，不是必须出页面——模型先按回答判断该不该出页面（有结构、可视化、交互或计算价值时出，否则用 Markdown）。`Card` 为紧凑交互卡片；`Article` 为 `render_ui` 卡片内的阅读版式（`Toc` + 可折叠 `Section` + 长 Markdown 正文）；`Auto` 由模型在 `Card`、`Article` 或自由布局（无 Card/Article 外壳，`Toc`/`Section` 可选）中选择。Article 的 `Section` 正文是一个嵌套 flow，块间距使用 group 级节奏；页面级 flow 只靠 margin 排版，不再叠加 flex gap，避免 section 前后出现双倍留白。
+- **实验性文档模式**：插件详情页的「实验性功能 → 回答即文档（实验）」写入 Host 设置文档的 volatile 字段 `documentMode`。开启后，普通回答（非按需生成、非 Artifact 编辑、非保存模板）的提示词改用文档契约：整篇内容写进一个 program、`style: "free"`、不写 Markdown 正文；Host 强制该布局并忽略会话模板，成功值与 `presentationMeta` 记录 `document: true` 与 `styleSource: "builtin"`，客户端按结果标记渲染成无卡片外壳的 `section.dsh-iui-document`。它不产生 Artifact 血缘、没有编辑入口与修订历史；按需结果（保留 `temporaryStyle`）、选中模板与编辑请求仍走卡片。结果按记录重放，因此开关只影响新回答。移除路径：DSH 原生支持消息内嵌 UI 后，删除该设置字段、文档提示词前缀/说明、Host 的 `documentRender` 分支与客户端 `DocumentCard`，历史结果回到卡片外壳。
+- 状态：全局启用/样式/自由布局/文档模式在 Host 设置文档；会话启用、关闭与样式覆盖原子写入 `<DSH_HOME>/dsh-intelligent-ui.json`（`sessions`、`offSessions`、`styles`）。旧版 `{ "global": true, "sessions": [...] }` 仍可读取为全局/会话迁移值。
 - 会话里的命令日志折叠成 `intelligent-ui` 投影，提供当前启用/样式状态、pending 和实时 `onDemand`（stateVersion 6）；输入框控件只镜像投影，Host 负责全部状态决定。控件会把乐观视图通过 BroadcastChannel 同步给其他标签，投影到达后收敛为该投影值。作用域菜单与导出菜单共用 `MenuItem`/`MenuDivider` 菜单行（宽度按内容、最小 208px，统一行距与选中/悬停/禁用态）；作用域菜单与样式面板都按右缘对齐 chip，并与触发按钮保持 12px 间距；两者使用不透明的 layer-2 抬升表面，内部卡片/行保留 module surface 以便在深浅色下分层。「显示样式」一行常驻，关闭时置灰禁用，上方有一条内缩的浅分割线；样式面板是菜单的第二级，返回按钮回到作用域菜单而不是关闭全部浮层。切换启用范围只提交开关命令，**不会自动打开**样式面板；面板只有两个显式入口——「显示样式」行，以及点击已激活且解析为开启的作用域项（Off 或全局关闭时的「跟随全局」只关闭菜单）。
 - 开关依赖部署同时组合 `sessionProjections` + `commands`（DSH Web 默认都有）。缺任一服务时无法显示/持久化会话控件，扩展回到**始终开启**行为。
 
@@ -57,11 +58,11 @@ Client  lib/client.js（浏览器，DSH module loader 懒加载）
 
 ### 结果样式契约
 
-`src/shared/style-templates.ts` 的 `StyleSnapshot` 是 schemaVersion 1（StyleSnapshotV1）：`baseLayout: card|article|free`、`directives`、可选 `theme`，另有可选 `suggestedName`。不带主题是正常情况：结果继承会话主题（当前选中模板，否则内置主题）；只有需要独立配色时才传完整主题，此时才做 3:1/建议 4.5:1 对比度检查。没有显式主题的结果不能保存为模板（没有可复制的 palette）。`render_ui` 要求 `program` 与 `style`；可带 `title`，以及互斥的 `styleId` 或 `temporaryStyle`。临时快照的 `baseLayout` 必须等于 `style`；仅当前 Host 授权且已观察到的工具调用可使用它。新按需生成使用 `style: "free"` 与 `temporaryStyle.baseLayout: "free"`，由程序组合用户要求的布局，不受 Card 紧凑要求或 Article 阅读 wrapper 限制；Toc/Section 可选，解析、锚点、主题与授权校验仍保留。旧 card/article 快照继续使用原有外壳与 Article 校验；内置会话样式仍为 Auto/Card/Article；保存模板的 `baseLayout` 为 `RenderLayout`（card/article/free）。选中自由模板时传 `style: "free"` 与精确 `styleId`，不带 `temporaryStyle`；Host 保留模板 ID 与布局一致性校验。按需操作期间不注入会话外壳提示；布局由用户请求决定，有实质歧义时先问一个聚焦问题，不静默默认。成功值含 `statements`、`style`、`styleSource: builtin|template|temporary`，以及可选 `styleId`、`warnings`；普通渲染的快照由工具参数承载、不在成功值中复制，而 B1 style edit 的成功值会回传 `styleEdit`/`temporaryStyle`/`title` 供客户端渲染修订卡。
+`src/shared/style-templates.ts` 的 `StyleSnapshot` 是 schemaVersion 1（StyleSnapshotV1）：`baseLayout: card|article|free`、`directives`、可选 `theme`，另有可选 `suggestedName`。不带主题是正常情况：结果继承会话主题（当前选中模板，否则内置主题）；只有需要独立配色时才传完整主题，此时才做 3:1/建议 4.5:1 对比度检查。没有显式主题的结果不能保存为模板（没有可复制的 palette）。`render_ui` 要求 `program` 与 `style`；可带 `title`，以及互斥的 `styleId` 或 `temporaryStyle`。临时快照的 `baseLayout` 必须等于 `style`；仅当前 Host 授权且已观察到的工具调用可使用它。新按需生成使用 `style: "free"` 与 `temporaryStyle.baseLayout: "free"`，由程序组合用户要求的布局，不受 Card 紧凑要求或 Article 阅读 wrapper 限制；Toc/Section 可选，解析、锚点、主题与授权校验仍保留。旧 card/article 快照继续使用原有外壳与 Article 校验；内置会话样式仍为 Auto/Card/Article；Auto 会话的普通渲染还可直接使用 `style: "free"`（无 `styleId`/`temporaryStyle`，Host 记为 builtin，客户端按内置自由版式回放）；强制 Card/Article 会话仍拒绝 free。保存模板的 `baseLayout` 为 `RenderLayout`（card/article/free）。选中自由模板时传 `style: "free"` 与精确 `styleId`，不带 `temporaryStyle`；Host 保留模板 ID 与布局一致性校验。按需操作期间不注入会话外壳提示；布局由用户请求决定，有实质歧义时先问一个聚焦问题，不静默默认。成功值含 `statements`、`style`、`styleSource: builtin|template|temporary`，以及可选 `styleId`、`document`、`warnings`；普通渲染还会在 `presentationMeta` 记录 `style`/`styleSource`（以及文档模式的 `document: true`），供落定后的自由布局与文档结果回放；快照由工具参数承载、不在成功值中复制，而 B1 style edit 的成功值会回传 `styleEdit`/`temporaryStyle`/`title` 供客户端渲染修订卡。
 
 Host 按操作类型强制校验布局：`generate` 的 `style` 和 `temporaryStyle.baseLayout` 必须均为 `free`；`adjust` 必须均与 `parentResultId` 在结果注册表中的快照 `baseLayout` 一致（free 保持 free，旧 card/article 保持原布局）。父快照缺失（包括被最近 200 条上限淘汰）时拒绝调整，错误提示用户取消后重新按需生成；不从模型参数或对话推断父布局。拒绝不写结果、不完成操作，历史工具参数仍可重放。
 
-优先级是：当前调用已授权的临时样式 → 会话样式覆盖 → 全局默认 → Auto。临时样式不写会话/全局设置。已选自定义模板时，普通调用必须传准确的 `styleId` 和模板的基础版式。模板或 catalog 不可用时客户端降级默认主题；没有显式主题的临时快照同样继承当前选中模板或内置主题，而不是独立于模板库。
+优先级是：当前调用已授权的临时样式 → 会话样式覆盖 → 全局默认 → Auto。会话样式只决定「出页面时」的版式；是否出页面由模型按回答判断（用户显式要求渲染、`/intelligent-ui` 显式调用、按需生成与编辑请求除外）。临时样式不写会话/全局设置。已选自定义模板时，普通调用必须传准确的 `styleId` 和模板的基础版式。模板或 catalog 不可用时客户端降级默认主题；没有显式主题的临时快照同样继承当前选中模板或内置主题，而不是独立于模板库。
 
 ### Operation 与会话事件
 
@@ -376,7 +377,7 @@ projection v6 在 enable/style/pending 之外携带可空 `onDemand`（operation
 
 ## 布局与间距契约
 
-free 临时结果或选中的自由模板中，下述页面形态与排版指导仅作建议，以用户要求的组合为准；组件 flow 间距、语言、主题和安全规则仍适用。
+Auto 选中的自由布局、free 临时结果或选中的自由模板中，下述页面形态与排版指导仅作建议，以内容需要的组合为准；组件 flow 间距、语言、主题和安全规则仍适用。
 
 - **渲染器拥有垂直节奏**：页面根 `Col`、`Section` 正文和 `Card` 内容都由渲染器的 flow 负责块间距（页面级 24px、组级 12px、内侧 8px）；模型不需要也不应该在这些位置再传 `gap`，否则会覆盖或叠加节奏。
 - **显式 gap 只用于横向/紧凑组合**：`Row`、`Grid`、`Carousel` 和小组控件栈可用 1–2（内侧）或 3–4（组级）；不要用 5–6 的嵌套 `Col` 去模仿页面级留白。
@@ -385,13 +386,14 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 
 ## 决策策略
 
-开关只决定能力是否可见；真正决定“这一轮出不出卡片、用哪种样式”的策略只有一份，位于注入的 `tool:intelligent-ui` 提示词里（Host 在开关命中会话时还会在段首加一句“本会话已开启 Intelligent UI”，并追加当前有效样式的说明）。它随开关一起出现，所以开启后的默认行为是：
+开关只决定能力是否可见；真正决定“这一轮出不出页面、出页面时用哪种版式”的策略只有一份，位于注入的 `tool:intelligent-ui` 提示词里（Host 在开关命中会话时还会在段首加一句“本会话已开启 Intelligent UI”，并追加当前有效样式的说明）。开启后的行为是：
 
-- **默认出卡片**：有结构的回答一律用 `render_ui`；`Card` 页保持紧凑可扫读。
-- **Article 页**：`Article` 样式要求 article-first 页面——`Toc`、可折叠 `Section`、每个 major part 的实质 `Markdown` 正文；不允许只交骨架或把内容藏在交互后面。
-- **文字是有界例外**：整段回答只有单个事实或一两句话；用户明确要文字 / 文档 / 代码；内容无法页面化（安全警示、必须逐字引用的材料）；或本轮连续两次渲染失败。
+- **由模型决定是否出页面**：有结构、可视化、交互或计算价值时用 `render_ui`；短回答、概念解释、代码/翻译、闲聊或用户明确要文字时直接用 Markdown。
+- **样式只决定出页面时的版式**：`Card` 页保持紧凑可扫读；`Article` 样式要求 article-first 页面——`Toc`、可折叠 `Section`、每个 major part 的实质 `Markdown` 正文，不允许只交骨架或把内容藏在交互后面；`Auto` 由模型在 Card、Article 或自由布局中选择。
+- **强制出页面的入口**：用户显式要求渲染（`/intelligent-ui` 或明确要页面/看板）、按需生成、编辑请求仍必须出页面。
 - **单一规则源**：Agent Skill 不重复决策规则，只负责“怎么做”。
-- **自由布局开关**：插件详情页的「自由布局」写入 Host 设置文档的 volatile 字段；开启后设计规范降级为建议。它和答案样式正交，不替代样式选择。
+- **实验性文档模式**：开启时普通回答的提示词改用“整篇即文档”契约（不写正文、`style: "free"`）；它只改变出页面时的呈现与提示词，不改变“是否出页面”的决策。按需生成、编辑请求与显式渲染请求不受影响。
+- **自由布局开关**：插件详情页的「自由布局」写入 Host 设置文档的 volatile 字段；开启后设计规范降级为建议。它和答案样式正交，不替代样式选择；Auto 选择自由布局也不受该开关限制。
 
 ## 图片导出
 
@@ -468,7 +470,7 @@ free 临时结果或选中的自由模板中，下述页面形态与排版指导
 - **深层页面**：`MAX_CST_DEPTH` 从 4 提升到 **10**（root 为 depth 0；真实 dashboard 为 depth 5–6、83 个 CST 节点），客户端嵌套映射与 Host 结构路由共享同一常量，因此大页面根级 delete/duplicate/move 可正常预览与 Apply；嵌套编辑 UI 仍只提供 display depth ≤4 的子块。`nestedBlocksForProgram` 不可用时 `resolvePendingStructureOperations` 回退到与 Host 同构的 CST 根级 block 表（nodeId/sourceDigest 与 Host 一致），根级操作仍可解析；超过支持深度的页面在预览阶段给出 `depth` 冲突（嵌套 move 给 `nestedTarget`），超过 200 个 CST 节点的浅页面给出独立的 `nodeLimit` 冲突（不再误报为深度问题，也不再显示误导性的「已不在当前修订中」）。
 - **已知限制**：自动发送依赖 composer 处于 plain 阶段，busy/发送中降级为手动发送提示，并且只有 send 路径真正消费草稿后才显示「已发送」，无法确认时一律降级手动（不假报）；普通 Send 在存在未应用结构队列时被 `pending_apply` 拒绝（不 markSubmitted、不删草稿），必须 Apply 或清空队列；Apply 保留草稿的 attached 状态（detached 草稿不重插 chip、不自动发送），插入 chip 前按排除旧草稿的 attached 计数检查批次上限；嵌套模式 Apply 后按结果 program 重建嵌套 block 表与完整 nested order groups，selection/addition 必须落在新 block 表（否则阻止 Apply），嵌套选择允许 `b1.2.1` 形状并随草稿持久化；预览与 Apply 共用无副作用的模型请求校验（styleMixed/空说明/临时样式仅排序/临时修订/无效/冲突都会在 0 op 预览中显示并禁用 confirm），预览 loading 中取消会丢弃晚到响应；面板本地的未保存整体说明/批量草稿与 popover 未保存说明纳入统一 dirty 守卫（丢弃草稿需二次确认、修订删除锁覆盖、Apply 提示保存）；CST 节点预算超限与层级过深分别报 `nodeLimit`/`depth`；post-Apply notice 渲染在聊天级 draft dock，单卡/舞台场景也可见；`submit()` 之后由既有 `reconcileArtifactSubmissions` 在 Turn 关闭时确认（Host 冲突仍走既有冲突横幅）；单次 Apply 队列上限 20（第 21 条被拒绝并提示，不截断、不丢草稿）；同一父级不允许混合结构操作种类；重映射依赖显示身份，duplicate+move 混合或无法唯一对齐时阻止 Apply（props 修订已记录但草稿无法迁移时，草稿/chip 保留在旧修订并显示可关闭的 `rebaseFailed` notice，不会静默留在过期画布）；结构操作支持 CST 深度 ≤10、节点 ≤200，Host 结构路由对更深的页面或超节点预算的页面整体拒绝（含根级操作），客户端分别以 `depth` / `nodeLimit` 冲突提前阻止；「移动到根级」仍受既有 Host move 校验限制（move 目标必须是可写容器）；编辑面板（中文）与 composer chip/dock（英文）在混合 locale 下语言可能不一致，属既有 chip locale seat 行为，非本特性引入；E2E 中走 Node bridge 的 structure 场景（25/25b/25d/61/63/65/67；25c 只取消批次、不发 preview/apply）直接调用共享 `applyStructureBatch`，绕过 Host 路由的鉴权、base registry 与幂等账本，这些路由级行为由 host 单测覆盖；E2E 引入真实异步 bridge 后仍有少量时序等待，套件存在非零 flake 概率；Phase B 已把批量取消后的 chip 负向断言改为 wait（不再单帧采样）并连续 3 次通过，其余时序等待仍按 known limit 记录。
 - **测试**：`remap.ts` 纯函数 15 条单测（副本排除、容器派生标题、nestedOrder 锚点插入、duplicate+move 不可靠）+ store 队列/预览/apply/rebase/chip rekey 与 20 上限拒绝单测 + 深层页面根级结构单测 + props 失败契约单测（mock 返回结构不一致的 props 结果：本地修订已记录、旧草稿/chip 保留、`applyNotice='rebaseFailed'` 且可关闭）+ 恢复的 batch-order 单测（`test/client/artifact-edit-batch-order.test.mjs` 6 条：up/down/top/bottom、只改 targetOrder/orderChanged 不动已保存需求、nested 按父独立、无选择/边界 no-op）+ Host 路由深度用例（`test/host/artifact-structure.test.mjs`：depth 6/83 节点根级 duplicate 与 delete 经真实路由成功并记录修订、depth 11 被路由拒绝且不写修订/账本）；`artifact-edit` E2E 迁移场景 25/25b/25c/25d/27/31/33/36 到「入队 → 保存 → 总预览 → Apply」，新增场景 57（结构 + 2 项需求 + 整体说明 auto-submit：`__submits` +1、真实发送文本的 `baseRevisionId` 为新修订、blockId b3/b5→b2/b4 重映射、整体说明保留、只有一次 dry-run + apply）、58（输入框有用户正文 → 不自动发送、保留 chip、notice 提示手动发送且可关闭）、59（刷新后 pendingOps 恢复）、60（三类冲突阻止 Apply 且零 Host 请求）、61（depth 6 / 83 节点 dashboard 根级批量 duplicate 预览无冲突并 Apply 成一条修订）、62（超过支持深度的页面给 `depth`/`nestedTarget` 冲突且零 Host 请求）、63（两块同签名无标题 Text：duplicate 前块后，后块的已保存需求仍落在原块 b3）、64（第 21 条入队被拒绝并提示，已保存需求/整体说明不丢）。套件 790 → **909 checks**（Phase A）→ **920 checks**（Phase B）。Phase A 复审修复新增单测：嵌套 Apply 重建嵌套表/完整 order/序列化/reload、嵌套选择/b1.2 形状持久化、0-op 预览冲突（styleMixed/stale/instruction/temporaryOrder）、普通 Send 队列阻塞、detached rebase、composerHasPlainText 多 chip、真实发送确认、统一 dirty 守卫、nodeLimit 区分、取消预览竞态；E2E 新增 65（嵌套 Apply 保留嵌套草稿并序列化）、66（队列 pending 时普通 Send 被拒、清空后正常）、67（detached 草稿 Apply 不重插 chip/不自动发送，显式 attach 后序列化）、68（0-op 预览 stale 冲突禁用 confirm，分支后解除）。Phase B 复审修复新增：版本 store 的删除回退选择（删除当前显示修订后 selected 指向确认文案里的回退目标，而不是无声跳到 latest）与 `stageProgramFor` 只在 stage 实际显示回退目标时合成 `fallbackFrom`（选其他修订即恢复可编辑）；`artifact-version.test.mjs` +3 条、`version-items.test.mjs` +2 条（local props/style kind 覆盖 Host 的通用 structure 标签）、`artifact-edit-remap.test.mjs` +1 条（客户端队列上限与 Host batch 上限共用 `MAX_ARTIFACT_STRUCTURE_OPERATIONS`，20 接受/21 拒绝）、`doc-facts-guard.test.mjs` 9 条（上下文数字匹配、Host/Client 互换与旧文案失败用例）；E2E 新增场景 69（显示旧修订 → 删除 → stage 落到回退目标并只读 → 选另一版恢复编辑入口）与旧流程/图片导出错误文案断言（notice-only 无 stage 时显示具体原因而不是通用失败，且不下载）；`artifact-edit` 套件 **920 checks**，图片导出 **76** 条断言，`test/browser/README.md` 同步。E2E 的场景 25/25b/25d/61/63/65/67 用真实 `applyStructureBatch`（Node bridge）生成 mock preview/apply，preview 与 apply program 与 Host 一致；57/58 等其余结构场景仍用手写 mock（只验证 client 侧 draft/rebase/发送行为，Host 引擎与路由一致性由 host 单测与 bridge 场景覆盖）。
-- **分支验证**（2026-11-10，`review-fixes`，含 Phase A/B、最终复审与收尾修复）：Node **799/799**（Host **305**、Client **460**、packaging **34**）；浏览器 **9/9** 套件，`artifact-edit` **920 checks**、`nested-edit-renderer` 75、图片导出 76 条断言；构建 host **841 kB**、client **4.19 MB**（js 3.95 / css 242.8 kB）；pack **65** files **6,079,141** / **13,086,571** 字节；`npm run check:docs-facts` 与 `git diff --check` 通过。
+- **当前工作区验证**（2026-11-11，未提交；Auto 智能格式决策：是否出页面、Card/Article/自由布局，以及普通样式的纯文本回退）：Node **804/804**（Host **309**、Client **461**、packaging **34**）；浏览器 **9/9** 套件，`artifact-edit` **920 checks**、`nested-edit-renderer` 75、图片导出 76 条断言；构建 host **845 kB**、client **4.19 MB**（js 3.95 / css 243.1 kB）；pack **65** files **6,126,182** / **13,147,456** 字节；`npm run check:docs-facts` 与 `git diff --check` 通过。
 
 - **已知缺口**：`additions`（模型新增区块）尚未写入草稿持久化记录，reload 后同会话内的新增会丢失（同会话 Apply 重映射与序列化正常）；属既有缺口，非本轮流水线引入。
 

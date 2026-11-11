@@ -27,6 +27,7 @@ import promptText from '../generated/prompt.txt'
 import { installSessionControls, readPreference, type IntelligentUIPreferenceConfig } from './mode.ts'
 import {
   DEFAULT_EXPORT_BACKGROUND,
+  DOCUMENT_MODE_FIELD,
   EXPORT_BACKGROUND_PATTERN,
   EXPORT_SCALES,
   DEFAULT_EXPORT_SCALE,
@@ -76,6 +77,8 @@ export const name = 'intelligent-ui'
  */
 export const Config = z.object({
   freeComposition: z.boolean().default(false).volatile(),
+  // Experimental: an ordinary rendered answer is the chat message body itself.
+  documentMode: z.boolean().default(false).volatile(),
   globalEnabled: z.boolean().volatile(),
   answerStyle: z.string().max(64).volatile(),
   // Image-export defaults. The beautification frame is chosen per export and
@@ -200,11 +203,13 @@ const PARAMETERS = {
       type: 'string',
       enum: RENDER_LAYOUTS,
       description:
-        'Answer presentation style for this page. Pass the style named by the session prompt: '
-        + '"card" for the compact interactive card, "article" for the reading layout, or the card/article '
-        + 'style you chose when the session is in Auto mode. For a selected free template, pass "free" with its styleId and no temporaryStyle. For Host-authorized on-demand generation, '
+        'Answer presentation style for this page. Pass the layout named by the session note: '
+        + '"card" for the compact interactive card or "article" for the reading layout. In Auto pass the layout you chose: '
+        + '"card", "article", or "free" to compose the page without either shell. For a selected custom template, pass its exact '
+        + 'baseLayout with styleId (including "free"). For Host-authorized on-demand generation, '
         + 'pass "free" with temporaryStyle.baseLayout: "free"; compose the layout requested by the user, asking if materially unclear. '
-        + 'For an on-demand adjustment, preserve the parent result snapshot layout (free, card or article).',
+        + 'For an on-demand adjustment, preserve the parent result snapshot layout (free, card or article). '
+        + 'When the session prompt says document mode is on, pass "free" and write the whole answer into the program (no Markdown reply).',
     },
     styleId: {
       type: 'string',
@@ -258,6 +263,7 @@ const OUTPUT = {
     },
     styleId: { type: 'string', description: 'Active custom style template id, absent for built-in styles.' },
     styleSource: { type: 'string', enum: ['builtin', 'template', 'temporary'], description: 'Source of the resolved page style.' },
+    document: { type: 'boolean', description: 'True when this ordinary render was made in the deployment\'s experimental document mode; the client selects the message-body presentation from it.' },
     warnings: {
       type: 'array',
       items: { type: 'string' },
@@ -386,12 +392,38 @@ function countStatements(program: string): number {
  * Sentence prepended to the generation prompt while the switch admits the
  * session. The generation prompt itself is static; this line makes the user's
  * opt-in explicit instead of leaving the model to infer it from the tool's
- * presence, and restates the bounded prose exception in one place.
+ * presence, and states the per-answer page-vs-text decision in one place.
  */
 const ENABLED_SESSION_PREFIX =
-  'Intelligent UI is enabled for this session. Treat a rendered page as the default answer format; '
-  + 'use Markdown only for a single fact or one or two sentences, an explicit request for text, content that cannot be shown as a page, '
-  + 'or after render_ui fails twice in the turn.\n\n'
+  'Intelligent UI is enabled for this session. For each ordinary answer, decide whether an interactive page serves the request better than text: '
+  + 'render when it does, otherwise answer in Markdown without calling render_ui. The Answer style note below picks the layout when you render; '
+  + 'a pending Artifact edit request follows its own instructions below.\n\n'
+
+/** Prompt opening for a bound on-demand turn: the page is the requested result. */
+const ON_DEMAND_PREFIX =
+  'Intelligent UI is enabled for this session. This turn is an on-demand UI request, so render the page instead of answering in prose.\n\n'
+
+/**
+ * Prompt opening for an ordinary answer while the experimental document mode is
+ * on: a rendered page is the reply itself, so no Markdown answer may sit
+ * outside the program.
+ */
+const DOCUMENT_SESSION_PREFIX =
+  'Intelligent UI is enabled for this session in document mode: when a page serves the answer, the page itself is the reply. '
+  + 'For each ordinary answer, decide whether a page serves the request better than text. '
+  + 'When it does, write the complete answer as ONE document program: put all prose, headings, tables, code and other readable content '
+  + 'inside the program using Markdown/Title/Text/Table/Code blocks, and place interactive or visual components between them in reading '
+  + 'order so the page reads like a normal answer. '
+  + 'Pass style: "free"; omit styleId and temporaryStyle. Do not write any Markdown reply outside the tool call — no introduction and no '
+  + 'closing sentence. Call render_ui once, then stop. A pending Artifact edit request follows its own instructions below; '
+  + 'when no page serves the answer, answer in Markdown as usual.\n\n'
+
+/** Layout note that replaces the session style/free-composition notes in document mode. */
+const DOCUMENT_MODE_NOTE =
+  '\n\nDocument mode is on for this deployment: the rendered page is the answer, not a card. '
+  + 'Compose it as one readable document without a Card or Article wrapper: prose in Markdown/Title/Text blocks, with visual or '
+  + 'interactive components placed between the parts they explain. The Card compactness and Article reading playbooks do not constrain '
+  + 'this document, and the layout/typography guidance is advisory; the hard rules, theme tokens and readable text still apply.'
 
 /** Prompt suffix appended when the deployment enables free composition. */
 const FREE_COMPOSITION_NOTE =
@@ -402,7 +434,8 @@ const FREE_COMPOSITION_NOTE =
 /** Routing note for artifact block-edit requests observed by the Host. */
 const ARTIFACT_EDIT_NOTE =
   '\n\nArtifact edit requests: when the latest user message contains an <artifact-edit-request> envelope that lists target blocks, '
-  + 'do not rewrite the whole page with render_ui. Call `edit_ui_blocks` exactly once with a mini program `root = Col([...])` '
+  + 'a pending edit request overrides the ordinary page-vs-text decision: apply it with the tool its envelope names. '
+  + 'For a block edit, do not rewrite the whole page with render_ui. Call `edit_ui_blocks` exactly once with a mini program `root = Col([...])` '
   + 'holding only those selected blocks\' updated top-level expressions in request order, plus any new helper statements; '
   + 'the Host splices them back into the unchanged page. The full page in the envelope is read-only reference. '
   + 'Requests that only change block order or the global instruction still use render_ui once with the complete updated program. '
@@ -475,26 +508,37 @@ function isFreeComposition(config: IntelligentUIPreferenceConfig | undefined): b
   return readPreference(config?.freeComposition, (value): value is boolean => value === true) === true
 }
 
+/**
+ * Read the experimental document-mode preference from its live config reference.
+ * @param config - the plugin Config resolved by the Host, when settings are composed.
+ * @returns true only when the deployment opted in; a missing ref means off.
+ */
+function isDocumentMode(config: IntelligentUIPreferenceConfig | undefined): boolean {
+  return readPreference(config?.documentMode, (value): value is boolean => value === true) === true
+}
+
 /** Answer-style guidance appended to the generation prompt for one session. */
 const STYLE_NOTES: Readonly<Record<AnswerStyle, string>> = {
   card:
-    '\n\nAnswer style for this session: **Card**. Build a compact, scannable interactive card. '
-    + 'Keep sections tight and do not turn the answer into a long article; when the request is very broad, '
-    + 'cover it with a clear card structure rather than a wall of prose. Pass `style: "card"` to render_ui.',
+    '\n\nAnswer style for this session: **Card**. When this answer is better as an interactive page, build a compact, scannable card and pass '
+    + '`style: "card"`. Keep sections tight and do not turn the answer into a long article; when the request is very broad, '
+    + 'cover it with a clear card structure rather than a wall of prose.',
   article:
-    '\n\nAnswer style for this session: **Article**. Build an article-first page in the card: '
+    '\n\nAnswer style for this session: **Article**. When this answer is better as an article, build an article-first page: '
     + 'a short coverage summary, a table of contents, and one or more collapsible `Section` components whose body '
     + 'is substantial prose (use `Markdown` inside a Section). Every major part needs specific facts, causes, '
     + 'examples or debates — not a one-line bullet. All core content must be present and readable in the initial '
     + 'render; interactions only add detail or navigation. Do not deliver an outline or a skeleton. '
     + 'Include a reachable `Toc` and at least one `Section`; the Host rejects an article call without both. '
-    + 'Pass `style: "article"` to render_ui.',
+    + 'Pass `style: "article"`.',
   auto:
-    '\n\nAnswer style for this session: **Auto**. Choose the style the request needs: use Card for interactive, '
-    + 'structured, visual or computational answers; use Article when the user asks for a detailed, in-depth, '
-    + 'long-form or comprehensive explanation. An Article answer needs a coverage summary, a table of contents, '
-    + 'and substantial `Section` prose, not a skeleton. Pass `style: "card"` or `style: "article"` to render_ui '
-    + 'to record the style you chose.',
+    '\n\nAnswer style for this session: **Auto**. Decide the answer format yourself. '
+    + 'Render a page when it genuinely helps: interactive, structured, visual or computational answers — a dashboard, map, '
+    + 'chart, form, planner, calculator, game, comparison, timeline or data to explore. Choose the layout that fits: '
+    + '**Card** for a compact interactive page; **Article** for a detailed, in-depth, long-form or comprehensive explanation '
+    + '(coverage summary + reachable `Toc` + substantial `Section` prose); **free** when neither shell fits — compose the page shape '
+    + 'yourself without a Card/Article wrapper, with `Toc` and `Section` optional. '
+    + 'Pass `style: "card"`, `"article"` or `"free"` to render_ui to record the style you chose.',
 }
 
 /** Quote external text for the prompt with line separators escaped. */
@@ -591,13 +635,17 @@ export function apply(ctx: {
     text: (context) => {
       const sessionId = context?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) return ''
-      const section = isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
-      const template = mode.templateFor(sessionId)
-      const style = mode.styleFor(sessionId)
       const operationNote = onDemand.promptNote(sessionId)
-      const note = operationNote ? '' : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
+      // Document mode owns ordinary answers only: a bound on-demand turn keeps
+      // the "render the page" opening and its result styling.
+      const document = !operationNote && isDocumentMode(config)
+      const section = !document && isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
+      const template = document ? undefined : mode.templateFor(sessionId)
+      const style = mode.styleFor(sessionId)
+      const note = operationNote ? '' : document ? DOCUMENT_MODE_NOTE : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
       // Keep the style instruction near the top, before the long DSL reference.
-      return `${ENABLED_SESSION_PREFIX}${operationNote ? `${operationNote}\n\n` : ''}${note}${ARTIFACT_EDIT_NOTE}
+      const prefix = operationNote ? ON_DEMAND_PREFIX : document ? DOCUMENT_SESSION_PREFIX : ENABLED_SESSION_PREFIX
+      return `${prefix}${operationNote ? `${operationNote}\n\n` : ''}${note}${ARTIFACT_EDIT_NOTE}
 
 ${section}`
     },
@@ -771,18 +819,21 @@ ${section}`
     name: RENDER_UI_TOOL,
     description:
       'Render an interactive answer as UI in the chat. Pass a complete openui-lang program that follows the '
-      + 'Intelligent UI rules in the system prompt. When Intelligent UI is enabled for the session this is the '
-      + 'default answer format: use it for any structured answer, including introductions, explainers, timelines, '
-      + 'comparisons, dashboards, step-by-step guides, maps, drawings, forms, planners, games or calculators. '
-      + 'Answer in prose only for a single fact or a one-line reply, an explicit text request, content that cannot '
-      + 'be shown as a page, or after rendering fails. The user sees the rendered page; do not repeat its content '
-      + 'in prose. Pass `style` set to the effective session style (card or article; when the session is in Auto, '
-      + 'the style you chose), or free with the styleId of the selected free template and no temporaryStyle. Article pages use Toc and collapsible Section blocks; Card pages stay compact. '
+      + 'Intelligent UI rules in the system prompt. Intelligent UI is enabled for the session, so decide for each answer '
+      + 'whether a page serves it better than text: use it for structured, visual, interactive or computed answers '
+      + '(introductions, explainers, timelines, comparisons, dashboards, step-by-step guides, maps, drawings, forms, '
+      + 'planners, games or calculators); answer in prose when a page would add nothing (a single fact or one-line reply, '
+      + 'a short explanation, an explicit text request, content that cannot be shown as a page, or after rendering fails). '
+      + 'The user sees the rendered page; do not repeat its content in prose. Pass `style` set to the session layout: '
+      + '"card" or "article", or in Auto the layout you chose ("card", "article" or "free"); a selected free template uses '
+      + 'its styleId with no temporaryStyle. Article pages use Toc and collapsible Section blocks; Card pages stay compact. '
       + 'For Host-authorized on-demand generation, use style: "free" and temporaryStyle.baseLayout: "free"; '
       + 'compose the user-requested layout without either shell. Adjustments must preserve the parent snapshot layout; '
       + 'the Host rejects missing parents. Ask a focused layout question if materially unclear. '
       + 'Never fabricate data, figures, dates or sources: ground them in the conversation or tool results, or ask the user first; '
       + 'missing data is material ambiguity, not a reason for placeholder content. '
+      + 'When the system prompt says document mode is on, an ordinary rendered answer is the reply itself: write all prose inside the '
+      + 'program, pass style: "free", and do not write a Markdown reply outside the tool call. '
       + 'For a pending Artifact block edit request with selected target blocks, call edit_ui_blocks instead with only those '
       + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page, and when several edit requests are pending pass editRequestId to choose one. '
       + 'For a pending natural-language style edit request (kind "style"), also call this tool exactly once with the complete updated program, the recorded style, the approved temporaryStyle and editRequestId; keep the layout and the content, and never use edit_ui_blocks for it. '
@@ -839,12 +890,21 @@ ${section}`
         editedBlockIds?: readonly string[]
         program?: string
         style?: RenderLayout
+        styleSource?: 'builtin' | 'template' | 'temporary'
         styleId?: string
+        document?: boolean
         styleEdit?: boolean
         temporaryStyle?: unknown
         title?: string
       }) => value.artifactId === undefined || value.revisionId === undefined || value.revision === undefined
-        ? null
+        ? {
+            // An ordinary render still records its resolved layout identity: the
+            // client needs the built-in free-layout source on replay, and document
+            // mode records the message-body presentation per result.
+            ...value.style === undefined ? {} : { style: value.style },
+            ...value.styleSource === undefined ? {} : { styleSource: value.styleSource },
+            ...value.document === undefined ? {} : { document: value.document },
+          }
         : {
             artifactId: value.artifactId,
             revisionId: value.revisionId,
@@ -937,8 +997,18 @@ ${section}`
       // A pending block edit applies the artifact's recorded style/template; the
       // session's current style only governs ordinary renders.
       const applyingBlockEdit = peekedBlockEdit !== undefined
-      const template = temporary || applyingBlockEdit ? undefined : mode.templateFor(sessionId)
-      const effective = temporary || applyingBlockEdit ? args.style : template?.baseLayout ?? mode.styleFor(sessionId)
+      // Experimental document mode: an ordinary answer becomes one free-layout
+      // document that the client presents as the message body. On-demand
+      // results, artifact edits and saved templates keep their recorded layout.
+      const documentRender = !temporary && !applyingBlockEdit && isDocumentMode(config)
+      const template = temporary || applyingBlockEdit || documentRender ? undefined : mode.templateFor(sessionId)
+      const effective = temporary || applyingBlockEdit ? args.style : documentRender ? 'free' : template?.baseLayout ?? mode.styleFor(sessionId)
+      if (documentRender && args.style !== 'free') {
+        throw new Error('render_ui: document mode renders the answer as one free-layout document; pass style: "free" without styleId or temporaryStyle.')
+      }
+      if (documentRender && 'styleId' in args) {
+        throw new Error('render_ui: document mode does not use saved templates; omit styleId and pass style: "free".')
+      }
       if (!applyingBlockEdit && template !== undefined && args.styleId !== template.id) {
         throw new Error(`render_ui: this session uses custom style ${quotePromptText(template.name)}; pass styleId: "${template.id}" and style: "${template.baseLayout}".`)
       }
@@ -950,8 +1020,12 @@ ${section}`
         }
         warnings.push(`Style template ${JSON.stringify(args.styleId)} is not available in this session; using the built-in theme.`)
       }
-      if (!isRenderLayout(args.style) || (!temporary && !applyingBlockEdit && template === undefined && !isPageStyle(args.style))) {
-        const expected = effective === 'auto' ? '"card" or "article"' : `"${effective}"`
+      // Auto may pick the free layout: the page composes its own shape without
+      // a Card/Article shell. A forced Card/Article session still cannot render
+      // free, a selected free template keeps its own styleId path, and document
+      // mode requires free for its ordinary answers.
+      if (!isRenderLayout(args.style) || (!temporary && !applyingBlockEdit && template === undefined && !isPageStyle(args.style) && effective !== 'auto' && !documentRender)) {
+        const expected = effective === 'auto' ? '"card", "article" or "free"' : `"${effective}"`
         throw new Error(`render_ui: pass style ${expected} for this session.`)
       }
       // Forced styles are enforced on the Host: a stale or guessed style must be
@@ -1040,6 +1114,7 @@ ${section}`
           : template === undefined ? 'builtin' : 'template'
       const renderedStyleId = lineage?.styleId ?? (temporary || applyingBlockEdit ? undefined : template?.id)
       const rendered = { statements, style: requestedStyle, styleSource: renderedStyleSource,
+        ...documentRender ? { document: true } : {},
         ...renderedStyleId === undefined ? {} : { styleId: renderedStyleId }, ...warnings.length === 0 ? {} : { warnings },
         ...lineage === undefined ? {} : {
           artifactId: lineage.artifactId,

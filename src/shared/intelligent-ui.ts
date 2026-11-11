@@ -39,6 +39,12 @@ export interface IntelligentUIProgram {
   readonly title?: string
   /** Presentation style recorded with the call; absent for older calls. */
   readonly style?: RenderLayout
+  /**
+   * Recorded document answer mode. The Host sets it on an ordinary render made
+   * while the deployment's experimental document mode was on; the client then
+   * presents the page as message-body content without card chrome.
+   */
+  readonly document?: boolean
   /** Custom template recorded with the call, when selected by the session. */
   readonly styleId?: string
   /** Inline result-owned style; independent of the saved-template catalog. */
@@ -107,6 +113,14 @@ export const PACKAGE_NAME = '@zephinel/dsh-intelligent-ui'
 
 /** Volatile boolean field controlling free composition in the Host settings document. */
 export const FREE_COMPOSITION_FIELD = 'freeComposition'
+
+/**
+ * Volatile boolean field for the experimental document answer mode. When on,
+ * an ordinary rendered answer is one free-layout page that reads as the chat
+ * message itself: the page carries all prose plus the interactive blocks, the
+ * model writes no Markdown reply, and the client drops the card chrome.
+ */
+export const DOCUMENT_MODE_FIELD = 'documentMode'
 
 /** Volatile boolean field enabling Intelligent UI in every session by default. */
 export const GLOBAL_ENABLED_FIELD = 'globalEnabled'
@@ -188,6 +202,8 @@ export interface ImageExportSettings {
 export interface IntelligentUISettings {
   /** Whether the design playbook is advisory instead of a template. */
   readonly freeComposition?: boolean
+  /** Experimental document mode: render an ordinary answer as the message body. */
+  readonly documentMode?: boolean
   /** Whether every session starts enabled; a session override still wins. */
   readonly globalEnabled?: boolean
   /** Deployment-wide default answer style; a session override still wins. */

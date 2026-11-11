@@ -43,8 +43,9 @@ test('the troubleshooting reference repeats the guardrail with the failure it pr
 })
 
 test('the enabled-session policy is single-sourced and explicit invocation is a directive', () => {
-  assert.match(prompt, /default answer format/i, 'the prompt makes a page the default in an enabled session')
-  assert.match(prompt, /single fact or at most one or two sentences/i, 'the prompt bounds the prose exception')
+  assert.match(prompt, /decide the format for each answer/i, 'the prompt makes the model choose page vs text')
+  assert.match(prompt, /answer in Markdown when a page would only decorate a short answer/i, 'the prompt names when text wins')
+  assert.match(prompt, /a free layout/i, 'the prompt names the free layout among the session layouts')
   assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
   assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')
   assert.match(skill, /Explicit invocation is a directive/i, 'the skill states the explicit-invocation directive')
@@ -84,7 +85,7 @@ test('the article style and Section/Toc vocabulary stay documented', () => {
   assert.match(skill, /Section`/i, 'SKILL.md names the Section component')
   assert.match(prompt, /Section\(title: string/, 'the injected prompt carries the Section signature')
   assert.match(prompt, /Toc\(items: string\[\], anchors\?: string\[\]\)/, 'the injected prompt carries the Toc anchors signature')
-  assert.match(prompt, /authorized free-layout result or selected free template, page shape and typography guidance is advisory/)
+  assert.match(prompt, /Auto-chosen, an authorized on-demand result or a selected free template — page shape and typography guidance is advisory/)
   assert.match(skill, /Free template/)
   assert.match(skill, /styleId.*without `temporaryStyle`/)
   assert.match(skill, /style: <"card"\|"article"\|"free">/)

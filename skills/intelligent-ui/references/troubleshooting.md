@@ -78,6 +78,15 @@ render_ui: this session uses custom style "Ocean notes"; pass styleId: "cs_ocean
 
 Follow that exact id/layout outside an authorized on-demand call. If the template is gone, let the user select another style; do not fabricate it.
 
+Document-mode errors reject a layout the deployment does not use for ordinary answers:
+
+```text
+render_ui: document mode renders the answer as one free-layout document; pass style: "free" without styleId or temporaryStyle.
+render_ui: document mode does not use saved templates; omit styleId and pass style: "free".
+```
+
+This deployment records ordinary answers as documents: pass `style: "free"`, put the whole answer (prose plus interactive blocks) in the program, and write no Markdown outside the call. Card/Article and saved-template layouts are rejected for these answers; apply on-demand results, saved templates and Artifact edit requests with their own recorded layout instead.
+
 Command and result-save failures include:
 
 ```text
@@ -287,4 +296,4 @@ If the page is merely visually weak, do not re-call for cosmetic fixes: choose b
 
 ### Free saved templates
 
-A selected free template requires `style: "free"` and its exact `styleId`, without `temporaryStyle`. A Card/Article selection still rejects free; a built-in selection cannot authorize free by adding an arbitrary styleId. Free templates require no Toc/Section or Article wrapper. Saving a result copies the registered layout, directives and theme; a theme-less result has no palette to copy, so the client hides Save and the API answers `no_theme`. A legacy client sending `baseLayout` receives `invalid_input` and must reload the updated client. Missing/deleted templates retain the existing default-theme fallback.
+A selected free template requires `style: "free"` and its exact `styleId`, without `temporaryStyle`. An Auto session may also pass `style: "free"` directly (no `styleId`/`temporaryStyle`); the Host records it as a built-in free layout. A forced Card/Article selection still rejects free, and adding an arbitrary styleId cannot authorize free. Free layouts require no Toc/Section or Article wrapper. Saving a result copies the registered layout, directives and theme; a theme-less result has no palette to copy, so the client hides Save and the API answers `no_theme`. A legacy client sending `baseLayout` receives `invalid_input` and must reload the updated client. Missing/deleted templates retain the existing default-theme fallback.

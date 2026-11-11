@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
   ANSWER_STYLE_FIELD,
+  DOCUMENT_MODE_FIELD,
   EXPORT_BACKGROUND_FIELD,
   EXPORT_SCALES,
   EXPORT_BACKGROUND_PRESETS,
@@ -84,6 +85,7 @@ type WritableField =
   | typeof GLOBAL_ENABLED_FIELD
   | typeof ANSWER_STYLE_FIELD
   | typeof FREE_COMPOSITION_FIELD
+  | typeof DOCUMENT_MODE_FIELD
   | typeof EXPORT_BACKGROUND_FIELD
   | typeof EXPORT_SCALE_FIELD
   | typeof EXPORT_REMOVE_FOLLOWUPS_FIELD
@@ -143,6 +145,7 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
   const storedStyle = snapshot.value?.answerStyle
   const answerStyle = isStyleId(storedStyle) ? storedStyle : 'auto'
   const free = snapshot.value?.freeComposition === true
+  const documentMode = snapshot.value?.documentMode === true
   const exportSettings = readImageExportSettings(snapshot.value)
   // Custom background picker: a preset palette plus a hex field, no native
   // browser color dialog. It opens under the row and dismisses on outside click.
@@ -315,6 +318,25 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           describedBy={`${idPrefix}-free ${noteId}`}
           onToggle={() => { void save(FREE_COMPOSITION_FIELD, !free) }}
         />
+      </div>
+
+      <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-experimental`}>
+        <div className="dsh-iui-settings-group-head">
+          <h3 id={`${idPrefix}-experimental`} className="dsh-iui-settings-group-title">
+            {t('settings.group.experimental')}
+          </h3>
+          <p className="dsh-iui-settings-group-hint">{t('settings.group.experimentalHint')}</p>
+        </div>
+        <SwitchRow
+          label={t('settings.document.label')}
+          hint={documentMode ? t('settings.document.on') : t('settings.document.off')}
+          idPrefix={`${idPrefix}-document`}
+          checked={documentMode}
+          disabled={locked}
+          describedBy={`${idPrefix}-document ${idPrefix}-document-note ${noteId}`}
+          onToggle={() => { void save(DOCUMENT_MODE_FIELD, !documentMode) }}
+        />
+        <p id={`${idPrefix}-document-note`} className="dsh-iui-settings-hint">{t('settings.document.note')}</p>
       </div>
 
       <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-export`}>

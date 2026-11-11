@@ -294,7 +294,7 @@ function mount({ answerStyle = 'auto', templates = [], revisions = [] } = {}) {
   return { ...registered, tool, blockTool, home, agent, event, send, command, file: join(home, 'dsh-intelligent-ui-artifacts.json') }
 }
 
-test('registers the revision output fields while ordinary renders keep a null presentation meta', async () => {
+test('registers the revision output fields while ordinary renders record their layout identity', async () => {
   const m = mount()
   const properties = m.tool.output.schema.properties
   for (const key of ['artifactId', 'revisionId', 'baseRevisionId', 'revision', 'editedBlockIds', 'program']) assert.ok(properties[key], key)
@@ -307,7 +307,7 @@ test('registers the revision output fields while ordinary renders keep a null pr
   assert.equal(value.revision, undefined)
   assert.equal(value.artifactId, undefined)
   assert.equal(value.program, undefined)
-  assert.equal(m.tool.output.presentationMeta({}, value), null)
+  assert.deepEqual(m.tool.output.presentationMeta({}, value), { style: 'card', styleSource: 'builtin' })
   assert.equal(m.tool.output.render({}, value)[0].text, `Interactive UI rendered for the user (${value.statements} statements, card style).`)
   assert.equal(existsSync(m.file), false, 'ordinary renders record no revision')
 })

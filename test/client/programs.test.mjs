@@ -146,12 +146,43 @@ test('inline snapshots survive recorded argument replay without catalog access',
   for (const args of [{ temporaryStyle: {} }, { temporaryStyle, style: 'article' }, { temporaryStyle, styleId: 'cs_abcdef' }]) {
     assert.deepEqual(programsFromToolNodes([settled('bad-temp', { program: PROGRAM, style: 'card', ...args })]), [])
   }
+  // A live Auto free call renders; a settled replay needs the recorded builtin
+  // source, and a template result with a missing identity stays invalid.
+  const [liveFree] = programsFromToolNodes([started('live-free', { program: PROGRAM, style: 'free' })])
+  assert.equal(liveFree.style, 'free')
   assert.deepEqual(programsFromToolNodes([settled('plain-free', { program: PROGRAM, style: 'free' })]), [])
+  const replayFree = settled('auto-free', { program: PROGRAM, style: 'free' })
+  replayFree.root.meta = { styleSource: 'builtin' }
+  const [autoFree] = programsFromToolNodes([replayFree])
+  assert.equal(autoFree.style, 'free')
+  assert.equal(autoFree.styleId, undefined)
+  assert.equal(autoFree.temporaryStyle, undefined)
+  const templateFree = settled('template-free', { program: PROGRAM, style: 'free' })
+  templateFree.root.meta = { styleSource: 'template' }
+  assert.deepEqual(programsFromToolNodes([templateFree]), [])
   assert.equal(programsFromToolNodes([settled('builtin', { program: PROGRAM, styleSource: 'builtin' })])[0].styleSource, 'builtin')
   assert.equal(programsFromToolNodes([settled('template', { program: PROGRAM, styleSource: 'template' })])[0].styleSource, 'template')
   assert.equal(programsFromToolNodes([settled('bad-source', { program: PROGRAM, styleSource: 'unknown' })])[0].styleSource, undefined)
 })
 
+
+test('document-mode results replay with their recorded presentation flag', () => {
+  const document = settled('document-free', { program: PROGRAM, style: 'free' })
+  document.root.meta = { style: 'free', styleSource: 'builtin', document: true }
+  const [program] = programsFromToolNodes([document])
+  assert.equal(program.style, 'free')
+  assert.equal(program.styleSource, 'builtin')
+  assert.equal(program.document, true)
+  // Ordinary result meta without the flag never selects the document shell.
+  const card = settled('plain-card', { program: PROGRAM, style: 'card' })
+  card.root.meta = { style: 'card', styleSource: 'builtin' }
+  assert.equal(programsFromToolNodes([card])[0].document, undefined)
+  assert.equal(programsFromToolNodes([card])[0].styleSource, 'builtin')
+  // The flag is result-owned metadata, not a model argument.
+  const injected = settled('arg-document', { program: PROGRAM, style: 'free', document: true })
+  injected.root.meta = { style: 'free', styleSource: 'builtin' }
+  assert.equal(programsFromToolNodes([injected])[0].document, undefined)
+})
 
 test('free template recordings replay with a valid styleId and no temporary snapshot', () => {
   for (const make of [started, settled]) {
@@ -160,9 +191,13 @@ test('free template recordings replay with a valid styleId and no temporary snap
     assert.equal(result.styleId, 'cs_abcdef')
     assert.equal(result.styleSource, 'template')
     assert.equal(result.temporaryStyle, undefined)
-    for (const styleId of [undefined, null, 'card', '', 'cs_BADBAD', 'cs_short', 42]) {
+    for (const styleId of [null, 'card', '', 'cs_BADBAD', 'cs_short', 42]) {
       assert.deepEqual(programsFromToolNodes([make('bad-free', { program: PROGRAM, style: 'free', styleId })]), [])
     }
+    // A live free call with no styleId is an Auto choice and renders; a replayed
+    // one without the recorded builtin source does not.
+    assert.equal(programsFromToolNodes([started('no-id-free', { program: PROGRAM, style: 'free' })])[0].style, 'free')
+    assert.deepEqual(programsFromToolNodes([settled('no-id-free', { program: PROGRAM, style: 'free' })]), [])
     for (const temporaryStyle of [null, {}, { schemaVersion: 2 }]) {
       assert.deepEqual(programsFromToolNodes([make('mixed-free', { program: PROGRAM, style: 'free', styleId: 'cs_abcdef', temporaryStyle })]), [])
     }
