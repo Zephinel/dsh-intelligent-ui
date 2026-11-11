@@ -34,6 +34,7 @@ import { useStyleScheme } from './theme-mode.ts'
 import type { StyleCatalog } from './styles.ts'
 import { MenuDivider, MenuItem } from './Menu.tsx'
 import { exportCardsImage } from './export-image.ts'
+import { NO_CAPTURABLE_STAGE_MESSAGE } from './export-image-targets.ts'
 import { useAnchoredPopup, usePopupDismiss } from './popover.ts'
 
 /** Business face injected by the plugin registration. */
@@ -102,6 +103,8 @@ export function ExportAction({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<BeautifyStyle | 'page' | null>(null)
   const [status, setStatus] = useState<ExportStatus>('idle')
+  /** Specific failure cause that makes a generic "try again" copy misleading. */
+  const [failure, setFailure] = useState<'notice-only' | null>(null)
   const [lastKind, setLastKind] = useState<'image' | 'page'>('image')
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -117,6 +120,7 @@ export function ExportAction({
     }
     setOpen(false)
     setStatus('idle')
+    setFailure(null)
   }, [])
   const placement = useAnchoredPopup(open, triggerRef, { minWidth: 0, maxWidth: 320, alignEnd: true }, menuRef)
   const menuVisible = open && placement !== null
@@ -194,6 +198,7 @@ export function ExportAction({
     busyRef.current = true
     setBusy(style)
     setLastKind('image')
+    setFailure(null)
     setStatus('working')
     try {
       await exportCardsImage(trigger, {
@@ -211,6 +216,9 @@ export function ExportAction({
       }, 650)
     } catch (error) {
       console.warn('[intelligent-ui] image export failed', error)
+      // A notice-only answer has no capturable stage: retrying cannot help, so
+      // surface the concrete cause instead of the generic failure copy.
+      setFailure(error instanceof Error && error.message === NO_CAPTURABLE_STAGE_MESSAGE ? 'notice-only' : null)
       setStatus('error')
     } finally {
       busyRef.current = false
@@ -229,6 +237,7 @@ export function ExportAction({
     busyRef.current = true
     setBusy('page')
     setLastKind('page')
+    setFailure(null)
     setStatus('working')
     try {
       await styles?.ensure(sessionId)
@@ -258,6 +267,7 @@ export function ExportAction({
       }, 650)
     } catch (error) {
       console.warn('[intelligent-ui] page export failed', error)
+      setFailure(error instanceof Error && error.message === NO_CAPTURABLE_STAGE_MESSAGE ? 'notice-only' : null)
       setStatus('error')
     } finally {
       busyRef.current = false
@@ -272,7 +282,7 @@ export function ExportAction({
       : status === 'empty'
         ? t('export.error.noPrograms')
         : status === 'error'
-          ? t('export.state.error')
+          ? failure === 'notice-only' ? t('export.state.noticeOnly') : t('export.state.error')
           : null
 
   return (
@@ -286,10 +296,13 @@ export function ExportAction({
         aria-haspopup="menu"
         aria-expanded={open}
         data-status={status === 'error' ? 'error' : undefined}
-        title={status === 'error' ? t('export.state.error') : t('export.button.title')}
+        title={status === 'error'
+          ? failure === 'notice-only' ? t('export.state.noticeOnly') : t('export.state.error')
+          : t('export.button.title')}
         onClick={() => {
           if (busyRef.current) return
           setStatus('idle')
+          setFailure(null)
           setOpen(value => !value)
         }}
       >

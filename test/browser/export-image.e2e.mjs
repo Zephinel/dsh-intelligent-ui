@@ -329,6 +329,23 @@ try {
     assert.doesNotMatch(stagePage, /RAW-STAGE-MARKER/, 'the interactive page never embeds the superseded recording')
     await cdp.waitFor('!document.querySelector("[data-dsh-iui-export-menu]")', 'stage page menu closed')
 
+    // A notice-only Turn whose artifact has no mounted stage cannot be captured.
+    // The menu must surface that concrete cause (retrying cannot help) instead
+    // of the generic "try again" copy, and must never download a stale image.
+    const missingTrigger = '[data-missing-stage-export] [data-dsh-iui-export]'
+    await cdp.waitFor(`!!document.querySelector('${missingTrigger}')`, 'missing-stage export fixture')
+    const downloadsBeforeMissing = await cdp.evaluate('window.downloads.length')
+    await cdp.evaluate(`document.querySelector('${missingTrigger}').click()`)
+    await cdp.waitFor('!!document.querySelector("[data-dsh-iui-export-menu]")', 'missing-stage export menu')
+    await cdp.evaluate(`(() => { const menus = [...document.querySelectorAll('[data-dsh-iui-export-menu]')]; const menu = menus[menus.length - 1]; menu.querySelector('[data-export-style="card"]').click(); return menus.length })()`)
+    await cdp.waitFor('!!document.querySelector(".dsh-iui-export-status.is-error")', 'missing-stage export error copy')
+    const missingCopy = await cdp.evaluate('document.querySelector(".dsh-iui-export-status.is-error").textContent')
+    assert.match(missingCopy, /latest revision card is not on the page/i, 'the export failure names the concrete no-capturable-stage cause')
+    assert.match(missingCopy, /Open the latest revision/, 'the failure copy explains the recovery instead of asking to retry')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.equal(await cdp.evaluate('window.downloads.length'), downloadsBeforeMissing, 'a notice-only answer downloads nothing')
+    assert.equal(await cdp.evaluate(`document.querySelector('${missingTrigger}').getAttribute("data-status") ?? null`), 'error', 'the trigger reports the failure state')
+
     console.log(`export-image E2E: OK (${raw.width}x${raw.height} raw, ${card.width}x${card.height} card, ${rounded.width}x${rounded.height} rounded 2x, shadow alpha ${card.maxAlpha}, page ${Math.round(page.size / 1024)} kB)`)
   }
 } finally {

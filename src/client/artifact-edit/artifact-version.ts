@@ -295,7 +295,11 @@ export function selectRevisionInState(state: ArtifactVersionState, revisionId: s
  *
  * The deleted record is dropped; when a prepared rollback fallback is supplied
  * its revision is (re)registered so the stage can render a live revision instead
- * of a dangling one. Latest/selection are recomputed from the remaining records.
+ * of a dangling one. Latest is recomputed from the remaining records. When the
+ * deleted revision was the selected one, the fallback target becomes selected so
+ * the stage matches the deletion confirmation ("this card rolls back to revision
+ * N"); a deletion without a displayed fallback keeps the selection when it still
+ * names a live record and otherwise repoints at the latest one.
  */
 export function forgetRevisionInState(
   state: ArtifactVersionState,
@@ -327,9 +331,16 @@ export function forgetRevisionInState(
     })
   }
   const latest = latestRecord(revisions)
-  const selected = state.selectedRevisionId !== undefined && revisions.has(state.selectedRevisionId)
-    ? state.selectedRevisionId
-    : latest?.revisionId
+  const wasSelected = state.selectedRevisionId === revisionId
+  // The deletion confirmation names the prepared rollback target, so a deleted
+  // displayed revision must select that target instead of silently advancing to
+  // the latest one (which may be a newer revision the user never chose).
+  const fallbackSelected = fallback !== undefined && revisions.has(fallback.revisionId) ? fallback.revisionId : undefined
+  const selected = wasSelected
+    ? fallbackSelected ?? latest?.revisionId
+    : state.selectedRevisionId !== undefined && revisions.has(state.selectedRevisionId)
+      ? state.selectedRevisionId
+      : latest?.revisionId
   return {
     ...state,
     revisions,
@@ -450,6 +461,17 @@ export function stageProgramFor(cardProgram: IntelligentUIProgram, record: Artif
   const styleSource = record.temporaryStyle !== undefined
     ? 'temporary' as const
     : record.styleId !== undefined ? 'template' as const : undefined
+  // A fallback-redirected card must stay read-only only while the stage actually
+  // displays the revision it fell back to: the marker drives edit/draft/runtime-
+  // state/Save suppression. Selecting another revision restores normal editing.
+  // The card-level marker belongs to the card's own redirected revision; a stage
+  // displaying a fetched revision has no card-level redirect, so the record
+  // marker written by forgetRevisionInState covers that case (that record *is*
+  // the fallback target).
+  const fallbackTarget = cardProgram.fallbackFrom === undefined ? undefined : cardProgram.revisionId
+  const fallbackFrom = fallbackTarget !== undefined && fallbackTarget === record.revisionId
+    ? cardProgram.fallbackFrom
+    : record.redirectedFrom
   return {
     callId: cardProgram.callId,
     program: record.program,
@@ -466,13 +488,7 @@ export function stageProgramFor(cardProgram: IntelligentUIProgram, record: Artif
     ...record.requestId === undefined ? {} : { requestId: record.requestId },
     ...record.localRevision === true ? { localRevision: true } : {},
     ...record.localRevisionKind === undefined ? {} : { localRevisionKind: record.localRevisionKind },
-    // A fallback-redirected card must stay read-only on the stage too: the
-    // fallback marker drives edit/draft/runtime-state/Save suppression. A stage
-    // displaying a fetched revision had no cardProgram-level redirect, so the
-    // record marker written by forgetRevisionInState covers that case.
-    ...(cardProgram.fallbackFrom ?? record.redirectedFrom) === undefined
-      ? {}
-      : { fallbackFrom: cardProgram.fallbackFrom ?? record.redirectedFrom },
+    ...fallbackFrom === undefined ? {} : { fallbackFrom },
     running: cardProgram.running,
   }
 }

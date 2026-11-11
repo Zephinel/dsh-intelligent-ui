@@ -117,26 +117,47 @@ export function verifyArtifactChipAttachment(access: ArtifactChipAccess, session
 const AUTO_SUBMIT_INTERVAL_MS = 400
 /** Number of auto-submit probes before giving up and asking for a manual Send. */
 const AUTO_SUBMIT_RETRIES = 12
+/** Number of confirmation probes after pressing Send before reporting manual. */
+const AUTO_SUBMIT_CONFIRM_RETRIES = 20
 
 /**
  * Whether the composer holds text outside its reference chips.
  *
- * A chip occupies its label length inside the draft text, so subtracting every
- * occurrence's length leaves the user-authored text. The post-Apply probe must
- * not auto-send when that remainder is non-empty: joining user prose to a model
+ * Every occurrence span is removed from the clipboard projection before the
+ * remainder is inspected, so neither another draft's chip nor the separator the
+ * chip insertion itself adds can be mistaken for user prose. Attachment chips
+ * are occurrences too, so they are removed the same way. The post-Apply probe
+ * must not auto-send when real text remains: joining user prose to a model
  * request would silently change what the user is writing.
  * @param state - current composer state.
  * @returns true when text other than chips remains.
  */
-export function composerHasPlainText(state: { readonly draft: string; readonly occurrences: readonly { readonly length: number }[] }): boolean {
-  const chipChars = state.occurrences.reduce((sum, occurrence) => sum + Math.max(0, occurrence.length), 0)
-  return state.draft.trim().length > chipChars
+export function composerHasPlainText(state: {
+  readonly draft: string
+  readonly occurrences: readonly { readonly offset?: number; readonly length: number }[]
+}): boolean {
+  let plain = ''
+  let cursor = 0
+  const spans = [...state.occurrences].sort((left, right) => (left.offset ?? 0) - (right.offset ?? 0))
+  for (const occurrence of spans) {
+    const start = occurrence.offset ?? cursor
+    if (start > cursor) plain += state.draft.slice(cursor, start)
+    cursor = Math.max(cursor, start + Math.max(0, occurrence.length))
+  }
+  plain += state.draft.slice(cursor)
+  return plain.trim() !== ''
 }
 
 /** Composer access needed by the post-Apply auto-submit probe. */
 export interface ArtifactSubmitAccess extends ArtifactChipAccess {
   /** Submit the current draft through the normal Send path; absent when the host has no Send verb. */
   readonly submit?: () => void
+  /**
+   * Whether the store observed the draft actually consumed by the send path
+   * (the chip codec ran and marked it submitted). Without this seat the probe
+   * cannot confirm a send and reports a manual send instead of a fake success.
+   */
+  readonly isSubmitted?: (referenceId: string) => boolean
 }
 
 /**
@@ -145,35 +166,52 @@ export interface ArtifactSubmitAccess extends ArtifactChipAccess {
  * A structural Apply replaces the draft key, so the composer chip has just been
  * re-inserted. Submitting before the composer is back to its plain phase would
  * send an empty request; this probe waits for both conditions (plain phase and
- * the new chip occurrence) before pressing Send. It never clears the draft on
- * failure: the caller keeps the chip and tells the user to send manually.
- * @param access - composer access plus the Send verb.
+ * the new chip occurrence) before pressing Send, then waits for the store to
+ * confirm that the chip codec consumed the draft. An unconfirmed send is
+ * reported as failure, so the card never claims "submitted" for a message that
+ * did not leave the composer. It never clears the draft on failure: the caller
+ * keeps the chip and tells the user to send manually.
+ * @param access - composer access plus the Send verb and the confirmation seat.
  * @param sessionId - chat session owning the composer.
  * @param referenceId - chip reference of the remapped draft.
  * @param options - retry count/interval overrides (tests).
- * @returns whether the draft was submitted.
+ * @returns whether the draft was confirmed submitted.
  */
 export async function requestArtifactAutoSubmit(
   access: ArtifactSubmitAccess,
   sessionId: string,
   referenceId: string,
-  options: { readonly retries?: number; readonly intervalMs?: number } = {},
+  options: { readonly retries?: number; readonly intervalMs?: number; readonly confirmRetries?: number } = {},
 ): Promise<boolean> {
   const retries = options.retries ?? AUTO_SUBMIT_RETRIES
   const intervalMs = options.intervalMs ?? AUTO_SUBMIT_INTERVAL_MS
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const submit = access.submit
-    if (typeof submit !== 'function') return false
+  const confirmRetries = options.confirmRetries ?? AUTO_SUBMIT_CONFIRM_RETRIES
+  const confirm = access.isSubmitted
+  const submit = access.submit
+  // Without both the Send verb and a confirmation seat the probe cannot verify
+  // a real send; downgrade to a manual send instead of reporting a fake one.
+  if (typeof submit !== 'function' || typeof confirm !== 'function') return false
+  let pressed = false
+  for (let attempt = 0; attempt <= retries && !pressed; attempt += 1) {
     const state = access.readInput(sessionId)
     if (state !== undefined && state.phase === 'plain' && chipForRef(state, referenceId) !== undefined) {
       try {
         submit()
-        return true
+        pressed = true
       } catch {
         return false
       }
+      break
     }
     if (attempt === retries) break
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  if (!pressed) return false
+  // The send path is asynchronous (the chip codec serializes before the message
+  // is accepted), so confirm it instead of assuming the click was enough.
+  for (let attempt = 0; attempt <= confirmRetries; attempt += 1) {
+    if (confirm(referenceId)) return true
+    if (attempt === confirmRetries) break
     await new Promise(resolve => setTimeout(resolve, intervalMs))
   }
   return false

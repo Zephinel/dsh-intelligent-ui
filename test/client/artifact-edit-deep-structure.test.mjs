@@ -65,3 +65,13 @@ test('a nested move on a too-deep page gets the dedicated nested-target conflict
   assert.deepEqual(resolved.conflicts.map(conflict => conflict.kind), ['nestedTarget'])
   assert.equal(resolved.conflicts[0].blockId, 'b1')
 })
+
+test('a shallow page over the CST node cap reports a node-limit conflict, never "depth"', () => {
+  const many = Array.from({ length: 210 }, (_, index) => `Text("row ${index}", "sm")`).join(', ')
+  const program = `root = Col([${many}])`
+  const resolved = resolvePendingStructureOperations(program, [op({ op: 'delete', blockId: 'b1' })])
+  assert.deepEqual(resolved.operations, [], 'nothing is sent for an over-cap page')
+  assert.deepEqual(resolved.conflicts.map(conflict => conflict.kind), ['nodeLimit'])
+  // The Host applies the same node cap, so the client conflict matches reality.
+  assert.equal(applyStructureBatch(program, [op({ op: 'delete', blockId: 'b1' })]).ok, false)
+})

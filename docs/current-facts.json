@@ -1,15 +1,17 @@
 {
-  "nodeTotal": 765,
+  "nodeTotal": 799,
   "host": 305,
-  "client": 437,
-  "packaging": 23,
+  "client": 460,
+  "packaging": 34,
   "browserSuites": 9,
-  "artifactEditChecks": 882,
+  "artifactEditChecks": 920,
   "nestedRendererChecks": 75,
+  "imageExportChecks": 76,
   "buildHostKb": 841,
-  "clientJsMb": 3.94,
-  "clientCssKb": 242.6,
+  "clientMb": 4.19,
+  "clientJsMb": 3.95,
+  "clientCssKb": 242.8,
   "packFiles": 65,
-  "packedBytes": 6075330,
-  "unpackedBytes": 13070892
+  "packedBytes": 6079105,
+  "unpackedBytes": 13086571
 }

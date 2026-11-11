@@ -110,6 +110,24 @@ function localBarSource(row: VersionLocalRow): VersionItemSource {
 }
 
 /**
+ * Merge the source label of a duplicate, preferring a client-local specific kind.
+ *
+ * The Host records deterministic style switches and props quick-adjusts as
+ * `struct_` structure revisions without edited blocks, so history alone cannot
+ * tell them apart from a structure operation (and would even label both as a
+ * style switch). The local revision card knows the exact kind, so it wins for
+ * `props`/`style`; every other pair keeps the history label authoritative.
+ * @param existing - source already merged for this revision id.
+ * @param incoming - source of the duplicate row being merged.
+ * @param local - whether the duplicate is a client-local revision card.
+ * @returns the source the bar should display.
+ */
+function mergeSource(existing: VersionItemSource, incoming: VersionItemSource, local: boolean): VersionItemSource {
+  if (!local || (incoming !== 'props' && incoming !== 'style')) return existing
+  return incoming
+}
+
+/**
  * Build the version-bar items.
  *
  * Merges the three sources by revision id, sorts newest first, marks the current
@@ -123,10 +141,11 @@ export function buildVersionItems(input: VersionItemsInput): { readonly items: V
   const merged = new Map<string, VersionItem>()
   const put = (item: VersionItem): void => {
     const existing = merged.get(item.revisionId)
-    // History rows are authoritative for source/time; local/known rows only add
-    // program availability and must not downgrade it.
+    // History rows are authoritative for time; the source keeps a local
+    // specific kind (props/style) over the generic recorded structure label.
     merged.set(item.revisionId, existing === undefined ? item : {
       ...existing,
+      source: mergeSource(existing.source, item.source, item.local),
       createdAt: existing.createdAt ?? item.createdAt,
       hasProgram: existing.hasProgram || item.hasProgram,
       local: existing.local || item.local,
@@ -179,6 +198,9 @@ export function buildVersionItems(input: VersionItemsInput): { readonly items: V
       // item instead of leaving it disabled.
       merged.set(revisionId, {
         ...existing,
+        ...known.localRevision === true
+          ? { source: mergeSource(existing.source, localBarSource({ revisionId, revision: known.revision, kind: known.localRevisionKind, createdAt: 0 }), true) }
+          : {},
         hasProgram: true,
         local: existing.local || known.localRevision === true,
         ...known.title === undefined ? {} : { title: existing.title ?? known.title },

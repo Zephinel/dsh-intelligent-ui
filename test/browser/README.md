@@ -6,7 +6,19 @@ events but not the full DSH Web integration.
 
 - `artifact-edit.e2e.mjs` mounts the production card list with one recorded
   `render_ui` program (the 夏令时与冬令时 sample fixture) and exercises block
-  editing and arrangement: entering edit mode, an empty request list and an
+  editing and arrangement. The current pipeline (scenarios 48–69) also covers
+  the M1 active revision stage (in-place updates, notice rows, frozen-promotion,
+  remount convergence, read-only stage for a frozen card's revision), the M2
+  version bar/thumbnails/FLIP/Details flow, the queue → save → total preview →
+  Apply edit pipeline (atomic structural revision, draft remap and
+  auto-send/manual fallback, conflict blocking, pending-queue reload, deep vs
+  too-deep pages, the 61–64 mapping/cap regressions), the Phase A real-send,
+  attached-draft, nested-Apply and preview-contract fixes (65–68) and the
+  Phase B deletion-fallback/read-only-recovery scenario (69). The historical
+  narrative below keeps the earlier scenario descriptions; the M4-5
+  “preview a structure operation” flow is the pre-pipeline behaviour (every
+  structure operation now enters the pending queue and applies through the
+  total preview). It starts with entering edit mode, an empty request list and an
   always-complete arrangement, opening a popover without creating a request,
   numbered/colour request rows after saving, the hover request card, keyboard
   (↑/↓/Home/End) and pointer-drag reordering with live canvas preview, locate-only
@@ -96,11 +108,12 @@ events but not the full DSH Web integration.
   and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. Scenario 36
   covers the Artifact base-registration lifecycle on legacy cards: opening the editor registers exactly one base with the render call id as the
   revision identity and the rendered program, the registration precedes the first structure request, the old-host 404 degrades without blocking,
-  both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, the legacy footer Adjust fallback rules, unit-tested `struct_` history labelling (E2E does not reopen history), third-pass assertions for contract-correct block/style envelopes (exact tool args, parser marker hardening, order-only title/styleId, temporary additions, unsaved-draft guard), and scenario 40 covers B2 deterministic style switching: capability picker/current row, zero-POST hover/focus preview (article wrapper + template accent), one-POST apply with `operations: []` + target + scope, local style revision card with no composer chip, dirty guard, temporary-base drop, Article targets disabled client-side, `style_missing`/`base_style_mismatch` copy, keyboard/a11y/forced-colors, the capability-off B1 regression, and the review follow-ups: contract-correct style envelope, preview-on-open suppression, style_missing/blocked-Apply/mismatch copy and client-side Article gating. 566 checks; no real
-  model is called (the
-  real-model restore/branch, cross-tab lease and nested-edit/nested-order
-  acceptance were run manually against an isolated second DSH Web instance and
-  are recorded in the M3/M4 plans).
+  both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, the legacy footer Adjust fallback rules, unit-tested `struct_` history labelling (E2E does not reopen history), third-pass assertions for contract-correct block/style envelopes (exact tool args, parser marker hardening, order-only title/styleId, temporary additions, unsaved-draft guard), and scenario 40 covers B2 deterministic style switching: capability picker/current row, zero-POST hover/focus preview (article wrapper + template accent), one-POST apply with `operations: []` + target + scope, local style revision card with no composer chip, dirty guard, temporary-base drop, Article targets disabled client-side, `style_missing`/`base_style_mismatch` copy, keyboard/a11y/forced-colors, the capability-off B1 regression, and the review follow-ups: contract-correct style envelope, preview-on-open suppression, style_missing/blocked-Apply/mismatch copy and client-side Article gating.
+  920 checks; no real model is called — the Phase A/B edit-pipeline sends run
+  through the production send path against the harness composer (the real-model
+  restore/branch, cross-tab lease and nested-edit/nested-order acceptance were
+  run manually against an isolated second DSH Web instance and are recorded in
+  the M3/M4 plans).
 
 - `on-demand.e2e.mjs` mounts production plugin slot registration with structural DSH services: arming/cancel commands, tab-scoped hint, draft-safe examples, result adjustment/save, free/legacy replay, metadata-only saving that preserves the source layout, and selected free-template replay across page reload without temporary actions, duplicate/error/pending handling, template management, focus return, zh/en and light/dark/narrow layout. It does not call a real model.
 - `style-theme.e2e.mjs` checks four recorded cards: inline replay independent of the catalog, saved-template themes, light/dark, late/missing/unavailable catalog and recovery.
@@ -116,8 +129,12 @@ events but not the full DSH Web integration.
   bleed, temporary-result theming, free-layout temporary/saved-template PNG capture and the live HTML download. It also checks the menu's right alignment, content width, below-trigger
   fallback and dismissal on scroll. With the follow-up-removal toggle on it also
   proves a mixed Card still appears in the PNG (prose pixels present) while a
-  pure follow-up Card does not (its marker colour is absent). Two `ExportAction` entries are mounted; the one whose Chat selector
-  reports no rendered UI must not add a trigger.
+  pure follow-up Card does not (its marker colour is absent). The revision-notice
+  case exports the active stage card rather than the raw recording, and a
+  notice-only answer whose artifact has no capturable stage shows the concrete
+  cause (no image is downloaded) instead of the generic retry copy. Two
+  `ExportAction` entries are mounted; the one whose Chat selector reports no
+  rendered UI must not add a trigger. 76 assertions.
 
 - `article-layout.e2e.mjs` renders a small Article fixture and measures the
   computed rhythm: Section bodies are nested flows with 12–16px block gaps, and

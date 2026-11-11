@@ -90,6 +90,7 @@ const SNAPSHOT = {
       { kind: 'assistant-step', data: { turn: 1, finalNode: { messageId: VISIBLE_MESSAGE } } },
       { kind: 'assistant-step', data: { turn: 2, finalNode: { messageId: HIDDEN_MESSAGE } } },
       { kind: 'assistant-step', data: { turn: 3, finalNode: { messageId: 'msg-stage' } } },
+      { kind: 'assistant-step', data: { turn: 5, finalNode: { messageId: 'msg-stage-missing' } } },
     ],
     turnDataSource: (turn: number) => ({
       getSnapshot: () => turn === 1
@@ -110,7 +111,16 @@ const SNAPSHOT = {
                 argsRaw: JSON.stringify({ program: STAGE_RAW_PROGRAM, title: 'Raw stage version', style: 'card' }),
               },
             }]
-          : [],
+          : turn === 5
+            ? [{
+                root: {
+                  phase: 'start',
+                  callId: 'missing-stage-call',
+                  name: 'render_ui',
+                  argsRaw: JSON.stringify({ program: MISSING_STAGE_PROGRAM, title: 'Missing stage', style: 'card' }),
+                },
+              }]
+            : [],
     }),
   },
 } as unknown as ExportChatSnapshot
@@ -122,6 +132,21 @@ const PROGRAMS: IntelligentUIProgram[] = [{ callId: 'call-1', program: PROGRAM, 
 const STAGE_ARTIFACT = 'stage-art-1'
 const STAGE_RAW_PROGRAM = 'root = Col([Card([Title("RAW-STAGE-MARKER", "sm")])])'
 const STAGE_SELECTED_PROGRAM = 'root = Col([Card([Title("SELECTED-STAGE-MARKER", "sm"), Text("selected revision body", "sm")])])'
+// A second notice-only Turn whose artifact has no mounted stage: the image
+// export must report the concrete "no capturable stage" cause instead of a
+// generic retry copy.
+const MISSING_STAGE_ARTIFACT = 'missing-stage-art-1'
+const MISSING_STAGE_PROGRAM = 'root = Col([Card([Title("MISSING-STAGE-MARKER", "sm")])])'
+const MISSING_STAGE_PROGRAMS: IntelligentUIProgram[] = [{
+  callId: 'missing-stage-call',
+  program: MISSING_STAGE_PROGRAM,
+  title: 'Missing stage',
+  style: 'card',
+  running: false,
+  artifactId: MISSING_STAGE_ARTIFACT,
+  revisionId: 'missing-stage-art-1-rev-1',
+  revision: 1,
+}]
 const STAGE_PROGRAMS: IntelligentUIProgram[] = [{
   callId: 'stage-raw-call',
   program: STAGE_RAW_PROGRAM,
@@ -285,6 +310,24 @@ function StageExportFixture(): ReactElement {
         sessionId="e2e-session"
         messageId={'msg-stage' as never}
         programsFor={() => STAGE_PROGRAMS}
+        settings={() => SETTINGS}
+        useChat={useChat}
+        t={fallbackT}
+      />
+    </div>
+  </div>
+  <div data-turn-tail="5">
+    <div className="dsh-iui-cards" data-dsh-intelligent-ui-list>
+      <button type="button" className="dsh-iui-revision-notice" data-dsh-iui-revision-notice data-dsh-iui-artifact-id={MISSING_STAGE_ARTIFACT}>
+        Revision notice
+      </button>
+    </div>
+    <div className="harness-actions" data-missing-stage-export style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <ExportAction
+        styles={styles}
+        sessionId="e2e-session"
+        messageId={'msg-stage-missing' as never}
+        programsFor={() => MISSING_STAGE_PROGRAMS}
         settings={() => SETTINGS}
         useChat={useChat}
         t={fallbackT}

@@ -31,6 +31,7 @@ import {
 } from '../../src/shared/artifact-edit.ts'
 import { ARTIFACT_BASE_ROUTE_PATH } from '../../src/shared/artifact-base.ts'
 import { ARTIFACT_STRUCTURE_ROUTE_PATH } from '../../src/shared/artifact-structure.ts'
+import { ARTIFACT_REVISION_ROUTE_PATH } from '../../src/shared/artifact-edit.ts'
 import { applyStructureBatch } from '../../src/host/artifact-structure.ts'
 import { extractArtifactBlocks } from '../../src/shared/artifact-blocks.ts'
 import {
@@ -57,18 +58,21 @@ import {
   enableBranch,
   flushArtifactDraftPersistence,
   hasArtifactEditContent,
+  hasUnsavedArtifactState,
   hydrateArtifactDrafts,
   installArtifactComposerBridge,
   hasModelRequestContent,
   isCurrentStyleTarget,
   moveArtifactBlock,
   moveArtifactBlockBy,
+  moveArtifactNestedBlock,
   noteArtifactChipMissing,
   openArtifactBlockEditor,
   openArtifactEditor,
   pendingStructureOpsFor,
   previewPendingStructureOps,
   probeArtifactRevisionStatus,
+  cancelApplyPreview,
   removePendingStructureOp,
   savePendingStructureOps,
   clearPendingStructureOps,
@@ -80,6 +84,7 @@ import {
   updateArtifactBlockDraft,
   saveArtifactBlockInstruction,
   setArtifactNestedMode,
+  setArtifactPanelDirty,
   serializeArtifactEditRequest,
   setArtifactGlobalInstruction,
   setArtifactStyleEditSupported,
@@ -87,6 +92,7 @@ import {
   setArtifactStyleSwitchTarget,
   supportsBlockEditing,
   undoArtifactRemove,
+  unsentDraftRevisionIds,
 } from '../../src/client/artifact-edit/store.ts'
 import {
   removeArtifactChip,
@@ -941,6 +947,119 @@ note = Text("调整分割线和间距。", "sm", "muted")`
   assert.deepEqual(draftSessionFor(key).selection.map(entry => entry.instruction), ['标题改短'], 'dismissing keeps the draft content')
 })
 
+/** Nested program used by the nested-Apply rebase regression. */
+const NESTED_APPLY_PROGRAM = `root = Col([a, b])
+a = Card([Title("A", "sm"), Text("one", "sm")])
+b = Card([Title("B", "sm"), Text("two", "sm")])`
+
+/** Answer the base, revision and structure routes for the nested Apply test. */
+function stubNestedApplyRoute(program) {
+  const calls = []
+  stubFetch((url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) {
+      return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
+      calls.push(body)
+      const applied = applyStructureBatch(program, body.operations)
+      if (!applied.ok) {
+        return new Response(JSON.stringify({ error: { code: applied.code, message: applied.message } }), { status: 400, headers: { 'content-type': 'application/json' } })
+      }
+      if (body.preview === true) {
+        return new Response(JSON.stringify({
+          ok: true,
+          preview: { program: applied.program, operations: body.operations, changedBlockIds: [...applied.affectedRootBlockIds], touched: [] },
+        }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        result: {
+          artifactId: 'nested-apply', revisionId: 'nested-apply-r2', baseRevisionId: body.baseRevisionId,
+          revision: 2, operationId: body.operationId, program: applied.program, title: '嵌套 Apply 样例', style: 'card',
+        },
+      }), { status: 201, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({
+      artifactId: 'nested-apply', revisionId: 'nested-apply', revision: 1,
+      latestRevisionId: 'nested-apply', latestRevision: 1, conflict: false,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  })
+  return calls
+}
+
+test('Phase A BLOCKER-1: an Apply round keeps nested mode, the nested block table and its order groups', async () => {
+  stubNestedApplyRoute(NESTED_APPLY_PROGRAM)
+  assert.deepEqual(openArtifactEditor('s-nested-apply', {
+    callId: 'nested-apply', program: NESTED_APPLY_PROGRAM, title: '嵌套 Apply 样例', style: 'card', running: false,
+  }), { ok: true })
+  await settleRoute()
+  const key = editKey('s-nested-apply', 'nested-apply')
+  assert.equal(setArtifactNestedMode(key, true), true, 'nested mode opens')
+  const before = draftSessionFor(key)
+  assert.equal(before.nestedMode, true)
+  assert.deepEqual(before.blocks.map(block => block.blockId), ['b1', 'b1.1', 'b1.2', 'b2', 'b2.1', 'b2.2'])
+  saveArtifactBlockInstruction(key, 'b1.1', '改为更短的说明')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b1.2' }])
+
+  const outcome = await applyEditRound(key, 1)
+  assert.equal(outcome.status, 'needSend')
+  const next = draftSessionFor(outcome.newKey)
+  assert.notEqual(next, undefined, 'the draft moved onto the new revision')
+  assert.equal(next.nestedMode, true, 'nested mode survives the rebase')
+  // The nested display table is authoritative: the remapped nested selection
+  // must resolve to a node identity, not a root-only fallback.
+  assert.deepEqual(next.blocks.map(block => block.blockId), ['b1', 'b1.1', 'b2', 'b2.1', 'b2.2'])
+  assert.deepEqual(next.selection.map(entry => [entry.blockId, entry.instruction]), [['b1.1', '改为更短的说明']])
+  // Every parent container keeps a complete order group, changed or not.
+  assert.deepEqual(next.nestedOrder, { b1: ['b1.1'], b2: ['b2.1', 'b2.2'] })
+  assert.deepEqual(next.nestedOriginalOrder, { b1: ['b1.1'], b2: ['b2.1', 'b2.2'] })
+  assert.equal(next.nestedOrderChanged, false)
+  assert.equal(pendingStructureOpsFor(next).length, 0)
+
+  const envelope = await serializeArtifactEditRequest(outcome.referenceId)
+  assert.equal(envelope.ok, true, 'the remapped nested request serializes')
+  assert.equal(envelope.request.edits.length, 1)
+  assert.equal(envelope.request.edits[0].blockId, 'b1.1')
+  assert.equal(envelope.request.edits[0].nodeId, next.blocks.find(block => block.blockId === 'b1.1').nodeId, 'the edit carries the nested CST node id')
+  assert.equal(envelope.request.edits[0].parentBlockId, 'b1')
+  assert.equal(envelope.request.edits[0].depth, 1)
+})
+
+test('Phase A BLOCKER-1: a nested-mode draft rehydrates its nested table, selection and order', async () => {
+  stubNestedApplyRoute(NESTED_APPLY_PROGRAM)
+  assert.deepEqual(openArtifactEditor('s-nested-rehydrate', {
+    callId: 'nested-rehydrate', program: NESTED_APPLY_PROGRAM, title: '嵌套持久化样例', style: 'card', running: false,
+  }), { ok: true })
+  await settleRoute()
+  const key = editKey('s-nested-rehydrate', 'nested-rehydrate')
+  assert.equal(setArtifactNestedMode(key, true), true)
+  saveArtifactBlockInstruction(key, 'b1.2', '嵌套持久化修改')
+  // Swap the second card's children so the pending nested order differs from base.
+  moveArtifactNestedBlock(key, 'b2', 'b2.2', 0)
+  assert.equal(draftSessionFor(key).nestedOrderChanged, true)
+  flushArtifactDraftPersistence()
+  const stored = JSON.parse(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${key}`))
+  assert.equal(stored.nestedMode, true)
+  assert.deepEqual(stored.nestedOrder, { b2: ['b2.2', 'b2.1'] })
+
+  // Reload simulation under a new chat id: the nested table rebuilds from the
+  // program, the changed group is restored and the nested selection survives.
+  const clone = { ...stored, key: `s-nested-reload:${stored.baseRevisionId}`, sessionId: 's-nested-reload' }
+  testStorage.setItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${clone.key}`, JSON.stringify(clone))
+  testStorage.setItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}s-nested-reload`, JSON.stringify([clone.key]))
+  const restored = editSessionFor('s-nested-reload', stored.baseRevisionId)
+  assert.notEqual(restored, undefined, 'the nested draft is not discarded on reload')
+  assert.equal(restored.nestedMode, true)
+  assert.deepEqual(restored.blocks.map(block => block.blockId), ['b1', 'b1.1', 'b1.2', 'b2', 'b2.1', 'b2.2'])
+  assert.deepEqual(restored.selection.map(entry => [entry.blockId, entry.instruction]), [['b1.2', '嵌套持久化修改']])
+  assert.deepEqual(restored.nestedOrder, { b1: ['b1.1', 'b1.2'], b2: ['b2.2', 'b2.1'] })
+  assert.equal(restored.nestedOrderChanged, true)
+  const envelope = await serializeArtifactEditRequest(referenceForSession(clone.key))
+  assert.equal(envelope.ok, true)
+  assert.equal(envelope.request.edits[0].nodeId, restored.blocks.find(block => block.blockId === 'b1.2').nodeId)
+  assert.deepEqual(envelope.request.orderByParent, { [restored.blocks.find(block => block.blockId === 'b2').nodeId]: [restored.blocks.find(block => block.blockId === 'b2.2').nodeId, restored.blocks.find(block => block.blockId === 'b2.1').nodeId] })
+})
+
 /**
  * Minimal composer editor simulator: one detect character per chip. The chip
  * helpers only need occurrence geometry, so the clipboard projection stays out
@@ -1062,7 +1181,7 @@ test('store: the per-chat draft cap rejects a seventh draft', async () => {
   assert.deepEqual(openArtifactEditor('m3', programFor('call_cap6')), { ok: false, reason: 'limit' })
   assert.equal(draftSessionsFor('m3').length, 6)
 
-  discardDraft(editKey('m3', 'call_cap0'))
+  discardDraft(editKey('m3', 'call_cap0'), true)
   assert.equal(draftSessionsFor('m3').length, 5)
   assert.deepEqual(openArtifactEditor('m3', programFor('call_cap6')), { ok: true })
 })
@@ -1114,9 +1233,42 @@ test('store: closing keeps a non-empty draft and discards an empty one', async (
   assert.equal(kept.selection.length, 1)
   assert.equal(editingSessionFor('m6'), undefined)
 
-  discardDraft(fullKey)
+  discardDraft(fullKey, true)
   assert.equal(draftSessionFor(fullKey), undefined)
   assert.equal(chip.removes.some(remove => remove.referenceId === `${ARTIFACT_EDIT_SOURCE}:${fullKey}`), true)
+})
+
+test('Phase A MINOR: unsaved panel and popover work joins the unified dirty guard', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-guard', programFor('call_guard'))
+  await settle()
+  const key = editKey('s-guard', 'call_guard')
+  const empty = draftSessionFor(key)
+  assert.equal(hasUnsavedArtifactState(empty), false, 'an empty canvas draft has nothing to protect')
+
+  // Panel-local global text: not in the draft, but revision deletion and discard
+  // must treat it as unsaved work.
+  setArtifactPanelDirty(key, true)
+  assert.equal(hasUnsavedArtifactState(draftSessionFor(key)), true)
+  assert.equal(unsentDraftRevisionIds(new Map([[key, draftSessionFor(key)]]), 's-guard').has('call_guard'), true)
+  discardDraft(key)
+  assert.notEqual(draftSessionFor(key), undefined, 'an unconfirmed discard keeps a draft with panel-local work')
+  discardDraft(key, true)
+  assert.equal(draftSessionFor(key), undefined, 'the confirmed discard removes it')
+
+  // Unsaved popover text: same guard, same discard behaviour.
+  openArtifactEditor('s-guard', programFor('call_guard'))
+  await settle()
+  const popoverKey = editKey('s-guard', 'call_guard')
+  openArtifactBlockEditor(popoverKey, 'b3')
+  updateArtifactBlockDraft(popoverKey, 'b3', '还没保存的说明')
+  assert.equal(draftSessionFor(popoverKey).activeDirty, true)
+  assert.equal(hasUnsavedArtifactState(draftSessionFor(popoverKey)), true)
+  discardDraft(popoverKey)
+  assert.notEqual(draftSessionFor(popoverKey), undefined, 'an unconfirmed discard keeps unsaved popover text')
+  setArtifactPanelDirty(popoverKey, false)
+  discardDraft(popoverKey, true)
+  assert.equal(draftSessionFor(popoverKey), undefined)
 })
 
 test('store: each attached draft has its own chip label and reference', async () => {
@@ -1366,7 +1518,7 @@ test('store: discarding or sending a draft clears its persisted copy and index',
   saveArtifactBlockInstruction(discardKey, 'b3', 'to discard')
   flushArtifactDraftPersistence()
   assert.ok(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${discardKey}`))
-  discardDraft(discardKey)
+  discardDraft(discardKey, true)
   assert.equal(testStorage.getItem(`${ARTIFACT_DRAFT_STORAGE_PREFIX}${discardKey}`), null)
   const discardedIndex = testStorage.getItem(`${ARTIFACT_DRAFT_INDEX_PREFIX}p4`)
   assert.equal(discardedIndex === null || JSON.parse(discardedIndex).length === 0, true)
@@ -2118,6 +2270,36 @@ test('store: total preview shows ops/diff/summary and blocks conflicting deletio
   assert.equal(blocked.conflicts.some(conflict => conflict.kind === 'selection'), true)
 })
 
+test('Phase A MINOR: cancelling a loading Apply preview discards the late dry-run answer', async () => {
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  stubFetch(async (url, body) => {
+    if (url === ARTIFACT_BASE_ROUTE_PATH) {
+      return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH) {
+      await gate
+      const applied = applyStructureBatch(DST_PROGRAM, body.operations)
+      assert.equal(applied.ok, true)
+      return new Response(JSON.stringify({ ok: true, preview: { program: applied.program, operations: body.operations, changedBlockIds: ['b1'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+  })
+  openArtifactEditor('s-cancel-preview', programFor('call_cancel_preview'))
+  await settle()
+  const key = editKey('s-cancel-preview', 'call_cancel_preview')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  const pendingPreview = previewPendingStructureOps(key)
+  await settle()
+  assert.equal(draftSessionFor(key).applyPreview.status, 'loading')
+  cancelApplyPreview(key)
+  assert.equal(draftSessionFor(key).applyPreview, undefined, 'cancel closes the dialog immediately')
+  release()
+  const late = await pendingPreview
+  assert.equal(late, undefined, 'the late answer is dropped instead of returning state')
+  assert.equal(draftSessionFor(key).applyPreview, undefined, 'the late answer cannot reopen the cancelled dialog')
+})
+
 test('store: Apply submits one batch, rebases the model request and rekeys the chip', async () => {
   stubFetch((url, body) => {
     if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200 })
@@ -2166,6 +2348,227 @@ test('store: Apply submits one batch, rebases the model request and rekeys the c
   assert.equal(second.status, 'needSend')
   assert.equal(second.newKey, outcome.newKey)
   assert.equal(typeof second.referenceId, 'string')
+})
+
+test('Phase A MAJOR-2: a normal Send never silently drops an unapplied structure queue', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-send-queue', programFor('call_send_queue'))
+  await settle()
+  const key = editKey('s-send-queue', 'call_send_queue')
+  saveArtifactBlockInstruction(key, 'b3', '保持这个修改')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  assert.equal(pendingStructureOpsFor(draftSessionFor(key)).length, 1)
+
+  const blocked = await serializeArtifactEditRequest(referenceForSession(key))
+  assert.deepEqual(blocked, { ok: false, problem: 'pending_apply' })
+  assert.equal(editProblemMessage('pending_apply'), en['edit.errorPendingApply'])
+  const draft = draftSessionFor(key)
+  assert.equal(draft.status, 'ready', 'the blocked send leaves the draft unsent')
+  assert.equal(draft.submittedAt, undefined)
+  assert.equal(pendingStructureOpsFor(draft).length, 1, 'the queue survives the blocked send')
+  assert.deepEqual(draft.selection.map(entry => entry.blockId), ['b3'], 'the model request survives too')
+
+  // Apply consumes the queue, so the card's follow-up send is allowed.
+  assert.equal(clearPendingStructureOps(key), true)
+  const sent = await serializeArtifactEditRequest(referenceForSession(key))
+  assert.equal(sent.ok, true)
+  assert.equal(draftSessionFor(key).status, 'submitted')
+})
+
+test('Phase A MAJOR-5: a zero-op Apply preview validates the model request contract', async () => {
+  setArtifactStyleEditSupported(true)
+  stubRevision(false)
+  openArtifactEditor('s-preview-mixed', programFor('call_preview_mixed'))
+  await settle()
+  const key = editKey('s-preview-mixed', 'call_preview_mixed')
+  saveArtifactBlockInstruction(key, 'b3', '改标题')
+  setArtifactStyleInstruction(key, '换成更安静的配色')
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.equal(preview.ops.length, 0)
+  assert.deepEqual(preview.conflicts.map(conflict => conflict.kind), ['styleMixed'], 'style/block mix is a preview conflict even with no queued ops')
+  assert.equal(preview.structureReady, true)
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'error', 'a mixed draft is not reported as needSend')
+  assert.deepEqual(result.conflicts.map(conflict => conflict.kind), ['styleMixed'])
+  assert.equal(draftSessionFor(key).status, 'ready', 'the rejected round does not consume the draft')
+  assert.equal(draftSessionFor(key).submittedAt, undefined)
+  setArtifactStyleEditSupported(true)
+})
+
+test('Phase A MAJOR-5: a zero-op Apply preview blocks a stale/conflicting base', async () => {
+  stubRevision(true)
+  openArtifactEditor('s-preview-conflict', programFor('call_preview_conflict'))
+  await settle()
+  const key = editKey('s-preview-conflict', 'call_preview_conflict')
+  assert.equal(draftSessionFor(key).status, 'conflict', 'the revision probe settled on a conflict')
+  saveArtifactBlockInstruction(key, 'b3', '改一下')
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.deepEqual(preview.conflicts.map(conflict => conflict.kind), ['stale'])
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'error', 'a conflicting draft is not auto-submittable')
+  assert.deepEqual(result.conflicts.map(conflict => conflict.kind), ['stale'])
+  assert.equal(draftSessionFor(key).status, 'conflict')
+})
+
+test('Phase A MAJOR-5: a zero-op preview probes a head advance the store has not seen', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-preview-late', programFor('call_preview_late'))
+  await settle()
+  const key = editKey('s-preview-late', 'call_preview_late')
+  saveArtifactBlockInstruction(key, 'b3', '改一下')
+  // The store still believes the draft is ready; the Host has moved on since.
+  stubRevision(true)
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.deepEqual(preview.conflicts.map(conflict => conflict.kind), ['stale'], 'the preview probes the head before offering confirm')
+  assert.equal(draftSessionFor(key).status, 'conflict')
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'error', 'the probed round is not sent')
+  assert.deepEqual(result.conflicts.map(conflict => conflict.kind), ['stale'])
+})
+
+test('Phase A MAJOR-5: closing the canvas during the zero-op probe drops the late preview', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-preview-close-race', programFor('call_preview_close_race'))
+  await settle()
+  const key = editKey('s-preview-close-race', 'call_preview_close_race')
+  saveArtifactBlockInstruction(key, 'b3', '改一下')
+  let releaseProbe
+  const probeResponse = new Promise(resolve => {
+    releaseProbe = () => resolve(new Response(JSON.stringify({ conflict: false, latestRevision: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  })
+  globalThis.fetch = async input => {
+    const url = typeof input === 'string' ? input : String(input?.url ?? '')
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.startsWith(ARTIFACT_REVISION_ROUTE_PATH)) return probeResponse
+    return new Response(JSON.stringify({ ok: false }), { status: 500 })
+  }
+  const pending = previewPendingStructureOps(key)
+  await new Promise(resolve => setTimeout(resolve, 10))
+  closeArtifactEditor(key)
+  releaseProbe()
+  const result = await pending
+  assert.equal(result, undefined, 'the late preview is discarded')
+  assert.equal(draftSessionFor(key)?.editing, false, 'the canvas stays closed')
+  assert.equal(draftSessionFor(key)?.applyPreview, undefined, 'the late preview does not reopen the dialog')
+
+  // An empty-draft close deletes the session, but the generation counter must
+  // keep moving: reopening the same key must not let an old probe collide.
+  stubRevision(false)
+  openArtifactEditor('s-preview-close-empty', programFor('call_preview_close_empty'))
+  await settle()
+  const emptyKey = editKey('s-preview-close-empty', 'call_preview_close_empty')
+  let releaseOld
+  const oldProbe = new Promise(resolve => {
+    releaseOld = () => resolve(new Response(JSON.stringify({ conflict: false, latestRevision: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  })
+  globalThis.fetch = async input => {
+    const url = typeof input === 'string' ? input : String(input?.url ?? '')
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.startsWith(ARTIFACT_REVISION_ROUTE_PATH)) return oldProbe
+    return new Response(JSON.stringify({ ok: false }), { status: 500 })
+  }
+  const oldPending = previewPendingStructureOps(emptyKey)
+  await new Promise(resolve => setTimeout(resolve, 10))
+  closeArtifactEditor(emptyKey)
+  stubRevision(true)
+  openArtifactEditor('s-preview-close-empty', programFor('call_preview_close_empty'))
+  await settle()
+  assert.equal(draftSessionFor(emptyKey)?.status, 'conflict', 'the reopened draft observes the new conflict')
+  saveArtifactBlockInstruction(emptyKey, 'b3', '新内容')
+  const fresh = await previewPendingStructureOps(emptyKey)
+  assert.equal(fresh?.conflicts.some(conflict => conflict.kind === 'stale'), true, 'the fresh preview reports the conflict')
+  releaseOld()
+  const late = await oldPending
+  assert.equal(late, undefined, 'the old preview generation is invalidated')
+  assert.equal(draftSessionFor(emptyKey)?.status, 'conflict', 'the late probe cannot clear the new conflict')
+  assert.equal(draftSessionFor(emptyKey)?.applyPreview?.conflicts.some(conflict => conflict.kind === 'stale'), true, 'the late probe cannot replace the fresh preview')
+})
+
+test('Phase A MAJOR-5: a queue added during the zero-op probe is previewed', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-preview-queue-race', programFor('call_preview_queue_race'))
+  await settle()
+  const key = editKey('s-preview-queue-race', 'call_preview_queue_race')
+  saveArtifactBlockInstruction(key, 'b3', '改一下')
+  let releaseProbe
+  const probeResponse = new Promise(resolve => {
+    releaseProbe = () => resolve(new Response(JSON.stringify({ conflict: false, latestRevision: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  })
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : String(input?.url ?? '')
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+    if (url === ARTIFACT_BASE_ROUTE_PATH) return new Response(JSON.stringify({ ok: true, registered: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.startsWith(ARTIFACT_REVISION_ROUTE_PATH)) return probeResponse
+    if (url === ARTIFACT_STRUCTURE_ROUTE_PATH && body?.preview === true) {
+      return new Response(JSON.stringify({ ok: true, preview: { program: DST_PROGRAM, operations: body.operations, changedBlockIds: ['b8'], touched: [] } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ ok: false }), { status: 500 })
+  }
+  const pending = previewPendingStructureOps(key)
+  await new Promise(resolve => setTimeout(resolve, 10))
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b8' }])
+  releaseProbe()
+  const preview = await pending
+  assert.equal(preview?.status, 'ready')
+  assert.equal(preview?.ops.length, 1, 'the preview switches to the queue that exists now')
+})
+
+test('Phase A MAJOR-5: an empty instruction blocks the Apply preview and the round', async () => {
+  stubRevision(false)
+  putStoredDraft('s-preview-empty', 's-preview-empty:call_preview_empty', {
+    requestId: 'req_emptydraft1',
+    selection: [{ blockId: 'b3', order: 1, instruction: '   ' }],
+  })
+  assert.equal(hydrateArtifactDrafts('s-preview-empty'), 1)
+  const key = 's-preview-empty:call_preview_empty'
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.deepEqual(preview.conflicts.map(conflict => conflict.kind), ['instruction'])
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'error')
+  assert.deepEqual(result.conflicts.map(conflict => conflict.kind), ['instruction'])
+  // The send codec agrees, so preview and send cannot drift.
+  assert.deepEqual(await serializeArtifactEditRequest(referenceForSession(key)), { ok: false, problem: 'empty_instruction' })
+})
+
+test('Phase A MAJOR-5: a temporary-style order-only round is refused before auto-submit', async () => {
+  stubRevision(false)
+  openArtifactEditor('s-preview-temp', programFor('call_preview_temp', { styleSource: 'temporary', temporaryStyle: TEMP_STYLE }))
+  await settle()
+  const key = editKey('s-preview-temp', 'call_preview_temp')
+  moveArtifactBlock(key, 'b5', 0)
+  const preview = await previewPendingStructureOps(key)
+  assert.equal(preview.status, 'ready')
+  assert.deepEqual(preview.conflicts.map(conflict => conflict.kind), ['temporaryOrder'])
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'error')
+  assert.deepEqual(result.conflicts.map(conflict => conflict.kind), ['temporaryOrder'])
+  assert.equal(draftSessionFor(key).submittedAt, undefined)
+})
+
+test('Phase A MAJOR-3: a detached draft stays detached (and never auto-sends) after Apply', async () => {
+  stubNestedApplyRoute(NESTED_APPLY_PROGRAM)
+  assert.deepEqual(openArtifactEditor('s-detach-apply', {
+    callId: 'detach-apply', program: NESTED_APPLY_PROGRAM, title: 'Detached Apply', style: 'card', running: false,
+  }), { ok: true })
+  await settleRoute()
+  const key = editKey('s-detach-apply', 'detach-apply')
+  assert.equal(setArtifactNestedMode(key, true), true, 'nested mode selects the nested child')
+  saveArtifactBlockInstruction(key, 'b1.1', '嵌套修改')
+  assert.equal(noteArtifactChipMissing(referenceForSession(key)), undefined)
+  assert.equal(draftSessionFor(key).attached, false, 'deleting the chip detaches the draft')
+  savePendingStructureOps(key, [{ op: 'delete', blockId: 'b1.2' }])
+  const result = await applyEditRound(key, 1)
+  assert.equal(result.status, 'needSend')
+  const next = draftSessionFor(result.newKey)
+  assert.equal(next.attached, false, 'the detached draft is not silently re-inserted as a chip')
+  assert.deepEqual(next.selection.map(entry => entry.blockId), ['b1.1'])
+  assert.deepEqual(next.pendingOps, undefined, 'the applied queue is consumed')
+  const envelope = await serializeArtifactEditRequest(result.referenceId)
+  assert.equal(envelope.ok, true, 'the detached draft stays serializable, so an explicit attach can send it later')
 })
 
 /** Identity helper for one local revision list (avoids a deep equal on timestamps). */

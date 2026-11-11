@@ -1114,9 +1114,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('${arrangementSelector('b1')}').getAttribute('data-batch-selected')`), 'true', 'the selection follows the reordered row')
   await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已批量调整区块顺序')`, 'batch reorder announcement')
   check((await text('[data-dsh-iui-edit-live]')).includes('已批量调整区块顺序'), true, 'batch reordering is announced')
-  const batchChip = `[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('调整区块顺序'))`
-  await wait(batchChip, 'batch chip label')
-  check(await read(batchChip), true, 'the composer chip reports the batch reorder')
+  const batchDraftChip = `(() => { const ref = window.__activeDraftReference(); return [...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => el.getAttribute('data-chip-ref') === ref && (el.getAttribute('data-chip-label') ?? '').includes('调整区块顺序')) })()`
+  await wait(batchDraftChip, 'batch chip label')
+  check(await read(batchDraftChip), true, 'the composer chip reports the batch reorder')
   await click('[data-dsh-iui-edit-batch-order="top"]')
   await wait(`document.querySelector('[data-dsh-iui-edit-arrangement-row]').getAttribute('data-block-id') === 'b1'`, 'batch top reorder')
   check((await arrangementOrder()).slice(0, 2), ['b1', 'b2'], 'top restores the selected block to the front')
@@ -1164,7 +1164,16 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await click('[data-dsh-iui-edit-batch-cancel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-batch-bar]")', 'cancel leaves batch mode')
   check((await arrangementOrder()).slice(0, 2), ['b1', 'b2'], 'cancel restores the order snapshot')
-  check((await chipLabel()).includes('调整区块顺序'), false, 'cancel drops the unsent reorder from the chip')
+  // The composer chip label comes from an async draft-store subscription; the
+  // negative assertion must wait for the re-render of this draft's chip instead
+  // of sampling once (two-run flake at this point, review MAJOR-2). Earlier
+  // scenarios leave their own chips in the one chat, so the wait is scoped to
+  // the chip this assertion reads.
+  // Scope the negative assertion to this draft's own chip: earlier scenarios
+  // leave unrelated chips in the one chat, and the first chip may not be ours.
+  const noBatchReorderChip = `(() => { const ref = window.__activeDraftReference(); return ![...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => el.getAttribute('data-chip-ref') === ref && (el.getAttribute('data-chip-label') ?? '').includes('调整区块顺序')) })()`
+  await wait(noBatchReorderChip, 'cancel drops the unsent reorder from the chip', { timeout: 5000 })
+  check(await read(noBatchReorderChip), true, 'cancel drops the unsent reorder from the chip')
   await wait(`document.querySelector('[data-dsh-iui-edit-live]')?.textContent.includes('已取消批量操作并恢复原顺序')`, 'batch cancel announcement')
   check((await text('[data-dsh-iui-edit-live]')).includes('已取消批量操作并恢复原顺序'), true, 'cancelling the batch is announced')
   check(await read(`document.querySelector('[data-dsh-iui-edit-batch-toggle]').getAttribute('aria-pressed')`), 'false', 'cancel clears the pressed state')
@@ -3547,6 +3556,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // request is auto-submitted with new block ids.
   await read('window.__resetCards()')
   await wait('!document.querySelector("[data-dsh-intelligent-ui=\\"card\\"]")', 'cards cleared for the apply round')
+  // Earlier scenarios leave detached drafts/chips in this chat; a real Send would
+  // refuse those stale chips, so this scenario starts from a clean composer.
+  await read('window.__clearEditDrafts()')
+  await wait(`window.__input().occurrences.length === 0`, 'composer cleared before the pipeline scenario')
   const PIPE_PROGRAM = 'root = Col([Title("流水线样例", "md"), Text("第一段", "sm"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])'
   const PIPE_PROGRAM_AFTER = 'root = Col([Title("流水线样例", "md"), Text("第二段", "sm"), Divider(), Text("结尾", "sm")])'
   await read(`window.__addCard('pipeline-call-1', '流水线样例', ${JSON.stringify(PIPE_PROGRAM)})`)
@@ -3598,24 +3611,30 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-apply-model-count]')), '2 项编辑需求', 'pipeline preview names the model edit requests')
   check((await text('[data-dsh-iui-edit-apply-model-global]')).includes('保持风格统一'), true, 'pipeline preview shows the saved global instruction')
   check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '应用并生成', 'a mixed Apply labels its confirm as apply-and-generate')
+  await read('window.__sent = false; window.__sentText = ""')
   await applyPreviewConfirm()
+  await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforePipeline + 1}`, 'pipeline structure revision card')
   await wait(`(window.__submits ?? 0) === ${submitsBefore + 1}`, 'model request auto-submitted')
   await wait(`document.querySelectorAll('[data-dsh-iui-local-revision]').length === ${localBeforePipeline + 1}`, 'pipeline structure revision card')
   await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'submitted'`, 'auto-submit notice on the rekeyed draft')
   check((await text('[data-dsh-iui-edit-apply-notice]')).includes('已发送'), true, 'the notice reports the automatic send')
   check(await count('[data-dsh-iui-edit-pending-op]'), 0, 'the applied structure batch leaves the queue empty')
-  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例 · 修订 2'))`, 'rekeyed chip label')
-  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例 · 修订 2'))`), true, 'the rebuilt chip targets the new revision')
-  check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例') && (el.getAttribute('data-chip-label') ?? '').includes('结构操作'))`), false, 'the rekeyed chip no longer reports consumed operations')
+  // Phase A MAJOR-5: the send is only reported after the send path confirmed it,
+  // so the consumed chip is gone and the actual sent text carries the remapped
+  // request against the new revision.
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'pipeline editor closed after the confirmed send')
+  await wait(`![...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线样例'))`, 'consumed chip removed from the composer')
+  check(await read('window.__sent'), true, 'the send path really ran for the auto-submitted request')
+  const pipelineSent = await read('window.__sentText ?? ""')
+  check(pipelineSent.includes('"baseRevisionId":"pipeline-rev-2"'), true, 'the sent request targets the new revision')
+  check(pipelineSent.includes('"blockId":"b2"'), true, 'the first saved request was remapped onto the new block id')
+  check(pipelineSent.includes('"blockId":"b4"'), true, 'the second saved request was remapped onto the new block id')
+  check(pipelineSent.includes('"blockId":"b3"'), false, 'no saved request keeps its stale block id')
+  check(pipelineSent.includes('保持风格统一'), true, 'the global instruction survives the rebase')
+  check(pipelineSent.includes('Text("第二段", "sm")'), true, 'the request carries the post-structure program')
   check((await read('window.__pipelineCalls')).length, 2, 'the round sends exactly one dry-run and one apply, never a replay')
-  const pipelineEnvelope = await read(`window.__serializeChipMatching('流水线样例')`)
-  check(pipelineEnvelope.includes('"baseRevisionId":"pipeline-rev-2"'), true, 'the serialized request targets the new revision')
-  check(pipelineEnvelope.includes('"blockId":"b2"'), true, 'the first saved request was remapped onto the new block id')
-  check(pipelineEnvelope.includes('"blockId":"b4"'), true, 'the second saved request was remapped onto the new block id')
-  check(pipelineEnvelope.includes('"blockId":"b3"'), false, 'no saved request keeps its stale block id')
-  check(pipelineEnvelope.includes('保持风格统一'), true, 'the global instruction survives the rebase')
-  check(pipelineEnvelope.includes('Text("第二段", "sm")'), true, 'the request carries the post-structure program')
-  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'pipeline editor closed after the send')
+  await click('[data-dsh-iui-edit-apply-notice-dismiss]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-apply-notice]")', 'pipeline notice dismissed')
   await read('window.fetch = window.__pipelineSavedFetch; delete window.__pipelineSavedFetch')
 
   // 58. User prose in the composer keeps the model request manual: the chip and
@@ -3848,6 +3867,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   // first while a saved request sits on the second. The remapped request must
   // stay on the original second block (b3), never on the inserted copy (b2).
   await read('window.__resetCards()')
+  await read('window.__clearEditDrafts()')
+  await wait(`window.__input().occurrences.length === 0`, 'composer cleared before the identical-duplicate scenario')
   const IDENTICAL_PROGRAM = 'root = Col([Text("x"), Text("x")])'
   await read(`window.__addCard('identical-call-1', '同签名样例', ${JSON.stringify(IDENTICAL_PROGRAM)})`)
   await wait('!!document.querySelector(\'[data-dsh-iui-call-id="identical-call-1"]\')', 'identical blocks card')
@@ -3865,12 +3886,15 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const identicalSubmitsBefore = await read('window.__submits ?? 0')
   await applyPreviewOpen()
   check(await count('[data-dsh-iui-edit-apply-conflict]'), 0, 'the identical-text duplicate maps reliably')
+  await read('window.__sent = false; window.__sentText = ""')
   await applyPreviewConfirm()
   await wait(`(window.__submits ?? 0) === ${identicalSubmitsBefore + 1}`, 'identical duplicate auto-submits the model request')
-  const identicalEnvelope = await read(`window.__serializeChipMatching('同签名样例')`)
+  const identicalEnvelope = await read('window.__sentText ?? ""')
   check(identicalEnvelope.includes('"blockId":"b3"'), true, 'the saved request follows the original second block')
   check(identicalEnvelope.includes('"blockId":"b2"'), false, 'the saved request never lands on the duplicated copy')
   check(identicalEnvelope.includes('第二块的需求'), true, 'the request keeps its instruction')
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'submitted'`, 'identical duplicate reports the confirmed send')
+  check(await read('window.__sent'), true, 'the identical duplicate send path really ran')
   await read('window.fetch = window.__identicalPreviousFetch; delete window.__identicalPreviousFetch; delete window.__identicalCalls')
 
   // 64. MAJOR-2 end-to-end: the 21st queued operation is refused with visible
@@ -3903,6 +3927,212 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queue limit queue cleared')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'queue limit editor closed')
+
+  // 65. Phase A BLOCKER-1: a nested-mode draft survives a structure Apply with
+  // its nested table/order, and the remapped nested request stays serializable.
+  await read('window.__clearEditDrafts()')
+  await read('window.__resetCards()')
+  const NESTED_APPLY_PROGRAM_E2E = `root = Col([a, b])
+a = Card([Title("A", "sm"), Text("one", "sm")])
+b = Card([Title("B", "sm"), Text("two", "sm")])`
+  await read(`window.__addCard('nested-apply-e2e', '嵌套应用样例', ${JSON.stringify(NESTED_APPLY_PROGRAM_E2E)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="nested-apply-e2e"]\')', 'nested apply card')
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__nestedApplyCalls', chain: '__nestedApplyPreviousFetch', program: NESTED_APPLY_PROGRAM_E2E,
+    artifactId: 'nested-apply-e2e', title: '嵌套应用样例', revisionId: 'nested-apply-rev-2',
+  }))
+  await click('[data-dsh-iui-call-id="nested-apply-e2e"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'nested apply editor')
+  await click('[data-dsh-iui-edit-nested]')
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-nested-row][data-block-id="b1.2"]')`, 'nested rows after the mode toggle')
+  await clickBlock('b1.1')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-popover]")', 'nested instruction popover')
+  await saveInstruction('嵌套请求保留')
+  await rowMenu('[data-dsh-iui-edit-nested-row][data-block-id="b1.2"]')
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'nested delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'nested delete queued')
+  const nestedSubmitsBefore = await read('window.__submits ?? 0')
+  // Composer prose keeps the remapped nested request manual, so the rekeyed
+  // draft and its nested panel stay inspectable.
+  await read(`window.__appendDraft('先保留这条嵌套说明')`)
+  await applyPreviewOpen('nested apply preview')
+  check(await count('[data-dsh-iui-edit-apply-op]'), 1, 'the nested preview lists the queued delete')
+  await applyPreviewConfirm()
+  await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'nested apply revision card')
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'extraText'`, 'nested apply manual notice')
+  check(await read('window.__submits ?? 0'), nestedSubmitsBefore, 'user prose keeps the nested request manual')
+  check(await count('[data-dsh-iui-edit-request-list]'), 1, 'the nested panel remounts on the rekeyed draft')
+  check((await text('[data-dsh-iui-edit-mode-state]')).includes('嵌套'), true, 'nested mode survives the rebase')
+  check(await count('[data-dsh-iui-edit-nested-row][data-block-id="b1.1"]'), 1, 'the remapped nested selection stays in the nested table')
+  check(await count('[data-dsh-iui-edit-nested-row][data-block-id="b1.2"]'), 0, 'the deleted nested child is gone')
+  check(await count('[data-dsh-iui-edit-nested-row][data-block-id="b2.2"]'), 1, 'an unchanged nested group keeps all of its rows')
+  check((await text('[data-dsh-iui-edit-request-list]')).includes('嵌套请求保留'), true, 'the remapped nested request is listed')
+  const nestedApplyEnvelope = await read(`window.__serializeChipMatching('嵌套应用样例').then(text => text, error => String(error))`)
+  check(nestedApplyEnvelope.includes('"blockId":"b1.1"'), true, 'the nested envelope carries the remapped display id')
+  check(nestedApplyEnvelope.includes('"nodeId"'), true, 'the nested envelope carries the nested CST node id')
+  check(nestedApplyEnvelope.includes('"parentBlockId":"b1"'), true, 'the nested envelope carries its parent block id')
+  check(nestedApplyEnvelope.includes('嵌套请求保留'), true, 'the nested envelope keeps the instruction')
+  check(nestedApplyEnvelope.includes('"baseRevisionId":"nested-apply-rev-2'), true, 'the nested envelope targets the new revision')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'nested editor closed after the manual send')
+  await read(`document.querySelector('[data-dsh-iui-edit-apply-notice-dismiss]')?.click()`)
+  await read('window.fetch = window.__nestedApplyPreviousFetch; delete window.__nestedApplyPreviousFetch; delete window.__nestedApplyCalls')
+
+  // 66. Phase A MAJOR-2: a normal Send never silently drops an unapplied queue.
+  await read('window.__clearEditDrafts()')
+  await read('window.__resetCards()')
+  const SEND_QUEUE_PROGRAM_E2E = 'root = Col([Title("队列发送样例", "md"), Text("一", "sm"), Text("二", "sm")])'
+  await read(`window.__addCard('send-queue-e2e', '队列发送样例', ${JSON.stringify(SEND_QUEUE_PROGRAM_E2E)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="send-queue-e2e"]\')', 'send queue card')
+  await click('[data-dsh-iui-call-id="send-queue-e2e"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'send queue editor')
+  await clickBlock('b2')
+  await saveInstruction('保留的发送修改')
+  await rowMenu(arrangementSelector('b3'))
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'send queue delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'send queue delete queued')
+  const queueSendSubmitsBefore = await read('window.__submits ?? 0')
+  const blockedSend = await read(`window.__serializeChip().then(() => null, error => String(error))`)
+  check(blockedSend.includes('还有未应用的结构操作'), true, 'a normal Send is refused while the queue is pending')
+  check(await read('window.__submits ?? 0'), queueSendSubmitsBefore, 'the refused Send never reaches the send path')
+  check(await count('[data-dsh-iui-edit-pending-op]'), 1, 'the queue survives the refused Send')
+  check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('结构操作 1 项'), true, 'the dock still reports the queued operation')
+  check((await text('[data-chip="artifact-edit"]')).includes('队列发送样例'), true, 'the chip stays in the composer')
+  await click('[data-dsh-iui-edit-pending-clear]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'send queue cleared')
+  const queueClearedSend = await read('window.__serializeChip()')
+  check(queueClearedSend.includes('"blockId":"b2"'), true, 'the cleared draft serializes its saved request')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'send closes after the queue is cleared')
+
+  // 67. Phase A MAJOR-3: Apply preserves a detached draft (no chip, no send).
+  await read('window.__clearEditDrafts()')
+  await read('window.__resetCards()')
+  const DETACH_APPLY_PROGRAM_E2E = 'root = Col([Title("分离应用样例", "md"), Text("一", "sm"), Text("二", "sm")])'
+  await read(`window.__addCard('detach-apply-e2e', '分离应用样例', ${JSON.stringify(DETACH_APPLY_PROGRAM_E2E)})`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="detach-apply-e2e"]\')', 'detached apply card')
+  await read(structureMockScript(structureBridge.url, {
+    calls: '__detachApplyCalls', chain: '__detachApplyPreviousFetch', program: DETACH_APPLY_PROGRAM_E2E,
+    artifactId: 'detach-apply-e2e', title: '分离应用样例', revisionId: 'detach-apply-rev-2',
+  }))
+  await click('[data-dsh-iui-call-id="detach-apply-e2e"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'detached apply editor')
+  await clickBlock('b2')
+  await saveInstruction('分离后仍保留')
+  await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('分离应用样例'))`, 'detached apply chip')
+  await read(`(() => { const item = window.__input().occurrences.find(entry => entry.source === 'artifact-edit' && entry.label.includes('分离应用样例')); if (item) window.__deleteChip(item.ref); return true })()`)
+  await wait('!!document.querySelector("[data-dsh-iui-draft-detached]")', 'detached notice after deleting the chip')
+  await rowMenu(arrangementSelector('b3'))
+  await click('[data-dsh-iui-edit-structure-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-structure-confirm-delete]")', 'detached delete confirmation')
+  await click('[data-dsh-iui-edit-structure-confirm-delete]')
+  await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'detached delete queued')
+  const detachSubmitsBefore = await read('window.__submits ?? 0')
+  await applyPreviewOpen('detached apply preview')
+  await applyPreviewConfirm()
+  await wait('!!document.querySelector("[data-dsh-iui-local-revision]")', 'detached apply revision card')
+  await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'detached'`, 'detached notice for the rekeyed draft')
+  check(await read('window.__submits ?? 0'), detachSubmitsBefore, 'a detached draft never auto-sends')
+  check(await count('[data-chip="artifact-edit"]'), 0, 'no chip is re-inserted for the detached draft')
+  await wait(`!!document.querySelector('[data-dsh-iui-edit-draft-row][data-attached="false"]')`, 'detached draft row in the dock')
+  check((await text('[data-dsh-iui-edit-request-list]')).includes('分离后仍保留'), true, 'the request survived the rebase')
+  await click('[data-dsh-iui-edit-draft-row][data-attached="false"] [data-dsh-iui-edit-draft-attach]')
+  await wait('!!document.querySelector(\'[data-chip="artifact-edit"]\')', 'chip returns after the explicit attach')
+  const detachedEnvelope = await read(`window.__serializeChipMatching('分离应用样例')`)
+  check(detachedEnvelope.includes('"baseRevisionId":"detach-apply-rev-2'), true, 'the attached request targets the new revision')
+  check(detachedEnvelope.includes('分离后仍保留'), true, 'the attached request keeps its instruction')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'detached editor closes after the manual send')
+  await read('window.fetch = window.__detachApplyPreviousFetch; delete window.__detachApplyPreviousFetch; delete window.__detachApplyCalls')
+
+  // 68. Phase A MAJOR-5: a zero-op Apply preview validates the model contract
+  // and disables confirm for a stale base; branch mode clears the blocker.
+  await read('window.__clearEditDrafts()')
+  await read('window.__resetCards()')
+  await read(`window.__addCard('conflict-preview-e2e', '冲突预览样例')`)
+  await wait('!!document.querySelector(\'[data-dsh-iui-call-id="conflict-preview-e2e"]\')', 'conflict preview card')
+  await click('[data-dsh-iui-call-id="conflict-preview-e2e"] [data-dsh-iui-edit-entry]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-view]")', 'conflict preview editor')
+  // Save the model request while the draft is editable, then move the base head
+  // so the same draft becomes a stale conflict.
+  await openArrangementEditor('b3')
+  await saveInstruction('冲突下的修改')
+  await read('window.__conflict = true; window.dispatchEvent(new Event("focus"))')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-conflict]")', 'conflict banner before the preview')
+  await applyPreviewOpen('conflict apply preview')
+  check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'stale')`), true, 'the zero-op preview reports the stale base')
+  check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'the stale conflict disables the confirm button')
+  await applyPreviewCancel()
+  await click('[data-dsh-iui-edit-branch]')
+  await wait('!!document.querySelector("[data-dsh-iui-edit-branch-note]")', 'branch note after turning the conflict into a branch')
+  await applyPreviewOpen('branch apply preview')
+  check(await count('[data-dsh-iui-edit-apply-conflict]'), 0, 'a branch draft has no stale conflict in the preview')
+  await applyPreviewCancel()
+  await read('window.__conflict = false')
+  await click('[data-dsh-iui-edit-exit-panel]')
+  await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'conflict preview editor closed')
+  await read('window.__clearEditDrafts()')
+
+  // 69. Phase B MAJOR-4: deleting the displayed old revision selects the
+  // rollback target named by the confirmation (not the newer latest revision),
+  // the stage is read-only while it displays that fallback target, and selecting
+  // another revision restores editing instead of keeping the card read-only.
+  await read('window.__setArtifactStageEnabled(true)')
+  await read('window.__resetCards()')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card]")', 'fallback-selection stage cleared')
+  await read('window.scrollTo(0, 0)')
+  const FS_V1 = 'root = Col([Card([Title("回退选择旧版", "sm")])])'
+  const FS_V2 = 'root = Col([Card([Title("回退选择当前版", "sm")])])'
+  const FS_V3 = 'root = Col([Card([Title("回退选择更新版", "sm")])])'
+  await read(`window.__setHistory('fallback-select', [
+    { revisionId: 'fallback-select-rev-3', revision: 3, baseRevisionId: 'fallback-select-rev-1', title: '回退选择样例', style: 'card', createdAt: 1763200023000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'fallback-select-rev-2', revision: 2, baseRevisionId: 'fallback-select-rev-1', title: '回退选择样例', style: 'card', createdAt: 1763200022000, source: 'edit', hasProgram: true, editedBlockIds: ['b1'] },
+    { revisionId: 'fallback-select-rev-1', revision: 1, title: '回退选择样例', style: 'card', createdAt: 1763200021000, source: 'initial', hasProgram: true },
+  ], { 'fallback-select-rev-1': ${JSON.stringify(FS_V1)}, 'fallback-select-rev-2': ${JSON.stringify(FS_V2)} })`)
+  // The revision-2 card becomes the stage; the revision-3 card stays a notice so
+  // the stage card itself owns the revision this scenario displays and deletes.
+  await read(`window.__appendRevision('fallback-select-call-2', ${JSON.stringify(FS_V2)}, { artifactId: 'fallback-select', revisionId: 'fallback-select-rev-2', revision: 2, baseRevisionId: 'fallback-select-rev-1', editedBlockIds: ['b1'] }, '回退选择样例')`)
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card][data-artifact-id=\\"fallback-select\\"]")', 'fallback selection stage card')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-stage-visible') === 'true'`, 'fallback selection stage visible')
+  await read(`window.__appendRevision('fallback-select-call-3', ${JSON.stringify(FS_V3)}, { artifactId: 'fallback-select', revisionId: 'fallback-select-rev-3', revision: 3, baseRevisionId: 'fallback-select-rev-1', editedBlockIds: ['b1'] }, '回退选择样例')`)
+  await wait(`window.__artifactVersionState('fallback-select').selected === 'fallback-select-rev-3'`, 'newer revision selected after registration')
+  check(await read(`document.querySelector('[data-dsh-iui-stage-card]').getAttribute('data-dsh-iui-call-id')`), 'fallback-select-call-2', 'the revision-2 card keeps the stage while a newer revision is a notice')
+  check(await count('[data-dsh-iui-revision-notice]'), 1, 'the newer revision is one notice row')
+  // Display the old revision 2 through the version bar, then delete it.
+  const fallbackSelectTrigger = '[data-dsh-iui-stage-card] [data-dsh-iui-history-open][data-dsh-iui-version-open="true"]'
+  await click(fallbackSelectTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'fallback selection version bar')
+  await wait('!!document.querySelector(\'[data-dsh-iui-version-item][data-revision="2"]\')', 'fallback selection revision-2 item')
+  await click('[data-dsh-iui-version-item][data-revision="2"]')
+  await wait('!document.querySelector("[data-dsh-iui-version-bar]")', 'fallback selection bar closed')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('回退选择当前版')`, 'stage displays the old revision 2')
+  check(await read(`window.__artifactVersionState('fallback-select').selected`), 'fallback-select-rev-2', 'revision 2 is selected on the stage')
+  await click(fallbackSelectTrigger)
+  await wait('!!document.querySelector("[data-dsh-iui-version-bar]")', 'fallback selection details bar')
+  await click('[data-dsh-iui-version-details]')
+  await wait('!!document.querySelector("[data-dsh-iui-history]")', 'fallback selection details dialog')
+  await wait('!!document.querySelector(`[data-dsh-iui-history-revision="fallback-select-rev-2"] [data-dsh-iui-history-delete]`)', 'fallback selection delete row ready')
+  await click('[data-dsh-iui-history-revision="fallback-select-rev-2"] [data-dsh-iui-history-delete]')
+  await wait('!!document.querySelector("[data-dsh-iui-history-delete-warning]")', 'fallback selection deletion confirmation')
+  check((await text('[data-dsh-iui-history-delete-warning]')).includes('回退到修订 1'), true, 'the confirmation names revision 1 as the rollback target')
+  await click('[data-dsh-iui-history-delete-confirm]')
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('回退选择旧版')`, 'stage follows the documented fallback to revision 1')
+  const fallbackSelectionState = await read(`window.__artifactVersionState('fallback-select')`)
+  check(fallbackSelectionState.selected, 'fallback-select-rev-1', 'MAJOR-4: the deleted displayed revision selects the rollback target, not latest revision 3')
+  check(fallbackSelectionState.latest, 'fallback-select-rev-3', 'the newer revision stays latest')
+  check(fallbackSelectionState.redirected['fallback-select-rev-1'], 'fallback-select-rev-2', 'the fallback record remembers the deleted revision')
+  check(await count('[data-dsh-iui-stage-card]'), 1, 'the fallback keeps exactly one stage card')
+  await wait('!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'fallback target display is read-only')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 0, 'the stage displaying the fallback target is read-only')
+  // Selecting another revision restores the edit entry: the fallback marker only
+  // belongs to the revision the card actually fell back to.
+  await read(`window.__selectArtifactRevision('fallback-select', 'fallback-select-rev-3')`)
+  await wait(`document.querySelector('[data-dsh-iui-stage-card]').textContent.includes('回退选择更新版')`, 'stage switches back to the newer revision')
+  await wait('!!document.querySelector("[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]")', 'selecting another revision restores the edit entry')
+  check(await count('[data-dsh-iui-stage-card] [data-dsh-iui-edit-entry]'), 1, 'MAJOR-4: selecting another revision restores editability (no permanent read-only fallback)')
+  check(await read(`window.__artifactVersionState('fallback-select').stage`), 'fallback-select-call-2', 'the redirected stage card keeps its identity')
+  await read('window.__setArtifactStageEnabled(false)')
 
   console.log(`artifact-edit e2e: ${checks} checks passed`)
 } finally {

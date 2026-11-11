@@ -906,3 +906,94 @@ Local `main` merged `artifact-version-switcher` (fast-forward) and `artifact-bat
 | `npm run test:browser` | PASS; **9/9** suites; `nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS; **65** files, **6,075,330** bytes packed, **13,070,892** bytes unpacked |
 | Structure | both languages present; `npm run check:docs-facts` passes; `git diff --check` passes |
+
+## 2026-11-10 — Phase A review fixes: nested Apply, queued-send blocking, attached preservation, preview contract and honest auto-send
+
+- **Background**: two fresh-context reviewers audited `7f367f9..b62bd5a` and found one blocker plus four majors and several minors; this round fixes the Phase A structure pipeline at the root cause, reproducing every finding with the `/tmp/iui-probe` probes first and locking the fixes with unit tests and E2E.
+- **Nested Apply (blocker)**: `rebaseDraftAfterStructure` rebuilds the nested block table and the complete nested order groups from the resulting program (all parent containers, including unchanged groups) and overlays the remapped pending order; nested mode is kept only when the result still has nested blocks, and a new invariant refuses to create a draft whose remapped selection/addition cannot resolve in the new table. Nested requests therefore always carry `nodeId`/`parentBlockId`; nested mode, order and changed groups are persisted (including `b1.2.1`-shaped ids) so a reload stays serializable. `probe-nested-rebase.mjs` goes from lost nested blocks/order and `invalid` serialization to the complete nested table, complete nestedOrder and an envelope with the nested node id.
+- **Normal Send no longer drops the queue (major)**: `serializeArtifactEditRequest` checks pendingOps before building the request and returns `pending_apply`; a chip Send shows "apply the queue first" and neither calls `markSubmitted` nor drops the draft. `probe-send-queue.mjs` before/after.
+- **Attached semantics and batch cap (major)**: a rebase preserves `oldSession.attached`, only an attached draft upserts a chip or auto-sends, and the attached count (excluding the old draft) is checked before inserting a chip; `composerHasPlainText` removes every reference span by offset before deciding, so sibling chips and their generated separators are not user prose; a detached draft gets its own notice. `probe-detached-rebase.mjs` goes from attached=true to false.
+- **Preview contract and honest auto-send (major)**: one side-effect-free `buildModelRequest` is shared by the send codec and the total Apply preview, so zero-op previews also produce styleMixed/instruction/temporaryOrder/styleUnsupported/invalid/stale conflicts and disable confirm; `applyRound` probes the head before `needSend`; auto-submit first checks sendability and only reports success after the send path confirmed the draft was consumed (`isArtifactEditSubmitted`), otherwise it downgrades to manual instead of faking "submitted". `probe-style-mixed-apply` / `probe-conflict-apply` go from ready/needSend to preview conflicts/apply error.
+- **Minors**: a preview cancelled while loading drops its late answer through a generation token (`probe-cancel-preview`); panel-local work and unsaved popover text join the unified dirty guard; node-budget and depth limits report `nodeLimit`/`depth` separately (a shallow 210-root-Text page no longer claims `depth`; copy and docs updated); post-Apply notices render in the chat-level draft dock so single-card/stage scenarios can see them.
+- **Verification**: Node **779/779** (Host **305**, Client **451**, packaging **23**; 14 new Phase A regressions); `artifact-edit` E2E **909 checks** (new 65–68: nested Apply keeps the nested draft, queued-structure Send blocking, detached draft without re-inserted chip/auto-send, zero-op stale preview disabling confirm; scenarios 57/63 now assert the real sent text), two consecutive green runs; `npm run test:browser` 9/9 (`nested-edit-renderer` 75); pack **65** files **6,077,725** / **13,083,208** bytes; docs-facts and `git diff --check` pass.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; **779/779** Node tests = Host **305** + Client **451** + packaging **23**; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB) |
+| `npm run typecheck` / `npm run test:renderer` | PASS |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **909 checks** (two consecutive runs) |
+| `npm run test:browser` | PASS; **9/9** suites; `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,077,725** bytes packed, **13,083,208** bytes unpacked |
+| Structure | zh/en records aligned; `npm run check:docs-facts` and `git diff --check` pass |
+
+## 2026-11-10 — Phase B review fixes: deletion fallback/read-only recovery, export error copy, version labels, docs and E2E stability
+
+- **Context**: after Phase A a second reviewer pass over the same tree reported one major (deleting the stage's displayed revision picked a fallback that disagreed with the confirmation, and a stage card that itself owned the deleted revision could stay read-only forever) plus minors (the image export swallowed its concrete notice-only error, the version bar mislabelled props revisions, current-state docs still described the old pipeline, the artifact-edit E2E flaked on a second run, the README image count said 66, the browser-suite README carried old counts, the bridge claim was overstated, the 20-operation cap had two implementations, the doc-facts checker only matched bare number fragments, and architecture presented a removed API as current). This round fixes the causes.
+- **Deletion fallback (MAJOR-4)**: `forgetRevisionInState` now selects the prepared rollback target when the deleted revision was the displayed one (instead of silently moving to the latest revision), and `stageProgramFor` synthesizes `fallbackFrom` only while the stage actually displays that fallback target — a card-level marker belongs to the revision the card fell back to and the record marker belongs to the fallback target record, so selecting any other revision drops the read-only state and restores the edit entry. The `/tmp/iui-probe-wt` reproductions (`probe-forget-selection`, `probe-stage-readonly2`) change from "selected r5 + fallbackFrom r2 + stage read-only" to "selected r1 + fallback target read-only + another revision editable".
+- **Image export**: `ExportAction` maps `NO_CAPTURABLE_STAGE_MESSAGE` to a localized concrete message (zh/en `export.state.noticeOnly`) in the menu status and trigger title/`data-status` instead of the generic "export failed, try again", because retrying cannot help; a notice-only answer with no capturable stage downloads nothing. The export E2E asserts the copy and the absence of a download.
+- **Version source**: `version-items.ts` lets a client-local `props`/`style` kind win over the generic Host structure label when merging (a props quick-adjust is recorded as a `struct_` structure revision and used to read "structure", or even "style switch"); the store-known path does the same. Two new unit tests.
+- **Shared cap**: the client queue limit in `remap.ts` now reuses the shared `MAX_ARTIFACT_STRUCTURE_OPERATIONS` (one implementation) with an equality and 20/21 boundary unit test.
+- **E2E stability**: the batch-cancel chip-label negative assertion waits for the re-render instead of sampling one frame; three consecutive runs pass. New scenario 69 locks "display an old revision → delete → the stage lands on the rollback target read-only → selecting another revision restores the edit entry".
+- **Docs**: `docs/limitations.md/.en` drop the removed "structural operations directly close the draft (`markSubmitted`)" wording and describe queue → save → total preview → Apply (structure-only Apply closes the draft after recording; mixed Apply keeps the rebased draft and auto-sends or falls back to a manual send; queueing/cancel lose nothing); the README pair, usage pair and architecture pair are synced; the deletion selection/read-only/recovery semantics are documented. The README image count moves 66 → 76; `test/browser/README.md` gains the current stage/version-bar/pipeline coverage and the 920-check count; architecture marks the removed single-operation structure API as history and scopes the bridge claim; `check-doc-facts.mjs` matches numbers in context (Host/Client cannot be swapped), guards the current-pipeline wording, browser-suite README counts and the image count, and gains 9 failure-case unit tests.
+- **Tests**: Node +15 (artifact-version +3, version-items +2, artifact-edit-remap +1, doc-facts-guard +9); the `artifact-edit` E2E grows 909 → **920 checks**; image export 72 → **76** assertions.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; Node **794/794** = Host **305** + Client **457** + packaging **32**; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB) |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **920 checks**, two consecutive runs |
+| `npm run test:browser` | PASS; **9/9** suites; image export 76 assertions, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,078,909** bytes packed, **13,086,153** bytes unpacked |
+| Structure | zh/en records aligned; `npm run check:docs-facts` and `git diff --check` pass |
+
+## 2026-11-10 — Final re-review closeout: zero-op stale probe and measured facts
+
+- **N1 (review finding)**: the new doc-facts failure test moved the real counts to **796/796** Node tests (Host **305**, Client **458**, packaging **33**) and pack **6,079,046** / **13,086,574** bytes; current-facts, README, architecture, CHANGELOG and verification now quote the final measured values.
+- **N2 (zero-op preview staleness race)**: with no queued structure operations, `previewPendingStructureOps` now runs the read-only revision probe first and folds a head advance the store has not observed into a `stale` conflict, disabling confirm; a unit test locks the "advanced only at preview time" path.
+- **N3 (known limitation, pre-existing)**: `additions` (model-added blocks) are not yet part of `PersistedDraft`, so they are lost after a reload; same-session Apply remapping/serialization works and the gap is recorded in architecture.
+- N4: the sticky read-only semantics of the rollback target are kept as documented (selecting another revision restores editing).
+- N5: the E2E structure-mock chip assertion is now scoped to the active draft via `data-chip-ref` (harness `__activeDraftReference()`), so an unrelated leftover chip cannot make it vacuous; early single-chip scenarios still use `chipLabel()`.
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; Node **796/796** = Host **305** + Client **458** + packaging **33**; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB) |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **920 checks**, two consecutive runs |
+| `npm run test:browser` | PASS; **9/9** suites; 76 image-export assertions, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,079,046** bytes packed, **13,086,574** bytes unpacked |
+
+## 2026-11-10 — Final gate false-green, zero-op probe races and docs closeout
+
+- **doc-facts false green (tooling/docs)**: the CLI filtered a `current-facts.json` mismatch out of the failure list, and `verifyFacts` returned early before checking any document, so an inconsistent snapshot still printed ok. The CLI no longer filters that failure, and a temp-root CLI-level regression test now requires `checkDocFacts` to fail on an inconsistent snapshot.
+- **N2 races**: closing the canvas now bumps the preview generation, so a late probe answer cannot write back and reopen the dialog; if a new pending queue appears while the zero-op probe is in flight, the preview re-enters the structure path instead of confirming `ops: [] / structureReady: true`. Both races have unit tests.
+- **N5 correction**: the E2E chip assertion is scoped to the active draft via `data-chip-ref` (harness `__activeDraftReference()`), so the negative assertion is not vacuous; the previous record's N5 wording is corrected.
+- **N3**: the `additions` persistence gap is recorded in the architecture known-gap bullet (pre-existing, not introduced by this pipeline).
+- Final measured gate: Node **799/799** (Host **305**, Client **460**, packaging **34**); `artifact-edit` **920 checks**; image export 76; `test:browser` 9/9; pack **65** files **6,079,092** / **13,086,611** bytes; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB).
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; Node **799/799** = Host **305** + Client **460** + packaging **34** |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **920 checks**, two consecutive runs |
+| `npm run test:browser` | PASS; **9/9** suites; 76 image-export assertions, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,079,092** bytes packed, **13,086,611** bytes unpacked |
+
+## 2026-11-10 — Closeout races, CLI coverage and final facts
+
+- **Empty-draft close/reopen race (review MAJOR)**: the preview generation counter is no longer reset when a draft is removed (discard/close/rebase/submit now only bump it); reopening the same key after an empty-draft close can therefore never collide with an old probe. The close-race test now also asserts that a late old probe cannot clear the reopened session's conflict or replace its fresh preview.
+- **CLI test coverage (review MINOR)**: the testable `runCli(root, io)` now owns the exit code and stderr path, and the temp-root doc-facts test executes the real CLI entry (asserting exit 1 plus the `docs/current-facts.json` failure copy); the Host/Client swap separator set also accepts `/` and `|`.
+- Final measured gate: Node **799/799** (Host **305**, Client **460**, packaging **34**); `artifact-edit` **920 checks**; image export 76; `test:browser` 9/9; pack **65** files **6,079,105** / **13,086,571** bytes; build host **841 kB**, client **4.19 MB** (js 3.95 / CSS 242.8 kB).
+
+### Automated results
+
+| Command / check | Result |
+| --- | --- |
+| `npm run check` | PASS; Node **799/799** = Host **305** + Client **460** + packaging **34** |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS; **920 checks**, two consecutive runs |
+| `npm run test:browser` | PASS; **9/9** suites; 76 image-export assertions, `nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS; **65** files, **6,079,105** bytes packed, **13,086,571** bytes unpacked |

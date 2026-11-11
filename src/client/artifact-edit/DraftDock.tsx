@@ -7,7 +7,7 @@
  * are the same as the former panel section, so composer/edit flows and tests
  * keep working; the dock renders nothing while the chat has no pending drafts.
  */
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -18,7 +18,10 @@ import type { ArtifactEditSession } from './contracts.ts'
 import {
   activateDraft,
   activeDraftKeyFor,
+  applyNoticeMessage,
+  artifactApplyNotices,
   attachDraft,
+  dismissArtifactApplyNotice,
   discardDraft,
   hasArtifactEditContent,
   useArtifactEditStore,
@@ -69,9 +72,39 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
   }, [editStore, sessionId])
   const activeKey = useMemo(() => activeDraftKeyFor(sessionId), [editStore, sessionId])
   const attachedCount = useMemo(() => drafts.filter(draft => draft.attached).length, [drafts])
-  if (drafts.length === 0) return null
+  // Post-Apply notices are chat-scoped: the Apply may have consumed the draft
+  // whose panel showed the notice (auto-submit / quick-props rebase), so render
+  // them here, where the composer keeps the surface mounted.
+  const notices = useMemo(() => artifactApplyNotices(sessionId), [editStore, sessionId])
+  // Deleting a draft that still holds content is a destructive action: the dock
+  // asks for a second click instead of silently dropping the work.
+  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null)
+  if (drafts.length === 0 && notices.length === 0) return null
   const attachBlocked = attachedCount >= MAX_ARTIFACT_BATCH_REQUESTS
-  return (
+  const noticeStrip = notices.length === 0 ? null : (
+    <section className="dsh-iui-draft-dock-notices" aria-label={t('edit.applyNoticeRegion')} data-dsh-iui-edit-apply-notices>
+      {notices.map(entry => (
+        <div
+          key={entry.key}
+          className="dsh-iui-edit-apply-notice"
+          role="status"
+          data-dsh-iui-edit-apply-notice
+          data-notice={entry.notice}
+        >
+          <span className="dsh-iui-edit-apply-notice-text">{applyNoticeMessage(entry.notice)}</span>
+          <button
+            type="button"
+            className="dsh-iui-edit-link"
+            data-dsh-iui-edit-apply-notice-dismiss
+            onClick={() => { dismissArtifactApplyNotice(entry.key) }}
+          >
+            {t('edit.applyNoticeDismiss')}
+          </button>
+        </div>
+      ))}
+    </section>
+  )
+  const draftStrip = drafts.length === 0 ? null : (
     <section className="dsh-iui-draft-dock" aria-label={t('edit.pendingDrafts')} data-dsh-iui-edit-draft-switcher>
       <div className="dsh-iui-draft-dock-head">
         <span className="dsh-iui-draft-dock-title">{t('edit.pendingDrafts')}</span>
@@ -128,11 +161,16 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
                   type="button"
                   className="dsh-iui-edit-draft-action dsh-iui-edit-draft-action-danger"
                   data-dsh-iui-edit-draft-discard
-                  aria-label={`${t('edit.discardDraft')}: ${title}`}
-                  title={t('edit.discardDraft')}
-                  onClick={() => { discardDraft(draft.key) }}
+                  data-confirm={confirmDiscard === draft.key ? 'true' : undefined}
+                  aria-label={`${confirmDiscard === draft.key ? t('edit.discardConfirm') : t('edit.discardDraft')}: ${title}`}
+                  title={confirmDiscard === draft.key ? t('edit.discardConfirm') : t('edit.discardDraft')}
+                  onClick={() => {
+                    if (confirmDiscard !== draft.key) { setConfirmDiscard(draft.key); return }
+                    setConfirmDiscard(null)
+                    discardDraft(draft.key, true)
+                  }}
                 >
-                  <RemixIcon name="delete-bin-line" size={13} />
+                  {confirmDiscard === draft.key ? t('edit.discardConfirm') : <RemixIcon name="delete-bin-line" size={13} />}
                 </button>
               </span>
             </li>
@@ -141,4 +179,5 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
       </ul>
     </section>
   )
+  return <>{noticeStrip}{draftStrip}</>
 }

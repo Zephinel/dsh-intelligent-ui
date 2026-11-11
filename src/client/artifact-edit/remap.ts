@@ -14,6 +14,7 @@
  * every branch without a browser.
  */
 import { NESTED_CONTAINER_TYPES } from '../../shared/artifact-containers.ts'
+import { MAX_ARTIFACT_STRUCTURE_OPERATIONS } from '../../shared/artifact-structure.ts'
 import type { ArtifactEditSelectionView, PendingApplyConflict, PendingStructureOp } from './contracts.ts'
 
 /** Structural subset of one display block the remapper needs. */
@@ -32,8 +33,12 @@ export function isBlockDescendant(blockId: string, ancestorBlockId: string): boo
   return blockId.startsWith(`${ancestorBlockId}.`)
 }
 
-/** Every queued op must stay inside the Host's per-request batch cap. */
-export const MAX_PENDING_STRUCTURE_OPS = 20
+/**
+ * Every queued op must stay inside the Host's per-request batch cap. The value is
+ * shared with the request validator so the client queue and the Host route can
+ * never drift apart.
+ */
+export const MAX_PENDING_STRUCTURE_OPS: number = MAX_ARTIFACT_STRUCTURE_OPERATIONS
 
 /** One queued op's display label data resolved against the old blocks. */
 export function pendingOpBlock(op: PendingStructureOp, blocks: readonly RemapBlock[]): RemapBlock | undefined {

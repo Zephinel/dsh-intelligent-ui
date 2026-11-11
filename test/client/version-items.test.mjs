@@ -47,6 +47,27 @@ test('style-switch structure revisions get their own source token', () => {
   assert.equal(operation.items[0].source, 'structure')
 })
 
+test('a local props kind keeps its specific source over the Host structure label', () => {
+  // A props quick-adjust is recorded by the Host as a `struct_` structure
+  // revision with no edited blocks, which historyBarSource alone would call a
+  // style switch; the client-local card knows it was a props adjustment.
+  const { items } = buildVersionItems({
+    history: [historyRow(2, { revisionId: 'struct_a1b2c3', source: 'structure', editedBlockIds: [] })],
+    local: [{ revisionId: 'struct_a1b2c3', revision: 2, kind: 'props', createdAt: 7 }],
+  })
+  assert.equal(items.length, 1)
+  assert.equal(items[0].source, 'props', 'the local props kind wins over the generic structure label')
+})
+
+test('a store-known props revision upgrades a disabled history row with its kind', () => {
+  const { items } = buildVersionItems({
+    history: [historyRow(2, { revisionId: 'struct_d4e5f6', source: 'structure', editedBlockIds: [], hasProgram: false })],
+    known: new Map([['struct_d4e5f6', { revisionId: 'struct_d4e5f6', revision: 2, localRevision: true, localRevisionKind: 'props' }]]),
+  })
+  assert.equal(items[0].hasProgram, true)
+  assert.equal(items[0].source, 'props', 'the known local kind also keeps the props label')
+})
+
 test('history metadata wins over a local/known duplicate but program availability adds up', () => {
   const { items } = buildVersionItems({
     history: [historyRow(2, { hasProgram: false, createdAt: 42 })],

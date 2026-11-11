@@ -886,3 +886,94 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 | `npm run test:browser` | PASS；**9/9** 套件；`nested-edit-renderer` 75 |
 | `npm run pack:check` | PASS；**65** 个文件，压缩 **6,075,330** 字节，解包 **13,070,892** 字节 |
 | 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — Phase A 复审修复：嵌套 Apply、队列阻塞发送、attached 保留、预览契约与诚实自动发送
+
+- **背景**：两个全新上下文 reviewer 复审 `7f367f9..b62bd5a` 后给出 1 BLOCKER + 4 MAJOR + 若干 MINOR；本轮按根因修 Phase A 核心流水线，所有问题先用 `/tmp/iui-probe` 探针复现，再补单测/E2E。
+- **嵌套 Apply（BLOCKER）**：`rebaseDraftAfterStructure` 按 `result.program` 重建嵌套 block 表与完整 nested order groups（所有父容器，含未变化组），再叠加重映射后的 pending order；仅当结果仍有嵌套块时保留 nestedMode，并新增「selection/additions 必须落在新 block 表」不变量，序列化因此始终带 `nodeId`/`parentBlockId`；嵌套模式、嵌套顺序与变更组进入 sessionStorage（selection 允许 `b1.2.1` 形状），reload 后仍可序列化。`probe-nested-rebase.mjs` 由 blocks 丢嵌套子块 / nestedOrder 丢失 / serialize `invalid` 变为嵌套表完整、nestedOrder 完整、envelope 带嵌套 nodeId。
+- **普通 Send 不再静默丢队列（MAJOR）**：`serializeArtifactEditRequest` 在构建请求前检查 pendingOps，非空返回 `pending_apply`；chip Send 显示「请先应用队列」且不 markSubmitted、不删草稿。`probe-send-queue.mjs` 前后对照。
+- **attached 语义与批次上限（MAJOR）**：rebase 保留 `oldSession.attached`，仅 attached 才 upsert chip / 自动发送，插入前按排除旧草稿的 attached 计数检查上限；`composerHasPlainText` 改为按 offset 移除全部 reference occurrence 后判断剩余正文，多 chip 分隔符不再算用户正文；detached 草稿给出独立 notice。`probe-detached-rebase.mjs` 由 attached=true 变为 false。
+- **预览契约与诚实自动发送（MAJOR）**：从 serialize 抽出无副作用的 `buildModelRequest`，preview 与 apply 共用同一套本地校验；0 op preview 也产出 styleMixed/instruction/temporaryOrder/styleUnsupported/invalid/stale 冲突并禁用 confirm；applyRound 在 needSend 前做权威 revision probe；自动发送先 `checkArtifactEditSendable` 预检，且只在 send 路径确认草稿已被 codec 消费（`isArtifactEditSubmitted`）后返回成功，否则降级手动，不假报「已发送」。`probe-style-mixed-apply` / `probe-conflict-apply` 由 preview ready/apply needSend 变为 preview 冲突/apply error。
+- **MINOR**：预览 loading 取消用 generation token 丢弃晚到响应（`probe-cancel-preview`）；面板本地状态与 popover 未保存说明纳入统一 dirty 守卫；节点预算与层级过深分别报 `nodeLimit`/`depth`（210 个根 Text 的浅页面不再误报 depth，文案与文档同步）；post-Apply notice 移到聊天级 draft dock，单卡/舞台场景可见。
+- **验证**：Node **779/779**（Host **305**、Client **451**、packaging **23**；新增 14 条 Phase A 回归）；`artifact-edit` E2E **909 checks**（新增 65–68：嵌套 Apply 保留嵌套草稿、队列阻塞普通 Send、detached 草稿不重插 chip/不自动发送、0-op 预览 stale 冲突禁用 confirm；场景 57/63 改为断言真实发送文本），连跑 2 次稳定；`npm run test:browser` 9/9（`nested-edit-renderer` 75）；pack **65** files **6,077,725** / **13,083,208** 字节；docs-facts 与 `git diff --check` 通过。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **779/779** = Host **305** + Client **451** + packaging **23**；build host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB） |
+| `npm run typecheck` / `npm run test:renderer` | PASS |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**909 checks**（连跑 2 次） |
+| `npm run test:browser` | PASS；**9/9** 套件；`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,077,725** 字节，解包 **13,083,208** 字节 |
+| 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — Phase B 复审修复：删除回退选择/只读恢复、导出具体错误、版本来源、文档与 E2E 稳定性
+
+- **背景**：Phase A 之后，另一组 reviewer 复审当前树，报告 1 MAJOR（删除 stage 当前显示修订时回退选择与文案不一致、且 stage 卡自身拥有被删修订时可能永久只读）+ 若干 MINOR（图片导出具体错误被吞、版本条 props 来源标签、当前态文档仍写旧流水线语义、E2E 二次跑 flake、图片断言 66、test/browser README 旧计数、bridge 声明过度、20 上限双实现、check-doc-facts 只做数字片段匹配、architecture 旧 API 当现状）。本轮按根因修复。
+- **删除回退（MAJOR-4）**：`forgetRevisionInState` 删除记录后，若被删的正是 selected revision，selected 指向确认文案里的回退目标（不再无声跳到 latest）；`stageProgramFor` 只在 stage 实际显示回退目标时合成 `fallbackFrom`（卡片级标记只属于它回退到的 revision，记录级标记只属于 fallback target 记录），选其他 revision 不再带 readonly 标记、编辑入口恢复。`/tmp/iui-probe-wt` 的 `probe-forget-selection` / `probe-stage-readonly2` 复现路径由「selected r5 + fallbackFrom r2 + stage readOnly」变为「selected r1 + 回退目标显示只读 + 选其他版可编辑」。
+- **图片导出**：`ExportAction` 捕获 `NO_CAPTURABLE_STAGE_MESSAGE` 时显示本地化具体原因（zh/en `export.state.noticeOnly`），触发按钮 title 与 `data-status` 同步，而不是通用「导出失败，请重试」；notice-only 无 stage 的场景不会下载任何文件。导出 E2E 新增断言。
+- **版本来源**：`version-items.ts` 合并时 client-local `props`/`style` kind 覆盖 Host 通用 structure 标签（props 快捷调整在 Host 侧记为 `struct_` 结构修订，原先会显示 structure 甚至 style switch），known 记录路径同样生效；新增 2 条单测。
+- **常量统一**：`remap.ts` 的客户端队列上限改为复用 shared `MAX_ARTIFACT_STRUCTURE_OPERATIONS`（单一实现），新增相等性与 20/21 边界单测。
+- **E2E 稳定性**：批量取消后的 chip label 负向断言改为 `wait`（不再采样单次渲染），连续跑 3 次通过；新增场景 69「选旧版 → 删除 → stage 落在回退目标且只读 → 选另一版恢复编辑入口」。
+- **文档**：`docs/limitations.md/.en` 删除「结构操作直接关闭草稿（markSubmitted）」旧语义，改为「入队 → 保存 → 总预览 Apply；纯结构 Apply 记录修订后关闭，混合 Apply 保留 rebase 草稿并自动发送/手动兜底；排队/取消不丢」；README 中英、usage 中英、architecture 中英同步；删除修订后的选中/只读/恢复语义写入 limitations/usage/architecture。README 图片断言 66 → 76；`test/browser/README.md` 更新当前 stage/版本条/流水线覆盖与 920 checks；architecture 把已删除的单操作结构 API 标为历史并限定 bridge 声明范围；`check-doc-facts.mjs` 改为上下文数字匹配（Host/Client 不可互换）+ 旧文案/浏览器 README/图片计数守卫，并新增 9 条失败用例单测。
+- **测试**：Node +15（artifact-version +3、version-items +2、artifact-edit-remap +1、doc-facts-guard +9）；`artifact-edit` E2E 909 → **920 checks**；图片导出 72 → **76** 条断言。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **794/794** = Host **305** + Client **457** + packaging **32**；build host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB） |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
+| `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,078,909** 字节，解包 **13,086,153** 字节 |
+| 结构 | 中英记录对应；`npm run check:docs-facts` 通过；`git diff --check` 通过 |
+
+## 2026-11-10 — 最终复审收尾：0-op 预览陈旧检测、事实数字与文档修正
+
+- **N1（复审发现）**：新增 doc-facts 失败用例后 Node 实际 **796/796**（Host **305**、Client **458**、packaging **33**），pack **6,079,046** / **13,086,574** 字节；本轮把 current-facts 与 README/architecture/CHANGELOG/verification 同步为最终实测值。
+- **N2（0-op 预览陈旧竞争）**：`previewPendingStructureOps` 在没有排队结构操作时现在会先做只读 revision probe，把 store 尚未观测到的 head 前移折叠为 `stale` 冲突并禁用 confirm；新增单测锁住「只在预览时才前进」的路径。
+- **N3（已知限制，非本轮引入）**：`additions`（模型新增区块）尚未进入 `PersistedDraft`，reload 后不会恢复；同会话内 Apply 重映射/序列化正常，已在 architecture 已知限制记录。
+- N4：回退目标的 sticky 只读语义按文档保留（选另一修订恢复编辑）。
+- N5：E2E 结构 mock 的 chip 断言已按当前草稿的 `data-chip-ref` 限定（harness `__activeDraftReference()`），负向断言不再受其他遗留 chip 影响；早期单 chip 场景仍使用 `chipLabel()`。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **796/796** = Host **305** + Client **458** + packaging **33**；build host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB） |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
+| `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,046** 字节，解包 **13,086,574** 字节 |
+
+## 2026-11-10 — 最终门禁假绿、0-op probe 竞态与文档收尾
+
+- **doc-facts 假绿（工具/文档）**：CLI 曾把 `current-facts.json` 不一致从失败列表中过滤掉，`verifyFacts` 又在校验前 early-return，导致事实快照错误时仍打印 ok。CLI 不再过滤该失败；新增临时根目录的 CLI 级回归测试，事实快照不一致时 `checkDocFacts` 必须返回失败。
+- **N2 竞态**：关闭编辑器时现在会 bump preview generation，晚到的 probe 响应不再写回并重开弹窗；零 op 预览在 probe 期间若出现新的待执行队列，会重新进入结构预览路径，不再把 `ops: [] / structureReady: true` 泄漏给确认按钮。两个竞态各有单测。
+- **N5 修正**：E2E chip 断言已按当前草稿的 `data-chip-ref` 限定（harness `__activeDraftReference()`），负向断言不再 vacuous；上一轮记录中的 N5 描述已更正。
+- **N3**：`additions` 未持久化写入 architecture 的已知缺口条目（既有缺口，非本轮引入）。
+- 最终实测：Node **799/799**（Host **305**、Client **460**、packaging **34**）；`artifact-edit` **920 checks**；图片导出 76；`test:browser` 9/9；pack **65** 文件 **6,079,092** / **13,086,611** 字节；构建 host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **799/799** = Host **305** + Client **460** + packaging **34** |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
+| `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,092** 字节，解包 **13,086,611** 字节 |
+
+## 2026-11-10 — Closeout 竞态、CLI 覆盖与最终数字
+
+- **空草稿关闭→重开竞态（复审 MAJOR）**：preview generation 计数不再随 draft 删除而清零（discard/close/rebase/submit 改为只递增、不 delete），空草稿关闭后同一 key 重开并启动新 preview 时，旧 probe 的 generation 必然过期；扩展关闭竞态单测：旧 probe 晚到后不得清除重开 session 的 conflict，也不得替换新 preview。
+- **CLI 测试覆盖（复审 MINOR）**：抽出可测试的 `runCli(root, io)`（包含退出码与 stderr），doc-facts-guard 的临时根目录测试现在真正执行 CLI 入口并断言 exit 1 与 `docs/current-facts.json` 失败文案；Host/Client 互换分隔符补上 `/`、`|`。
+- 最终实测：Node **799/799**（Host **305**、Client **460**、packaging **34**）；`artifact-edit` **920 checks**；图片导出 76；`test:browser` 9/9；pack **65** 文件 **6,079,105** / **13,086,571** 字节；构建 host **841 kB**、client **4.19 MB**（js 3.95 / CSS 242.8 kB）。
+
+### 自动化结果
+
+| 命令 / 检查 | 本轮结果 |
+| --- | --- |
+| `npm run check` | PASS；Node **799/799** = Host **305** + Client **460** + packaging **34** |
+| `node test/browser/artifact-edit.e2e.mjs` | PASS；**920 checks**，连续 2 次通过 |
+| `npm run test:browser` | PASS；**9/9** 套件；图片导出 76 条断言、`nested-edit-renderer` 75 |
+| `npm run pack:check` | PASS；**65** 个文件，压缩 **6,079,105** 字节，解包 **13,086,571** 字节 |

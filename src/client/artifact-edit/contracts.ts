@@ -116,6 +116,12 @@ export interface ArtifactEditSession {
   readonly activeDraft: string
   /** Whether unsaved popover text differs from the saved instruction. */
   readonly activeDirty: boolean
+  /**
+   * Transient chat-scoped flag: the mounted panel holds work that is not in the
+   * draft yet (unsaved global text, a panel-local structure batch). It is never
+   * persisted; destructive paths read it so local work cannot be lost silently.
+   */
+  readonly panelDirty?: boolean
   readonly globalInstruction: string
   /**
    * Revision-bound natural-language style requirement. When non-empty this
@@ -191,7 +197,7 @@ export interface ApplyRoundResult {
  * queue: sent automatically, left in the composer for a manual Send, or left
  * there because the composer already held user prose.
  */
-export type ApplyOutcomeNotice = 'submitted' | 'manual' | 'extraText' | 'rebaseFailed'
+export type ApplyOutcomeNotice = 'submitted' | 'manual' | 'extraText' | 'detached' | 'rebaseFailed'
 
 /** Result of queueing structure operations (the queue never silently truncates). */
 export type SavePendingOpsResult =
@@ -200,7 +206,7 @@ export type SavePendingOpsResult =
 
 /** Why one queued structure operation blocks Apply until the user fixes it. */
 export interface PendingApplyConflict {
-  readonly kind: 'selection' | 'addition' | 'styleMixed' | 'overlap' | 'duplicate' | 'limit' | 'unresolved' | 'target' | 'order' | 'depth' | 'nestedTarget'
+  readonly kind: 'selection' | 'addition' | 'styleMixed' | 'overlap' | 'duplicate' | 'limit' | 'unresolved' | 'target' | 'order' | 'depth' | 'nestedTarget' | 'nodeLimit' | 'instruction' | 'temporaryOrder' | 'styleUnsupported' | 'invalid' | 'stale'
   /** Block the conflict is about, when it has one. */
   readonly blockId?: string
   /** Human-readable detail for the preview dialog (localized by the view). */
@@ -333,8 +339,8 @@ export interface ArtifactEditActions {
   activateDraft(key: string): void
   /** Attach one detached draft to the next Send (no-op when the batch is full). */
   attachDraft(key: string): void
-  /** Discard one draft of this chat for good. */
-  discardDraft(key: string): void
+  /** Discard one draft of this chat for good (confirmation applies in the dock). */
+  discardDraft(key: string, confirm?: boolean): void
   /** Select (or clear) the deterministic style switch target of the active draft. */
   selectStyleTarget(target: ArtifactStyleTarget | undefined, layout?: RenderLayout): void
   /** Apply the selected deterministic style switch (zero model turn). */
@@ -355,6 +361,8 @@ export interface ArtifactEditActions {
    * because the composer holds user text, or failed (chip kept for manual Send).
    */
   applyRound(): Promise<ApplyRoundResult & { readonly autoSubmit?: ApplyOutcomeNotice }>
+  /** Report whether this panel currently holds unsaved local work. */
+  setPanelDirty(dirty: boolean): void
   /** Dismiss the post-Apply notice. */
   dismissApplyNotice(): void
 }

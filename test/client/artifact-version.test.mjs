@@ -456,8 +456,95 @@ test('H1 residual: a card-level fallbackFrom still wins over the record marker',
   const state = registerAll([card()])
   const record = { ...state.revisions.get('rev-1'), redirectedFrom: 'rev-9' }
   const program = stageProgramFor(
-    { callId: 'card-1', program: 'root = Col([])', running: false, fallbackFrom: 'rev-2' },
+    { callId: 'card-1', program: 'root = Col([])', running: false, revisionId: 'rev-1', fallbackFrom: 'rev-2' },
     record,
   )
   assert.equal(program.fallbackFrom, 'rev-2')
+})
+
+test('deleting the displayed revision selects the prepared fallback target, not the latest revision', () => {
+  // Reviewer reproduction: revisions 1, 2 and 5; the user displays/selects the
+  // old revision 2 (owned by the stage card) and deletes it from the history
+  // dialog. The confirmation names revision 1 as the rollback target, so the
+  // stage must select revision 1 even though revision 5 is newer.
+  let state = registerAll([
+    card({ cardId: 'card-1', revisionId: 'rev-1', revision: 1, turn: 1 }),
+    card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 }),
+    card({ cardId: 'card-3', revisionId: 'rev-5', revision: 5, turn: 5 }),
+  ])
+  state = setStageVisibilityInState(state, true)
+  state = selectRevisionInState(state, 'rev-2')
+  state = forgetRevisionInState(state, 'rev-2', {
+    deletedRevisionId: 'rev-2',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    program: 'root = Col([Title("fallback")])',
+    style: 'card',
+    createdAt: 3,
+  })
+  assert.equal(state.latestRevisionId, 'rev-5', 'the newer revision stays latest')
+  assert.equal(state.selectedRevisionId, 'rev-1', 'the stage selects the documented rollback target')
+  assert.equal(state.revisions.get('rev-1').redirectedFrom, 'rev-2', 'the fallback record remembers the display redirect')
+})
+
+test('deleting a non-displayed revision keeps the current selection', () => {
+  let state = registerAll([
+    card({ cardId: 'card-1', revisionId: 'rev-1', revision: 1, turn: 1 }),
+    card({ cardId: 'card-2', revisionId: 'rev-2', revision: 2, turn: 2 }),
+    card({ cardId: 'card-3', revisionId: 'rev-5', revision: 5, turn: 5 }),
+  ])
+  state = setStageVisibilityInState(state, true)
+  // The stage displays the latest revision; an older revision (not rendered by
+  // any card either) is deleted with a rollback record.
+  assert.equal(state.selectedRevisionId, 'rev-5')
+  state = forgetRevisionInState(state, 'rev-2', {
+    deletedRevisionId: 'rev-2',
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    program: 'root = Col([Title("fallback")])',
+    style: 'card',
+    createdAt: 3,
+  })
+  assert.equal(state.selectedRevisionId, 'rev-5', 'a deletion away from the displayed revision does not move the selection')
+  const displayed = state.revisions.get('rev-5')
+  const unredirected = stageProgramFor(
+    { callId: 'card-2', program: 'root = Col([])', running: false, revisionId: 'rev-1', fallbackFrom: 'rev-2' },
+    displayed,
+  )
+  assert.equal(unredirected.fallbackFrom, undefined, 'the card-level marker does not leak onto a different displayed revision')
+  assert.equal(unredirected.program, displayed.program)
+})
+
+test('a fallback marker only applies while the stage displays the fallback target', () => {
+  // A card redirected rev-2 -> rev-1: displaying rev-1 stays read-only, any
+  // other selected revision restores editing (the documented escape hatch).
+  const fallbackRecord = {
+    revisionId: 'rev-1',
+    artifactId: ARTIFACT,
+    revision: 1,
+    program: 'root = Col([Title("fallback")])',
+    style: 'card',
+    callId: 'card-1',
+    seq: 1,
+    redirectedFrom: 'rev-2',
+  }
+  const otherRecord = { ...fallbackRecord, revisionId: 'rev-5', revision: 5, redirectedFrom: undefined }
+  const redirectedCard = {
+    callId: 'card-1',
+    program: 'root = Col([Title("fallback")])',
+    running: false,
+    artifactId: ARTIFACT,
+    revisionId: 'rev-1',
+    revision: 1,
+    fallbackFrom: 'rev-2',
+  }
+  assert.equal(stageProgramFor(redirectedCard, fallbackRecord).fallbackFrom, 'rev-2', 'the fallback target display is read-only')
+  assert.equal(stageProgramFor(redirectedCard, otherRecord).fallbackFrom, undefined, 'selecting another revision restores editing')
+  // Without a card-level redirect the record marker still protects a stage that
+  // displays the fallback target of a deletion.
+  const plainCard = { callId: 'card-2', program: 'root = Col([])', running: false }
+  assert.equal(stageProgramFor(plainCard, fallbackRecord).fallbackFrom, 'rev-2')
+  assert.equal(stageProgramFor(plainCard, otherRecord).fallbackFrom, undefined)
 })

@@ -62,6 +62,9 @@ import {
   activateDraft as activateArtifactDraft,
   attachDraft as attachArtifactDraft,
   activeDraftKeyFor,
+  checkArtifactEditSendable,
+  draftSessionFor,
+  isArtifactEditSubmitted,
   unsentDraftRevisionIds,
   useArtifactEditStore,
   blocksForProgram,
@@ -106,6 +109,7 @@ import {
   setArtifactGlobalInstruction,
   setArtifactStyleEditSupported,
   setArtifactStyleInstruction,
+  setArtifactPanelDirty,
   reconcileArtifactSubmissions,
   supportsBlockEditing,
   undoArtifactRemove,
@@ -783,13 +787,29 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
     applyRound: async () => {
       const result = await applyEditRound(editKey, turnNumber)
       if (result.status !== 'needSend' || result.referenceId === undefined || result.newKey === undefined) return result
+      const rebased = draftSessionFor(result.newKey)
+      // A detached draft must not send itself: the user removed its chip on
+      // purpose, so the round only leaves the request for an explicit attach and
+      // says so instead of silently doing nothing.
+      if (rebased?.attached !== true) {
+        noteArtifactApplyOutcome(result.newKey, 'detached')
+        return { ...result, autoSubmit: 'detached' as const }
+      }
       const state = readInput?.()
       if (state !== undefined && composerHasPlainText(state)) {
         noteArtifactApplyOutcome(result.newKey, 'extraText')
         return { ...result, autoSubmit: 'extraText' as const }
       }
+      // Only ask the composer to Send a request the chip codec would accept;
+      // otherwise the user keeps the chip and sends after fixing the draft.
+      const sendable = await checkArtifactEditSendable(result.referenceId)
+      if (!sendable.ok) {
+        noteArtifactApplyOutcome(result.newKey, 'manual')
+        return { ...result, autoSubmit: 'manual' as const }
+      }
       const submitted = await requestArtifactAutoSubmit({
         readInput: () => readInput?.(),
+        isSubmitted: referenceId => isArtifactEditSubmitted(referenceId),
         ...(inputActions as { submit?: () => void } | undefined)?.submit === undefined
           ? {}
           : { submit: (inputActions as { submit: () => void }).submit },
@@ -797,11 +817,12 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
       noteArtifactApplyOutcome(result.newKey, submitted ? 'submitted' : 'manual')
       return { ...result, autoSubmit: submitted ? 'submitted' as const : 'manual' as const }
     },
+    setPanelDirty: dirty => { setArtifactPanelDirty(editKey, dirty) },
     dismissApplyNotice: () => { dismissArtifactApplyNotice(editKey) },
     enableBranch: () => { enableArtifactBranch(editKey) },
     activateDraft: key => { activateArtifactDraft(key) },
     attachDraft: key => { attachArtifactDraft(key) },
-    discardDraft: key => { discardArtifactDraft(key) },
+    discardDraft: (key, confirm) => { discardArtifactDraft(key, confirm) },
   }), [editKey, turnNumber, refreshStyleCatalog, readInput, inputActions, sessionId])
 
   // Capture one thumbnail for the revision the stage displays (M2/D9): fonts,

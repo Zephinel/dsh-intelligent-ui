@@ -3905,7 +3905,17 @@
  * No outer card, no enclosed chip cards; one line of drafts, actions on demand.
  * ---------------------------------------------------------------------- */
 
+.dsh-iui-draft-dock-notices {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, calc(var(--dsh-chat-content-width, 748px) + 32px));
+  margin: 0 auto 6px;
+}
+
 .dsh-iui-draft-dock {
+
   box-sizing: border-box;
   display: flex;
   flex-direction: row;

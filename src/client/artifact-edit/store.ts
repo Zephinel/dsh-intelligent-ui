@@ -91,7 +91,7 @@ export type SerializeOutcome =
      * chip whose edit session no longer exists (`stale`). `missing` is reserved
      * for an empty/internal reference that never named a session.
      */
-    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing' | 'temporary_order' | 'style_mixed' | 'style_unsupported'
+    readonly problem: 'empty' | 'empty_instruction' | 'conflict' | 'invalid' | 'stale' | 'missing' | 'temporary_order' | 'style_mixed' | 'style_unsupported' | 'pending_apply'
   }
 
 interface SessionMapSnapshot {
@@ -144,6 +144,25 @@ export function isArtifactStyleEditSupported(): boolean | undefined {
   return styleEditSupported
 }
 
+/**
+ * Whether one draft holds unsaved work that a destructive action must not drop.
+ *
+ * Content lives in the draft; a mounted panel may additionally hold local work
+ * (the unsaved global textarea, a panel-local structure batch) and the popover
+ * may hold unsaved instruction text. Revision deletion, draft discard and Apply
+ * all use this one predicate so no surface can silently bypass another.
+ * @param session - draft to inspect.
+ * @returns true when the draft or its mounted editor has unsaved work.
+ */
+export function hasUnsavedArtifactState(session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction' | 'activeDirty'> & {
+  readonly nestedOrderChanged?: boolean
+  readonly additions?: readonly unknown[]
+  readonly pendingOps?: readonly unknown[]
+  readonly panelDirty?: boolean
+}): boolean {
+  return hasArtifactEditContent(session) || session.activeDirty === true || session.panelDirty === true
+}
+
 /** Whether one draft currently holds unsent edit content. */
 export function hasArtifactEditContent(
   session: Pick<ArtifactEditSession, 'selection' | 'orderChanged' | 'globalInstruction' | 'styleInstruction'> & { readonly nestedOrderChanged?: boolean; readonly pendingOps?: readonly unknown[] },
@@ -180,7 +199,10 @@ export function unsentDraftRevisionIds(
 ): ReadonlySet<string> {
   const ids = new Set<string>()
   for (const session of allSessions.values()) {
-    if (session.sessionId !== sessionId || !isUserDraft(session)) continue
+    if (session.sessionId !== sessionId || session.status === 'submitted') continue
+    // A mounted panel's local work (unsaved global text, a batch draft) and
+    // unsaved popover text are unsaved too: deleting the base would strand them.
+    if (!hasUnsavedArtifactState(session)) continue
     ids.add(session.baseRevisionId)
   }
   return ids
@@ -197,10 +219,10 @@ function draftCount(sessionId: string, excludeKey?: string): number {
 }
 
 /** Count the chat's drafts that currently contribute a composer chip. */
-function attachedDraftCount(sessionId: string): number {
+function attachedDraftCount(sessionId: string, excludeKey?: string): number {
   let count = 0
-  for (const session of sessions.values()) {
-    if (session.sessionId !== sessionId || session.status === 'submitted') continue
+  for (const [key, session] of sessions) {
+    if (key === excludeKey || session.sessionId !== sessionId || session.status === 'submitted') continue
     if (session.attached && hasArtifactEditContent(session)) count += 1
   }
   return count
@@ -260,6 +282,10 @@ interface PersistedDraft {
   readonly styleInstruction?: string
   /** Queued structure operations (task-11); absent on older records. */
   readonly pendingOps?: readonly { readonly id: string; readonly op: 'delete' | 'duplicate' | 'move'; readonly blockId: string; readonly targetParentBlockId?: string; readonly createdAt: number }[]
+  /** Whether the draft was showing nested-container blocks; the tables rebuild from `program`. */
+  readonly nestedMode?: boolean
+  /** Pending nested group orders that differ from the rebuilt base order. */
+  readonly nestedOrder?: Readonly<Record<string, readonly string[]>>
   readonly attached: boolean
 }
 
@@ -328,6 +354,7 @@ function serializePersistedDraft(session: ArtifactEditSession): string | undefin
     if (!isStyleSnapshot(session.temporaryStyle)) return undefined
     if (JSON.stringify(session.temporaryStyle).length > 20_000) return undefined
   }
+  const changedNestedOrder = nestedOrderChanges(session)
   const record: PersistedDraft = {
     key: session.key,
     sessionId: session.sessionId,
@@ -351,6 +378,8 @@ function serializePersistedDraft(session: ArtifactEditSession): string | undefin
     globalInstruction: session.globalInstruction,
     ...session.styleInstruction.trim() === '' ? {} : { styleInstruction: session.styleInstruction },
     ...(session.pendingOps?.length ?? 0) === 0 ? {} : { pendingOps: session.pendingOps },
+    ...session.nestedMode === true ? { nestedMode: true as const } : {},
+    ...changedNestedOrder === undefined ? {} : { nestedOrder: changedNestedOrder },
     attached: session.attached,
   }
   try {
@@ -424,6 +453,26 @@ function removePersistedDraft(key: string, sessionId?: string): void {
   writeDraftIndex(owner, readDraftIndex(owner).filter(candidate => candidate !== key))
 }
 
+/** Display block id grammar shared by persisted selections and nested orders. */
+const DISPLAY_BLOCK_ID = /^b[1-9][0-9]{0,3}(?:\.[1-9][0-9]{0,3}){0,3}$/
+
+/** Read the persisted changed nested groups; undefined for a missing/corrupt value. */
+function readPersistedNestedOrder(value: unknown): Readonly<Record<string, readonly string[]>> | undefined {
+  if (value === undefined) return undefined
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const groups: Record<string, readonly string[]> = {}
+  for (const [parent, children] of Object.entries(value as Record<string, unknown>)) {
+    if (!DISPLAY_BLOCK_ID.test(parent) || !Array.isArray(children)) return undefined
+    const ids: string[] = []
+    for (const child of children) {
+      if (typeof child !== 'string' || !DISPLAY_BLOCK_ID.test(child)) return undefined
+      ids.push(child)
+    }
+    groups[parent] = ids
+  }
+  return Object.keys(groups).length === 0 ? undefined : groups
+}
+
 /** Validate one stored draft record; undefined for corrupt/obsolete data. */
 function readPersistedDraft(raw: string): PersistedDraft | undefined {
   let value: unknown
@@ -479,11 +528,13 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
   for (const entry of record.selection) {
     if (entry === null || typeof entry !== 'object') return undefined
     const candidate = entry as Record<string, unknown>
-    if (typeof candidate.blockId !== 'string' || !/^b[1-9][0-9]{0,3}$/.test(candidate.blockId)) return undefined
+    if (typeof candidate.blockId !== 'string' || !DISPLAY_BLOCK_ID.test(candidate.blockId)) return undefined
     if (typeof candidate.order !== 'number' || !Number.isSafeInteger(candidate.order) || candidate.order < 1) return undefined
     if (typeof candidate.instruction !== 'string') return undefined
     selection.push({ blockId: candidate.blockId, order: candidate.order, instruction: candidate.instruction })
   }
+  if ('nestedMode' in record && record.nestedMode !== undefined && typeof record.nestedMode !== 'boolean') return undefined
+  const nestedOrder = readPersistedNestedOrder(record.nestedOrder)
   return {
     key: record.key,
     sessionId: record.sessionId,
@@ -503,6 +554,8 @@ function readPersistedDraft(raw: string): PersistedDraft | undefined {
     globalInstruction: record.globalInstruction,
     ...styleInstruction === '' ? {} : { styleInstruction },
     ...pendingOps.length === 0 ? {} : { pendingOps },
+    ...record.nestedMode === true ? { nestedMode: true as const } : {},
+    ...nestedOrder === undefined ? {} : { nestedOrder },
     attached: record.attached,
   }
 }
@@ -533,12 +586,31 @@ export function ensureArtifactDraft(key: string): ArtifactEditSession | undefine
   if (extraction.blocks.length === 0) { removePersistedDraft(key, record.sessionId); return undefined }
   const wrappedProgram = wrapProgramForBlockEditing(record.program, extraction)
   if (wrappedProgram === undefined) { removePersistedDraft(key, record.sessionId); return undefined }
+  // A nested-mode draft is restored into its nested block table, so the
+  // persisted nested selection keeps its node identity and stays serializable.
+  const nested = record.nestedMode === true ? nestedBlocksForProgram(record.program) : undefined
+  const blocks = nested === undefined ? extraction.blocks : nested.blocks
   const blockIds = extraction.blocks.map(block => block.blockId)
   if (describeTargetOrderProblem(blockIds, record.targetOrder) !== undefined) {
     removePersistedDraft(key, record.sessionId)
     return undefined
   }
-  const known = new Set(blockIds)
+  let nestedOrder: Record<string, string[]> | undefined
+  let nestedOriginalOrder: Record<string, string[]> | undefined
+  let nestedOrderChanged = false
+  if (nested !== undefined) {
+    nestedOriginalOrder = orderGroups(blocks)
+    nestedOrder = Object.fromEntries(Object.entries(nestedOriginalOrder).map(([parent, ids]) => [parent, [...ids]]))
+    for (const [parent, stored] of Object.entries(record.nestedOrder ?? {})) {
+      const base = nestedOrder[parent]
+      // Only a complete permutation of the current children can be trusted;
+      // a stale/corrupt group falls back to the rebuilt base order.
+      if (base === undefined || stored.length !== base.length || stored.some(id => !base.includes(id))) continue
+      nestedOrder[parent] = [...stored]
+    }
+    nestedOrderChanged = nestedOrdersDiffer(nestedOrder, nestedOriginalOrder)
+  }
+  const known = new Set(blocks.map(block => block.blockId))
   const selection = record.selection
     .filter(entry => known.has(entry.blockId))
     .map(entry => ({ blockId: entry.blockId, order: entry.order, instruction: entry.instruction }))
@@ -555,11 +627,13 @@ export function ensureArtifactDraft(key: string): ArtifactEditSession | undefine
     ...record.styleId === undefined ? {} : { styleId: record.styleId },
     ...record.temporaryStyle === undefined ? {} : { temporaryStyle: record.temporaryStyle },
     program: record.program,
+    ...nested === undefined ? {} : { nestedMode: true as const },
     wrappedProgram,
-    blocks: extraction.blocks,
+    blocks,
     originalOrder: blockIds,
     targetOrder: [...record.targetOrder],
     orderChanged: isReorderedOrder(blockIds, record.targetOrder),
+    ...nestedOrder === undefined ? {} : { nestedOrder, nestedOriginalOrder, nestedOrderChanged },
     selection,
     globalInstruction: record.globalInstruction.slice(0, 4000),
     styleInstruction: styleEditSupported === false ? '' : (record.styleInstruction ?? '').slice(0, MAX_STYLE_INSTRUCTION_CHARS),
@@ -922,12 +996,19 @@ export function attachDraft(key: string): boolean {
 
 /**
  * Discard one draft for good (content, chip and canvas state).
+ *
+ * Unsaved content is never dropped silently: the caller has to pass an explicit
+ * confirmation, so the dock's two-step delete is the only way to lose a draft
+ * that still holds work (draft content or panel-local text).
  * @param key - draft key.
+ * @param confirm - true only after the user explicitly confirmed the discard.
  */
-export function discardDraft(key: string): void {
+export function discardDraft(key: string, confirm = false): void {
   const session = sessions.get(key)
   if (session === undefined) return
+  if (!confirm && hasUnsavedArtifactState(session) && session.status !== 'submitted') return
   const reference = referenceOf(key)
+  nextPreviewGeneration(key)
   sessions.delete(key)
   references.delete(reference)
   if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
@@ -1134,6 +1215,9 @@ export function openArtifactEditor(sessionId: string, program: IntelligentUIProg
 export function closeArtifactEditor(key: string): void {
   const session = sessions.get(key)
   if (session === undefined) return
+  // A preview probe may still be in flight; closing the canvas must drop its
+  // late answer even when the draft survives as a detached draft.
+  nextPreviewGeneration(key)
   if (activeKeys.get(session.sessionId) === key) activeKeys.delete(session.sessionId)
   if (!hasArtifactEditContent(session)) {
     sessions.delete(key)
@@ -1427,6 +1511,25 @@ function orderGroups(blocks: readonly { blockId: string; parentBlockId?: string 
     ;(groups[block.parentBlockId] ??= []).push(block.blockId)
   }
   return groups
+}
+
+/**
+ * Pending nested group orders that differ from the base order.
+ *
+ * Only the changed groups are worth persisting; the base order is rebuilt from
+ * the program on hydrate, so an unchanged group never needs a stored copy.
+ * @param session - draft whose nested arrangement is inspected.
+ * @returns changed groups, or undefined when every group is at its base order.
+ */
+function nestedOrderChanges(session: Pick<ArtifactEditSession, 'nestedMode' | 'nestedOrder' | 'nestedOriginalOrder'>): Record<string, readonly string[]> | undefined {
+  if (session.nestedMode !== true || session.nestedOrder === undefined) return undefined
+  const changed: Record<string, readonly string[]> = {}
+  for (const [parent, ids] of Object.entries(session.nestedOrder)) {
+    const base = session.nestedOriginalOrder?.[parent]
+    if (base !== undefined && base.length === ids.length && base.every((id, index) => id === ids[index])) continue
+    changed[parent] = [...ids]
+  }
+  return Object.keys(changed).length === 0 ? undefined : changed
 }
 
 /** Whether any nested group differs from its base order. */
@@ -1939,22 +2042,24 @@ interface StructureBlockTable {
  * Structure-capable block table for one draft program.
  *
  * The nested display map is authoritative whenever it can be built. When it
- * cannot be built (for example a page nested beyond the supported depth or one
- * over the node cap), fall back to the direct root children of a CST built with
- * the same container whitelist as the Host: their node ids and digests match
- * the Host's tree, so root-level delete/duplicate/move stay resolvable and the
- * preview can report a precise depth conflict instead of claiming the block
- * disappeared. Nested targets are not addressable in fallback mode.
+ * cannot be built without hitting a CST limit, the limit is reported as-is: the
+ * Host applies the same depth/node caps, so an over-cap page has no addressable
+ * structure operations and saying "too deep" for a shallow-but-huge page would
+ * be a lie. When the map fails for any other reason (an unsupported node
+ * elsewhere in the page), fall back to the direct root children of a CST built
+ * with the same container whitelist as the Host: their node ids and digests
+ * match the Host's tree, so root-level delete/duplicate/move stay resolvable.
+ * Nested targets are not addressable in fallback mode.
  * @param program - draft base program.
- * @returns the table, plus whether the page exceeded the supported depth/nodes.
+ * @returns the table, or the CST limit that blocked it.
  */
-function structureBlockTable(program: string): { readonly table?: StructureBlockTable; readonly tooDeep: boolean } {
+function structureBlockTable(program: string): { readonly table?: StructureBlockTable; readonly limit?: 'depth' | 'nodes' } {
   const nested = nestedBlocksForProgram(program)
-  if (nested !== undefined) return { table: { blocks: nested.blocks, rootNodeId: nested.rootNodeId, nested: true }, tooDeep: false }
+  if (nested !== undefined) return { table: { blocks: nested.blocks, rootNodeId: nested.rootNodeId, nested: true } }
   const tree = buildArtifactTree(program, { containerTypes: [...NESTED_CONTAINER_TYPES] })
-  if (tree.limitsExceeded !== undefined) return { tooDeep: true }
+  if (tree.limitsExceeded !== undefined) return { limit: tree.limitsExceeded === 'too_deep' ? 'depth' : 'nodes' }
   const root = tree.nodes.get(tree.rootNodeId)
-  if (root === undefined) return { tooDeep: false }
+  if (root === undefined) return {}
   const blocks: { blockId: string; nodeId: string; sourceDigest: string }[] = []
   let ordinal = 0
   for (const childId of root.children) {
@@ -1964,8 +2069,8 @@ function structureBlockTable(program: string): { readonly table?: StructureBlock
     blocks.push({ blockId: `b${ordinal}`, nodeId: node.nodeId, sourceDigest: node.digest })
   }
   return blocks.length === 0
-    ? { tooDeep: false }
-    : { table: { blocks, rootNodeId: tree.rootNodeId, nested: false }, tooDeep: false }
+    ? {}
+    : { table: { blocks, rootNodeId: tree.rootNodeId, nested: false } }
 }
 
 /**
@@ -1996,17 +2101,20 @@ export function resolvePendingStructureOperations(
   ops: readonly PendingStructureOp[],
 ): { readonly operations: readonly DeterministicOperation[]; readonly conflicts: PendingApplyConflict[] } {
   const conflicts: PendingApplyConflict[] = []
-  const { table, tooDeep } = structureBlockTable(program)
+  const { table, limit } = structureBlockTable(program)
   if (table === undefined) {
-    // The page cannot be read at all (too deep/large, or an unsupported root):
+    // The page cannot be read at all (over a CST limit, or an unsupported root):
     // every op is blocked, and a nested move says why instead of pretending the
-    // block vanished from the revision.
+    // block vanished from the revision. A node-cap page is reported as such,
+    // never as a depth problem.
     return {
       operations: [],
       conflicts: ops.map(op => ({
-        kind: tooDeep
-          ? op.targetParentBlockId !== undefined && op.targetParentBlockId !== 'root' ? 'nestedTarget' : 'depth'
-          : 'unresolved',
+        kind: limit === 'nodes'
+          ? 'nodeLimit'
+          : limit === 'depth'
+            ? op.targetParentBlockId !== undefined && op.targetParentBlockId !== 'root' ? 'nestedTarget' : 'depth'
+            : 'unresolved',
         blockId: op.blockId,
       })),
     }
@@ -2139,41 +2247,102 @@ async function fetchStructureDryRun(
 }
 
 /**
+ * Preview generation per draft.
+ *
+ * A preview that is cancelled (or restarted) while its dry-run is in flight must
+ * not reopen the dialog when the late answer lands: every request captures the
+ * current generation and is allowed to write state only when it is still the
+ * newest one for that key.
+ */
+const previewGenerations = new Map<string, number>()
+
+/** Bump and return the preview generation of one draft. */
+function nextPreviewGeneration(key: string): number {
+  const generation = (previewGenerations.get(key) ?? 0) + 1
+  previewGenerations.set(key, generation)
+  return generation
+}
+
+/** Whether one captured generation is still the newest for its draft. */
+function previewGenerationCurrent(key: string, generation: number): boolean {
+  return previewGenerations.get(key) === generation && sessions.has(key)
+}
+
+/**
  * Build the total Apply preview: queued structure operations, their dry-run
  * diff, the model-request summary and every blocking conflict.
+ *
+ * The model-side contract checks run even with zero queued operations, so the
+ * dialog can disable confirm for a request the send codec would refuse
+ * (style/block mix, empty instruction, temporary-style order-only, stale base).
  * @param key - edit-session key.
  * @returns the preview state stored on the session (also returned for the caller).
  */
 export async function previewPendingStructureOps(key: string): Promise<ApplyPreviewState | undefined> {
   const session = sessions.get(key)
   if (session === undefined || session.status === 'submitted') return undefined
+  const generation = nextPreviewGeneration(key)
   const ops = pendingStructureOpsFor(session)
   const model = modelSummaryOf(session)
   const previewOps = pendingOpPreviews(session)
+  const modelConflicts = modelRequestConflicts(session)
   if (ops.length === 0) {
-    const state: ApplyPreviewState = { status: 'ready', ops: [], model, conflicts: [], structureReady: true }
-    sessions.set(key, { ...session, applyPreview: state })
+    // A model-only round still has to know whether the base moved. The store may
+    // not have observed the head advancement yet, so probe it here (read-only)
+    // and fold a stale conflict into the preview instead of letting the user
+    // confirm against an outdated revision.
+    const probe = await probeRevision(session)
+    if (!previewGenerationCurrent(key, generation)) return undefined
+    const current = sessions.get(key)
+    if (current === undefined) return undefined
+    if (pendingStructureOpsFor(current).length > 0) {
+      // The user queued a structure operation while the probe was in flight;
+      // preview the queue that exists now instead of confirming an empty round.
+      return previewPendingStructureOps(key)
+    }
+    let status = current.status
+    let latestRevision = current.latestRevision
+    if (probe.result === 'conflict' && current.branch !== true) {
+      status = 'conflict'
+      latestRevision = probe.latestRevision ?? latestRevision
+    } else if (probe.result === 'ok' && (current.status === 'checking' || current.status === 'conflict' || current.status === 'error')) {
+      status = 'ready'
+      latestRevision = probe.latestRevision ?? latestRevision
+    }
+    const probed: ArtifactEditSession = { ...current, status, ...latestRevision === undefined ? {} : { latestRevision } }
+    const conflicts = modelRequestConflicts(probed)
+    const state: ApplyPreviewState = { status: 'ready', ops: [], model: modelSummaryOf(probed), conflicts, structureReady: true }
+    sessions.set(key, { ...probed, applyPreview: state })
     publish()
     return state
   }
   const built = pendingWireOperations(session)
-  const loading: ApplyPreviewState = { status: 'loading', ops: previewOps, model, conflicts: built.conflicts, structureReady: built.conflicts.length === 0 }
+  const structureConflicts = [...built.conflicts]
+  const loading: ApplyPreviewState = {
+    status: 'loading',
+    ops: previewOps,
+    model,
+    conflicts: [...modelConflicts, ...structureConflicts],
+    structureReady: structureConflicts.length === 0,
+  }
   sessions.set(key, { ...session, applyPreview: loading })
   publish()
-  if (built.conflicts.length > 0) {
+  if (structureConflicts.length > 0) {
     const state: ApplyPreviewState = { ...loading, status: 'ready' }
     sessions.set(key, { ...sessions.get(key) ?? session, applyPreview: state })
     publish()
     return state
   }
   const dryRun = await fetchStructureDryRun(session, built.operations)
+  if (!previewGenerationCurrent(key, generation)) return undefined
   const current = sessions.get(key)
   if (current === undefined) return undefined
   const remapConflicts = dryRun.ok ? remapConflictsFor(current, dryRun.program) : []
-  const conflicts = [...built.conflicts, ...remapConflicts]
+  const structureReady = dryRun.ok && built.conflicts.length === 0 && remapConflicts.length === 0
+  const conflicts = [...modelConflicts, ...built.conflicts, ...remapConflicts]
   const state: ApplyPreviewState = dryRun.ok
-    ? { status: 'ready', ops: previewOps, model, conflicts, structureReady: conflicts.length === 0, afterProgram: dryRun.program, changedBlockIds: dryRun.changedBlockIds, diff: diffProgramLines(current.program, dryRun.program) }
-    : { status: 'failed', ops: previewOps, model, conflicts: built.conflicts, structureReady: true, error: dryRun.message }
+    ? { status: 'ready', ops: previewOps, model, conflicts, structureReady, afterProgram: dryRun.program, changedBlockIds: dryRun.changedBlockIds, diff: diffProgramLines(current.program, dryRun.program) }
+    : { status: 'failed', ops: previewOps, model, conflicts: [...modelConflicts, ...built.conflicts], structureReady: true, error: dryRun.message }
   sessions.set(key, { ...current, applyPreview: state, structureError: undefined })
   publish()
   return state
@@ -2181,6 +2350,8 @@ export async function previewPendingStructureOps(key: string): Promise<ApplyPrev
 
 /** Close the total Apply preview without applying anything. */
 export function cancelApplyPreview(key: string): void {
+  // Invalidate any in-flight dry-run first: its answer must not reopen the dialog.
+  nextPreviewGeneration(key)
   const session = sessions.get(key)
   if (session === undefined || session.applyPreview === undefined) return
   sessions.set(key, { ...session, applyPreview: undefined })
@@ -2199,6 +2370,40 @@ export function noteArtifactApplyOutcome(key: string, outcome: ApplyOutcomeNotic
   if (session === undefined || session.applyNotice === outcome) return
   sessions.set(key, { ...session, applyNotice: outcome })
   publish()
+}
+
+/** Locale key of one post-Apply notice. */
+export function applyNoticeLocaleKey(notice: ApplyOutcomeNotice): string {
+  switch (notice) {
+    case 'submitted': return 'edit.applyNotice.submitted'
+    case 'manual': return 'edit.applyNotice.manual'
+    case 'extraText': return 'edit.applyNotice.extraText'
+    case 'detached': return 'edit.applyNotice.detached'
+    case 'rebaseFailed': return 'edit.applyNotice.rebaseFailed'
+  }
+}
+
+/** Localized copy of one post-Apply notice. */
+export function applyNoticeMessage(notice: ApplyOutcomeNotice): string {
+  return translate(applyNoticeLocaleKey(notice))
+}
+
+/**
+ * Post-Apply notices waiting for one chat.
+ *
+ * These are chat-scoped on purpose: an Apply (or a quick-props revision) can
+ * consume the draft that owned the mounted panel, so the notice must render on
+ * a surface that survives the card swap instead of only inside the old panel.
+ * @param sessionId - chat session whose notices are listed.
+ * @returns draft key plus notice, in store order.
+ */
+export function artifactApplyNotices(sessionId: string): { readonly key: string; readonly notice: ApplyOutcomeNotice }[] {
+  const notices: { key: string; notice: ApplyOutcomeNotice }[] = []
+  for (const [key, session] of sessions) {
+    if (session.sessionId !== sessionId || session.applyNotice === undefined) continue
+    notices.push({ key, notice: session.applyNotice })
+  }
+  return notices
 }
 
 /** Dismiss the post-Apply notice of one draft. */
@@ -2265,11 +2470,32 @@ function rebaseDraftAfterStructure(
     if (!mapping.reliable) return { ok: false, reason: 'mapping' }
     if (!queueMapped) return { ok: false, reason: 'queue' }
   }
+  // Nested mode owns its own authoritative block table: the display map of the
+  // resulting program, not the root-level extraction. Keeping the root table
+  // would drop every nested child from `blocks`, so a remapped nested selection
+  // could no longer resolve its node identity and the nested UI would vanish.
+  const nestedMode = oldSession.nestedMode === true && nested !== undefined
+  const blocks = nestedMode && nested !== undefined ? nested.blocks : rootExtraction.blocks
   const selection = remapSelection(oldSession.selection, mapping.mapping).selection
   const additions = remapAdditions(oldSession.additions ?? [], mapping.mapping).additions
+  // Invariant of a usable draft: every remapped saved reference must resolve to
+  // a block of the new authoritative table. Otherwise the request could not carry
+  // its node identity (missing nested table) and Apply must not create it.
+  const newBlockIds = new Set(blocks.map(block => block.blockId))
+  if (selection.some(entry => !newBlockIds.has(entry.blockId))
+    || additions.some(addition => !newBlockIds.has(addition.parentBlockId))) {
+    return { ok: false, reason: 'mapping' }
+  }
   const rootIds = rootExtraction.blocks.map(block => block.blockId)
   const target = remapTargetOrder(oldSession.targetOrder, mapping.mapping, rootExtraction.blocks)
-  const nestedState = remapNestedOrder({ nestedOrder: oldSession.nestedOrder, mapping: mapping.mapping, newBlocks })
+  const nestedState = remapNestedOrder({ nestedOrder: oldSession.nestedOrder, mapping: mapping.mapping, newBlocks: blocks })
+  // The pending nested order must cover every parent container, changed or not:
+  // the panel reads it as the authoritative order and a missing group would make
+  // unchanged children unreachable. Changed groups overlay the rebuilt base.
+  const nestedOrder = nestedMode
+    ? Object.fromEntries(Object.entries(nestedState.nestedOriginalOrder).map(([parent, ids]) => [parent, [...(nestedState.nestedOrder[parent] ?? ids)]]))
+    : undefined
+  const nestedOrderChanged = nestedOrder !== undefined && nestedOrdersDiffer(nestedOrder, nestedState.nestedOriginalOrder)
   // A consumed Apply round never replays its operations. A quick-props revision
   // is a different route: the queue is still pending, so remap it onto the new
   // block ids instead of dropping it.
@@ -2291,6 +2517,11 @@ function rebaseDraftAfterStructure(
       })
   const key = editKey(oldSession.sessionId, result.revisionId)
   const reference = referenceForSession(key)
+  // The user's attachment decision survives the rebase: a detached draft stays
+  // out of the next Send (no re-inserted chip, no auto-submit), and an attached
+  // one must still fit the batch cap before its chip is inserted.
+  const attached = oldSession.attached === true
+    && attachedDraftCount(oldSession.sessionId, oldKey) < MAX_ARTIFACT_BATCH_REQUESTS
   const next: ArtifactEditSession = {
     key,
     sessionId: oldSession.sessionId,
@@ -2298,7 +2529,7 @@ function rebaseDraftAfterStructure(
     baseRevisionId: result.revisionId,
     baseRevision: result.revision,
     requestId: newRequestId(),
-    attached: true,
+    attached,
     branch: oldSession.branch ?? false,
     latestRevision: result.revision,
     ...(result.title ?? oldSession.title) === undefined ? {} : { title: result.title ?? oldSession.title },
@@ -2306,14 +2537,14 @@ function rebaseDraftAfterStructure(
     ...result.styleId === undefined ? {} : { styleId: result.styleId },
     ...result.temporaryStyle === undefined ? {} : { temporaryStyle: result.temporaryStyle },
     program: result.program,
-    ...oldSession.nestedMode === true ? { nestedMode: true as const } : {},
+    ...nestedMode ? { nestedMode: true as const } : {},
     ...oldSession.strict === true ? { strict: true as const } : {},
     ...wrappedProgram === undefined ? {} : { wrappedProgram },
-    blocks: rootExtraction.blocks,
+    blocks,
     originalOrder: rootIds,
     targetOrder: target.targetOrder.length === 0 ? rootIds : [...target.targetOrder],
     orderChanged: target.targetOrder.length === 0 ? false : target.orderChanged,
-    ...nestedState.nestedOrderChanged ? { nestedOrder: nestedState.nestedOrder, nestedOriginalOrder: nestedState.nestedOriginalOrder, nestedOrderChanged: true } : {},
+    ...nestedOrder === undefined ? {} : { nestedOrder, nestedOriginalOrder: nestedState.nestedOriginalOrder, nestedOrderChanged },
     selection,
     ...additions.length === 0 ? {} : { additions },
     ...pendingOps.length === 0 ? {} : { pendingOps },
@@ -2418,19 +2649,40 @@ export async function applyEditRound(key: string, turn?: number): Promise<ApplyR
     return { status: 'error', error: translate('edit.structureFailed') }
   }
   const ops = pendingStructureOpsFor(session)
+  // The model side is validated before any Host call, with the same checks the
+  // send codec uses. A model-only round (zero queued operations) must not report
+  // `needSend` for a draft that could never be serialized (style/block mix,
+  // empty instruction, temporary-style order-only, stale head).
+  const modelConflicts = modelRequestConflicts(session)
   if (ops.length === 0) {
+    if (modelConflicts.length > 0) {
+      const state: ApplyPreviewState = { status: 'ready', ops: [], model: modelSummaryOf(session), conflicts: modelConflicts, structureReady: true }
+      sessions.set(key, { ...session, applyPreview: state })
+      publish()
+      return { status: 'error', conflicts: modelConflicts, error: modelConflictMessage(modelConflicts) }
+    }
+    if (!hasModelRequestContent(session)) return { status: 'done' }
+    // Authoritative last check: an edit round may have been opened on a stale
+    // base while the card's status was still settling, so never hand a doomed
+    // request to the auto-submit probe.
+    const probe = await probeRevision(session)
+    if (probe.result === 'conflict' && session.branch !== true) {
+      const current = sessions.get(key) ?? session
+      sessions.set(key, { ...current, status: 'conflict', latestRevision: probe.latestRevision ?? current.latestRevision })
+      publish()
+      return { status: 'error', error: translate('edit.conflictSend'), conflicts: [{ kind: 'stale' }] }
+    }
     // No structure revision is produced, so the draft keeps its key and chip;
     // the card only needs the reference to auto-submit the model request.
-    return hasModelRequestContent(session)
-      ? { status: 'needSend', newKey: key, referenceId: referenceForSession(key) }
-      : { status: 'done' }
+    return { status: 'needSend', newKey: key, referenceId: referenceForSession(key) }
   }
   const built = pendingWireOperations(session)
-  if (built.conflicts.length > 0) {
-    const state: ApplyPreviewState = { status: 'ready', ops: pendingOpPreviews(session), model: modelSummaryOf(session), conflicts: built.conflicts, structureReady: false }
+  const applyConflicts = [...modelConflicts, ...built.conflicts]
+  if (applyConflicts.length > 0) {
+    const state: ApplyPreviewState = { status: 'ready', ops: pendingOpPreviews(session), model: modelSummaryOf(session), conflicts: applyConflicts, structureReady: built.conflicts.length === 0 }
     sessions.set(key, { ...sessions.get(key) ?? session, applyPreview: state })
     publish()
-    return { status: 'error', conflicts: built.conflicts }
+    return { status: 'error', conflicts: applyConflicts, ...modelConflicts.length === 0 ? {} : { error: modelConflictMessage(modelConflicts) } }
   }
   // A total preview the user just confirmed already carries the authoritative
   // dry-run program; capture it before clearing the dialog state below, then
@@ -2980,6 +3232,7 @@ export async function probeArtifactRevisionStatus(key: string): Promise<void> {
 function markSubmitted(key: string): void {
   const session = sessions.get(key)
   if (session === undefined) return
+  nextPreviewGeneration(key)
   sessions.set(key, {
     ...session,
     status: 'submitted',
@@ -3083,28 +3336,21 @@ export function reconcileArtifactSubmissions(
   return restored
 }
 
+/** One draft's model-request envelope, or the local contract problem blocking it. */
+type ModelRequestOutcome =
+  | { readonly ok: true; readonly request: ArtifactEditRequest }
+  | { readonly ok: false; readonly problem: 'empty' | 'empty_instruction' | 'invalid' | 'temporary_order' | 'style_mixed' | 'style_unsupported' }
+
 /**
- * Assemble the structured request for one chip reference and validate it for
- * sending. Called by the composer reference codec; a conflict blocks the send.
- * @param referenceId - chip reference id.
- * @returns the request or a machine-readable problem.
+ * Build the model-request envelope of one draft without any side effect.
+ *
+ * This is the single contract check behind the normal Send and the total Apply
+ * preflight: both call it, so the preview can never disagree with the real send,
+ * and a preview never marks the draft submitted.
+ * @param session - draft whose pending model request is assembled.
+ * @returns the request, or the local problem that blocks it.
  */
-export async function serializeArtifactEditRequest(referenceId: string): Promise<SerializeOutcome> {
-  // An empty reference never named an edit session (internal caller bug);
-  // every other unresolved id is a real chip whose session is gone — stale.
-  if (referenceId.trim() === '') return { ok: false, problem: 'missing' }
-  // A chip restored with the draft arrives before the edit store rehydrates:
-  // the deterministic reference names the draft key, so hydrate it lazily.
-  if (!references.has(referenceId) && referenceId.startsWith(`${ARTIFACT_EDIT_SOURCE}:`)) {
-    ensureArtifactDraft(referenceId.slice(ARTIFACT_EDIT_SOURCE.length + 1))
-  }
-  const key = references.get(referenceId)
-  if (key === undefined) return { ok: false, problem: 'stale' }
-  const session = sessions.get(key)
-  if (session === undefined) return { ok: false, problem: 'stale' }
-  // A consumed draft's chip may survive one more submission attempt when the
-  // composer was busy while the store removed it; never send the same draft twice.
-  if (session.status === 'submitted') return { ok: false, problem: 'stale' }
+function buildModelRequest(session: ArtifactEditSession): ModelRequestOutcome {
   const globalInstruction = session.globalInstruction.trim()
   const styleInstruction = session.styleInstruction.trim()
   if (session.selection.length === 0
@@ -3141,11 +3387,6 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
       program: session.program,
     }
     if (describeEditRequestProblem(styleRequest) !== undefined) return { ok: false, problem: 'invalid' }
-    // Branch drafts are allowed to target an older base; the Host re-validates
-    // the branch on apply. Non-branch drafts keep the strict latest-head guard.
-    const styleProbe = await probeRevision(session)
-    if (styleProbe.result === 'conflict' && session.branch !== true) return { ok: false, problem: 'conflict' }
-    markSubmitted(key)
     return { ok: true, request: styleRequest }
   }
   const edits: ArtifactBlockEdit[] = [...session.selection]
@@ -3218,12 +3459,140 @@ export async function serializeArtifactEditRequest(referenceId: string): Promise
     program: session.program,
   }
   if (describeEditRequestProblem(request) !== undefined) return { ok: false, problem: 'invalid' }
+  return { ok: true, request }
+}
+
+/** Model-side conflict kinds of one local request problem. */
+function modelConflictKindFor(problem: Exclude<ModelRequestOutcome, { ok: true }>['problem']): PendingApplyConflict['kind'] | undefined {
+  switch (problem) {
+    case 'empty_instruction': return 'instruction'
+    case 'style_mixed': return 'styleMixed'
+    case 'style_unsupported': return 'styleUnsupported'
+    case 'temporary_order': return 'temporaryOrder'
+    case 'invalid': return 'invalid'
+    case 'empty': return undefined
+  }
+}
+
+/**
+ * Local (network-free) model-side conflicts of one draft's pending request.
+ *
+ * The total Apply preview and the real Apply round share this check, so a
+ * request the send codec would refuse can never reach the confirm button, and a
+ * model-only Apply cannot report `needSend` for an unsendable draft.
+ * @param session - draft to validate.
+ * @returns conflicts that block Apply until the user fixes the draft.
+ */
+export function modelRequestConflicts(session: ArtifactEditSession): PendingApplyConflict[] {
+  const conflicts: PendingApplyConflict[] = []
+  if (session.status === 'conflict' && session.branch !== true) conflicts.push({ kind: 'stale' })
+  if (!hasModelRequestContent(session)) return conflicts
+  const built = buildModelRequest(session)
+  if (built.ok) return conflicts
+  const kind = modelConflictKindFor(built.problem)
+  if (kind !== undefined) conflicts.push({ kind })
+  return conflicts
+}
+
+/** Localized error copy of one model-side conflict list. */
+function modelConflictMessage(conflicts: readonly PendingApplyConflict[]): string {
+  const kind = conflicts[0]?.kind
+  switch (kind) {
+    case 'stale': return translate('edit.conflictSend')
+    case 'styleMixed': return translate('edit.styleMixed')
+    case 'temporaryOrder': return translate('edit.errorTemporaryOrder')
+    case 'styleUnsupported': return translate('edit.styleUnavailable')
+    default: return translate('edit.errorInvalid')
+  }
+}
+
+/** Problem codes serialize may report. */
+type SerializeProblem = Extract<SerializeOutcome, { ok: false }>['problem']
+
+/** Outcome of the network-checked sendability probe (never consumes the draft). */
+export type SendableOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly problem: SerializeProblem; readonly message: string }
+
+/** Resolve one chip reference to its live, unsent draft. */
+function resolveDraftForReference(referenceId: string): { readonly key: string; readonly session: ArtifactEditSession } | { readonly problem: SerializeProblem } {
+  // An empty reference never named an edit session (internal caller bug);
+  // every other unresolved id is a real chip whose session is gone — stale.
+  if (referenceId.trim() === '') return { problem: 'missing' }
+  // A chip restored with the draft arrives before the edit store rehydrates:
+  // the deterministic reference names the draft key, so hydrate it lazily.
+  if (!references.has(referenceId) && referenceId.startsWith(`${ARTIFACT_EDIT_SOURCE}:`)) {
+    ensureArtifactDraft(referenceId.slice(ARTIFACT_EDIT_SOURCE.length + 1))
+  }
+  const key = references.get(referenceId)
+  if (key === undefined) return { problem: 'stale' }
+  const session = sessions.get(key)
+  if (session === undefined) return { problem: 'stale' }
+  // A consumed draft's chip may survive one more submission attempt when the
+  // composer was busy while the store removed it; never send the same draft twice.
+  if (session.status === 'submitted') return { problem: 'stale' }
+  return { key, session }
+}
+
+/** Local queue/contract problem of one draft, checked before any probe. */
+function localSendProblem(session: ArtifactEditSession): SerializeProblem | undefined {
+  // An unapplied queue must never be dropped by a normal Send: the model
+  // request would be committed and the structure operations would disappear
+  // with the consumed draft. The user has to Apply (or clear) the queue first.
+  if (pendingStructureOpsFor(session).length > 0) return 'pending_apply'
+  const built = buildModelRequest(session)
+  return built.ok ? undefined : built.problem
+}
+
+/**
+ * Check whether one chip reference can be sent right now without consuming it.
+ *
+ * The post-Apply auto-submit asks this before pressing Send: an invalid, mixed,
+ * empty-instruction, queued, stale or conflicting draft downgrades to a manual
+ * send instead of reporting a send that cannot happen.
+ * @param referenceId - chip reference id.
+ * @returns ok, or the exact problem plus its localized message.
+ */
+export async function checkArtifactEditSendable(referenceId: string): Promise<SendableOutcome> {
+  const resolved = resolveDraftForReference(referenceId)
+  if ('problem' in resolved) return { ok: false, problem: resolved.problem, message: editProblemMessage(resolved.problem) }
+  const local = localSendProblem(resolved.session)
+  if (local !== undefined) return { ok: false, problem: local, message: editProblemMessage(local) }
+  // Branch drafts are allowed to target an older base; the Host re-validates
+  // the branch on apply. Non-branch drafts keep the strict latest-head guard.
+  const probe = await probeRevision(resolved.session)
+  if (probe.result === 'conflict' && resolved.session.branch !== true) {
+    return { ok: false, problem: 'conflict', message: editProblemMessage('conflict') }
+  }
+  return { ok: true }
+}
+
+/** Whether one chip reference's draft has actually been consumed by a send. */
+export function isArtifactEditSubmitted(referenceId: string): boolean {
+  const key = references.get(referenceId)
+  return key !== undefined && sessions.get(key)?.status === 'submitted'
+}
+
+/**
+ * Assemble the structured request for one chip reference and validate it for
+ * sending. Called by the composer reference codec; a conflict blocks the send.
+ * @param referenceId - chip reference id.
+ * @returns the request or a machine-readable problem.
+ */
+export async function serializeArtifactEditRequest(referenceId: string): Promise<SerializeOutcome> {
+  const resolved = resolveDraftForReference(referenceId)
+  if ('problem' in resolved) return { ok: false, problem: resolved.problem }
+  const { key, session } = resolved
+  const local = localSendProblem(session)
+  if (local !== undefined) return { ok: false, problem: local }
+  const built = buildModelRequest(session)
+  if (!built.ok) return { ok: false, problem: built.problem }
   // Branch drafts are allowed to target an older base; the Host re-validates
   // the branch on apply. Non-branch drafts keep the strict latest-head guard.
   const probe = await probeRevision(session)
   if (probe.result === 'conflict' && session.branch !== true) return { ok: false, problem: 'conflict' }
   markSubmitted(key)
-  return { ok: true, request }
+  return { ok: true, request: built.request }
 }
 
 /** Open the card that owns one chip reference, if its draft still exists. */
@@ -3247,6 +3616,7 @@ export function editProblemMessage(problem: Extract<SerializeOutcome, { ok: fals
     case 'temporary_order': return t('edit.errorTemporaryOrder')
     case 'style_mixed': return t('edit.styleMixed')
     case 'style_unsupported': return t('edit.styleUnavailable')
+    case 'pending_apply': return t('edit.errorPendingApply')
   }
 }
 
@@ -3309,6 +3679,19 @@ export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' |
   }
   const branchSuffix = session.branch === true ? t('edit.chip.branchSuffix') : ''
   return `${t('edit.entry')} ${title} · ${t('edit.revision', { n: session.baseRevision })} · ${summary}${branchSuffix}`
+}
+
+/**
+ * Record whether the mounted editor of one draft holds unsaved local work.
+ * Cleanup clearing is idempotent, so unmounting cannot leave a stale block.
+ * @param key - edit-session key.
+ * @param dirty - current panel-local dirty flag.
+ */
+export function setArtifactPanelDirty(key: string, dirty: boolean): void {
+  const session = sessions.get(key)
+  if (session === undefined || (session.panelDirty === true) === dirty) return
+  sessions.set(key, { ...session, ...dirty ? { panelDirty: true as const } : { panelDirty: undefined } })
+  publish()
 }
 
 /** Whether any draft of this chat currently contributes a composer chip. */

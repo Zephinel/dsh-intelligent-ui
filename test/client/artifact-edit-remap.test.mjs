@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  MAX_PENDING_STRUCTURE_OPS,
   detectPendingConflicts,
   isBlockDescendant,
   mapOldToNewBlocks,
@@ -14,6 +15,7 @@ import {
   remapSelection,
   remapTargetOrder,
 } from '../../src/client/artifact-edit/remap.ts'
+import { MAX_ARTIFACT_STRUCTURE_OPERATIONS } from '../../src/shared/artifact-structure.ts'
 
 /** One display block fixture. */
 let seq = 0
@@ -109,6 +111,16 @@ test('style instructions and invalid batches block Apply', () => {
   assert.equal(detectPendingConflicts({ ops: [op({ blockId: 'missing' })], blocks, selection: [], styleInstruction: '' }).some(conflict => conflict.kind === 'unresolved'), true)
   const many = Array.from({ length: 21 }, (_, index) => op({ blockId: `b${index + 1}` }))
   assert.equal(detectPendingConflicts({ ops: many, blocks: Array.from({ length: 21 }, (_, index) => block(`b${index + 1}`)), selection: [], styleInstruction: '' }).some(conflict => conflict.kind === 'limit'), true)
+})
+
+test('the client queue cap is the shared Host batch cap, so they cannot drift', () => {
+  assert.equal(MAX_PENDING_STRUCTURE_OPS, MAX_ARTIFACT_STRUCTURE_OPERATIONS, 'one shared 20-op limit')
+  assert.equal(MAX_PENDING_STRUCTURE_OPS, 20)
+  const blocks = Array.from({ length: MAX_PENDING_STRUCTURE_OPS + 1 }, (_, index) => block(`b${index + 1}`))
+  const atCap = blocks.slice(0, MAX_PENDING_STRUCTURE_OPS).map((item, index) => op({ blockId: item.blockId, id: `op-${index}` }))
+  assert.equal(detectPendingConflicts({ ops: atCap, blocks, selection: [], styleInstruction: '' }).some(conflict => conflict.kind === 'limit'), false, 'the batch cap itself is accepted')
+  const overCap = [...atCap, op({ blockId: blocks[MAX_PENDING_STRUCTURE_OPS].blockId, id: 'op-over' })]
+  assert.equal(detectPendingConflicts({ ops: overCap, blocks, selection: [], styleInstruction: '' }).some(conflict => conflict.kind === 'limit'), true, 'the first op over the cap is rejected')
 })
 
 test('a clean batch has no conflicts', () => {

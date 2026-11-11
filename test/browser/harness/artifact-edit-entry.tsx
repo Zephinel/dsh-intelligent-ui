@@ -20,7 +20,7 @@ import { NESTED_CONTAINERS_PROGRAM, NESTED_CONTAINERS_TITLE } from '../fixtures/
 import { LARGE_PAGE_PROGRAM, LARGE_PAGE_TITLE, NESTED_PROPS_PROGRAM, NESTED_PROPS_TITLE, PROPS_CENTER_PROGRAM, PROPS_CENTER_TITLE, PROPS_DYNAMIC_PROGRAM, PROPS_DYNAMIC_TITLE, PROPS_LEGACY_AUTO_PROGRAM, PROPS_LEGACY_AUTO_TITLE, PROPS_PROGRAM, PROPS_TITLE } from '../fixtures/props-artifact.ts'
 import { DEEP_DASHBOARD_PROGRAM, DEEP_DASHBOARD_TITLE, VERY_DEEP_PROGRAM, VERY_DEEP_TITLE } from '../fixtures/deep-artifact.ts'
 import { templates } from './style-fixtures.ts'
-import { savePendingStructureOps, submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
+import { activeDraftKeyFor, artifactApplyNotices, discardDraft as discardArtifactDraft, dismissArtifactApplyNotice, draftSessionsFor, referenceForSession, savePendingStructureOps, submittedDraftsFor } from '../../../src/client/artifact-edit/store.ts'
 import { addLocalRevision, clearLocalRevisions } from '../../../src/client/artifact-edit/local-revisions.ts'
 import { clearRevisionFallbacks } from '../../../src/client/artifact-edit/revision-fallbacks.ts'
 import { artifactVersionFor, registerArtifactRevision, selectArtifactRevision, setArtifactVersionStageEnabled } from '../../../src/client/artifact-edit/artifact-version.ts'
@@ -155,6 +155,30 @@ function insertText(text: string, span: { start: number; end: number; draftRev: 
   return true
 }
 
+/**
+ * Mirror the production send path: serializing an artifact-edit chip is what
+ * consumes its draft (the store marks it submitted and the chip sync removes
+ * it). The old counter-only mock made auto-submit look successful without ever
+ * running the codec, so the suite can now assert a real send.
+ */
+function submitDraft(): void {
+  w.__submits = (w.__submits ?? 0) + 1
+  const chipSource = w.__chipSource
+  const occurrences = (input.occurrences as unknown as Occurrence[]).filter(item => item.source === 'artifact-edit')
+  if (chipSource === undefined) return
+  void (async () => {
+    try {
+      const texts: string[] = []
+      for (const occurrence of occurrences) texts.push(await chipSource.codec.serialize(occurrence.ref, new AbortController().signal))
+      w.__sentText = texts.join('\n')
+      w.__sent = true
+      setDraft('')
+    } catch (error) {
+      w.__notice = String(error instanceof Error ? error.message : error)
+    }
+  })()
+}
+
 const inputMachine = {
   state: { getSnapshot: () => input, subscribe: () => () => {} },
   insertReference,
@@ -163,7 +187,7 @@ const inputMachine = {
   addAttachments: () => false,
   removeAttachment: () => false,
   pruneAttachments: () => {},
-  submit: () => { w.__submits = (w.__submits ?? 0) + 1 },
+  submit: submitDraft,
   notify: (_level: string, text: string) => { w.__notice = text },
   focus: () => {},
   beginCommand: () => false,
@@ -176,7 +200,7 @@ const inputActions = {
   addAttachments: () => false,
   removeAttachment: () => {},
   pruneAttachments: () => {},
-  submit: () => { w.__submits = (w.__submits ?? 0) + 1 },
+  submit: submitDraft,
 }
 let view: IntelligentUIModeView = base
 w.__project = (patch: Partial<IntelligentUIModeView>) => { view = { ...view, ...patch }; update() }
@@ -236,6 +260,17 @@ w.__collectImageAssets = (callId: string) => {
 w.__settleLocalImages = (callId: string) => {
   const card = document.querySelector(`[data-dsh-iui-call-id="${callId}"]`)
   return card === null ? Promise.resolve() : settleLocalImages(card as HTMLElement)
+}
+// Scenario hygiene: earlier cases leave detached drafts/chips in the one chat.
+// A real Send would refuse those stale chips, so later send scenarios clear the
+// draft store first (through the store, never by editing the composer text).
+w.__clearEditDrafts = () => {
+  for (const draft of draftSessionsFor(SESSION)) discardArtifactDraft(draft.key, true)
+  // Submitted drafts keep their post-Apply notices until reconciled; clear them
+  // too so a later scenario only observes the notice it caused itself.
+  for (const notice of artifactApplyNotices(SESSION)) dismissArtifactApplyNotice(notice.key)
+  setDraft('')
+  return true
 }
 w.__input = () => ({ draft: input.draft, occurrences: input.occurrences, draftRev: input.draftRev, phase: input.phase })
 w.__setDraft = (text: string) => setDraft(text)
@@ -479,6 +514,10 @@ w.__thumbnailStates = (artifactId: string, revisionId: string) => {
     lightCross: read('light').crossScheme ?? null,
     darkCross: read('dark').crossScheme ?? null,
   }
+}
+w.__activeDraftReference = () => {
+  const key = activeDraftKeyFor(SESSION)
+  return key === undefined ? undefined : referenceForSession(key)
 }
 w.__appendRevision = (callId: string, program: string, meta: Record<string, unknown> = {}, title: string = DST_TITLE) => {
   nodes = [...nodes, cardNode(callId, program, meta, title)]
@@ -746,7 +785,7 @@ function Harness(): ReactElement {
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>
         {(input.occurrences as unknown as Occurrence[]).map(occurrence => (
-          <span key={occurrence.occurrenceId} data-chip={occurrence.source} data-chip-label={occurrence.label}>{occurrence.label}</span>
+          <span key={occurrence.occurrenceId} data-chip={occurrence.source} data-chip-ref={occurrence.ref} data-chip-label={occurrence.label}>{occurrence.label}</span>
         ))}
       </div>
       <div data-sent-summary><SentSummary /></div>

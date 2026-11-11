@@ -29,10 +29,11 @@ import {
   type ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { blockKindLabel, type ApplyOutcomeNotice, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
+import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
 import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
-import { canBatchMove, hasArtifactEditContent, isCurrentStyleTarget } from './store.ts'
+import { applyNoticeLocaleKey, canBatchMove, hasArtifactEditContent, isCurrentStyleTarget } from './store.ts'
 import { MAX_PENDING_STRUCTURE_OPS } from './remap.ts'
+import { MAX_CST_NODES } from '../../shared/program-cst.ts'
 import { describeArticleLayoutProblem } from '../../shared/article-layout.ts'
 import { styleSwitchBlocker as describeStyleSwitchBlocker, styleTargetDisableReason } from './style-targets.ts'
 import { MAX_STYLE_INSTRUCTION_CHARS, type ArtifactBlock, type ArtifactBlockKind } from '../../shared/artifact-edit.ts'
@@ -1044,6 +1045,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   const styleOnly = session.styleInstruction.trim() !== '' && !hasBlockOrGlobalContent
   const hasModelContent = hasBlockOrGlobalContent || session.styleInstruction.trim() !== ''
   const batchUnsaved = batchMode || nestedBatchMode
+  // Panel-local work is transparent to the draft store, so report it: revision
+  // deletion and draft discard read the same flag instead of dropping it.
+  const panelLocalDirty = globalDirty || batchOps.length > 0 || nestedBatchOps.length > 0
+  useEffect(() => {
+    actions.setPanelDirty(panelLocalDirty)
+    return () => { actions.setPanelDirty(false) }
+  }, [actions, panelLocalDirty])
   const canApply = hasSavedContent && !structureBusy && !applyBusy
   const applyPreview = session.applyPreview
   const applyPreviewReady = applyPreview !== undefined && applyPreview.status === 'ready'
@@ -1067,16 +1075,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       case 'order': return t('edit.applyConflict.order')
       case 'depth': return t('edit.applyConflict.depth')
       case 'nestedTarget': return t('edit.applyConflict.nestedTarget')
+      case 'nodeLimit': return t('edit.applyConflict.nodeLimit', { max: MAX_CST_NODES })
+      case 'instruction': return t('edit.applyConflict.instruction')
+      case 'temporaryOrder': return t('edit.applyConflict.temporaryOrder')
+      case 'styleUnsupported': return t('edit.applyConflict.styleUnsupported')
+      case 'invalid': return t('edit.applyConflict.invalid')
+      case 'stale': return t('edit.applyConflict.stale')
       default: return t('edit.applyConflict.unresolved', { block })
-    }
-  }
-  /** Locale key of one post-Apply notice. */
-  const applyNoticeKey = (notice: ApplyOutcomeNotice): string => {
-    switch (notice) {
-      case 'submitted': return 'edit.applyNotice.submitted'
-      case 'manual': return 'edit.applyNotice.manual'
-      case 'extraText': return 'edit.applyNotice.extraText'
-      case 'rebaseFailed': return 'edit.applyNotice.rebaseFailed'
     }
   }
   const hoverEntry = hoverBlockId === null ? undefined : requests.get(hoverBlockId)
@@ -1708,6 +1713,13 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
       announce(t('edit.a11yApplyBlocked'))
       return
     }
+    // An unsaved popover instruction would be dropped when the Apply rekeys the
+    // draft (the panel remounts), so the round waits for Save or Cancel.
+    if (session.activeDirty === true) {
+      setApplyHint(t('edit.applyHintActive'))
+      announce(t('edit.a11yApplyBlocked'))
+      return
+    }
     if (!hasSavedContent) {
       setApplyHint(t('edit.applyHintEmpty'))
       return
@@ -1804,7 +1816,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
   useEffect(() => {
     const notice = session.applyNotice
     if (notice === undefined) return
-    announce(t(applyNoticeKey(notice)))
+    announce(t(applyNoticeLocaleKey(notice)))
   }, [session.applyNotice])
 
   // A structural operation disables the actions and cancels a pending confirm.
@@ -2898,21 +2910,6 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         )}
         {applyError === undefined ? null : (
           <p className="dsh-iui-edit-apply-error" role="alert" data-dsh-iui-edit-apply-error>{applyError}</p>
-        )}
-        {session.applyNotice === undefined ? null : (
-          <div className="dsh-iui-edit-apply-notice" role="status" data-dsh-iui-edit-apply-notice data-notice={session.applyNotice}>
-            <span className="dsh-iui-edit-apply-notice-text">
-              {t(applyNoticeKey(session.applyNotice))}
-            </span>
-            <button
-              type="button"
-              className="dsh-iui-edit-link"
-              data-dsh-iui-edit-apply-notice-dismiss
-              onClick={() => { actions.dismissApplyNotice() }}
-            >
-              {t('edit.applyNoticeDismiss')}
-            </button>
-          </div>
         )}
         <div className="dsh-iui-edit-apply-row">
           <span className="dsh-iui-edit-apply-summary" data-dsh-iui-edit-apply-summary>
