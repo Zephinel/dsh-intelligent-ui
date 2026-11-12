@@ -1,12 +1,12 @@
 ---
 name: intelligent-ui
-description: "Render an interactive answer as UI in DSH: one complete OpenUI Lang program (maps, photos, charts, tables, forms, SVG drawings, games) shown as a turn-tail card. Use it for structured answers — itineraries, comparisons, dashboards, timelines, explainers, guides — when the session has Intelligent UI enabled and a page serves the answer better than text; the model decides the format per answer. If render_ui is missing, answer in prose."
+description: "Render an interactive answer as UI in DSH: one complete OpenUI Lang program (maps, photos, charts, tables, forms, SVG drawings, games) shown as a turn-tail card. Use it for structured answers — itineraries, comparisons, dashboards, timelines, explainers, guides — when the session has Intelligent UI enabled and a page serves the answer better than text; the model decides the format per answer and loads this skill only when it renders. If render_ui is missing, answer in prose."
 whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games, timelines, explainers — or the user asks to render, show, visualize or build a page, or invokes /intelligent-ui. Not for a single fact, a one-line reply, or a plain text/code answer."
 ---
 
 # Intelligent UI
 
-`render_ui` turns one OpenUI Lang program into an interactive card at the end of the turn. The program is not prose and not HTML: it declares named values and components, and the card evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the decision boundary, the workflow, the design playbook and the deep reference that the prompt cannot fit.
+`render_ui` turns one OpenUI Lang program into an interactive card at the end of the turn. The program is not prose and not HTML: it declares named values and components, and the card evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the design playbook and the deep reference that the prompt cannot fit.
 
 ## Before you start: is the session enabled?
 
@@ -20,17 +20,9 @@ A deployment may also enable **Free-form layout** on the extension's Plugin deta
 
 ## Decide the format
 
-The decision policy is owned by the injected `tool:intelligent-ui` prompt; this skill applies it. In an enabled session you decide per answer whether a page serves it better than text:
+The decision policy is owned by the injected `tool:intelligent-ui` prompt; this skill applies it rather than restating it. If that policy decides the answer is better as Markdown, answer in Markdown without calling `render_ui` and stop here; otherwise continue with the workflow below.
 
-- **Render a page** when the answer gains from structure, visuals, interaction or computation: several facts or options, a timeline, stages, steps, a comparison, numbers, data to explore, a map, a drawing, a form, a planner, a calculator, a game, a dashboard.
-- **Answer in Markdown** when a page would only decorate a short answer: a single fact, a one- or two-sentence reply, a definition or concise explanation, a code snippet, a translation, chit-chat, or an explicit request for text.
-
-The session style is a layout preference for when you render, not a requirement to render: Card and Article name the layout, Auto lets you choose Card, Article or a free layout. Explicit invocation is a directive (see above).
-
-Two consequences matter in practice:
-
-- **A knowledge or explainer topic is not automatically a prose answer.** If the answer would have parts (eras, stages, factors, examples, dynasties, events), a page — timeline, cards or an explorer — usually serves it better than a long text answer; a short explanation is still fine as text.
-- **A page is never faked.** If the switch is off or the tool is missing, say so once and answer in prose; never simulate a card with HTML or a fenced block.
+The session style is a layout preference for when you render, not a requirement to render: Card and Article name the layout, Auto lets you choose Card, Article or a free layout. Explicit invocation is a directive (see above). A page is never faked: if the switch is off or the tool is missing, say so once and answer in prose; never simulate a card with HTML or a fenced block.
 
 ## Answer styles
 
@@ -170,6 +162,7 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 - **SearchImage for things with a look** — place, dish, product, animal, building: give it one feature photo in a hero, card or media row, never one photo per item in a list. Name the exact subject (`"Belém Tower Lisbon"`, not `"Europe trip"`). A photo shows what a thing looks like; `Svg` shows how it works, so how-to answers often need drawings even when photos are present.
 - **Use the file path for an image you already have.** When you or a tool created a PNG/JPEG/WebP/GIF in the workspace (chart export, screenshot, generated figure), pass it to `Image` directly — workspace-relative (`Image("figures/chart.png", "Quarterly revenue")`) or absolute. The app reads it through the session's file permissions; never start a static file server or paste an `http://` URL for a local file, and never say a local image cannot be shown. A missing, oversized or unsupported file renders a clear placeholder; SVG and `HtmlView` local images are not supported.
 - **Draw with `Svg` whenever the user would otherwise picture it.** One drawing per step, viewBox around 240 wide, a dozen shapes in tokens, `SvgText` labels, a `Line` + small `Polygon` for arrows. Drive it from `$step` and offer a thumbnail strip.
+- **Draw the mechanism, don't describe its shape.** When the answer explains a process, loop or request path — how a runtime turns a prompt into tool calls, how a request flows, how a state machine moves — lead with one labeled diagram (stages, arrows, and the state or data passing between them), then add a few sentences of prose. Make the steps explorable when interaction teaches the order (a stepper, tabs or a slider); never make the reader assemble the flow from paragraphs.
 - **Make it work on its own.** Every control changes what is rendered; every list, budget or total is computed from state or inline data with `@functions`; nothing waits for another message. `@ToAssistant` is only for what the page cannot compute (form submit, "plan another day").
 - **Guard arithmetic.** Number inputs are empty or zero: read them as `@Clamp(@Default($people, 1), 1, 50)` and guard divisions with a `$n > 0 ? … : 1` ternary. `@Avg` of an empty list is `0`.
 - **Format for humans.** `@Format(value, "currency", 0, "USD")`, `@Format(value, "percent", 1)`, `@Plural(n, "guest")`, `@FormatDate(date, "long")`. Units belong in the label or unit argument, not in the number. `@FormatDate` on an empty or invalid date returns `""`, so an empty date input never breaks the card.

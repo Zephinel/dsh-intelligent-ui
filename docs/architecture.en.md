@@ -384,7 +384,7 @@ For an Auto-chosen free layout, free temporary results or selected free template
 
 The switch only makes the capability visible; the policy that decides whether a turn gets a page and which layout it uses lives in one place — the injected `tool:intelligent-ui` prompt section (the Host also prefixes it with "Intelligent UI is enabled for this session" and appends the effective style note). An enabled session behaves as follows:
 
-- **The model decides whether a page helps:** it uses `render_ui` when the answer gains from structure, visuals, interaction or computation; a short answer, a concise explanation, code/translation, chit-chat or an explicit text request stays in Markdown.
+- **The model decides whether a page helps (Auto has no default):** it uses `render_ui` when showing the answer helps the reader understand faster or more accurately — a concept, mechanism/process, structure, comparison, data or interaction; a one-fact or one-sentence answer, code/translation, chit-chat or an explicit text request stays in Markdown.
 - **The style only decides the layout when a page is rendered:** a `Card` page stays compact and scannable; the `Article` style calls for an article-first page — a `Toc`, collapsible `Section`s, and substantive `Markdown` prose for every major part (a skeleton, or content hidden behind interactions, is not acceptable); `Auto` lets the model choose Card, Article or a free layout.
 - **Explicit render requests:** `/intelligent-ui` or an explicit page/dashboard ask, on-demand generation and artifact edit requests still require a page.
 - **One source:** the Agent Skill does not repeat the decision policy; it only covers how to build.
