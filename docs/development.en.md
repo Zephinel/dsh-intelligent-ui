@@ -67,7 +67,6 @@ node scripts/install.mjs   # writes only id + name (an insert block), no config
 ```yaml
 - id: intelligent-ui
   config:
-    exportToAssistant: false
     freeComposition: true
     globalEnabled: false
     answerStyle: auto
@@ -76,7 +75,7 @@ node scripts/install.mjs   # writes only id + name (an insert block), no config
     removeFollowUps: true
 ```
 
-(Use the current values; with `globalEnabled: false` enable the plugin per session with the **UI** switch in the composer.)
+(Use the current values; these are all Host Config fields — the experimental `documentMode` switch defaults to off and is added only when needed. With `globalEnabled: false` enable the plugin per session with the **UI** switch in the composer. `install.mjs` replaces the template's empty `[]` with the insert block and writes `[]` back when uninstalling leaves no entries.)
 
 Verify and roll back:
 
@@ -109,14 +108,14 @@ npm run build:host     # rebuild the Host only
 npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
 npm run check          # typecheck + build + Host/Client/packaging tests + renderer checks
 npm run pack:check     # npm pack --dry-run, checks the final published file list
-npm run check:release  # pack → throwaway DSH_HOME install → check packaged skills/lib, mount, served bundle → uninstall (needs the dsh CLI)
+npm run check:release  # pack → throwaway DSH_HOME install → check full packaged file hashes, mount, served bundle → uninstall (needs dsh + pnpm)
 npm run test:browser   # 9 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
 ```
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.
 - `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version that is invoked "through the render_ui tool", and owns the decision policy (the model decides per answer whether a page helps; a session style only names the layout when it renders; explicit invocation or an explicit page request is a directive) plus the layout/spacing contract (the renderer owns the page rhythm; the model does not add root gaps or manual blank blocks); rebuild after editing.
 - `scripts/install.mjs`: profile install/uninstall for a local checkout (writes a marked patch block, with automatic backup).
-- `scripts/release-check.mjs`: the pre-release package-level check. It installs the `npm pack` artifact into a throwaway `$DSH_HOME` (booting Web on an isolated port) and verifies the packed file list and the Agent Skill's current decision wording, that the installed `lib/` and `skills/` hash-match the checkout, that the composed tree carries the loader row, that the boot graph and the actually served client bundle come from the installed package, and that uninstall removes the dependency, bundle row and directory. It reads the packaged/installed artifact rather than the source tree's runtime and never touches the user's profile or running service; the `dsh` CLI must be on PATH.
+- `scripts/release-check.mjs`: the pre-release package-level check. It extracts the `npm pack` artifact and compares every packed file with the checkout (every packed path must exist in the checkout, and `lib/`, `skills/`, `locale/` plus the bundle patch must hash-match it), then installs the tarball into a throwaway `$DSH_HOME` (booting Web on an isolated port) and verifies that the installed file set and hashes are byte-identical to the tarball, that the composed tree carries the loader row, that the boot graph and the actually served client bundle come from the installed package, and that uninstall removes the dependency, bundle row and directory. `npm pack` runs the repository's `prepare` build (rewriting the ignored `lib/`), but the script never reads or writes the user's profiles or the running service; the `dsh` CLI and pnpm must be on PATH.
 - `scripts/capture-screenshots.mjs`: `node scripts/capture-screenshots.mjs` captures the component tour, UI menu/style panel, armed hint, temporary result (light/dark) and settings at 2x in Chrome. Fixed tokens, production components and fake projection/catalog/form services need no DSH; shell card glyphs use lucide stand-ins. `--dark --out-dir=/tmp/iui-dark` reruns all captures in dark mode in a separate directory; skips without Chrome. Never hand-edit images.
 - `src/lib/**`: the port of the upstream component library and 59 library `@functions` (including the M4-1 `nestedEditLibrary` container HOC, the `nested-edit.css` direct-child selector compensation and the B2-6 `runtimeState`/`onRuntimeStateChange` forwarding); `src/lib/render.tsx` is the DSH wrapper (theme isolation, error boundary, `@ToAssistant` backfill), and `src/lib/i18n.tsx` gives renderer components their `t` seat plus the English fallback.
 - `src/client/**`: DSH Slot registrations (the composer UI switch, the Plugin detail page `plugins.bundle.config` and the export entry in the message action strip), the turn-tail card, the `render_ui` / `edit_ui_blocks` process rows (one-line failure reason), the program extractor (including block-edit revision cards and `requestId`), export message/Turn lookup, the image-export pipeline (SnapDOM plus frame composition), interactive-page assembly (asset fetch + theme snapshot + inline HTML), and the `ctx.locale` dictionary registration; it also contains Artifact block editing and arrangement (multi-draft store, one active canvas plus the draft switcher, one composer chip per draft, edit view/Artifact editor/block popover, live order preview, background revision probe, per-envelope sent-message summary, Turn-close `requestId` reconciliation restoring failed drafts, branch mode for outdated revisions, `local-revisions.ts` zero-model local revision cards persisted in localStorage and rendered per Turn, `store.ts` sessionStorage draft persistence/lazy hydration, `tabs.ts` BroadcastChannel cross-tab soft leases, temporary-style content editing (snapshot travels with the request; order/global-only requests blocked), `nested.ts` CST-to-nested block mapping with the opt-in **Nested blocks** edit mode, the **Nested block order** same-parent reordering UI (`nestedOrder`, drag/keyboard/reset), arrangement-row duplicate/two-step delete/**Move to…** cross-container moves with local structural revision cards (kind structure), nested-group **Add block** model additions, and structure preview→diff modal confirmation.
@@ -175,11 +174,11 @@ Run these in order before publishing:
 
 ```bash
 npm run check          # typecheck, build, Node/renderer tests and docs-facts
-npm run check:release  # install the packed artifact into a throwaway DSH_HOME and check packing, mount, client bundle and uninstall
+npm run check:release  # install the packed artifact into a throwaway DSH_HOME and check full file hashes, mount, client bundle and uninstall
 npm run pack:check     # confirm the final published file list
 ```
 
-`check:release` needs the `dsh` CLI on PATH; it boots its own isolated instance and never touches the current profile or running service. Publishing itself is triggered by a `v*` tag through [publish.yml](../.github/workflows/publish.yml) (Trusted Publishing, OIDC and provenance); details are in the next section.
+`check:release` needs the `dsh` CLI and pnpm on PATH; `npm pack` first runs the repository build (writing only the ignored `lib/`), and the script boots its own isolated instance, so it never reads or writes the current profile or the running service. Publishing itself is triggered by a `v*` tag through [publish.yml](../.github/workflows/publish.yml) (Trusted Publishing, OIDC and provenance); details are in the next section.
 
 ## Layout (release-related)
 

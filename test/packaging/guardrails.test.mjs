@@ -14,6 +14,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
+import { CURRENT_SKILL_MARKERS, RETIRED_SKILL_MARKERS } from '../../scripts/skill-policy-markers.mjs'
+
 const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
@@ -47,12 +49,17 @@ test('the enabled-session policy is single-sourced and explicit invocation is a 
   assert.match(prompt, /answer in Markdown when a page would only decorate a short answer/i, 'the prompt names when text wins')
   assert.match(prompt, /there is no default format/i, 'the prompt states that Auto has no default format')
   assert.match(prompt, /judge by whether the page improves understanding/i, 'the prompt names the value criterion')
+  assert.match(prompt, /When both sides seem to fit, the kind decides/i, 'the prompt resolves the short-and-conceptual case')
+  assert.match(prompt, /explanation of how something works is a page even when the prose version would be short/i, 'the prompt makes mechanism explanations page-first')
   assert.match(prompt, /a free layout/i, 'the prompt names the free layout among the session layouts')
   assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
   assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')
-  assert.match(skill, /applies it rather than restating it/i, 'the skill applies the policy instead of restating it')
-  assert.match(skill, /Draw the mechanism/i, 'the skill carries the mechanism-diagram design rule')
-  assert.doesNotMatch(skill, /Render a page when the answer gains from structure/, 'the skill no longer restates the render criteria')
+  for (const marker of CURRENT_SKILL_MARKERS) {
+    assert.ok(skill.includes(marker), `the shipped skill carries ${JSON.stringify(marker)}`)
+  }
+  for (const marker of RETIRED_SKILL_MARKERS) {
+    assert.ok(!skill.includes(marker), `the shipped skill drops retired wording ${JSON.stringify(marker)}`)
+  }
   assert.match(skill, /Explicit invocation is a directive/i, 'the skill states the explicit-invocation directive')
   assert.doesNotMatch(skill, /## When to answer in prose/, 'the skill no longer duplicates the prose policy')
 })

@@ -397,6 +397,7 @@ function countStatements(program: string): number {
 const ENABLED_SESSION_PREFIX =
   'Intelligent UI is enabled for this session. There is no default format. For each ordinary answer, decide whether an interactive page serves the request better than text. '
   + 'Render when showing the answer helps the reader understand faster or more accurately; otherwise answer in Markdown without calling render_ui. '
+  + 'When both seem to fit, the kind decides: a bare fact or a term restatement stays text, while an explanation of how something works is a page even when the prose version would be short. '
   + 'The Answer style note below picks the layout when you render; a pending Artifact edit request follows its own instructions below.\n\n'
 
 /** Prompt opening for a bound on-demand turn: the page is the requested result. */
@@ -822,8 +823,10 @@ ${section}`
       + 'Intelligent UI rules in the system prompt. Intelligent UI is enabled for the session; there is no default format, so decide for each answer '
       + 'whether a page serves it better than text: use it when showing the answer helps the reader understand faster or more accurately — structured, visual, interactive or computed answers '
       + '(introductions, explainers, timelines, comparisons, dashboards, step-by-step guides, maps, drawings, forms, '
-      + 'planners, games or calculators); answer in prose when a page would add nothing (a single fact or one-line reply, '
-      + 'a short answer with no structure to show, an explicit text request, content that cannot be shown as a page, or after rendering fails). '
+      + 'planners, games or calculators); answer in prose when a page would add nothing (a single fact, a term restatement, '
+      + 'a one-sentence definition that does not explain how something works, a code snippet, a translation, chit-chat, '
+      + 'an explicit text request, content that cannot be shown as a page, or after rendering fails). '
+      + 'When both seem to fit, the kind decides: a bare fact or a term restatement stays text, while an explanation of how something works is a page even when the prose version would be short. '
       + 'The user sees the rendered page; do not repeat its content in prose. Pass `style` set to the session layout: '
       + '"card" or "article", or in Auto the layout you chose ("card", "article" or "free"); a selected free template uses '
       + 'its styleId with no temporaryStyle. Article pages use Toc and collapsible Section blocks; Card pages stay compact. '

@@ -55,6 +55,9 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   const { tool, sections } = mount()
   assert.equal(tool.name, 'render_ui')
   assert.match(tool.description, /openui-lang/)
+  assert.match(tool.description, /a term restatement/, 'the tool description names the text branch')
+  assert.match(tool.description, /an explanation of how something works is a page even when the prose version would be short/, 'the tool description resolves the short-and-conceptual case')
+  assert.match(tool.description, /a code snippet, a translation, chit-chat/, 'the tool description lists the text cases the prompt lists')
   assert.equal(tool.parameters.type, 'object')
   assert.deepEqual(tool.parameters.required, ['program', 'style'])
   assert.deepEqual(Object.keys(tool.parameters.properties).sort(), ['editRequestId', 'program', 'style', 'styleId', 'temporaryStyle', 'title'].sort())
@@ -73,6 +76,8 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.match(enabledText, /Answer style for this session: \*\*Auto\*\*/)
   assert.match(enabledText, /Pass `style: "card"`, `"article"` or `"free"`/)
   assert.match(enabledText, /answer in Markdown without calling render_ui/)
+  assert.match(enabledText, /There is no default format/)
+  assert.match(enabledText, /an explanation of how something works is a page even when the prose version would be short/)
   assert.match(enabledText, /a pending edit request overrides the ordinary page-vs-text decision/)
 })
 

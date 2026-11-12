@@ -68,6 +68,45 @@ function findBlock(text) {
   return { begin, end: after }
 }
 
+/**
+ * The shipped profile template writes an empty patch layer as the YAML
+ * empty-array document `[]`. Appending a list item after that token produces a
+ * second YAML document and DSH can no longer parse the patch, so the empty
+ * document form has to be replaced, not appended to. Comments around it
+ * (the template header) are preserved.
+ */
+const EMPTY_DOCUMENT_LINE = /^\s*\[\s*\]\s*$/
+
+/** The document body with comments and blank lines removed. */
+function documentBody(text) {
+  return text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n').trim()
+}
+
+/** Whether the patch currently holds the empty-array document. */
+function isEmptyDocument(text) {
+  return documentBody(text) === '[]'
+}
+
+/** Whether no list entries remain after comments and blank lines are stripped. */
+function hasNoEntries(text) {
+  return documentBody(text) === ''
+}
+
+/** Replace the `[]` token with the managed block, keeping the comment header. */
+function replaceEmptyDocument(text, block) {
+  const lines = text.split('\n')
+  const index = lines.findIndex((line) => EMPTY_DOCUMENT_LINE.test(line))
+  if (index === -1) return `${text.replace(/\s*$/, '')}\n\n${block}`
+  lines.splice(index, 1, block.trimEnd())
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n')}\n`
+}
+
+/** Write the empty-array document back after the comment header. */
+function ensureEmptyDocument(text) {
+  const trimmed = text.replace(/\s*$/, '')
+  return `${trimmed}\n\n[]\n`
+}
+
 const options = parseArgs(process.argv.slice(2))
 const patchFile = resolve(options.home, 'profiles', options.profile, 'cordis.patch.yml')
 const entry = resolve(root, 'lib', 'index.js')
@@ -95,10 +134,15 @@ if (options.uninstall) {
     process.exit(0)
   }
   next = `${text.slice(0, existing.begin)}${text.slice(existing.end)}`.replace(/\n{3,}/g, '\n\n')
+  // Removing the only entry would leave an empty document; restore the shipped
+  // empty-array form so the patch stays parseable.
+  if (hasNoEntries(next)) next = ensureEmptyDocument(next)
 } else {
   const block = managedBlock(entry)
   if (existing !== undefined) {
     next = `${text.slice(0, existing.begin)}${block}${text.slice(existing.end)}`
+  } else if (isEmptyDocument(text)) {
+    next = replaceEmptyDocument(text, block)
   } else {
     const separator = text.endsWith('\n') ? '\n' : '\n\n'
     next = `${text}${separator}\n${block}`

@@ -1,7 +1,7 @@
 ---
 name: intelligent-ui
 description: "Render an interactive answer as UI in DSH: one complete OpenUI Lang program (maps, photos, charts, tables, forms, SVG drawings, games) shown as a turn-tail card. Use it for structured answers — itineraries, comparisons, dashboards, timelines, explainers, guides — when the session has Intelligent UI enabled and a page serves the answer better than text; the model decides the format per answer and loads this skill only when it renders. If render_ui is missing, answer in prose."
-whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games, timelines, explainers — or the user asks to render, show, visualize or build a page, or invokes /intelligent-ui. Not for a single fact, a one-line reply, or a plain text/code answer."
+whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games, timelines, explainers — or the user asks to render, show, visualize or build a page, or invokes /intelligent-ui. Not for a bare fact, a term restatement, a one-line factual reply, or a plain text/code answer."
 ---
 
 # Intelligent UI

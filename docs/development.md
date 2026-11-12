@@ -67,7 +67,6 @@ node scripts/install.mjs   # 只写 id + name（一个插入块），不写 conf
 ```yaml
 - id: intelligent-ui
   config:
-    exportToAssistant: false
     freeComposition: true
     globalEnabled: false
     answerStyle: auto
@@ -76,7 +75,7 @@ node scripts/install.mjs   # 只写 id + name（一个插入块），不写 conf
     removeFollowUps: true
 ```
 
-（字段按当前设置写；`globalEnabled: false` 时用输入框的 **UI** 开关按会话启用。）
+（字段按当前设置写，以上都是 Host Config 的字段；实验开关 `documentMode` 默认关闭，需要时再加。`globalEnabled: false` 时用输入框的 **UI** 开关按会话启用。`install.mjs` 会把模板里的空 `[]` 替换成插入块，卸载且没有其它条目时写回 `[]`。）
 
 验证与回滚：
 
@@ -109,14 +108,14 @@ npm run build:host     # 只重建 Host
 npm run typecheck      # tsc --noEmit；浏览器 src/client 因运行时平台包类型不可解析而排除
 npm run check          # typecheck + build + Host/Client/打包测试 + renderer 检查
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
-npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内 skills/lib、挂载、client bundle → 卸载（需要 dsh CLI）
+npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内全量文件哈希、挂载、client bundle → 卸载（需要 dsh + pnpm）
 npm run test:browser   # 9 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染
 ```
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（是否出页面由模型按回答判断、样式只决定出页面时的版式、显式调用或明确要求页面是直接指令）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
-- `scripts/release-check.mjs`：发布前的包级检查。`npm pack` 产物装进一次性 `$DSH_HOME`（独立端口启动 Web），校验包内文件清单与 Agent Skill 当前决策文案、安装后 `lib/` 与 `skills/` 与源码同哈希、组合树出现 loader row、boot graph 与实际提供的 client bundle 来自安装包、卸载后依赖/bundle row/目录全部消失。它不读源码树的运行结果，也不触碰现有 profile 与运行中的服务；需要 `dsh` 在 PATH 上。
+- `scripts/release-check.mjs`：发布前的包级检查。`npm pack` 产物解包后与 checkout 逐文件对比（每个打包路径都必须存在于 checkout，`lib/`、`skills/`、`locale/` 与 bundle patch 全量哈希一致），再装进一次性 `$DSH_HOME`（独立端口启动 Web），校验安装后的文件集合与哈希和 tarball 逐字节一致、组合树出现 loader row、boot graph 与实际提供的 client bundle 来自安装包、卸载后依赖/bundle row/目录全部消失。`npm pack` 会运行仓库的 `prepare` 构建（重写 ignored 的 `lib/`），但脚本不读写现有 profile、不碰运行中的服务；需要 `dsh` 与 `pnpm` 在 PATH 上。
 - `scripts/capture-screenshots.mjs`：`node scripts/capture-screenshots.mjs` 在 Chrome 2x 重建组件 tour、UI 菜单/样式面板、armed 提示、临时结果（明/暗）与插件设置截图。使用固定主题 token、生产组件与假投影/catalog/form，不需运行 DSH；壳层卡片图标用 lucide 替身。`--dark --out-dir=/tmp/iui-dark` 可在独立目录重跑全套深色截图；没有 Chrome 时跳过。禁止手工编辑图片。
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植（含 M4-1 `nestedEditLibrary` 容器 HOC、`nested-edit.css` 直接子选择器补偿与 B2-6 `runtimeState`/`onRuntimeStateChange` 转发）；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` / `edit_ui_blocks` 进程行（失败时一行原因）、程序提取器（含 block-edit 修订卡片与 `requestId`）、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册；另有 Artifact 区块编辑与编排（多草稿 store、单 active 画布与草稿切换区、每草稿一个 Composer chip、编辑视图/Artifact 编辑器/区块浮层、实时排序预览、后台修订探测、已发送消息逐信封摘要、Turn 关闭按 `requestId` 对账与 failed 草稿恢复，以及旧修订的 branch 模式和 `local-revisions.ts` 零模型本地修订卡片（localStorage，按 Turn 渲染）、`store.ts` 的 sessionStorage 草稿持久化/懒恢复与 `tabs.ts` 的 BroadcastChannel 跨标签软租约，以及临时样式结果的内容编辑（快照随请求、纯排序/整体说明被阻止）、`nested.ts` 的 CST→嵌套区块映射与编辑画布「嵌套区块」opt-in 模式、嵌套「嵌套区块编排」同父排序（`nestedOrder`/drag/keyboard/reset）、编排行复制/两段式删除/「移动到…」跨容器移动（本地结构修订卡 `kind` 为 structure）、嵌套组「添加区块」（模型 additions）与结构操作 preview→diff 模态确认。
@@ -175,11 +174,11 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 
 ```bash
 npm run check          # typecheck、构建、Node/renderer 测试与 docs-facts
-npm run check:release  # 把打包产物装进一次性 DSH_HOME，校验包内容、挂载、client bundle 与卸载
+npm run check:release  # 把打包产物装进一次性 DSH_HOME，校验全量文件哈希、挂载、client bundle 与卸载
 npm run pack:check     # 确认最终发布文件清单
 ```
 
-`check:release` 需要 `dsh` 在 PATH 上；它自己启动隔离实例，不触碰当前 profile 与运行中的服务。发布本身由 `v*` tag 触发 [publish.yml](../.github/workflows/publish.yml)（Trusted Publishing、OIDC 与 provenance），细节见下一节。
+`check:release` 需要 `dsh` 与 `pnpm` 在 PATH 上；`npm pack` 会先跑仓库构建（只写 ignored 的 `lib/`），脚本自己启动隔离实例，不读写当前 profile、不触碰运行中的服务。发布本身由 `v*` tag 触发 [publish.yml](../.github/workflows/publish.yml)（Trusted Publishing、OIDC 与 provenance），细节见下一节。
 
 ## 目录（发布相关）
 
