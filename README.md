@@ -179,7 +179,7 @@ dsh web
 
 ## 构建、测试与部署
 
-从[获取代码](#获取代码)的 checkout 根目录开始。`npm install` 的 `prepare` 会自动构建；本地安装器默认写入 `web` profile 并自动备份。若该 profile 已安装 npm/GitHub 版，先用 `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` 移除，避免同一插件重复注册。
+从[获取代码](#获取代码)的 checkout 根目录开始。`npm install` 的 `prepare` 会自动构建；本地安装器默认写入 `web` profile 并自动备份。若该 profile 已安装 npm/GitHub 版，先用 `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` 移除，避免同一插件重复注册。切换与回滚步骤见[两种安装模式与切换](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#两种安装模式与切换)；发布前按[发布前检查](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#发布前检查)依次运行三条命令。
 
 ```bash
 npm install

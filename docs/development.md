@@ -44,6 +44,62 @@ node scripts/install.mjs --uninstall   # 然后同样重启 DSH Web 进程
 
 > 0.2.2-rc.1 的宿主在 patch 文件变化后会重组插件树（Host 工具立即出现），但浏览器端插件可能停留在旧 revision：**刷新页面**通常即可；仍异常再 restart。
 
+### 两种安装模式与切换
+
+本地开发用 **dev row**（`scripts/install.mjs`），发布/升级路径用 **bundle 安装**（`dsh plugin add` 或插件市场）。两者都会插入同一个 loader row id，**不要装在同一个 profile**。
+
+| 模式 | profile 里的样子 | 用途 |
+|---|---|---|
+| dev row | `cordis.patch.yml` 里一个带标记的 insert 块，`name` 指向 checkout 的 `lib/index.js` | 日常改代码：`npm run build` 后重启即生效，不拷贝 |
+| bundle | `dsh plugin` 安装，`name` 为包名，代码在 profile 的 `node_modules` 副本里 | 发布验证与普通使用：更新后需要重装 |
+
+从 bundle 切到 dev row：
+
+```bash
+dsh plugin --profile web remove @zephinel/dsh-intelligent-ui
+# 若 cordis.patch.yml 里还有旧的 `- id: intelligent-ui` 配置行，先删掉
+npm run build
+node scripts/install.mjs   # 只写 id + name（一个插入块），不写 config
+```
+
+`install.mjs` 不写 `config`。把原设置作为**独立覆盖行**追加在标记块之后（重跑 install.mjs 不会冲掉）：
+
+```yaml
+- id: intelligent-ui
+  config:
+    exportToAssistant: false
+    freeComposition: true
+    globalEnabled: false
+    answerStyle: auto
+    exportBackground: "#ecfdf5"
+    exportScale: 2x
+    removeFollowUps: true
+```
+
+（字段按当前设置写；`globalEnabled: false` 时用输入框的 **UI** 开关按会话启用。）
+
+验证与回滚：
+
+```bash
+dsh --profile web --dump-config | grep -A12 'id: intelligent-ui'
+# dev row: name 以 file:// 指向 checkout 的 lib/index.js，且 config 在
+# bundle:  name 为 '@zephinel/dsh-intelligent-ui'
+node scripts/install.mjs --uninstall   # 回退 bundle 前先卸载 dev row，然后重启
+```
+
+`install.mjs` 会在写入前把 patch 备份到 `$DSH_HOME/backups/dsh-intelligent-ui-*`。
+
+日常循环按改动类型区分：
+
+```bash
+# 只改 skills/intelligent-ui/SKILL.md：重启即可（技能在启动时从 checkout 读取）
+# 改 prompt（scripts/generate-prompt.mjs）、Host 或 Client：先构建
+npm run build
+# 然后重启承载 Web UI 的 DSH 进程
+```
+
+没有 watch 模式；重建 `lib/client.js` 后刷新页面可能拿到旧 revision，重启才可靠（见下一节）。
+
 ## 开发
 
 ```bash
@@ -112,6 +168,18 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 4. **混合版本降级**：新 Client + 旧 Host（或反向）必须有明确行为：缺路由/缺字段时降级到哪个 UI 文案与哪条非权威路径，且不阻塞主流程。
 
 反例是基础登记之前的旧卡：同一张卡在结构操作、修订历史与恢复里分别失败成不同错误。参考实现：`src/shared/artifact-base.ts`（共享契约与校验）、`src/host/artifact-base.ts`（登记生命周期与 base resolve 边界）、`src/client/artifact-edit/artifact-base.ts`（single-flight ensure 与旧 Host 能力缓存）。
+
+## 发布前检查
+
+发布前按顺序运行：
+
+```bash
+npm run check          # typecheck、构建、Node/renderer 测试与 docs-facts
+npm run check:release  # 把打包产物装进一次性 DSH_HOME，校验包内容、挂载、client bundle 与卸载
+npm run pack:check     # 确认最终发布文件清单
+```
+
+`check:release` 需要 `dsh` 在 PATH 上；它自己启动隔离实例，不触碰当前 profile 与运行中的服务。发布本身由 `v*` tag 触发 [publish.yml](../.github/workflows/publish.yml)（Trusted Publishing、OIDC 与 provenance），细节见下一节。
 
 ## 目录（发布相关）
 

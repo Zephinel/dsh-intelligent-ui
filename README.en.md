@@ -179,7 +179,7 @@ Temporary results are usable immediately; style adjustment happens inside the ca
 
 ## Build, test and deploy
 
-Start at the checkout root from [Getting the code](#getting-the-code). `npm install` builds automatically through `prepare`; the local installer defaults to the `web` profile and backs up its patch. If that profile already has the npm/GitHub version, remove it first with `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` to avoid registering the plugin twice.
+Start at the checkout root from [Getting the code](#getting-the-code). `npm install` builds automatically through `prepare`; the local installer defaults to the `web` profile and backs up its patch. If that profile already has the npm/GitHub version, remove it first with `dsh plugin --profile web remove @zephinel/dsh-intelligent-ui` to avoid registering the plugin twice. See [Two install modes and switching](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#two-install-modes-and-switching) for the switch and rollback steps, and [Pre-release checks](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#pre-release-checks) for the publish gate.
 
 ```bash
 npm install

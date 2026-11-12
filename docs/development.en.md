@@ -44,6 +44,62 @@ node scripts/install.mjs --uninstall   # then restart the DSH Web process the sa
 
 > On 0.2.2-rc.1, the host rebuilds the plugin tree after the patch file changes (Host tools appear immediately), but the browser-side plugin may stay on the old revision: **refreshing the page** usually fixes it; if it is still broken, restart.
 
+### Two install modes and switching
+
+Use the **dev row** (`scripts/install.mjs`) for local development and the **bundle install** (`dsh plugin add` or the plugin marketplace) for release validation and ordinary use. Both declare the same loader row id, so **do not install both in one profile**.
+
+| Mode | What the profile holds | When to use it |
+|---|---|---|
+| Dev row | A marked insert block in `cordis.patch.yml` whose `name` points at the checkout's `lib/index.js` | Day-to-day code changes: rebuild, restart, done; nothing is copied |
+| Bundle | Installed with `dsh plugin`; `name` is the package name and the code lives in the profile's `node_modules` copy | Release validation and regular use; reinstall to update |
+
+Switch from a bundle install to the dev row:
+
+```bash
+dsh plugin --profile web remove @zephinel/dsh-intelligent-ui
+# remove the old `- id: intelligent-ui` config row from cordis.patch.yml if it is still there
+npm run build
+node scripts/install.mjs   # writes only id + name (an insert block), no config
+```
+
+`install.mjs` does not write `config`. Add the previous settings as a **separate override row** after the marked block (rerunning install.mjs will not overwrite it):
+
+```yaml
+- id: intelligent-ui
+  config:
+    exportToAssistant: false
+    freeComposition: true
+    globalEnabled: false
+    answerStyle: auto
+    exportBackground: "#ecfdf5"
+    exportScale: 2x
+    removeFollowUps: true
+```
+
+(Use the current values; with `globalEnabled: false` enable the plugin per session with the **UI** switch in the composer.)
+
+Verify and roll back:
+
+```bash
+dsh --profile web --dump-config | grep -A12 'id: intelligent-ui'
+# dev row: `name` starts with file:// and points at the checkout's lib/index.js, with config present
+# bundle:  `name` is '@zephinel/dsh-intelligent-ui'
+node scripts/install.mjs --uninstall   # remove the dev row before re-installing the bundle, then restart
+```
+
+`install.mjs` backs up the patch under `$DSH_HOME/backups/dsh-intelligent-ui-*` before writing.
+
+The day-to-day loop depends on what changed:
+
+```bash
+# skills/intelligent-ui/SKILL.md only: just restart (the skill is read from the checkout at boot)
+# prompt (scripts/generate-prompt.mjs), Host or Client: build first
+npm run build
+# then restart the process hosting the DSH Web UI
+```
+
+There is no watch mode; after rebuilding `lib/client.js` a page refresh may still get the old revision, so a restart is the reliable path (see the next section).
+
 ## Development
 
 ```bash
@@ -112,6 +168,18 @@ Any capability that adds new Host-side collaborative state (for example the auth
 4. **Mixed-version degradation**: new client + old Host (or the reverse) has defined behavior: which UI copy and which non-authoritative path it degrades to when a route or field is missing, without blocking the main flow.
 
 The counter-example is the old card before base registration: the same card failed differently across structure operations, revision history and restore. Reference implementation: `src/shared/artifact-base.ts` (shared contract and validation), `src/host/artifact-base.ts` (registration lifecycle and base resolve boundary), `src/client/artifact-edit/artifact-base.ts` (single-flight ensure and old-Host capability cache).
+
+## Pre-release checks
+
+Run these in order before publishing:
+
+```bash
+npm run check          # typecheck, build, Node/renderer tests and docs-facts
+npm run check:release  # install the packed artifact into a throwaway DSH_HOME and check packing, mount, client bundle and uninstall
+npm run pack:check     # confirm the final published file list
+```
+
+`check:release` needs the `dsh` CLI on PATH; it boots its own isolated instance and never touches the current profile or running service. Publishing itself is triggered by a `v*` tag through [publish.yml](../.github/workflows/publish.yml) (Trusted Publishing, OIDC and provenance); details are in the next section.
 
 ## Layout (release-related)
 
