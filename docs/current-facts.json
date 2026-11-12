@@ -4,14 +4,14 @@
   "client": 464,
   "packaging": 37,
   "browserSuites": 9,
-  "artifactEditChecks": 935,
+  "artifactEditChecks": 938,
   "nestedRendererChecks": 75,
   "imageExportChecks": 76,
   "buildHostKb": 846,
   "clientMb": 4.2,
   "clientJsMb": 3.96,
-  "clientCssKb": 244.7,
+  "clientCssKb": 244.8,
   "packFiles": 65,
-  "packedBytes": 6120699,
-  "unpackedBytes": 13147815
+  "packedBytes": 6120723,
+  "unpackedBytes": 13147971
 }

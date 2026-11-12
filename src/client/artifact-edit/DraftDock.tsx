@@ -153,12 +153,12 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
                 aria-current={active ? 'true' : undefined}
                 onClick={() => { activateDraft(draft.key) }}
               >
-                <span className="dsh-iui-edit-draft-dot" aria-hidden="true" />
-                <span className="dsh-iui-edit-draft-text">
+                <span className="dsh-iui-edit-draft-chip">
+                  <RemixIcon name="file-text-line" size={12} />
                   <span className="dsh-iui-edit-draft-title" title={title}>{title}</span>
-                  <span className="dsh-iui-edit-draft-meta">
-                    {t('edit.revision', { n: draft.baseRevision })} · {draftSummaryLabel(draft, t)}
-                  </span>
+                </span>
+                <span className="dsh-iui-edit-draft-meta" title={`${t('edit.revision', { n: draft.baseRevision })} · ${draftSummaryLabel(draft, t)}`}>
+                  {t('edit.revision', { n: draft.baseRevision })} · {draftSummaryLabel(draft, t)}
                 </span>
                 {conflict ? <span className="dsh-iui-edit-draft-tag is-conflict">{t('edit.conflictBadge')}</span> : null}
                 {draft.submitFailed === true ? <span className="dsh-iui-edit-draft-tag is-failed" title={t('edit.draftFailedHint')}>{t('edit.draftFailed')}</span> : null}

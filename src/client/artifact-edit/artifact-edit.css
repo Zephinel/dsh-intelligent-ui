@@ -1239,24 +1239,23 @@
   cursor: pointer;
 }
 
-.dsh-iui-edit-draft-dot {
+.dsh-iui-edit-draft-chip {
+  display: inline-flex;
   flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--dsw-alias-border-l3);
-}
-
-.dsh-iui-edit-draft-row.is-active .dsh-iui-edit-draft-dot {
-  background: var(--dsw-alias-brand-primary);
-}
-
-.dsh-iui-edit-draft-text {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
+  max-width: 180px;
+  padding: 2px 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-edit-draft-chip svg {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .dsh-iui-edit-draft-title {
@@ -4034,7 +4033,7 @@
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-row {
   flex: none;
-  max-width: min(340px, 78vw);
+  max-width: min(400px, 82vw);
   min-width: 0;
   border: 1px solid transparent;
   border-radius: var(--dsw-radius-sm);
@@ -4047,50 +4046,51 @@
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-row.is-active {
-  border-color: var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-2);
+  border-color: transparent;
+  background: transparent;
   box-shadow: none;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-open {
-  gap: 5px;
-  padding: 2px 3px 2px 6px;
+  gap: 7px;
+  padding: 2px 3px 2px 2px;
 }
 
-.dsh-iui-draft-dock .dsh-iui-edit-draft-text {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
+/* One draft row reads as the gallery's chip language: the name is a small
+   file-typed chip, revision and request summary follow as quiet meta text. */
+.dsh-iui-draft-dock .dsh-iui-edit-draft-chip {
+  max-width: min(170px, 42vw);
 }
 
-.dsh-iui-draft-dock .dsh-iui-edit-draft-meta {
-  white-space: nowrap;
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row:hover .dsh-iui-edit-draft-chip {
+  border-color: var(--dsw-alias-border-l3);
 }
 
-.dsh-iui-draft-dock .dsh-iui-edit-draft-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--dsw-alias-label-tertiary);
-}
-
-.dsh-iui-draft-dock .dsh-iui-edit-draft-row.is-active .dsh-iui-edit-draft-dot {
-  background: var(--dsw-alias-label-primary);
+.dsh-iui-draft-dock .dsh-iui-edit-draft-row.is-active .dsh-iui-edit-draft-chip {
+  /* Selection is the band's one accent: hover only lifts the hairline. */
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-title {
-  max-width: 150px;
+  overflow: hidden;
   color: var(--dsw-alias-label-primary);
   font-size: 11.5px;
   font-weight: 500;
   line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-meta {
+  min-width: 0;
+  overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
+  font-size: 10.5px;
   line-height: 14px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dsh-iui-draft-dock .dsh-iui-edit-draft-tag {

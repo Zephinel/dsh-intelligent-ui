@@ -332,6 +332,8 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-draft-switcher]')).includes('待提交编辑'), true, 'reloaded draft stays in the pending list')
   check(await read(`document.querySelector('[data-dsh-iui-edit-panel] [data-dsh-iui-edit-draft-switcher]') === null`), true, 'draft switcher is not inside the edit panel')
   check(await read(`!!document.querySelector('[data-composer-card] [data-dsh-iui-edit-draft-switcher]')`), true, 'draft dock lives inside the composer card')
+  check(await count('[data-dsh-iui-edit-draft-row] .dsh-iui-edit-draft-chip svg'), 1, 'each draft row renders as a title chip with its file icon')
+  check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-draft-row] .dsh-iui-edit-draft-chip')).borderTopWidth`), '1px', 'the draft chip keeps its hairline border')
   const dockGeometry = await read(`(() => {
     const dock = document.querySelector('[data-dsh-iui-edit-draft-switcher]');
     const card = document.querySelector('[data-composer-card]');
@@ -783,6 +785,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-call-id="dst-call-1"]').getAttribute('data-dsh-iui-editing') === 'true'`, 'first draft active again')
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-draft-row][data-active="true"]').length === 1 && !document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'one active draft after close animation')
   check(await count('[data-dsh-iui-edit-draft-row][data-active="true"]'), 1, 'exactly one active draft')
+  const activeChipCue = await read(`(() => {
+    const active = document.querySelector('[data-dsh-iui-edit-draft-row][data-active="true"] .dsh-iui-edit-draft-chip');
+    const idle = document.querySelector('[data-dsh-iui-edit-draft-row]:not([data-active="true"]) .dsh-iui-edit-draft-chip');
+    if (!active || !idle) return null;
+    return { active: getComputedStyle(active).borderTopColor, idle: getComputedStyle(idle).borderTopColor };
+  })()`)
+  check(activeChipCue !== null && activeChipCue.active !== activeChipCue.idle, true, 'the active draft chip carries a distinct selection border')
   // Delete the second chip; the draft must survive as detached, then re-attach.
   const refs = await read('window.__input().occurrences.filter(item => item.source === "artifact-edit").map(item => item.ref)')
   check(refs.length, 2, 'two chip references')
