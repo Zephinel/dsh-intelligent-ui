@@ -10,8 +10,8 @@
   "buildHostKb": 846,
   "clientMb": 4.19,
   "clientJsMb": 3.95,
-  "clientCssKb": 243.5,
+  "clientCssKb": 244.5,
   "packFiles": 65,
-  "packedBytes": 6119924,
-  "unpackedBytes": 13143540
+  "packedBytes": 6120004,
+  "unpackedBytes": 13144621
 }

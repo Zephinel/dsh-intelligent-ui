@@ -91,10 +91,11 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
           data-dsh-iui-edit-apply-notice
           data-notice={entry.notice}
         >
+          <span className="dsh-iui-edit-apply-notice-dot" aria-hidden="true" />
           <span className="dsh-iui-edit-apply-notice-text">{applyNoticeMessage(entry.notice)}</span>
           <button
             type="button"
-            className="dsh-iui-edit-link"
+            className="dsh-iui-edit-apply-notice-dismiss"
             data-dsh-iui-edit-apply-notice-dismiss
             onClick={() => { dismissArtifactApplyNotice(entry.key) }}
           >

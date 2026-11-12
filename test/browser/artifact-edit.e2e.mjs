@@ -168,13 +168,17 @@ try {
   --dsw-elevation-panel:0 6px 24px rgb(0 0 0 / 12%); --dsw-elevation-prominent:0 10px 36px rgb(0 0 0 / 16%);
   --dsh-chat-content-width:748px; --dsh-composer-side-clearance:0px; --dsh-content-font-size:14px;
 }
+/* Real DSH dark tokens (bluish neutral ramp), so the dark captures and any
+   dark-state color assertion match the shipping chrome instead of a proxy. */
 body[data-ds-dark-theme] { color-scheme:dark;
-  --dsw-alias-bg-base:#111; --dsw-alias-bg-layer-1:#1b1b1b; --dsw-alias-bg-layer-2:#242424; --dsw-alias-bg-layer-3:#2e2e2e;
-  --dsw-alias-bg-module-platform:#353638; --dsw-alias-label-primary:#f2f2f2; --dsw-alias-label-secondary:#b8b8b8;
-  --dsw-alias-label-tertiary:#8a8a8a; --dsw-alias-label-caption:#777;
-  --dsw-alias-border-l1:#323232; --dsw-alias-border-l2:#3c3c3c; --dsw-alias-border-l3:#4a4a4a;
-  --dsw-alias-interactive-bg-hover:#2e2e2e; --dsw-alias-interactive-bg-hover-solid:#333;
-  --dsw-specific-menu:#242424; --dsw-specific-bubble:#2b3440; --dsw-specific-input-major:#1f1f1f;
+  --dsw-alias-bg-base:#151517; --dsw-alias-bg-layer-1:#232324; --dsw-alias-bg-layer-2:#2c2c2e; --dsw-alias-bg-layer-3:#353638;
+  --dsw-alias-bg-module-platform:#353638; --dsw-alias-label-primary:#f9fafb; --dsw-alias-label-secondary:#cfd3d6;
+  --dsw-alias-label-tertiary:#adb2b8; --dsw-alias-label-caption:#81858c;
+  --dsw-alias-border-l1:#ffffff0f; --dsw-alias-border-l2:#ffffff1f; --dsw-alias-border-l3:#ffffff29;
+  --dsw-alias-interactive-bg-hover:#ffffff14; --dsw-alias-interactive-bg-hover-solid:#353638;
+  --dsw-alias-state-business-primary:#7aaaff; --dsw-alias-state-error-primary:#f25a5a; --dsw-alias-state-warn-primary:#f59e0b;
+  --dsw-alias-button-floating-fill:#2c2c2e; --dsw-alias-button-floating-hover:#353638;
+  --dsw-specific-menu:#303136; --dsw-specific-bubble:#2c2c2e; --dsw-specific-input-major:#2c2c2e;
 }
 html { scrollbar-width:none; } ::-webkit-scrollbar { width:0; height:0; }
 body { margin:0; background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary); font:14px/1.5 var(--dsw-font-family); }
@@ -3658,6 +3662,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(noticeOnlyBand?.topOffset >= 11 && noticeOnlyBand?.topOffset <= 14.5, true, 'the notice band starts at the card top edge, not the card padding')
   check(await count('[data-dsh-iui-edit-draft-switcher]'), 0, 'the notice-only state really has no draft row')
   await shot('harness-apply-notice.png')
+  // The notice row is a quiet status line, not a filled alert card: it must keep
+  // its hierarchy in the dark scheme too.
+  await read('document.body.setAttribute("data-ds-dark-theme", "")')
+  await shot('harness-apply-notice-dark.png')
+  await read('document.body.removeAttribute("data-ds-dark-theme")')
   // Phase A MAJOR-5: the send is only reported after the send path confirmed it,
   // so the consumed chip is gone and the actual sent text carries the remapped
   // request against the new revision.
@@ -3747,6 +3756,9 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(noticeAndDockBand?.dockMarginTop, '0px', 'the retained draft band does not cancel the card padding a second time')
   check(noticeAndDockBand?.bandPaddingBottom, '0px', 'the notice band hands the closing divider to the draft row')
   await shot('harness-apply-notice-and-dock.png')
+  await read('document.body.setAttribute("data-ds-dark-theme", "")')
+  await shot('harness-apply-notice-and-dock-dark.png')
+  await read('document.body.removeAttribute("data-ds-dark-theme")')
   await click('[data-dsh-iui-edit-apply-notice-dismiss]')
   await wait('!document.querySelector("[data-dsh-iui-edit-apply-notice]")', 'manual notice dismissed')
   check(await count('[data-dsh-iui-edit-apply-notice]'), 0, 'dismissing removes the manual notice')

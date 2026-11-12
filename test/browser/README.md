@@ -110,7 +110,8 @@ events but not the full DSH Web integration.
   preceding hidden slot entry, and scenarios 57/58 assert that the post-Apply
   result notice starts at the card top edge (not the card padding), stays inside
   the card and above the draft line, both notice-only (Apply consumed the draft)
-  and above the retained draft dock. The input-orbit checks now exclude dropdown triggers, which keep their
+  and above the retained draft dock, and capture the quiet notice row in light
+  and dark. The input-orbit checks now exclude dropdown triggers, which keep their
   menu focus state. Scenario 36
   covers the Artifact base-registration lifecycle on legacy cards: opening the editor registers exactly one base with the render call id as the
   revision identity and the rendered program, the registration precedes the first structure request, the old-host 404 degrades without blocking,
