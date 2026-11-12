@@ -26,6 +26,7 @@ import {
   hasArtifactEditContent,
   useArtifactEditStore,
 } from './store.ts'
+import { noticeCopyParts } from './notice-copy.ts'
 
 /** Injected face of the drafts dock. */
 export interface DraftDockInjected {
@@ -52,6 +53,15 @@ function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
   if (opsLabel !== '') return opsLabel
   return t('edit.summaryGlobal')
 }
+
+/** Semantic icon of one post-Apply notice; the copy and icon shape also carry the state. */
+const APPLY_NOTICE_ICONS = {
+  submitted: 'check-line',
+  manual: 'information-line',
+  extraText: 'alert-line',
+  detached: 'external-link-line',
+  rebaseFailed: 'close-circle-line',
+} as const
 
 /**
  * Composer dock strip listing every retained draft of this chat.
@@ -83,26 +93,36 @@ export function DraftDock({ sessionId, t = fallbackT }: PropsRuntime<'conversati
   const attachBlocked = attachedCount >= MAX_ARTIFACT_BATCH_REQUESTS
   const noticeStrip = notices.length === 0 ? null : (
     <section className="dsh-iui-draft-dock-notices" aria-label={t('edit.applyNoticeRegion')} data-dsh-iui-edit-apply-notices>
-      {notices.map(entry => (
-        <div
-          key={entry.key}
-          className="dsh-iui-edit-apply-notice"
-          role="status"
-          data-dsh-iui-edit-apply-notice
-          data-notice={entry.notice}
-        >
-          <span className="dsh-iui-edit-apply-notice-dot" aria-hidden="true" />
-          <span className="dsh-iui-edit-apply-notice-text">{applyNoticeMessage(entry.notice)}</span>
-          <button
-            type="button"
-            className="dsh-iui-edit-apply-notice-dismiss"
-            data-dsh-iui-edit-apply-notice-dismiss
-            onClick={() => { dismissArtifactApplyNotice(entry.key) }}
+      {notices.map(entry => {
+        const copy = noticeCopyParts(applyNoticeMessage(entry.notice))
+        return (
+          <div
+            key={entry.key}
+            className="dsh-iui-edit-apply-notice"
+            role="status"
+            data-dsh-iui-edit-apply-notice
+            data-notice={entry.notice}
           >
-            {t('edit.applyNoticeDismiss')}
-          </button>
-        </div>
-      ))}
+            <span className="dsh-iui-edit-apply-notice-icon" aria-hidden="true">
+              <RemixIcon name={APPLY_NOTICE_ICONS[entry.notice]} size={15} />
+            </span>
+            <span className="dsh-iui-edit-apply-notice-text">
+              <strong className="dsh-iui-edit-apply-notice-lead">{copy.lead}</strong>
+              {copy.detail === '' ? null : <span className="dsh-iui-edit-apply-notice-detail">{copy.detail}</span>}
+            </span>
+            <button
+              type="button"
+              className="dsh-iui-edit-apply-notice-dismiss"
+              data-dsh-iui-edit-apply-notice-dismiss
+              aria-label={t('edit.applyNoticeDismiss')}
+              title={t('edit.applyNoticeDismiss')}
+              onClick={() => { dismissArtifactApplyNotice(entry.key) }}
+            >
+              <RemixIcon name="close-line" size={14} />
+            </button>
+          </div>
+        )
+      })}
     </section>
   )
   const draftStrip = drafts.length === 0 ? null : (

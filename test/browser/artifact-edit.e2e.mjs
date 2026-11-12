@@ -160,7 +160,8 @@ try {
   --dsw-alias-label-tertiary:#888; --dsw-alias-label-caption:#999;
   --dsw-alias-border-l1:#e4e4e4; --dsw-alias-border-l2:#d4d4d4; --dsw-alias-border-l3:#c4c4c4;
   --dsw-alias-interactive-bg-hover:#eee; --dsw-alias-interactive-bg-hover-solid:#e8e8e8;
-  --dsw-alias-state-business-primary:#1265bb; --dsw-alias-state-error-primary:#b42318; --dsw-alias-state-warn-primary:#b54708;
+  --dsw-alias-state-business-primary:#4176e6; --dsw-alias-state-error-primary:#ec1313; --dsw-alias-state-warn-primary:#f59e0b;
+  --dsw-alias-state-success-primary:#22c55e;
   --dsw-alias-button-floating-fill:#fff; --dsw-alias-button-floating-hover:#f2f2f2;
   --dsw-specific-menu:#fff; --dsw-specific-bubble:#eef2f7; --dsw-specific-input-major:#fff;
   --dsw-radius-sm:6px; --dsw-radius-md:10px; --dsw-radius-lg:14px; --dsw-radius-xl:18px;
@@ -177,6 +178,7 @@ body[data-ds-dark-theme] { color-scheme:dark;
   --dsw-alias-border-l1:#ffffff0f; --dsw-alias-border-l2:#ffffff1f; --dsw-alias-border-l3:#ffffff29;
   --dsw-alias-interactive-bg-hover:#ffffff14; --dsw-alias-interactive-bg-hover-solid:#353638;
   --dsw-alias-state-business-primary:#7aaaff; --dsw-alias-state-error-primary:#f25a5a; --dsw-alias-state-warn-primary:#f59e0b;
+  --dsw-alias-state-success-primary:#22c55e;
   --dsw-alias-button-floating-fill:#2c2c2e; --dsw-alias-button-floating-hover:#353638;
   --dsw-specific-menu:#303136; --dsw-specific-bubble:#2c2c2e; --dsw-specific-input-major:#2c2c2e;
 }
@@ -3652,6 +3654,13 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
       noticeVisible: nr.width > 0 && nr.height > 0,
       // The band fills from the card's top edge: 1px border + 12px band gutter.
       topOffset: nr.top - cr.top,
+      iconVisible: (() => {
+        const icon = notice.querySelector('.dsh-iui-edit-apply-notice-icon svg');
+        return icon !== null && icon.getBoundingClientRect().width > 0;
+      })(),
+      dismissLabel: notice.querySelector('[data-dsh-iui-edit-apply-notice-dismiss]')?.getAttribute('aria-label') ?? null,
+      lead: notice.querySelector('.dsh-iui-edit-apply-notice-lead')?.textContent ?? '',
+      detail: notice.querySelector('.dsh-iui-edit-apply-notice-detail')?.textContent ?? '',
     };
   })()`)
   check(noticeOnlyBand?.position, 'relative', 'notice-only band returns the composer overlay to flow')
@@ -3661,6 +3670,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(noticeOnlyBand?.aboveDraft, true, 'notice-only band never overlaps the composer draft line')
   check(noticeOnlyBand?.topOffset >= 11 && noticeOnlyBand?.topOffset <= 14.5, true, 'the notice band starts at the card top edge, not the card padding')
   check(await count('[data-dsh-iui-edit-draft-switcher]'), 0, 'the notice-only state really has no draft row')
+  check(noticeOnlyBand?.iconVisible, true, 'the notice carries its semantic state icon')
+  check(noticeOnlyBand?.dismissLabel, '知道了', 'the icon-only dismiss keeps its accessible name')
+  check(noticeOnlyBand?.lead, '结构操作已应用', 'the status clause is the row lead and the rest is detail')
+  check(noticeOnlyBand?.detail, '，模型请求已发送。', 'the detail clause keeps the separator and the original copy')
   await shot('harness-apply-notice.png')
   // The notice row is a quiet status line, not a filled alert card: it must keep
   // its hierarchy in the dark scheme too.

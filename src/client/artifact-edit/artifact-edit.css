@@ -4356,63 +4356,77 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* Post-Apply notices are a status line in the composer band, not an alert card:
-   one small state dot, one plain sentence, one quiet dismiss control. The band
-   already separates itself with a hairline, so the row needs no box of its own. */
+/* Post-Apply notices are a quiet status line in the composer band: a semantic
+   state icon, a lead/detail sentence and a ghost icon-only dismiss. The band's
+   hairline already separates the row, so it needs no box of its own. */
 .dsh-iui-edit-apply-notice {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 18px;
 }
 
-.dsh-iui-edit-apply-notice-dot {
+.dsh-iui-edit-apply-notice-icon {
   flex: none;
-  width: 6px;
-  height: 6px;
-  margin-top: 6px;
-  border-radius: 50%;
-  background: var(--dsw-alias-label-tertiary);
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 1.5px;
+  color: var(--dsw-alias-label-secondary);
 }
 
-.dsh-iui-edit-apply-notice[data-notice='manual'] .dsh-iui-edit-apply-notice-dot,
-.dsh-iui-edit-apply-notice[data-notice='extraText'] .dsh-iui-edit-apply-notice-dot,
-.dsh-iui-edit-apply-notice[data-notice='detached'] .dsh-iui-edit-apply-notice-dot {
-  background: var(--dsw-alias-state-warn-primary, var(--dsw-alias-label-secondary));
+.dsh-iui-edit-apply-notice-icon svg { display: block; }
+
+/* Tone lives on the icon; the copy and the icon shape also carry the state. */
+.dsh-iui-edit-apply-notice[data-notice='submitted'] .dsh-iui-edit-apply-notice-icon {
+  color: var(--dsw-alias-state-success-primary);
 }
 
-.dsh-iui-edit-apply-notice[data-notice='rebaseFailed'] .dsh-iui-edit-apply-notice-dot {
-  background: var(--dsw-alias-state-error-primary);
+.dsh-iui-edit-apply-notice[data-notice='manual'] .dsh-iui-edit-apply-notice-icon {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dsh-iui-edit-apply-notice[data-notice='extraText'] .dsh-iui-edit-apply-notice-icon,
+.dsh-iui-edit-apply-notice[data-notice='detached'] .dsh-iui-edit-apply-notice-icon {
+  color: var(--dsw-alias-state-warn-primary, var(--dsw-alias-label-secondary));
+}
+
+.dsh-iui-edit-apply-notice[data-notice='rebaseFailed'] .dsh-iui-edit-apply-notice-icon {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .dsh-iui-edit-apply-notice-text {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
   overflow-wrap: anywhere;
 }
 
-/* The error token itself is a thin margin under 4.5:1 on the composer surface
-   (4.24:1 dark, 4.50:1 light), so the failure copy keeps the theme's primary
-   ink and the red dot carries the state; an explicit failure sentence is
-   already a non-color signal. */
-.dsh-iui-edit-apply-notice[data-notice='rebaseFailed'] .dsh-iui-edit-apply-notice-text {
-  color: var(--dsw-alias-label-primary);
+.dsh-iui-edit-apply-notice-lead { font-weight: 600; }
+
+/* The error token is a thin margin under 4.5:1 on the composer surface
+   (4.24:1 dark, 4.50:1 light), so only the icon takes it; the failure copy
+   keeps the primary ink and the explicit sentence carries the state. */
+.dsh-iui-edit-apply-notice-detail {
+  color: var(--dsw-alias-label-secondary);
 }
 
 .dsh-iui-edit-apply-notice-dismiss {
   flex: none;
-  margin: -2px -6px 0 0;
-  padding: 2px 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: -2px -4px 0 0;
+  padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  line-height: 0;
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease;
 }
