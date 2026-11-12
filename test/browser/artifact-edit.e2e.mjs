@@ -179,11 +179,18 @@ body[data-ds-dark-theme] { color-scheme:dark;
 html { scrollbar-width:none; } ::-webkit-scrollbar { width:0; height:0; }
 body { margin:0; background:var(--dsw-alias-bg-base); color:var(--dsw-alias-label-primary); font:14px/1.5 var(--dsw-font-family); }
 main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
-[data-composer-card] { position:fixed; bottom:16px; left:16px; right:16px; max-width:748px; margin:auto; border:1px solid var(--dsw-alias-border-l2); border-radius:14px; background:var(--dsw-alias-bg-layer-1); padding:8px 12px; }
-[data-composer-draft] { min-height:20px; white-space:pre-wrap; color:var(--dsw-alias-label-secondary); font-size:13px; }
-[data-composer-chips] { display:flex; gap:6px; }
+[data-composer-card] { position:fixed; bottom:16px; left:16px; right:16px; max-width:748px; margin:auto; border:1px solid var(--dsw-alias-border-l2); border-radius:14px; background:var(--dsw-alias-bg-layer-1); display:flex; flex-direction:column; gap:12px; padding-top:8px; }
+/* Matches the DSH composer: the overlay slot is an absolutely positioned anchor
+   with no height, entries render inside a display:contents slot outlet, and
+   another slot entry (the feedback probe) precedes the bands. A strip that stays
+   outside the card band therefore paints over the text area; the bands must put
+   the anchor back into flow themselves. */
+[data-composer-overlay] { height:0; position:absolute; inset:0 0 auto; }
+[data-slot="conversation.input.overlay"] { display:contents; }
+[data-composer-draft] { min-height:20px; padding:0 12px; white-space:pre-wrap; color:var(--dsw-alias-label-secondary); font-size:13px; }
+[data-composer-chips] { display:flex; gap:6px; padding:0 12px; }
 [data-chip] { border:1px solid var(--dsw-alias-border-l2); border-radius:6px; padding:1px 6px; font-size:12px; color:var(--dsw-alias-label-primary); }
-[data-sent-summary] { margin-top:6px; }
+[data-sent-summary] { margin-top:6px; padding:0 12px 12px; }
 </style></head><body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`)
   server = await startStaticServer(temp)
   browser = await launchChrome({ url: server.url, width: 1500, height: 1000 })
@@ -3619,6 +3626,38 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-edit-apply-notice]')?.getAttribute('data-notice') === 'submitted'`, 'auto-submit notice on the rekeyed draft')
   check((await text('[data-dsh-iui-edit-apply-notice]')).includes('已发送'), true, 'the notice reports the automatic send')
   check(await count('[data-dsh-iui-edit-pending-op]'), 0, 'the applied structure batch leaves the queue empty')
+  // The consumed draft leaves the notice alone in the band. The notice must turn
+  // the absolute DSH overlay anchor into an in-flow row above the text area
+  // instead of painting over the draft line.
+  const noticeOnlyBand = await read(`(() => {
+    const overlay = document.querySelector('[data-composer-overlay]');
+    const section = document.querySelector('[data-dsh-iui-edit-apply-notices]');
+    const notice = document.querySelector('[data-dsh-iui-edit-apply-notice]');
+    const card = document.querySelector('[data-composer-card]');
+    const draft = document.querySelector('[data-composer-draft]');
+    if (!overlay || !section || !notice || !card || !draft) return null;
+    const sr = section.getBoundingClientRect();
+    const nr = notice.getBoundingClientRect();
+    const cr = card.getBoundingClientRect();
+    const dr = draft.getBoundingClientRect();
+    return {
+      position: getComputedStyle(overlay).position,
+      bandHeight: Number.parseFloat(getComputedStyle(overlay).height),
+      insideCard: sr.left >= cr.left - 0.5 && sr.right <= cr.right + 0.5,
+      aboveDraft: nr.bottom <= dr.top + 0.5,
+      noticeVisible: nr.width > 0 && nr.height > 0,
+      // The band fills from the card's top edge: 1px border + 12px band gutter.
+      topOffset: nr.top - cr.top,
+    };
+  })()`)
+  check(noticeOnlyBand?.position, 'relative', 'notice-only band returns the composer overlay to flow')
+  check(noticeOnlyBand?.bandHeight > 0, true, 'notice-only band contributes layout height')
+  check(noticeOnlyBand?.insideCard, true, 'notice-only band stays inside the composer card')
+  check(noticeOnlyBand?.noticeVisible, true, 'notice-only band renders a visible notice row')
+  check(noticeOnlyBand?.aboveDraft, true, 'notice-only band never overlaps the composer draft line')
+  check(noticeOnlyBand?.topOffset >= 11 && noticeOnlyBand?.topOffset <= 14.5, true, 'the notice band starts at the card top edge, not the card padding')
+  check(await count('[data-dsh-iui-edit-draft-switcher]'), 0, 'the notice-only state really has no draft row')
+  await shot('harness-apply-notice.png')
   // Phase A MAJOR-5: the send is only reported after the send path confirmed it,
   // so the consumed chip is gone and the actual sent text carries the remapped
   // request against the new revision.
@@ -3685,6 +3724,29 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-apply-notice]')).includes('请手动发送'), true, 'the manual notice explains the fallback')
   check((await read('window.__input().draft')).includes('请同时解释这次删改的原因'), true, 'the user prose stays in the composer')
   check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('流水线手动样例 · 修订 2'))`), true, 'the rekeyed chip stays in the composer')
+  // Notice + retained draft: both strips share the card-top band and stack in
+  // order instead of the notice floating over the draft row.
+  const noticeAndDockBand = await read(`(() => {
+    const notice = document.querySelector('[data-dsh-iui-edit-apply-notice]');
+    const section = document.querySelector('[data-dsh-iui-edit-apply-notices]');
+    const dock = document.querySelector('[data-dsh-iui-edit-draft-switcher]');
+    if (!notice || !section || !dock) return null;
+    const nr = notice.getBoundingClientRect();
+    const dr = dock.getBoundingClientRect();
+    return {
+      stacked: nr.bottom <= dr.top + 0.5,
+      dockVisible: dr.width > 0 && dr.height > 0,
+      // The shared band claims the top edge once: the draft row must not pull
+      // up over the notice (~-.8) and the notice band must not add a bottom pad.
+      dockMarginTop: getComputedStyle(dock).marginTop,
+      bandPaddingBottom: getComputedStyle(section).paddingBottom,
+    };
+  })()`)
+  check(noticeAndDockBand?.stacked, true, 'the notice band stacks above the retained draft band')
+  check(noticeAndDockBand?.dockVisible, true, 'the retained draft band stays visible under the notice')
+  check(noticeAndDockBand?.dockMarginTop, '0px', 'the retained draft band does not cancel the card padding a second time')
+  check(noticeAndDockBand?.bandPaddingBottom, '0px', 'the notice band hands the closing divider to the draft row')
+  await shot('harness-apply-notice-and-dock.png')
   await click('[data-dsh-iui-edit-apply-notice-dismiss]')
   await wait('!document.querySelector("[data-dsh-iui-edit-apply-notice]")', 'manual notice dismissed')
   check(await count('[data-dsh-iui-edit-apply-notice]'), 0, 'dismissing removes the manual notice')

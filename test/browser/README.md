@@ -105,11 +105,17 @@ events but not the full DSH Web integration.
   adds the single-row **More** menu (Locate/Edit/Duplicate/Move/Delete with an
   in-menu delete confirmation), the input focus orbit, menu keyboard/focus and
   forced-colors checks, page/request numbering, a real shell-width 1180px fit,
-  and artifact-missing/reflow coverage. The input-orbit checks now exclude dropdown triggers, which keep their menu focus state. Scenario 36
+  and artifact-missing/reflow coverage. The composer mock now carries the real
+  DSH absolute overlay anchor plus its display:contents slot outlet and a
+  preceding hidden slot entry, and scenarios 57/58 assert that the post-Apply
+  result notice starts at the card top edge (not the card padding), stays inside
+  the card and above the draft line, both notice-only (Apply consumed the draft)
+  and above the retained draft dock. The input-orbit checks now exclude dropdown triggers, which keep their
+  menu focus state. Scenario 36
   covers the Artifact base-registration lifecycle on legacy cards: opening the editor registers exactly one base with the render call id as the
   revision identity and the rendered program, the registration precedes the first structure request, the old-host 404 degrades without blocking,
   both the props fallback and the duplicate-preview failure show the actionable missing-authoritative-program copy, and scenario 39 covers the B1 in-editor style editing: style section visibility/capability, focus/Escape/clear, style chip label, style envelope fields (kind/styleInstruction/editRequestId, no block fields), mixed-content blocking, a mocked style revision card with Save, the legacy footer Adjust fallback rules, unit-tested `struct_` history labelling (E2E does not reopen history), third-pass assertions for contract-correct block/style envelopes (exact tool args, parser marker hardening, order-only title/styleId, temporary additions, unsaved-draft guard), and scenario 40 covers B2 deterministic style switching: capability picker/current row, zero-POST hover/focus preview (article wrapper + template accent), one-POST apply with `operations: []` + target + scope, local style revision card with no composer chip, dirty guard, temporary-base drop, Article targets disabled client-side, `style_missing`/`base_style_mismatch` copy, keyboard/a11y/forced-colors, the capability-off B1 regression, and the review follow-ups: contract-correct style envelope, preview-on-open suppression, style_missing/blocked-Apply/mismatch copy and client-side Article gating.
-  920 checks; no real model is called — the Phase A/B edit-pipeline sends run
+  931 checks; no real model is called — the Phase A/B edit-pipeline sends run
   through the production send path against the harness composer (the real-model
   restore/branch, cross-tab lease and nested-edit/nested-order acceptance were
   run manually against an isolated second DSH Web instance and are recorded in

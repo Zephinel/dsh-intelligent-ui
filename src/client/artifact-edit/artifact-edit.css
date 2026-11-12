@@ -3901,17 +3901,53 @@
 }
 
 /* -------------------------------------------------------------------------
- * Pending-edit draft dock: a quiet instrument strip above the composer card.
- * No outer card, no enclosed chip cards; one line of drafts, actions on demand.
+ * Pending-edit draft dock and post-Apply notices: one quiet instrument band in
+ * the top of the composer card. No outer card, no enclosed chip cards; one line
+ * of drafts and the apply results, actions on demand.
  * ---------------------------------------------------------------------- */
 
 .dsh-iui-draft-dock-notices {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(100%, calc(var(--dsh-chat-content-width, 748px) + 32px));
-  margin: 0 auto 6px;
+  width: 100%;
+  /* Fill from the card's top edge like the draft row. DSH renders overlay
+     entries inside a `display: contents` slot outlet, so the band's own top
+     margin reaches the card's padding; a direct-child first-child selector
+     would never match there. */
+  margin-top: -8px;
+  padding: 12px 12px 0;
+}
+
+/* The armed on-demand hint already occupies the band above the composer; the
+   notice strip then keeps the card's top padding instead of pulling over it. */
+.dsh-iui-on-demand-hint ~ .dsh-iui-draft-dock-notices {
+  margin-top: 0;
+}
+
+/* A notice strip alone closes the band with the same inset divider as the
+   draft row; with drafts below, the draft row's divider closes it instead. */
+.dsh-iui-draft-dock-notices:not(:has(+ .dsh-iui-draft-dock)) {
+  padding-bottom: 12px;
+}
+
+.dsh-iui-draft-dock-notices:not(:has(+ .dsh-iui-draft-dock))::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 1px;
+  background: var(--dsw-alias-border-l1);
+  pointer-events: none;
+}
+
+/* Drafts below notices: the band's top edge was already claimed, so this row
+   only keeps its vertical rhythm and its own closing divider. */
+.dsh-iui-draft-dock-notices + .dsh-iui-draft-dock {
+  margin-top: 0;
 }
 
 .dsh-iui-draft-dock {
@@ -3950,7 +3986,10 @@
   pointer-events: none;
 }
 
-[data-composer-overlay]:has(.dsh-iui-draft-dock) {
+/* The DSH overlay anchor is absolutely positioned with no height: either strip
+   must return it to flow, otherwise the strip paints over the text area. */
+[data-composer-overlay]:has(.dsh-iui-draft-dock),
+[data-composer-overlay]:has(.dsh-iui-draft-dock-notices) {
   position: relative;
   height: auto;
 }

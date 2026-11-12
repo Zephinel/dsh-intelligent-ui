@@ -781,7 +781,15 @@ function Harness(): ReactElement {
   return <>
     <main key={w.__renderKey}><Seat name="conversation.chat.turnTail" turn={turnState} /></main>
     <div data-composer-card>
-      <div data-composer-overlay><SeatList name="conversation.input.overlay" /></div>
+      {/* Mirrors the DSH composer: the overlay slot renders its entries inside a
+          `display: contents` outlet, and another registered entry (the feedback
+          probe) is always mounted before the bands. */}
+      <div data-composer-overlay>
+        <div data-slot="conversation.input.overlay" style={{ display: 'contents' }}>
+          <span hidden data-feedback-probe />
+          <SeatList name="conversation.input.overlay" />
+        </div>
+      </div>
       <div data-composer-draft>{input.draft}</div>
       <div data-composer-chips>
         {(input.occurrences as unknown as Occurrence[]).map(occurrence => (
