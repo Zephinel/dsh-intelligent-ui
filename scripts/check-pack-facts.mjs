@@ -7,11 +7,13 @@
  * compares the packed file count and `unpackedSize` with
  * `docs/current-facts.json`.
  *
- * `unpackedSize` is the sum of the shipped file sizes, so it is independent of
- * the npm/tar/gzip versions (unlike the compressed tarball size) while still
- * catching README text edits that change the shipped bytes, plus added/removed
- * packaged files. It is the guard for the "docs changes are packed" gap: the CI
- * docs-only fast path excludes the README pair for the same reason.
+ * The guard compares the packed file count and the sum of the NON-build files
+ * (everything outside `lib/`) with `docs/current-facts.json`. The non-build sum
+ * is independent of npm/tar/gzip versions and of the host platform's esbuild
+ * output (the Linux runner's `lib/` bytes differ from macOS by a few KB), while
+ * still catching README text edits and added/removed packed files. It is the
+ * guard for the "docs changes are packed" gap: the CI docs-only fast path
+ * excludes the README pair for the same reason.
  *
  *   npm run build
  *   node scripts/check-pack-facts.mjs
@@ -57,8 +59,10 @@ const failures = []
 if (packed.files.length !== facts.packFiles) {
   failures.push(`packed files ${packed.files.length} != docs/current-facts.json packFiles ${facts.packFiles}`)
 }
-if (packed.unpackedSize !== facts.unpackedBytes) {
-  failures.push(`packed unpackedSize ${packed.unpackedSize} != docs/current-facts.json unpackedBytes ${facts.unpackedBytes}`)
+const nonBuildFiles = packed.files.filter((file) => !file.path.startsWith('lib/'))
+const nonBuildBytes = nonBuildFiles.reduce((sum, file) => sum + file.size, 0)
+if (nonBuildBytes !== facts.nonBuildUnpackedBytes) {
+  failures.push(`non-build packed bytes ${nonBuildBytes} != docs/current-facts.json nonBuildUnpackedBytes ${facts.nonBuildUnpackedBytes}`)
 }
 
 if (failures.length > 0) {
@@ -67,5 +71,7 @@ if (failures.length > 0) {
   console.error('  run `npm run build && npm run pack:check`, update docs/current-facts.json and the docs that quote the gate')
   process.exitCode = 1
 } else {
-  console.log(`pack-facts: ok (${packed.files.length} files; unpacked ${packed.unpackedSize} bytes)`)
+  console.log(
+    `pack-facts: ok (${packed.files.length} files; non-build unpacked ${nonBuildBytes} bytes; total unpacked ${packed.unpackedSize})`,
+  )
 }

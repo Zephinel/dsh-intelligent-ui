@@ -108,7 +108,7 @@ npm run build:host     # 只重建 Host
 npm run typecheck      # tsc --noEmit；浏览器 src/client 因运行时平台包类型不可解析而排除
 npm run check          # typecheck + build + Host/Client/打包测试 + renderer + 文档事实/链接与打包事实检查
 npm run check:docs-links # 校验 README/docs/Agent Skill 的本地链接、锚点、仓库链接与 clone URL（已含在 check 中）
-npm run check:pack-facts # 校验打包文件数与 unpacked 字节与 docs/current-facts.json 一致（已含在 check 中）
+npm run check:pack-facts # 校验打包文件数与非构建文件字节与 docs/current-facts.json 一致（已含在 check 中）
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内全量文件哈希、挂载、client bundle → 卸载（需要 dsh + pnpm）
 npm run test:browser   # 9 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染

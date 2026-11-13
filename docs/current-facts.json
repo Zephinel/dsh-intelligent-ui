@@ -13,5 +13,6 @@
   "clientCssKb": 244.8,
   "packFiles": 65,
   "packedBytes": 6121208,
-  "unpackedBytes": 13149135
+  "unpackedBytes": 13149135,
+  "nonBuildUnpackedBytes": 3816846
 }

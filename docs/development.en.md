@@ -108,7 +108,7 @@ npm run build:host     # rebuild the Host only
 npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
 npm run check          # typecheck + build + Host/Client/packaging tests + renderer + docs facts/links and packaged-manifest facts
 npm run check:docs-links # README/docs/Agent-Skill local links, anchors, repository links and clone URL (already inside check)
-npm run check:pack-facts # packed file count and unpacked bytes match docs/current-facts.json (already inside check)
+npm run check:pack-facts # packed file count and non-build bytes match docs/current-facts.json (already inside check)
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 npm run check:release  # pack → throwaway DSH_HOME install → check full packaged file hashes, mount, served bundle → uninstall (needs dsh + pnpm)
 npm run test:browser   # 9 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
