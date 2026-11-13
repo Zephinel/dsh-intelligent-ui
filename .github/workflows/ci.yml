@@ -47,7 +47,6 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           persist-credentials: false
       - name: Classify the change
         id: classify
@@ -59,23 +58,25 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           docs_only=false
+          range=""
           case "$EVENT_NAME" in
             pull_request)
-              git fetch --depth=1 origin "$BASE_REF" >/dev/null 2>&1 || true
-              range="FETCH_HEAD...HEAD"
+              if git fetch --depth=1 origin "$BASE_REF" >/dev/null 2>&1; then
+                range="FETCH_HEAD HEAD"
+              fi
               ;;
             push)
               if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
-                range="$BEFORE_SHA...$HEAD_SHA"
-              else
-                range=""
+                if git fetch --depth=1 origin "$BEFORE_SHA" >/dev/null 2>&1; then
+                  range="$BEFORE_SHA HEAD"
+                fi
               fi
               ;;
             *) range="" ;;
           esac
           files=""
           if [ -n "$range" ]; then
-            files="$(git diff --name-only "$range" 2>/dev/null || true)"
+            files="$(git diff --name-only $range 2>/dev/null || true)"
           fi
           if [ -n "$files" ]; then
             docs_only=true
