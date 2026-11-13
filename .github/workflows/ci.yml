@@ -124,7 +124,10 @@ jobs:
         run: npm run check
       - name: Packaged manifest
         if: env.DOCS_ONLY != 'true'
-        run: npm run pack:check
+        # `npm run check` already rebuilt lib/; --ignore-scripts avoids a second
+        # prepare/build just to measure the same tarball. Publish keeps the full
+        # pack:check so prepare itself is still validated before a release.
+        run: npm pack --dry-run --json --ignore-scripts
       - name: Generated files are committed
         if: env.DOCS_ONLY != 'true'
         run: git diff --exit-code
@@ -135,11 +138,19 @@ jobs:
           npm run check:docs-links
 
   browser:
-    name: browser
+    name: browser (${{ matrix.name }})
     needs: changes
     if: github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: artifact-edit
+            suites: artifact-edit
+          - name: other-suites
+            suites: on-demand style-panel style-theme export-image standalone-page article-layout settings-picker nested-edit-renderer
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -164,4 +175,10 @@ jobs:
       - name: Build
         run: npm run build
       - name: Browser suites
-        run: npm run test:browser
+        run: |
+          set -euo pipefail
+          for suite in ${{ matrix.suites }}; do
+            echo "::group::$suite"
+            node "test/browser/${suite}.e2e.mjs"
+            echo "::endgroup::"
+          done
