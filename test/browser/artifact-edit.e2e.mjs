@@ -830,6 +830,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const darkChipCue = await read(chipCueProbe)
   check(darkChipCue !== null && darkChipCue.activeBorder === darkChipCue.business, true, 'the dark scheme uses the same business accent selection border')
   check(darkChipCue !== null && darkChipCue.activeVsCard >= 3, true, 'the dark selection border meets 3:1 against the card surface')
+  check(darkChipCue !== null && activeChipCue !== null && darkChipCue.activeBorder !== activeChipCue.activeBorder && darkChipCue.card !== activeChipCue.card, true, 'the dark read used dark tokens (the scheme switch took effect)')
   await read('document.body.removeAttribute("data-ds-dark-theme")')
   await new Promise(resolve => setTimeout(resolve, 250))
   // Delete the second chip; the draft must survive as detached, then re-attach.
