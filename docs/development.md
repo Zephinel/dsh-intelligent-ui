@@ -178,7 +178,7 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 - 缓存：只使用 `actions/setup-node` 的 npm 缓存（按 lockfile 键）；`lib/` 是 ignored 构建产物且完整构建约 0.8 秒，不缓存。
 - [`publish.yml`](../.github/workflows/publish.yml)：`v*` tag 触发，流程见[发布（Trusted Publishing）](#发布trusted-publishing)。
 
-`npm run check:release`（打包 → 一次性 `DSH_HOME` 安装 → 启动隔离 Web → 卸载）尚未接入 CI：Linux runner 上的行为还需要一次验证，目前它是**本地发布前门禁**，不要在没跑过它的机器上发版。分支保护（required status check `verify`）与 `v*` tag 限制需要在 GitHub 仓库设置里由维护者开启，不在代码里。首个运行实测：全量 **118 s** wall（verify 51 s，browser 单 job 102 s、套件 88 s）；拆分与去重后最终全量 **80 s**（verify 51 s，artifact-edit shard 68 s，other-suites shard 54 s）；纯文档推送走快速路径（待填 {{DOCS_MS}} s）。
+`npm run check:release`（打包 → 一次性 `DSH_HOME` 安装 → 启动隔离 Web → 卸载）尚未接入 CI：Linux runner 上的行为还需要一次验证，目前它是**本地发布前门禁**，不要在没跑过它的机器上发版。分支保护（required status check `verify`）与 `v*` tag 限制需要在 GitHub 仓库设置里由维护者开启，不在代码里。首个运行实测：全量 **118 s** wall（verify 51 s，browser 单 job 102 s、套件 88 s）；拆分与去重后全量 **80–93 s**（verify 51 s，artifact-edit shard 68–79 s，other-suites shard 54–58 s，runner 波动）；首次纯文档推送 **34 s** 走快速路径（changes + docs fast gate），分类 job 收窄为只 fetch diff base 后应更低。
 
 ## 发布前检查
 
