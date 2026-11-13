@@ -223,7 +223,7 @@ npm 包：[`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephin
 ## 贡献
 
 - 问题与功能请求：使用 [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues)。
-- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑同一套本地门禁，main 上另跑 9 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
+- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑本地门禁（纯文档改动只跑文档检查），main 上的代码改动另跑 9 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
 - 贡献者与 AI 协作代理都应遵循[文档同步技能](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md)：行为、文案或计数变化时，同步中英 README、`CHANGELOG.md` 与 `docs/` 对应文档。checkout 中以本地 `.agents/skills/sync-iui-docs/SKILL.md` 为准。
 - 维护者：[@Zephinel](https://github.com/Zephinel)。
 

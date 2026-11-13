@@ -223,7 +223,7 @@ Market versions follow npm `latest`; after publishing a new version and pushing 
 ## Contributing
 
 - Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
-- Run `npm run check` before opening a PR; CI ([`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)) runs the same local gate on PRs and main, plus the nine browser suites on main. Releases use the [GitHub Actions Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml) on `v*` tags; the development guide describes the process.
+- Run `npm run check` before opening a PR; CI ([`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)) runs the local gate on PRs and main (docs-only diffs run only the docs checks), plus the nine browser suites on main for code changes. Releases use the [GitHub Actions Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml) on `v*` tags; the development guide describes the process.
 - Contributors and AI coding agents should follow the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md): when behavior, copy or counts change, update both READMEs, `CHANGELOG.md` and the matching documents under `docs/`. In a checkout, use the local `.agents/skills/sync-iui-docs/SKILL.md`.
 - Maintainer: [@Zephinel](https://github.com/Zephinel).
 

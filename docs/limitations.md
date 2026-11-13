@@ -68,4 +68,4 @@
 - 编辑画布支持屏幕阅读器和纯键盘操作，但没有真实 screen-reader/axe 审计；live region 是单个 polite 槽位，快速连续重排会合并播报，指针拖拽只在 drop 时播报。
 - 输入框轨道光晕的 forced-colors/touch 行为由 Chromium CDP 模拟验证；真实 Windows 高对比度、iPad/Safari 和深色主题下的对比度尚未实测。
 - 视觉基线是手动对照（5 张 PNG），没有自动像素 diff；只在 390×844、900×1000 和桌面宽度做了布局验证，更多设备/浏览器组合未覆盖。
-- `npm run check` 不包含需要 Chrome 的浏览器套件；PR/main 的 CI 跑本地门禁（`ci.yml`），main 上另跑浏览器套件，发布由 tag 触发的 GitHub Actions 完成。`check:release` 尚未接入 CI（Linux 运行待验证），仍是本地发布前门禁。`tsc` 不检查 `src/client`（DSH 平台类型不在本地依赖中）。
+- `npm run check` 不包含需要 Chrome 的浏览器套件；PR/main 的 CI 跑本地门禁（`ci.yml`；纯文档改动只跑文档检查），main 上的代码改动另跑浏览器套件，发布由 tag 触发的 GitHub Actions 完成。`check:release` 尚未接入 CI（Linux 运行待验证），仍是本地发布前门禁。`tsc` 不检查 `src/client`（DSH 平台类型不在本地依赖中）。
