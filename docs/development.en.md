@@ -106,8 +106,9 @@ npm run build          # full build of prompt + host + client
 npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
-npm run check          # typecheck + build + Host/Client/packaging tests + renderer + docs facts/links
+npm run check          # typecheck + build + Host/Client/packaging tests + renderer + docs facts/links and packaged-manifest facts
 npm run check:docs-links # README/docs/Agent-Skill local links, anchors, repository links and clone URL (already inside check)
+npm run check:pack-facts # packed file count and unpacked bytes match docs/current-facts.json (already inside check)
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 npm run check:release  # pack → throwaway DSH_HOME install → check full packaged file hashes, mount, served bundle → uninstall (needs dsh + pnpm)
 npm run test:browser   # 9 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
@@ -173,7 +174,7 @@ The counter-example is the old card before base registration: the same card fail
 
 Two GitHub Actions workflows (GitHub-hosted `ubuntu-latest`, Node 24; Chrome comes from the runner and each job resolves its path and fails loudly if it is missing, so the typography check cannot silently skip):
 
-- [`ci.yml`](../.github/workflows/ci.yml): a `changes` job classifies the diff first; the `verify` job **always runs on PRs and main pushes** (so a required status check is never skipped by path filters): full changes run `npm run check` (typecheck/build/Node/renderer/docs-facts/docs-links), `npm run pack:check` and the generated-file check, while docs-only changes run just `check:docs-facts` + `check:docs-links` (seconds; note the docs fast path does not re-pack the tarball — if README text changes packaged bytes, run `npm run pack:check` locally). The `browser` job runs the nine Chrome suites only on main pushes/manual dispatch, split into two shards: `artifact-edit` alone (locally ~58 of the ~78 seconds the whole suite needs) and the other eight suites. The first real CI run measured 88 s of suites in one job; after sharding the wall time is set by the longest shard. It is not a PR gate (the suite has a known small flake probability).
+- [`ci.yml`](../.github/workflows/ci.yml): a `changes` job classifies the diff first; the `verify` job **always runs on PRs and main pushes** (so a required status check is never skipped by path filters): full changes run `npm run check` (typecheck/build/Node/renderer/docs-facts/docs-links), `npm run pack:check` and the generated-file check, while CHANGELOG/PRODUCT/docs/.agents-only changes run just `check:docs-facts` + `check:docs-links` (seconds); the README pair is packed content, so README edits take the full gate, where `check:pack-facts` validates the packed bytes. The `browser` job runs the nine Chrome suites only on main pushes/manual dispatch, split into two shards: `artifact-edit` alone (locally ~58 of the ~78 seconds the whole suite needs) and the other eight suites. The first real CI run measured 88 s of suites in one job; after sharding the wall time is set by the longest shard. It is not a PR gate (the suite has a known small flake probability).
 - Concurrency: PRs share one group with `cancel-in-progress`, so only the latest push runs; on main every commit gets its own group (including the SHA), so each main commit runs to completion — a release branch must not skip gates.
 - Caches: only the `actions/setup-node` npm cache (keyed by the lockfile); `lib/` is an ignored build artifact that rebuilds in ~0.8 s, so it is not cached.
 - [`publish.yml`](../.github/workflows/publish.yml): triggered by `v*` tags, see [Releasing (Trusted Publishing)](#releasing-trusted-publishing).

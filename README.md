@@ -197,7 +197,7 @@ dsh web
 | `npm run build` | 生成 prompt、Host、Client 与独立导出页面 bundle |
 | `npm test` | 构建后运行 Host、Client 与打包的 Node 测试 |
 | `npm run typecheck` | 运行 `tsc --noEmit`（浏览器 `src/client` 暂因运行时平台类型不可解析而排除） |
-| `npm run check` | 提交前完整检查：typecheck、构建、Node 测试、renderer 检查与文档事实/链接检查 |
+| `npm run check` | 提交前完整检查：typecheck、构建、Node 测试、renderer 检查、文档事实/链接与打包事实检查 |
 | `npm run pack:check` | 预览 npm 包最终文件清单，不发布 |
 | `npm run check:release` | 打包产物解包后校验每个打包路径都在 checkout 中存在，并对 `lib/`、`skills/`、`locale/` 与 bundle patch 全量哈希比对，再装进一次性 `$DSH_HOME`（独立端口），校验安装后文件集合与哈希、插件挂载、实际提供的 client bundle 与卸载；不改动现有 profile，需要 `dsh` 与 `pnpm` 在 PATH 上 |
 | `npm run test:browser` | 先构建；运行 9 个浏览器套件，需要 Chrome |
@@ -223,7 +223,7 @@ npm 包：[`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephin
 ## 贡献
 
 - 问题与功能请求：使用 [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues)。
-- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑本地门禁（纯文档改动只跑文档检查），main 上的代码改动另跑 9 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
+- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑本地门禁：CHANGELOG/PRODUCT/docs 等纯文档改动只跑文档检查，README 属打包内容走全量门禁；main 上的代码改动另跑 9 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
 - 贡献者与 AI 协作代理都应遵循[文档同步技能](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md)：行为、文案或计数变化时，同步中英 README、`CHANGELOG.md` 与 `docs/` 对应文档。checkout 中以本地 `.agents/skills/sync-iui-docs/SKILL.md` 为准。
 - 维护者：[@Zephinel](https://github.com/Zephinel)。
 

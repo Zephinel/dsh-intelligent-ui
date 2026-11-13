@@ -45,7 +45,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/host/*.test.mjs test/client/*.test.mjs test/packaging/*.test.mjs",
     "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs && node test/renderer/media-row-check.mjs && node test/renderer/pressable-select-check.mjs && node test/renderer/css-contract-check.mjs && node test/renderer/prop-contract-check.mjs && node test/renderer/nested-css-contract-check.mjs && node test/renderer/capture-token-contract-check.mjs",
-    "check": "npm run typecheck && npm run build && npm test && npm run test:renderer && npm run check:docs-facts && npm run check:docs-links",
+    "check": "npm run typecheck && npm run build && npm test && npm run test:renderer && npm run check:docs-facts && npm run check:docs-links && npm run check:pack-facts",
     "pack:check": "npm pack --dry-run --json",
     "check:release": "node scripts/release-check.mjs",
     "prepare": "node scripts/build.mjs",
@@ -53,7 +53,8 @@
     "test:browser": "node test/browser/on-demand.e2e.mjs && node test/browser/style-panel.e2e.mjs && node test/browser/style-theme.e2e.mjs && node test/browser/export-image.e2e.mjs && node test/browser/standalone-page.e2e.mjs && node test/browser/article-layout.e2e.mjs && node test/browser/settings-picker.e2e.mjs && node test/browser/artifact-edit.e2e.mjs && node test/browser/nested-edit-renderer.e2e.mjs",
     "capture:readme": "node scripts/capture-screenshots.mjs && node scripts/capture-editor-screenshot.mjs && node scripts/capture-editor-screenshot.mjs --en && node scripts/build-readme-bento.mjs",
     "check:docs-facts": "node scripts/check-doc-facts.mjs",
-    "check:docs-links": "node scripts/check-docs-links.mjs"
+    "check:docs-links": "node scripts/check-docs-links.mjs",
+    "check:pack-facts": "node scripts/check-pack-facts.mjs"
   },
   "keywords": [
     "deepseek-harness",

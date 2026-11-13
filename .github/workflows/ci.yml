@@ -82,7 +82,9 @@ jobs:
             docs_only=true
             while IFS= read -r file; do
               case "$file" in
-                README.md|README.en.md|CHANGELOG.md|PRODUCT.md|docs/*|.agents/*) ;;
+                # README files are shipped in the tarball, so README edits take
+                # the full gate where check:pack-facts validates the bytes.
+                CHANGELOG.md|PRODUCT.md|docs/*|.agents/*) ;;
                 *) docs_only=false ;;
               esac
             done <<< "$files"
@@ -123,12 +125,6 @@ jobs:
       - name: Local gate
         if: env.DOCS_ONLY != 'true'
         run: npm run check
-      - name: Packaged manifest
-        if: env.DOCS_ONLY != 'true'
-        # `npm run check` already rebuilt lib/; --ignore-scripts avoids a second
-        # prepare/build just to measure the same tarball. Publish keeps the full
-        # pack:check so prepare itself is still validated before a release.
-        run: npm pack --dry-run --json --ignore-scripts
       - name: Generated files are committed
         if: env.DOCS_ONLY != 'true'
         run: git diff --exit-code
