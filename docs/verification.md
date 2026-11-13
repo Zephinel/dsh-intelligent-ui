@@ -1026,8 +1026,16 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 ## 2026-11-13 — 草稿行改为 chip 语言（gallery 同款）
 
 - **背景**：用户选定的 gallery 里草稿行是「文件图标 + 标题 chip + 修订/摘要 meta」；上一轮只落地了提示行（option C），真实草稿行仍是「待提交编辑 + 圆点 + 两行标题/摘要」。本轮把真实草稿行改成同款 chip 语言。
-- **实现**：`DraftDock.tsx` 的草稿行把标题包进 `.dsh-iui-edit-draft-chip`（`file-text-line` 12px 图标、hairline 边框、hover surface、`--dsw-radius-sm`），修订与请求摘要作为 chip 后的次要 meta 同行显示；删除旧圆点与两行文本节点及其 CSS；active 状态移到 chip（surface step + 主色 business 边框 + `aria-current`；hover 只提亮 hairline，不与选中态混淆），head/count、conflict/failed/detached 标签、Attach/Discard 动作与全部 data hooks 不变；行宽上限放宽到 400px 以容纳 chip+meta。
+- **实现**：`DraftDock.tsx` 的草稿行把标题包进 `.dsh-iui-edit-draft-chip`（`file-text-line` 12px 图标、hairline 边框、hover surface、`--dsw-radius-sm`），修订与请求摘要作为 chip 后的次要 meta 同行显示；删除旧圆点与两行文本节点及其 CSS；active 状态移到 chip（主色 business 边框作为选择提示 + `aria-current`；surface step 的填充变化约 1:1、实际不可辨；hover 只提亮 hairline，不与选中态混淆），head/count、conflict/failed/detached 标签、Attach/Discard 动作与全部 data hooks 不变；行宽上限放宽到 400px 以容纳 chip+meta。
 - **测试**：`artifact-edit` E2E 新增 3 条断言（草稿行内有 chip 文件图标、chip 保留 1px hairline 边框、active chip 的选中边框与 idle 不同），935 → **938 checks**；既有 dock 几何/居中/分隔线/交互断言全部保持。
 - **demo**：`.tmp-report/notice-demo.html`（本机临时服务 `:4175`）同步改为 chip 行，可切换状态/主题/草稿行/旧样式对比。
 - **实测门禁**：`npm run check` PASS；Node **810/810** = Host **309** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **938 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,120,723** 字节，解包 **13,147,971** 字节；构建 host **846 kB**、client **4.20 MB**（js 3.96 / CSS 244.8 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过。
 - **证据边界**：未调用真实模型；真机 GUI 需重启 DSH Web 后目视（client bundle 缓存）。E2E 截图（`harness-draft-dock.png`、`harness-apply-notice-and-dock*.png`）与 demo 覆盖明暗和 notice+dock 同屏。
+
+## 2026-11-13 — 独立复审未复审提交 + 复审修复（仅测试与文档）
+
+- **背景**：独立只读 subagent 复审两个从未复审的提交：`3e46080`（Standards/Spec 两路 review 的修复批次）与 `0f3bf54`（chip 草稿行 reviewer 意见后的 amend）。结论 **MERGE OK WITH NITS**，无 BLOCKER/MAJOR；产品修复成立，问题集中在两处测试真实性与文档精度。本轮只改测试/文档/检查脚本，不改产品行为。
+- **测试真实性**：`artifact-edit` E2E 的 active chip 断言原先只比较 active 与 idle 边框颜色，修复前的 `border-l3` 与 idle 的 `border-l2` 本就不同、旧代码同样通过；现在改为断言 active 边框等于 `--dsw-alias-state-business-primary`、不同于 hover token（`border-l3`），并对卡片表面达到 WCAG 1.4.11 的 3:1 非文本对比度，明暗两套主题都断言（938 → **943 checks**）。`test/host/tool.test.mjs` 直接断言 `ENABLED_SESSION_PREFIX`（此前删掉 prefix 里的 tie-break 句子仍会因静态 prompt 含同样句子而通过）；`RETIRED_SKILL_MARKERS` 增加两条旧 decision bullet 的字面子串。
+- **文档精度**：marker 模块归属改为「guardrail 与 release check 共用」（prompt 不 import 它）；`whenToUse` 列出实际排除项；README 的 `check:release` 行改为「校验每个打包路径存在 + 对所属路径哈希」；当前验证行由「未提交」改为「本地 main 未推送」；active chip 的提示说明为 business 边框（surface step 约 1:1）；55 px dock band 与无条件 meta tooltip 作为已接受项记录。
+- **实测门禁**：`npm run check` PASS；Node **810/810** = Host **309** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **943 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,120,930** 字节，解包 **13,148,354** 字节；构建 host **846 kB**、client **4.20 MB**（js 3.96 / CSS 244.8 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过；`npm run check:release` 复核 PASS。
+- **证据边界**：本轮为复审修复，未重新调用真实模型；模型侧 tie-break 行为仍以重启后的真机会话为最终验证；E2E 为组件级 harness；timeout/安装器路径沿用上一轮实测与本轮 `check:release` 复核。

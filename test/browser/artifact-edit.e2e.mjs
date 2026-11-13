@@ -785,13 +785,53 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelector('[data-dsh-iui-call-id="dst-call-1"]').getAttribute('data-dsh-iui-editing') === 'true'`, 'first draft active again')
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-draft-row][data-active="true"]').length === 1 && !document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'one active draft after close animation')
   check(await count('[data-dsh-iui-edit-draft-row][data-active="true"]'), 1, 'exactly one active draft')
-  const activeChipCue = await read(`(() => {
+  // The active cue must be perceptible and must not be the hover signal. Assert
+  // the token itself and its non-text contrast (WCAG 1.4.11 >= 3:1 against the
+  // card surface); a plain "active != idle" comparison also passes with the old
+  // border-l3 token and would not lock this fix.
+  const chipCueProbe = `(() => {
     const active = document.querySelector('[data-dsh-iui-edit-draft-row][data-active="true"] .dsh-iui-edit-draft-chip');
     const idle = document.querySelector('[data-dsh-iui-edit-draft-row]:not([data-active="true"]) .dsh-iui-edit-draft-chip');
-    if (!active || !idle) return null;
-    return { active: getComputedStyle(active).borderTopColor, idle: getComputedStyle(idle).borderTopColor };
-  })()`)
-  check(activeChipCue !== null && activeChipCue.active !== activeChipCue.idle, true, 'the active draft chip carries a distinct selection border')
+    if (!active) return null;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none';
+    document.body.appendChild(probe);
+    const token = name => {
+      probe.style.color = 'var(' + name + ')';
+      return getComputedStyle(probe).color;
+    };
+    const rgb = value => (value.match(/[0-9.]+/g) || []).slice(0, 3).map(Number);
+    const luminance = value => rgb(value).map(channel => {
+      const c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+    const contrast = (a, b) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    const result = {
+      activeBorder: getComputedStyle(active).borderTopColor,
+      idleBorder: idle ? getComputedStyle(idle).borderTopColor : null,
+      business: token('--dsw-alias-state-business-primary'),
+      hoverBorder: token('--dsw-alias-border-l3'),
+      card: token('--dsw-specific-input-major'),
+    };
+    result.activeVsCard = contrast(result.activeBorder, result.card);
+    probe.remove();
+    return result;
+  })()`
+  const activeChipCue = await read(chipCueProbe)
+  check(activeChipCue !== null && activeChipCue.activeBorder !== activeChipCue.idleBorder, true, 'the active draft chip carries a distinct selection border')
+  check(activeChipCue !== null && activeChipCue.activeBorder === activeChipCue.business, true, 'the active selection border is the business accent token')
+  check(activeChipCue !== null && activeChipCue.activeBorder !== activeChipCue.hoverBorder, true, 'hover (border-l3) cannot impersonate the active selection')
+  check(activeChipCue !== null && activeChipCue.activeVsCard >= 3, true, 'the active selection border meets 3:1 against the card surface')
+  await read('document.body.setAttribute("data-ds-dark-theme", "")')
+  await new Promise(resolve => setTimeout(resolve, 250))
+  const darkChipCue = await read(chipCueProbe)
+  check(darkChipCue !== null && darkChipCue.activeBorder === darkChipCue.business, true, 'the dark scheme uses the same business accent selection border')
+  check(darkChipCue !== null && darkChipCue.activeVsCard >= 3, true, 'the dark selection border meets 3:1 against the card surface')
+  await read('document.body.removeAttribute("data-ds-dark-theme")')
+  await new Promise(resolve => setTimeout(resolve, 250))
   // Delete the second chip; the draft must survive as detached, then re-attach.
   const refs = await read('window.__input().occurrences.filter(item => item.source === "artifact-edit").map(item => item.ref)')
   check(refs.length, 2, 'two chip references')

@@ -79,6 +79,11 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.match(enabledText, /There is no default format/)
   assert.match(enabledText, /an explanation of how something works is a page even when the prose version would be short/)
   assert.match(enabledText, /a pending edit request overrides the ordinary page-vs-text decision/)
+  // `enabledText` is the prefix plus the static prompt, and both carry the
+  // tie-break sentence; assert on the prefix itself so deleting it from
+  // ENABLED_SESSION_PREFIX cannot stay green through the prompt copy.
+  assert.match(plugin.ENABLED_SESSION_PREFIX, /For each ordinary answer, decide whether an interactive page serves the request better than text/)
+  assert.match(plugin.ENABLED_SESSION_PREFIX, /When both seem to fit, the kind decides/)
 })
 
 test('the free-composition preference appends its advisory note to the prompt', () => {

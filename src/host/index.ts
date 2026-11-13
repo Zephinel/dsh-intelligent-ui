@@ -394,7 +394,7 @@ function countStatements(program: string): number {
  * opt-in explicit instead of leaving the model to infer it from the tool's
  * presence, and states the per-answer page-vs-text decision in one place.
  */
-const ENABLED_SESSION_PREFIX =
+export const ENABLED_SESSION_PREFIX =
   'Intelligent UI is enabled for this session. There is no default format. For each ordinary answer, decide whether an interactive page serves the request better than text. '
   + 'Render when showing the answer helps the reader understand faster or more accurately; otherwise answer in Markdown without calling render_ui. '
   + 'When both seem to fit, the kind decides: a bare fact or a term restatement stays text, while an explanation of how something works is a page even when the prose version would be short. '

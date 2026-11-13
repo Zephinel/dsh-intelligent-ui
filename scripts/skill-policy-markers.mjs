@@ -25,6 +25,8 @@ export const RETIRED_SKILL_MARKERS = [
   'Answer in Markdown only when the whole answer is',
   'a definition or concise explanation',
   'Render a page when the answer gains from structure',
+  'when the answer gains from structure',
+  'would only decorate a short answer',
   'A knowledge or explainer topic is not automatically a prose answer',
   'adds the decision boundary',
 ]
