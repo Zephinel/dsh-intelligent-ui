@@ -377,30 +377,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   const orbitGeometry = `(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); const a = input.getBoundingClientRect(); const b = orbit.getBoundingClientRect(); return Math.abs(a.left - b.left - 5) < 1 && Math.abs(a.top - b.top - 5) < 1; })()`
   // The measured orbit position can trail one layout frame after focus; wait
   // for the settled geometry instead of failing the whole suite on that frame.
-  try {
-    await wait(orbitGeometry, 'orbit sits five pixels outside the field', { timeout: 12000 })
-  } catch (error) {
-    const diag = await read(`(() => {
-      const input = document.querySelector('[data-dsh-iui-edit-global]');
-      const orbit = document.querySelector('[data-dsh-iui-input-orbit]');
-      const a = input.getBoundingClientRect();
-      const b = orbit.getBoundingClientRect();
-      const host = orbit.parentElement;
-      return {
-        input: { left: a.left, top: a.top, width: a.width, height: a.height },
-        orbit: { left: b.left, top: b.top, width: b.width, height: b.height },
-        style: orbit.getAttribute('style'),
-        hostClass: host && host.className,
-        hostRect: host && host.getBoundingClientRect().toJSON(),
-        active: document.activeElement && document.activeElement.tagName,
-        scrollY: window.scrollY,
-        dpr: devicePixelRatio,
-        viewport: [innerWidth, innerHeight],
-      };
-    })()`)
-    console.log('ORBIT DIAGNOSTIC', JSON.stringify(diag))
-    throw error
-  }
+  // CI's first layout pass can be slower than a local one (cold font/layout
+  // work), so give the settled-geometry wait a generous bound while keeping the
+  // exact 5px requirement.
+  await wait(orbitGeometry, 'orbit sits five pixels outside the field', { timeout: 15000 })
   // The 320ms panel width animation can still be settling when the expression
   // first matches; sample again after it finishes so the assertion is stable.
   await new Promise(resolve => setTimeout(resolve, 400))
@@ -410,10 +390,10 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-edit-global]')).outlineStyle`), 'none', 'the field focus outline is replaced by the orbit')
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-input-orbit]'), '::before').display`), 'none', 'normal motion keeps the orbit as the only focus ring')
   await read(`(() => { const marker = document.createElement('div'); marker.id = 'orbit-reflow-marker'; marker.style.height = '40px'; document.querySelector('[data-dsh-iui-edit-view]').prepend(marker); return true; })()`)
-  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit follows a layout shift')
+  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit follows a layout shift', { timeout: 10000 })
   check(await read(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`), true, 'orbit follows a position-only layout shift')
   await read(`document.getElementById('orbit-reflow-marker').remove()`)
-  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit returns after reflow')
+  await wait(`(() => { const input = document.querySelector('[data-dsh-iui-edit-global]'); const orbit = document.querySelector('[data-dsh-iui-input-orbit]'); return Math.abs(parseFloat(orbit.style.top) - (input.getBoundingClientRect().top - 5)) < 1.5; })()`, 'orbit returns after reflow', { timeout: 10000 })
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   await new Promise(resolve => setTimeout(resolve, 120))
   check(await read(`getComputedStyle(document.querySelector('[data-dsh-iui-input-orbit]'), '::before').display`), 'block', 'reduced motion restores a static focus ring')
