@@ -197,7 +197,7 @@ Everyday checks and packaging:
 | `npm run build` | Generate the prompt, Host, Client and standalone export-page bundles |
 | `npm test` | Run Host, Client and packaging Node tests after a build |
 | `npm run typecheck` | Run `tsc --noEmit` (the browser `src/client` half is currently excluded: its DSH platform types are runtime-provided) |
-| `npm run check` | Full pre-submit check: typecheck, build, Node tests and renderer checks |
+| `npm run check` | Full pre-submit check: typecheck, build, Node tests, renderer checks and docs facts/links |
 | `npm run pack:check` | Preview the final npm package file list without publishing |
 | `npm run check:release` | Extract the packed tarball, check that every packed path exists in the checkout, hash-compare `lib/`, `skills/`, `locale/` and the bundle patch, then install it into a throwaway `$DSH_HOME` on an isolated port and verify the installed file set and hashes, the mounted row, the served client bundle and uninstall; never touches the user's profile; needs the `dsh` CLI and pnpm on PATH |
 | `npm run test:browser` | Run 9 browser suites after a build; Chrome required. `test/browser/visual-baselines/` holds manual visual baselines (5 PNGs + `captures.json` + `SHA256SUMS`) with no automated pixel comparison |
@@ -223,7 +223,7 @@ Market versions follow npm `latest`; after publishing a new version and pushing 
 ## Contributing
 
 - Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
-- Run `npm run check` before opening a PR; there is no PR CI, so the local command is the gate. Releases use the [GitHub Actions Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml); the development guide describes the process.
+- Run `npm run check` before opening a PR; CI ([`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)) runs the same local gate on PRs and main, plus the nine browser suites on main. Releases use the [GitHub Actions Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml) on `v*` tags; the development guide describes the process.
 - Contributors and AI coding agents should follow the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md): when behavior, copy or counts change, update both READMEs, `CHANGELOG.md` and the matching documents under `docs/`. In a checkout, use the local `.agents/skills/sync-iui-docs/SKILL.md`.
 - Maintainer: [@Zephinel](https://github.com/Zephinel).
 

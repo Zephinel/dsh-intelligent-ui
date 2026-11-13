@@ -1039,3 +1039,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **文档精度**：marker 模块归属改为「guardrail 与 release check 共用」（prompt 不 import 它）；`whenToUse` 列出实际排除项；README 的 `check:release` 行改为「校验每个打包路径存在 + 对所属路径哈希」；当前验证行由「未提交」改为「本地 main 未推送」；active chip 的提示说明为 business 边框（surface step 约 1:1）；55 px dock band 与无条件 meta tooltip 作为已接受项记录。
 - **实测门禁**：`npm run check` PASS；Node **810/810** = Host **309** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,120,929** 字节，解包 **13,148,354** 字节；构建 host **846 kB**、client **4.20 MB**（js 3.96 / CSS 244.8 kB）；`npm run check:docs-facts` 与 `git diff --check` 通过；`npm run check:release` 复核 PASS。
 - **证据边界**：本轮为复审修复，未重新调用真实模型；模型侧 tie-break 行为仍以重启后的真机会话为最终验证；E2E 为组件级 harness；timeout/安装器路径沿用上一轮实测与本轮 `check:release` 复核。
+
+
+## 2026-11-14 — CI 工作流与文档链接守卫
+
+- **背景**：full audit 之后补 CI 与机械守卫；本轮不改产品行为。新增 `.github/workflows/ci.yml`（PR/main 的 `verify`：与本地一致的 `npm run check`、`pack:check`、生成物检查；main/手动触发另跑 9 个浏览器套件，因 artifact-edit 有已知 flake 暂不作为 PR 门禁）并加固 `publish.yml`（`pack:check`、CHANGELOG 版本段、发布后 registry/dist-tag 校验）；`check:release` 仍为本地发布前门禁，Linux CI 行为待验证。
+- **文档链接守卫**：新增 `npm run check:docs-links` 并纳入 `npm run check`，覆盖 README/docs/Agent Skill 的本地链接、锚点、GitHub 仓库链接与 clone URL；`test/packaging/manifest.test.mjs` 增加 CHANGELOG 条目唯一性、renderer README 脚本覆盖与 workflow 触发/gate 断言。README、development、limitations 与 sync 技能 references 同步更新（CI 说明、命令表、限制表述、发布 gate）。
+- **实测门禁**：`npm run check` PASS；Node **810/810** = Host **309** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,121,021** 字节，解包 **13,148,777** 字节；构建 host **846 kB**、client **4.20 MB**（js 3.96 / CSS 244.8 kB）；`npm run check:docs-facts`/`check:docs-links`、`git diff --check` 通过；`check:release` 本轮未重跑（本地门禁沿用上一轮记录）。
+- **证据边界**：GitHub Actions 工作流尚未在真实 runner 执行（本机只做 YAML 解析与本地等价命令验证）；首次 CI 的 Linux/Chrome 行为、以及 `check:release` 能否在 Linux runner 跑通，需要观察后再决定是否把它接入 CI；未调用真实模型。

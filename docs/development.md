@@ -106,7 +106,8 @@ npm run build          # prompt + host + client 全量构建
 npm run build:client   # 只重建浏览器 bundle
 npm run build:host     # 只重建 Host
 npm run typecheck      # tsc --noEmit；浏览器 src/client 因运行时平台包类型不可解析而排除
-npm run check          # typecheck + build + Host/Client/打包测试 + renderer 检查
+npm run check          # typecheck + build + Host/Client/打包测试 + renderer + 文档事实/链接检查
+npm run check:docs-links # 校验 README/docs/Agent Skill 的本地链接、锚点、仓库链接与 clone URL（已含在 check 中）
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内全量文件哈希、挂载、client bundle → 卸载（需要 dsh + pnpm）
 npm run test:browser   # 9 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染
@@ -168,6 +169,15 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 
 反例是基础登记之前的旧卡：同一张卡在结构操作、修订历史与恢复里分别失败成不同错误。参考实现：`src/shared/artifact-base.ts`（共享契约与校验）、`src/host/artifact-base.ts`（登记生命周期与 base resolve 边界）、`src/client/artifact-edit/artifact-base.ts`（single-flight ensure 与旧 Host 能力缓存）。
 
+## 持续集成（CI）
+
+仓库有两个 GitHub Actions 工作流（GitHub-hosted `ubuntu-latest`，Node 24；Chrome 由 runner 提供，步骤里解析其路径并断言存在，避免排版检查静默跳过）：
+
+- [`ci.yml`](../.github/workflows/ci.yml)：`verify` job 在 **PR 与 main push** 上跑与本地一致的 `npm run check`（typecheck/build/Node/renderer/docs-facts/docs-links）、`npm run pack:check`，并检查生成物（`src/generated/prompt.txt`）已提交；`browser` job 只在 **main push 与手动触发** 时跑 9 个 Chrome 套件——`artifact-edit` 有已知的少量 flake 概率，暂不作为 PR 必过门禁。
+- [`publish.yml`](../.github/workflows/publish.yml)：`v*` tag 触发，流程见[发布（Trusted Publishing）](#发布trusted-publishing)。
+
+`npm run check:release`（打包 → 一次性 `DSH_HOME` 安装 → 启动隔离 Web → 卸载）尚未接入 CI：Linux runner 上的行为还需要一次验证，目前它是**本地发布前门禁**，不要在没跑过它的机器上发版。分支保护（required status check `verify`）与 `v*` tag 限制需要在 GitHub 仓库设置里由维护者开启，不在代码里。
+
 ## 发布前检查
 
 发布前按顺序运行：
@@ -227,7 +237,7 @@ git push origin main --follow-tags
 
 5. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.5.0 — 2026-10-25`），正文概述该版本变更；npm publish 由 tag 触发，Release 页面需单独创建。
 
-`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，跑 `npm run check`，再用 OIDC + `--provenance` 发布到 npm；不需要 `NODE_AUTH_TOKEN`。发布后用 `npm view @zephinel/dsh-intelligent-ui version dist-tags` 校验。
+`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
 > 版本号约定：正式版使用稳定 semver（如 `0.5.0`，tag `v0.5.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 

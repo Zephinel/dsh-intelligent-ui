@@ -106,7 +106,8 @@ npm run build          # full build of prompt + host + client
 npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
-npm run check          # typecheck + build + Host/Client/packaging tests + renderer checks
+npm run check          # typecheck + build + Host/Client/packaging tests + renderer + docs facts/links
+npm run check:docs-links # README/docs/Agent-Skill local links, anchors, repository links and clone URL (already inside check)
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 npm run check:release  # pack → throwaway DSH_HOME install → check full packaged file hashes, mount, served bundle → uninstall (needs dsh + pnpm)
 npm run test:browser   # 9 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
@@ -168,6 +169,15 @@ Any capability that adds new Host-side collaborative state (for example the auth
 
 The counter-example is the old card before base registration: the same card failed differently across structure operations, revision history and restore. Reference implementation: `src/shared/artifact-base.ts` (shared contract and validation), `src/host/artifact-base.ts` (registration lifecycle and base resolve boundary), `src/client/artifact-edit/artifact-base.ts` (single-flight ensure and old-Host capability cache).
 
+## Continuous integration (CI)
+
+Two GitHub Actions workflows (GitHub-hosted `ubuntu-latest`, Node 24; Chrome comes from the runner and each job resolves its path and fails loudly if it is missing, so the typography check cannot silently skip):
+
+- [`ci.yml`](../.github/workflows/ci.yml): the `verify` job runs the same local gate on **PRs and main pushes** — `npm run check` (typecheck/build/Node/renderer/docs-facts/docs-links), `npm run pack:check` and a generated-file check (`src/generated/prompt.txt` must be committed); the `browser` job runs the nine Chrome suites only on **main pushes and manual dispatch** — the artifact-edit suite has a known small flake probability, so it is not a PR gate yet.
+- [`publish.yml`](../.github/workflows/publish.yml): triggered by `v*` tags, see [Releasing (Trusted Publishing)](#releasing-trusted-publishing).
+
+`npm run check:release` (pack → install into a throwaway `DSH_HOME` → serve → uninstall) is not wired into CI yet: its Linux runner behaviour still needs a spike, so it remains a **local pre-release gate** — do not release from a machine that has not run it. Branch protection (required `verify` status check) and the `v*` tag restriction are GitHub repository settings the maintainer enables, not code.
+
 ## Pre-release checks
 
 Run these in order before publishing:
@@ -227,7 +237,7 @@ git push origin main --follow-tags
 
 5. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.5.0 — 2026-10-25`) with a short summary. npm publish is triggered by the tag; the Release page is created separately.
 
-`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check`, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. Verify afterwards with `npm view @zephinel/dsh-intelligent-ui version dist-tags`.
+`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
 
 > Version convention: production releases use stable semver (for example `0.5.0`, tag `v0.5.0`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 

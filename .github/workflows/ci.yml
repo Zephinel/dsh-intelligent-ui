@@ -1,0 +1,94 @@
+# Continuous integration for the local gate.
+#
+# - `verify` runs on every PR and push to main: typecheck/build/Node/renderer
+#   tests, docs-facts and docs-links inside `npm run check`, plus the packaged
+#   manifest and a generated-prompt freshness check. Chrome is preinstalled on
+#   ubuntu runners; CHROME_BIN is explicit so a missing browser fails instead of
+#   silently skipping the typography check.
+# - `browser` runs the nine Chrome suites on main pushes and manual dispatch
+#   only. The artifact-edit suite has a known small flake probability, so it is
+#   deliberately not a PR gate yet.
+# - `check:release` (pack -> install into a throwaway DSH_HOME -> serve -> uninstall)
+#   is not wired in yet: its Linux runner behaviour needs a spike, so it stays a
+#   local pre-release gate for now. Never publish from a job that did not run it.
+#
+# Owner setup (GitHub settings, not code): require the `verify` status check on
+# main/branches and restrict `v*` tag creation to maintainers.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Resolve Chrome
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [ -z "$chrome" ]; then
+            echo "::error::Chrome not found on the runner"
+            exit 1
+          fi
+          echo "CHROME_BIN=$chrome" >> "$GITHUB_ENV"
+          echo "using $chrome"
+      - name: Install dependencies
+        run: npm ci
+      - name: Local gate
+        run: npm run check
+      - name: Packaged manifest
+        run: npm run pack:check
+      - name: Generated files are committed
+        run: git diff --exit-code
+
+  browser:
+    name: browser
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Resolve Chrome
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [ -z "$chrome" ]; then
+            echo "::error::Chrome not found on the runner"
+            exit 1
+          fi
+          echo "CHROME_BIN=$chrome" >> "$GITHUB_ENV"
+          echo "using $chrome"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Browser suites
+        run: npm run test:browser

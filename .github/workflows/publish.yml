@@ -9,13 +9,17 @@
 # or npmjs.com → the package → Settings → Trusted Publishing → GitHub Actions
 # (repository Zephinel/dsh-intelligent-ui, workflow publish.yml).
 #
-# Release: bump the version and update the docs, commit, then push a matching tag:
+# Release: bump the version and update the docs (keep the CHANGELOG section),
+# commit, then push a matching tag:
 #
-#   git tag v0.3.0-26-10-22
-#   git push origin main --follow-tags
+#   git tag v0.5.0
+#   git push origin v0.5.0
 #
-# The job fails if the tag does not match package.json, so a mistyped tag cannot
-# publish the wrong version.
+# The job fails if the tag does not match package.json, if `npm run check` or
+# `npm run pack:check` fails, or if CHANGELOG.md has no section for the version,
+# so a mistyped or undocumented tag cannot publish. `check:release` (install the
+# tarball into a throwaway DSH_HOME and serve it) is still a local pre-release
+# gate: wire it in here only after its Linux runner behaviour is verified.
 name: publish
 
 on:
@@ -60,8 +64,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and test
+      - name: Local gate
         run: npm run check
+
+      - name: Packaged manifest
+        run: npm run pack:check
+
+      - name: Release notes exist for this version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if ! grep -q "^## \[${version}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no \"## [${version}]\" section"
+            exit 1
+          fi
+          echo "changelog section ok: ${version}"
 
       - name: Publish with provenance
         run: npm publish --access public --tag latest --provenance
+
+      - name: Verify the published version and dist-tag
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          for attempt in 1 2 3 4 5; do
+            published="$(npm view @zephinel/dsh-intelligent-ui version 2>/dev/null || true)"
+            latest="$(npm view @zephinel/dsh-intelligent-ui dist-tags.latest 2>/dev/null || true)"
+            if [ "$published" = "$version" ] && [ "$latest" = "$version" ]; then
+              echo "registry: $published (latest)"
+              exit 0
+            fi
+            echo "registry not settled yet ($published / ${latest:-none}); retrying"
+            sleep 3
+          done
+          echo "::error::registry verification failed: version=${published:-none} latest=${latest:-none} expected=$version"
+          exit 1

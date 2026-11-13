@@ -130,6 +130,15 @@ test('the two README languages ship, the changelog stays append-only and the doc
   assert.ok(rendererScripts.size > 0, 'package.json names the renderer check scripts')
   const undocumented = [...rendererScripts].filter(name => !rendererReadme.includes(name))
   assert.deepEqual(undocumented, [], 'test/renderer/README.md names every renderer check script')
+  // Workflow contract: CI runs the local gate on PRs/main and publishing stays tag-only.
+  const ci = read('.github/workflows/ci.yml')
+  assert.match(ci, /pull_request:/, 'CI covers pull requests')
+  assert.match(ci, /npm run check/, 'CI runs the local gate')
+  assert.match(ci, /npm run test:browser/, 'CI runs the browser suites')
+  const publish = read('.github/workflows/publish.yml')
+  assert.match(publish, /tags:\s*\n\s*- 'v\*'/, 'publish runs on v* tags')
+  assert.match(publish, /npm run pack:check/, 'publish validates the packaged manifest')
+  assert.match(publish, /Verify the published version and dist-tag/, 'publish verifies the registry result')
 })
 
 test('the bundle patch inserts the host row under the installed package name', () => {
