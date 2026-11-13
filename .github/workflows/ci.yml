@@ -45,7 +45,7 @@ jobs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Classify the change
@@ -99,11 +99,11 @@ jobs:
       DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Set up Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -154,11 +154,11 @@ jobs:
             suites: on-demand style-panel style-theme export-image standalone-page article-layout settings-picker nested-edit-renderer
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Set up Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
