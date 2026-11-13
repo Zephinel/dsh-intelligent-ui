@@ -3,8 +3,9 @@
 Most of these scripts cover the `src/lib` half (the OpenUI Lang renderer) without a
 browser; the typography check uses headless Chrome. They are not part of the client
 bundle. `npm run test:renderer` runs the parser, render, contrast, i18n, typography,
-media-row, pressable-select, CSS-contract and prop-contract checks in order;
-`npm run check` runs them after the build and the Node test suites.
+media-row, pressable-select, CSS-contract, prop-contract, nested-CSS-contract and
+capture-token-contract checks in order; `npm run check` runs them after the build
+and the Node test suites.
 
 ## Parser check
 
@@ -127,6 +128,32 @@ carousel `itemWidth`, chart series inference and stacked negatives, aspect ratio
 raw table numbers, YouTube URL forms, safe CSS lengths, slider state, Flashcard
 semantics, decimal-comma input, Markdown nesting and out-of-domain `@function`
 calls rendering empty instead of failing the card.
+
+## Nested CSS contract check
+
+```sh
+node test/renderer/nested-css-contract-check.mjs
+```
+
+Static check for the nested edit-mode wrappers: every direct-child selector in
+`src/lib/components/components.css` whose owner can be an allowlisted nested
+container (`Col`, `Row`, `Box`, `Grid`, `Card`, `Section`, `Carousel` or a
+`.iui-flow` element) must have an explicit `display:contents` compensation rule in
+`nested-edit.css`, and the scoped grid/carousel typography caps must be repeated
+through the wrapper. Currently **28/28 direct + 5/5 scoped**; it fails when a
+component selector or the compensation layer changes only on one side.
+
+## Capture token contract check
+
+```sh
+node test/renderer/capture-token-contract-check.mjs
+```
+
+Compares every `--dsw-alias-*` variable the client CSS references against the
+tokens defined by the editor capture script (`scripts/capture-editor-screenshot.mjs`).
+A missing token silently renders a transparent or white control only in the README
+screenshot (the browser E2E still sees the element), so this check pins the
+**23 alias tokens** the captures depend on.
 
 ## Theme torture
 

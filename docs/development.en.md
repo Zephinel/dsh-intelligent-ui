@@ -229,7 +229,7 @@ git push origin main --follow-tags
 
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check`, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. Verify afterwards with `npm view @zephinel/dsh-intelligent-ui version dist-tags`.
 
-> Version convention: production releases use stable semver (for example `0.5.0`, tag `v0.5.0`), and the GitHub Release title carries the date. Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds.
+> Version convention: production releases use stable semver (for example `0.5.0`, tag `v0.5.0`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
 

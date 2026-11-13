@@ -229,7 +229,7 @@ git push origin main --follow-tags
 
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，跑 `npm run check`，再用 OIDC + `--provenance` 发布到 npm；不需要 `NODE_AUTH_TOKEN`。发布后用 `npm view @zephinel/dsh-intelligent-ui version dist-tags` 校验。
 
-> 版本号约定：正式版使用稳定 semver（如 `0.5.0`，tag `v0.5.0`），GitHub Release 标题带日期。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。
+> 版本号约定：正式版使用稳定 semver（如 `0.5.0`，tag `v0.5.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 
 > 旧的 granular token 直接发布方式将在 2027-01 移除；这个流程不依赖长期 token。
 

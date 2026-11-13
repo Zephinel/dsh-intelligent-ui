@@ -104,16 +104,32 @@ test('every shipped screenshot exists and is used by the matching README', () =>
   }
 })
 
-test('the two README languages ship and link to each other', () => {
+test('the two README languages ship, the changelog stays append-only and the docs README covers every check', () => {
   assert.match(read('README.md'), /\[English\]\(README\.en\.md\)/, 'Chinese README links to English')
   assert.match(read('README.en.md'), /\[中文\]\(README\.md\)/, 'English README links to Chinese')
   // The changelog is English-only and repo-only: both READMEs link it, it has an
   // Unreleased section, and it stays out of the npm tarball.
   assert.match(read('README.md'), /CHANGELOG\.md/, 'Chinese README links the changelog')
   assert.match(read('README.en.md'), /CHANGELOG\.md/, 'English README links the changelog')
+  const changelog = read('CHANGELOG.md')
   assert.ok(existsSync(new URL('CHANGELOG.md', root)), 'CHANGELOG.md exists')
-  assert.match(read('CHANGELOG.md'), /^## \[Unreleased\]$/m, 'CHANGELOG.md has an Unreleased section')
+  assert.match(changelog, /^## \[Unreleased\]$/m, 'CHANGELOG.md has an Unreleased section')
   assert.ok(!pkg.files.includes('CHANGELOG.md'), 'CHANGELOG.md stays out of the npm package')
+  // Released sections are append-only: a bullet duplicated into a later version
+  // (the 2026-11-05 regression) is corrupt history, not release notes.
+  const bullets = changelog.split('\n').filter(line => line.startsWith('- '))
+  const duplicated = bullets.filter((line, index) => bullets.indexOf(line) !== index)
+  assert.deepEqual([...new Set(duplicated)].map(line => line.slice(0, 60)), [], 'every CHANGELOG bullet is unique')
+  // test/renderer/README.md must describe every script the renderer gates run;
+  // the nested-CSS and capture-token contracts were silently missing from it.
+  const rendererReadme = read('test/renderer/README.md')
+  const rendererScripts = new Set()
+  for (const key of ['test:renderer', 'check:theme']) {
+    for (const match of (pkg.scripts[key] ?? '').matchAll(/test\/renderer\/([A-Za-z0-9._-]+\.mjs)/g)) rendererScripts.add(match[1])
+  }
+  assert.ok(rendererScripts.size > 0, 'package.json names the renderer check scripts')
+  const undocumented = [...rendererScripts].filter(name => !rendererReadme.includes(name))
+  assert.deepEqual(undocumented, [], 'test/renderer/README.md names every renderer check script')
 })
 
 test('the bundle patch inserts the host row under the installed package name', () => {
