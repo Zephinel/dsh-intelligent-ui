@@ -173,7 +173,9 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 
 仓库有两个 GitHub Actions 工作流（GitHub-hosted `ubuntu-latest`，Node 24；Chrome 由 runner 提供，步骤里解析其路径并断言存在，避免排版检查静默跳过）：
 
-- [`ci.yml`](../.github/workflows/ci.yml)：`verify` job 在 **PR 与 main push** 上跑与本地一致的 `npm run check`（typecheck/build/Node/renderer/docs-facts/docs-links）、`npm run pack:check`，并检查生成物（`src/generated/prompt.txt`）已提交；`browser` job 只在 **main push 与手动触发** 时跑 9 个 Chrome 套件——`artifact-edit` 有已知的少量 flake 概率，暂不作为 PR 必过门禁。
+- [`ci.yml`](../.github/workflows/ci.yml)：`changes` job 先判断改动是否只涉及 README/CHANGELOG/PRODUCT/docs/.agents；`verify` job **在 PR 与 main push 上始终运行**（因此 required status check 不会因 paths 过滤被跳过），全量改动跑 `npm run check`（typecheck/build/Node/renderer/docs-facts/docs-links）、`npm run pack:check` 和生成物检查，纯文档改动只跑 `check:docs-facts` + `check:docs-links`（数秒级；注意纯文档快速路径不重新打包，README 文字若改变 tarball 字节需本地跑一次 `npm run pack:check`）；`browser` job 只在 main push 与手动触发时跑 9 个 Chrome 套件——本地实测 `artifact-edit` 约占整套 78 秒中的 58 秒，拆到多机反而多付 setup，故保持单 job；它不作为 PR 门禁（该套件有已知的少量 flake 概率）。
+- 并发：PR 使用同一并发组且 `cancel-in-progress`，连续推送只保留最新一次；main 每个 commit 使用独立组（含 SHA），保证 main 上每个提交都完整跑过，符合发版分支要求。
+- 缓存：只使用 `actions/setup-node` 的 npm 缓存（按 lockfile 键）；`lib/` 是 ignored 构建产物且完整构建约 0.8 秒，不缓存。
 - [`publish.yml`](../.github/workflows/publish.yml)：`v*` tag 触发，流程见[发布（Trusted Publishing）](#发布trusted-publishing)。
 
 `npm run check:release`（打包 → 一次性 `DSH_HOME` 安装 → 启动隔离 Web → 卸载）尚未接入 CI：Linux runner 上的行为还需要一次验证，目前它是**本地发布前门禁**，不要在没跑过它的机器上发版。分支保护（required status check `verify`）与 `v*` tag 限制需要在 GitHub 仓库设置里由维护者开启，不在代码里。

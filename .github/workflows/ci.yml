@@ -1,16 +1,21 @@
-# Continuous integration for the local gate.
+# Continuous integration.
 #
-# - `verify` runs on every PR and push to main: typecheck/build/Node/renderer
-#   tests, docs-facts and docs-links inside `npm run check`, plus the packaged
-#   manifest and a generated-prompt freshness check. Chrome is preinstalled on
-#   ubuntu runners; CHROME_BIN is explicit so a missing browser fails instead of
-#   silently skipping the typography check.
-# - `browser` runs the nine Chrome suites on main pushes and manual dispatch
-#   only. The artifact-edit suite has a known small flake probability, so it is
-#   deliberately not a PR gate yet.
-# - `check:release` (pack -> install into a throwaway DSH_HOME -> serve -> uninstall)
-#   is not wired in yet: its Linux runner behaviour needs a spike, so it stays a
-#   local pre-release gate for now. Never publish from a job that did not run it.
+# Design notes (measured, 2026-11-14):
+# - `verify` runs on every PR and main push. The job always runs, so a required
+#   status check can never be left pending by a skipped/path-filtered run; a
+#   cheap `changes` job decides whether the full gate or only the docs gate is
+#   needed. A docs-only change costs seconds instead of the full suite.
+# - Concurrency: PR pushes cancel superseded runs; main pushes use a per-SHA
+#   group so every commit on main runs to completion (a release branch must not
+#   skip gates).
+# - `browser` runs the nine Chrome suites only on main/manual dispatch. Local
+#   measurements: artifact-edit dominates (~58 s of ~78 s total), so sharding
+#   across runners adds more setup than it saves; the single job stays, and it is
+#   not a PR gate because artifact-edit has a known small flake probability.
+# - Caches: only actions/setup-node's npm cache (lockfile keyed). `lib/` is an
+#   ignored build artifact and is rebuilt in ~0.8 s, so it is not cached.
+# - `check:release` (pack -> throwaway DSH_HOME -> serve -> uninstall) is still a
+#   local pre-release gate: its Linux runner behaviour needs a spike first.
 #
 # Owner setup (GitHub settings, not code): require the `verify` status check on
 # main/branches and restrict `v*` tag creation to maintainers.
@@ -26,14 +31,71 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # main: unique group per SHA -> every main commit finishes. PRs: shared group
+  # per branch -> only the latest push runs.
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: change classification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the change
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          docs_only=false
+          case "$EVENT_NAME" in
+            pull_request)
+              git fetch --depth=1 origin "$BASE_REF" >/dev/null 2>&1 || true
+              range="FETCH_HEAD...HEAD"
+              ;;
+            push)
+              if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+                range="$BEFORE_SHA...$HEAD_SHA"
+              else
+                range=""
+              fi
+              ;;
+            *) range="" ;;
+          esac
+          files=""
+          if [ -n "$range" ]; then
+            files="$(git diff --name-only "$range" 2>/dev/null || true)"
+          fi
+          if [ -n "$files" ]; then
+            docs_only=true
+            while IFS= read -r file; do
+              case "$file" in
+                README.md|README.en.md|CHANGELOG.md|PRODUCT.md|docs/*|.agents/*) ;;
+                *) docs_only=false ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docs-only: $docs_only"
+
   verify:
     name: verify
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -45,6 +107,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Resolve Chrome
+        if: env.DOCS_ONLY != 'true'
         run: |
           chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
           if [ -z "$chrome" ]; then
@@ -54,17 +117,27 @@ jobs:
           echo "CHROME_BIN=$chrome" >> "$GITHUB_ENV"
           echo "using $chrome"
       - name: Install dependencies
+        if: env.DOCS_ONLY != 'true'
         run: npm ci
       - name: Local gate
+        if: env.DOCS_ONLY != 'true'
         run: npm run check
       - name: Packaged manifest
+        if: env.DOCS_ONLY != 'true'
         run: npm run pack:check
       - name: Generated files are committed
+        if: env.DOCS_ONLY != 'true'
         run: git diff --exit-code
+      - name: Docs fast gate
+        if: env.DOCS_ONLY == 'true'
+        run: |
+          npm run check:docs-facts
+          npm run check:docs-links
 
   browser:
     name: browser
-    if: github.event_name != 'pull_request'
+    needs: changes
+    if: github.event_name != 'pull_request' && needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
