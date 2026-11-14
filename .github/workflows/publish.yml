@@ -89,17 +89,22 @@ jobs:
         run: npm publish --access public --tag latest --provenance
 
       - name: Verify the published version and dist-tag
+        # Registry propagation can take several minutes (0.6.0 took ~7 min to
+        # appear through the packument even though `npm publish` succeeded).
+        # Poll the cheap dist-tags/version endpoints directly with a long bound
+        # instead of trusting a cached `npm view` for a few seconds.
         run: |
           version="$(node -p "require('./package.json').version")"
-          for attempt in 1 2 3 4 5; do
-            published="$(npm view @zephinel/dsh-intelligent-ui version 2>/dev/null || true)"
-            latest="$(npm view @zephinel/dsh-intelligent-ui dist-tags.latest 2>/dev/null || true)"
-            if [ "$published" = "$version" ] && [ "$latest" = "$version" ]; then
-              echo "registry: $published (latest)"
+          encoded="$(node -p "require('./package.json').name.replace('/', '%2F')")"
+          for attempt in $(seq 1 60); do
+            tags="$(curl -fsS --max-time 10 "https://registry.npmjs.org/-/package/${encoded}/dist-tags" 2>/dev/null || true)"
+            status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "https://registry.npmjs.org/${encoded}/${version}" 2>/dev/null || true)"
+            if [ "$status" = "200" ] && printf '%s' "$tags" | grep -Fq "\"latest\":\"${version}\""; then
+              echo "registry: ${version} (latest; version endpoint 200)"
               exit 0
             fi
-            echo "registry not settled yet ($published / ${latest:-none}); retrying"
-            sleep 3
+            echo "registry not settled yet (version endpoint ${status:-none}; tags: ${tags:-none}); retrying"
+            sleep 10
           done
-          echo "::error::registry verification failed: version=${published:-none} latest=${latest:-none} expected=$version"
+          echo "::error::registry verification failed after 10 minutes: expected ${version}; last tags=${tags:-none} status=${status:-none}"
           exit 1

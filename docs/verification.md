@@ -1079,3 +1079,10 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **背景**：把 0.5.0 之后的 Unreleased 收束为 0.6.0（`package.json`/lock 0.6.0，CHANGELOG 新增 `## [0.6.0] - 2026-11-14`），并新增发布前人工审核的 `release-notes/0.6.0.md` 与 `.en.md`。README 状态/安装 pin、development 的 latest pin 与 tag 示例同步到 0.6.0；旧状态行里「本地 main 未推送」的错误说法已删除。
 - **门禁**：`npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`sidebar-update` **23 checks**；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,366** 字节；`npm run check:release`（本机）PASS：65 个打包文件与安装副本逐字节一致、loader row/client bundle/embedded skill/卸载均通过；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **发版状态**：版本与发布说明已准备好，等待维护者审核 release-notes 文案后再打 `v0.6.0` tag；publish workflow 会在 tag 上重跑 check/pack:check/release-notes 并用 Trusted Publishing 发布。
+
+## 2026-11-14 — 0.6.0 发布
+
+- **发布**：tag `v0.6.0`（annotated，指向 `ee1e511`）触发 publish workflow（run 43605229838）；`npm publish --access public --tag latest --provenance` 成功，registry 稍后显示 **0.6.0** 为 `latest`，dist attestations 带 SLSA provenance；GitHub Release 已创建。tag 固定的 `release-notes/0.6.0.md` 与 `.en.md` 返回 200，更新提示在 0.5.0 用户上可获得已审核要点。
+- **发布 job 的假红**：workflow 的 registry 校验只重试 5 次 ×3 s，publish 成功后 packument 传播约 7 分钟，校验因此失败并让 run 变红；`npm view` 当时仍返回 0.5.0，但 `dist-tags`/版本端点最终为 0.6.0。已把校验改为直接轮询 registry 端点、最多 10 分钟（见 Unreleased Fixed），避免后续版本重演。
+- **门禁**：本机 `npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`sidebar-update` **23 checks**；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,366** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **证据边界**：`check:release` 在发版前本机 PASS（65 个打包文件与安装副本一致）；publish workflow 不运行浏览器套件（这些在 main CI 已跑）；GitHub Release 正文为人工创建（workflow 不自动建 Release）。

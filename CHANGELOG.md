@@ -7,6 +7,10 @@ been published yet.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Registry verification waits for npm propagation.** The publish workflow asked npm for the new version for only five attempts × 3 s and treated a stale packument as a failed publish, even though `npm publish` had succeeded (0.6.0 appeared through the registry about seven minutes later). The step now polls the dist-tags endpoint plus the version endpoint directly for up to ten minutes before failing.
+
 ## [0.6.0] - 2026-11-14
 
 ### Added
