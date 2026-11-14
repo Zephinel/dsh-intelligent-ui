@@ -87,7 +87,7 @@ Three real examples (sales dashboard, coffee brewing quiz, pour-over calculator 
 | Bilingual UI | Follows DSH's Chinese or English UI language |
 | Agent Skill | Registers `intelligent-ui` with the plugin so the model can load syntax, examples and troubleshooting on demand |
 | Plugin detail page | Manage global enablement, default style, templates, composition, experimental features and export preferences in one place |
-| Update notice | The Host reads the npm `latest` stable version (six-hour cache; highlights come from the human-reviewed `release-notes/<version>.md`); a newer version adds one sidebar card whose popover lists the points, with an arrow that opens the plugin detail page. The card stays in normal flow and never covers Plugins or Automation tasks |
+| Update notice | The Host reads the npm `latest` stable version (six-hour cache; highlights come from the human-reviewed `release-notes/<version>.md`); a newer version adds one sidebar card whose "View details" label opens a popover with the points; clicking the rest of the card (including the always-right arrow) opens the plugin detail page. The card stays in normal flow and never covers Plugins or Automation tasks |
 | Replayable | Programs and temporary styles replay from recorded tool arguments; exported pages freeze the scheme at export time |
 
 ## Getting the code

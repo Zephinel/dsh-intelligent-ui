@@ -81,7 +81,7 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
   const [, setRevision] = useState(0)
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<PopoverPlacement | null>(null)
-  const cardRef = useRef<HTMLButtonElement | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const titleId = useId()
   useEffect(() => {
@@ -131,7 +131,6 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
 
   useEffect(() => {
     if (!open) return
-    popoverRef.current?.querySelector<HTMLElement>('[data-dsh-iui-update-open]')?.focus()
     const onPointer = (event: PointerEvent): void => {
       const target = event.target as Node | null
       if (target === null) return
@@ -171,18 +170,6 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
           <strong id={`${titleId}-title`}>{t('update.highlights')}</strong>
           <span className="dsh-iui-update-popover-version">{view.current} → {latest}</span>
         </div>
-        {openDetails === undefined ? null : (
-          <button
-            type="button"
-            className="dsh-iui-update-popover-arrow"
-            data-dsh-iui-update-open
-            aria-label={t('update.openDetails')}
-            title={t('update.openDetails')}
-            onClick={() => { setOpen(false); openDetails() }}
-          >
-            <RemixIcon name="arrow-right-up-line" size={16} />
-          </button>
-        )}
       </div>
       {highlights.length === 0
         ? <p className="dsh-iui-update-popover-empty">{t(POPOVER_EMPTY_KEY)}</p>
@@ -197,27 +184,41 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
 
   return (
     <>
-      <button
+      <div
         ref={cardRef}
-        type="button"
         className={`dsh-iui-sidebar-update${open ? ' is-open' : ''}`}
         data-dsh-iui-sidebar-update
         data-version={latest}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? titleId : undefined}
-        onClick={() => { setOpen((value) => !value) }}
       >
-        <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><PluginMark /></span>
-        <span className="dsh-iui-sidebar-update-copy">
-          <span className="dsh-iui-sidebar-update-title">{t('update.title', { name: SHORT_NAME })}</span>
-          <span className="dsh-iui-sidebar-update-meta">
-            <span className="dsh-iui-sidebar-update-versions">{view.current} → {latest}</span>
-            <span className="dsh-iui-sidebar-update-action">{t('update.open')}</span>
+        {openDetails === undefined ? null : (
+          <button
+            type="button"
+            className="dsh-iui-sidebar-update-hit"
+            data-dsh-iui-update-card-open
+            aria-label={t('update.openDetails')}
+            onClick={() => { setOpen(false); openDetails() }}
+          />
+        )}
+        <span className="dsh-iui-sidebar-update-content">
+          <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><PluginMark /></span>
+          <span className="dsh-iui-sidebar-update-copy">
+            <span className="dsh-iui-sidebar-update-title">{t('update.title', { name: SHORT_NAME })}</span>
+            <span className="dsh-iui-sidebar-update-meta">
+              <span className="dsh-iui-sidebar-update-versions">{view.current} → {latest}</span>
+              <button
+                type="button"
+                className="dsh-iui-sidebar-update-action"
+                data-dsh-iui-update-card-details
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                aria-controls={open ? titleId : undefined}
+                onClick={() => { setOpen((value) => !value) }}
+              >{t('update.open')}</button>
+            </span>
           </span>
+          <span className="dsh-iui-sidebar-update-chevron" aria-hidden="true"><RemixIcon name="arrow-right-s-line" size={16} /></span>
         </span>
-        <span className="dsh-iui-sidebar-update-chevron" aria-hidden="true"><RemixIcon name="arrow-right-s-line" size={16} /></span>
-      </button>
+      </div>
       {popover}
     </>
   )

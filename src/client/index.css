@@ -2329,7 +2329,18 @@
 
 .dsh-iui-sidebar-update-action {
   flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.dsh-iui-sidebar-update-action:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
 }
 
 .dsh-iui-sidebar-update-chevron {
@@ -2342,12 +2353,36 @@
   border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 52%, transparent);
 }
 
-.dsh-iui-sidebar-update.is-open .dsh-iui-sidebar-update-chevron {
-  transform: rotate(90deg);
+.dsh-iui-sidebar-update {
+  position: relative;
 }
 
-.dsh-iui-sidebar-update-chevron {
-  transition: transform 120ms ease;
+/* The whole card navigates; only the "view details" label opens the popover. */
+.dsh-iui-sidebar-update-hit {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dsh-iui-sidebar-update-hit:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-sidebar-update-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: none;
 }
 
 .dsh-iui-update-popover {
@@ -2391,31 +2426,6 @@
   font-size: 11px;
 }
 
-.dsh-iui-update-popover-arrow {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.dsh-iui-update-popover-arrow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.dsh-iui-update-popover-arrow:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 1px;
-}
-
 .dsh-iui-update-popover-points {
   display: flex;
   flex-direction: column;
@@ -2452,15 +2462,8 @@
   line-height: 1.45;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dsh-iui-sidebar-update-chevron {
-    transition: none;
-  }
-}
-
 @media (forced-colors: active) {
-  .dsh-iui-update-popover,
-  .dsh-iui-update-popover-arrow {
+  .dsh-iui-update-popover {
     border-color: ButtonText;
     background: Canvas;
     color: ButtonText;
