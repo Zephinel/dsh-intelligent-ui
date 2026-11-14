@@ -1073,3 +1073,9 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **测试**：`sidebar-update.e2e.mjs` 覆盖侧栏插入/几何/分点击目标/浮窗/折叠隐藏/中英文要点（23 checks）；`test/host/update-routes.test.mjs` 覆盖稳定版比较、要点解析（去 Markdown）、registry + raw notes 的两个 URL 与缓存、英文 `?lang=en` 独立 URL/缓存与缺失回退默认文件、registry 失败、notes 缺失（按失败 TTL 重试）、未知/预发布当前版本、GET-only 与连接拒绝。临时 Chrome 交互探针（未入库）验证：点卡片后浮窗出现在卡片右侧、要点文本正确、卡片主体（叠层按钮）触发 `openDetails` 并关闭浮窗、箭头无旋转、Escape 关闭；静态 demo 截图见 `.tmp-demo/`（未提交）。
 - **实测门禁**：`npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件；非构建 **3,818,258** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：未在真实 DSH 会话中热重启验证（当前 3080 服务仍运行旧 bundle）；真实侧栏 DOM 与探针结构一致但 DSH 升级可能改变，届时卡片自动隐藏；Host 需能访问 `registry.npmjs.org` 与 `raw.githubusercontent.com`，离线时降级为无要点/无提示；浮窗未做真实屏幕阅读器审计。
+
+## 2026-11-14 — 0.6.0 发布准备
+
+- **背景**：把 0.5.0 之后的 Unreleased 收束为 0.6.0（`package.json`/lock 0.6.0，CHANGELOG 新增 `## [0.6.0] - 2026-11-14`），并新增发布前人工审核的 `release-notes/0.6.0.md` 与 `.en.md`。README 状态/安装 pin、development 的 latest pin 与 tag 示例同步到 0.6.0；旧状态行里「本地 main 未推送」的错误说法已删除。
+- **门禁**：`npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`sidebar-update` **23 checks**；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,366** 字节；`npm run check:release`（本机）PASS：65 个打包文件与安装副本逐字节一致、loader row/client bundle/embedded skill/卸载均通过；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **发版状态**：版本与发布说明已准备好，等待维护者审核 release-notes 文案后再打 `v0.6.0` tag；publish workflow 会在 tag 上重跑 check/pack:check/release-notes 并用 Trusted Publishing 发布。

@@ -55,7 +55,7 @@ const NOTES = '## Highlights\n- `侧栏` [更新](https://example.com) 提示\n-
 const NOTES_EN = '## Highlights\n- English point one\n- English point two\n'
 
 /** Stub the registry + raw notes fetches and record every URL. */
-function stubFetch({ version = '0.6.0', versionError = false, notes = NOTES, notesError = false, englishNotes = NOTES_EN, englishError = false } = {}) {
+function stubFetch({ version = '0.7.0', versionError = false, notes = NOTES, notesError = false, englishNotes = NOTES_EN, englishError = false } = {}) {
   const calls = []
   globalThis.fetch = async (url) => {
     calls.push(String(url))
@@ -74,10 +74,10 @@ function stubFetch({ version = '0.6.0', versionError = false, notes = NOTES, not
 }
 
 test('only a newer stable version counts as an update', () => {
-  assert.equal(isNewerStableVersion('0.6.0', '0.5.0'), true)
-  assert.equal(isNewerStableVersion('0.6.0', '0.6.0'), false)
+  assert.equal(isNewerStableVersion('0.7.0', '0.5.0'), true)
+  assert.equal(isNewerStableVersion('0.7.0', '0.7.0'), false)
   assert.equal(isNewerStableVersion('0.5.9', '0.5.10'), false)
-  assert.equal(isNewerStableVersion('0.6.0-rc.1', '0.5.0'), false)
+  assert.equal(isNewerStableVersion('0.7.0-rc.1', '0.5.0'), false)
   assert.equal(isNewerStableVersion('not-a-version', '0.5.0'), false)
 })
 
@@ -95,13 +95,13 @@ test('the route reports the newer version with its reviewed highlights and cache
   assert.equal(first.status, 200)
   assert.deepEqual(JSON.parse(first.body), {
     current: packageVersion,
-    latest: '0.6.0',
+    latest: '0.7.0',
     updateAvailable: true,
     highlights: ['侧栏 更新 提示', '第二点'],
   })
   assert.deepEqual(calls, [
     'https://registry.npmjs.org/@zephinel%2Fdsh-intelligent-ui/latest',
-    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.md',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.7.0/release-notes/0.7.0.md',
   ])
   const second = await request(route)
   assert.deepEqual(JSON.parse(second.body).highlights, ['侧栏 更新 提示', '第二点'])
@@ -117,7 +117,7 @@ test('an English client gets the language-specific notes and caches them separat
   assert.deepEqual(english.highlights, ['English point one', 'English point two'])
   assert.deepEqual(calls, [
     'https://registry.npmjs.org/@zephinel%2Fdsh-intelligent-ui/latest',
-    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.en.md',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.7.0/release-notes/0.7.0.en.md',
   ])
   assert.equal(JSON.parse((await request(route, { url: `${UPDATE_ROUTE_PATH}?lang=en` })).body).highlights[0], 'English point one')
   assert.equal(calls.length, 2, 'the English answer is cached on its own')
@@ -130,8 +130,8 @@ test('an English request falls back to the default notes when the English file i
   assert.deepEqual(result.highlights, ['侧栏 更新 提示', '第二点'])
   assert.deepEqual(calls, [
     'https://registry.npmjs.org/@zephinel%2Fdsh-intelligent-ui/latest',
-    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.en.md',
-    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.md',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.7.0/release-notes/0.7.0.en.md',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.7.0/release-notes/0.7.0.md',
   ])
 })
 
@@ -144,7 +144,7 @@ test('the route stays silent when the registry read fails', async () => {
 })
 
 test('a prerelease latest never offers an update', async () => {
-  stubFetch({ version: '0.6.0-rc.1' })
+  stubFetch({ version: '0.7.0-rc.1' })
   const { route } = mount()
   const result = await request(route)
   assert.deepEqual(JSON.parse(result.body), { current: packageVersion, latest: null, updateAvailable: false, highlights: [] })
@@ -154,7 +154,7 @@ test('a missing release-notes document keeps the update but returns no points', 
   const calls = stubFetch({ notesError: true })
   const { route } = mount()
   const first = await request(route)
-  assert.deepEqual(JSON.parse(first.body), { current: packageVersion, latest: '0.6.0', updateAvailable: true, highlights: [] })
+  assert.deepEqual(JSON.parse(first.body), { current: packageVersion, latest: '0.7.0', updateAvailable: true, highlights: [] })
   await request(route)
   assert.equal(calls.length, 2, 'an unread notes document is retried on the failure TTL rather than every request')
 })
@@ -163,10 +163,10 @@ test('an unknown or prerelease running version never offers an update', async ()
   const home = mkdtempSync(join(tmpdir(), 'iui-update-manifest-'))
   try {
     const manifest = join(home, 'package.json')
-    writeFileSync(manifest, JSON.stringify({ name: '@zephinel/dsh-intelligent-ui', version: '0.6.0-rc.1' }))
+    writeFileSync(manifest, JSON.stringify({ name: '@zephinel/dsh-intelligent-ui', version: '0.7.0-rc.1' }))
     stubFetch()
     const check = createUpdateChecker({ manifestUrl: pathToFileURL(manifest) })
-    assert.deepEqual(await check(), { current: '0.0.0', latest: '0.6.0', updateAvailable: false, highlights: [] })
+    assert.deepEqual(await check(), { current: '0.0.0', latest: '0.7.0', updateAvailable: false, highlights: [] })
     assert.equal(installedVersion(pathToFileURL(manifest)), undefined)
   } finally {
     rmSync(home, { recursive: true, force: true })
