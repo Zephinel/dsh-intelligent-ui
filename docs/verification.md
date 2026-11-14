@@ -1087,9 +1087,9 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **门禁**：本机 `npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`sidebar-update` **23 checks**；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,366** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：`check:release` 在发版前本机 PASS（65 个打包文件与安装副本一致）；publish workflow 不运行浏览器套件（这些在 main CI 已跑）；GitHub Release 正文为人工创建（workflow 不自动建 Release）。
 
-## 2026-11-14 — 0.6.1 安全/可用性修复准备
+## 2026-11-14 — 0.6.1 安全/可用性修复
 
 - **背景**：issue #1 指出 0.6.0 及更早版本内嵌 `@openuidev/lang-core@1.0.1`，其 `resolveRef()` 对共享引用无 memoization，模型生成的 doubling 引用程序可在同步 Host 解析阶段指数展开。实测（512 MB bounded Node）1.0.1：N=16 **626 ms / 256 MB**、N=18 **2,393 ms / 466 MB**；1.1.1：N=16 **15 ms**、N=18 **6 ms**、N=20 **6 ms / 58 MB**。已把 `@openuidev/lang-core` 与 `@openuidev/react-lang` 升到 **^1.1.1**（lock 解析 1.1.1），重新构建后 `lib/index.js` 遥测常量为 **1.1.1** 且包含 memoized resolver；全部 **10 个浏览器套件**本地通过（含 `artifact-edit` 944、`sidebar-update` 23）。
-- **发布准备**：版本 0.6.1、`release-notes/0.6.1.md` / `.en.md`（3+3 条要点）、CHANGELOG `## [0.6.1] - 2026-11-14`、README/development 的 latest pin 已就绪；等待维护者审核 release-notes 后打 `v0.6.1` tag。
+- **发布结果**：维护者审核后打 tag `v0.6.1`，publish workflow（run 43609493251）**success**；npm **0.6.1** 为 `latest`，provenance 校验通过，GitHub Release 已创建；`release-notes/0.6.1.md` / `.en.md` 在 tag 上可读（2+2 条要点）。
 - **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10**，`artifact-edit` **944 checks**、`nested-edit-renderer` 75、图片导出 76、`sidebar-update` 23；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,283** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：这是 availability-only 修复；上游指出的“未解析引用仍可能超线性”不在本次范围（后续可加解析预算/离线程解析）；0.5.0/0.6.0 用户需通过 DSH 插件页升级，侧栏更新卡片只在已安装 0.6.0 的用户收到 0.6.1 时第一次生效。
