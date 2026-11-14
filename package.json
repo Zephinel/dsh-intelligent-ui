@@ -54,7 +54,8 @@
     "capture:readme": "node scripts/capture-screenshots.mjs && node scripts/capture-editor-screenshot.mjs && node scripts/capture-editor-screenshot.mjs --en && node scripts/build-readme-bento.mjs",
     "check:docs-facts": "node scripts/check-doc-facts.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs",
-    "check:pack-facts": "node scripts/check-pack-facts.mjs"
+    "check:pack-facts": "node scripts/check-pack-facts.mjs",
+    "check:release-notes": "node scripts/check-release-notes.mjs"
   },
   "keywords": [
     "deepseek-harness",

@@ -3,9 +3,9 @@
  *
  * The extension cannot see npm from the browser reliably, so the Host exposes
  * one cached read of the package's `latest` dist-tag. The browser renders a
- * dismissible notice only when that tag is a stable version newer than the
- * running package, and the notice's action opens this bundle's Plugins detail
- * page, where DSH itself owns the actual update.
+ * compact notice only when that tag is a stable version newer than the running
+ * package; the notice lists the reviewed release highlights and links to this
+ * bundle's Plugins detail page, where DSH itself owns the actual update.
  */
 
 /** Same-origin Host route serving the update check. */
@@ -13,12 +13,14 @@ export const UPDATE_ROUTE_PATH = '/api/intelligent-ui/update'
 
 /** One answer of the update check; `latest` is null when the registry read failed. */
 export interface UpdateCheckView {
-  /** Version of the running package, read from its `package.json`. */
+  /** Version of the running package, read from its `package.json`; `0.0.0` when unknown. */
   readonly current: string
   /** Newest stable published version, or null when it could not be read. */
   readonly latest: string | null
   /** Whether a newer stable version than `current` is published. */
   readonly updateAvailable: boolean
+  /** Release-note highlights for `latest`; empty when the notes are unavailable. */
+  readonly highlights: readonly string[]
 }
 
 /** Parsed stable version components. */

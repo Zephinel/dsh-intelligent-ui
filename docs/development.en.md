@@ -229,18 +229,19 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 **Publishing a version**:
 
 1. Update the version in `package.json` / `package-lock.json`, `CHANGELOG.md`, the README status and version pins, and the matching docs;
-2. run `npm run check`;
-3. commit and push `main`;
-4. create and push a tag that matches the version:
+2. write and human-review `release-notes/<version>.md` (`## Highlights` with at least one bullet; format in `release-notes/README.md`; `npm run check:release-notes` previews the gate locally);
+3. run `npm run check`;
+4. commit and push `main`;
+5. create and push a tag that matches the version:
 
 ```bash
 git tag v0.5.0
 git push origin main --follow-tags
 ```
 
-5. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.5.0 — 2026-10-25`) with a short summary. npm publish is triggered by the tag; the Release page is created separately.
+6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.5.0 — 2026-10-25`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.
 
-`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
+`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version and reviewed `## Highlights` in `release-notes/<version>.md` (`npm run check:release-notes`), then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
 
 > Version convention: production releases use stable semver (for example `0.5.0`, tag `v0.5.0`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 

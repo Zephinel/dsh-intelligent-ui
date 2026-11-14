@@ -9,8 +9,9 @@
  * down instead of covering them. If the sidebar shape is unknown, the host is
  * never inserted and the feature stays hidden (no broken layout).
  *
- * This is intentionally the only DOM insertion in the extension. When DSH adds
- * a sidebar notice slot, replace this module with a slot registration.
+ * This is the extension's only sidebar insertion (the input-orbit overlay uses
+ * a separate document-level host). When DSH adds a sidebar notice slot, replace
+ * this module with a slot registration.
  */
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -49,7 +50,9 @@ export function installSidebarUpdateNotice(props: UpdateNoticeProps): () => void
   const root = createRoot(host)
   root.render(createElement(UpdateNotice, props))
   let queued = false
+  let disposed = false
   const place = (): void => {
+    if (disposed) return
     const sidebar = findSidebarRoot()
     if (sidebar === null) return
     const nav = findPanelNav(sidebar)
@@ -57,7 +60,7 @@ export function installSidebarUpdateNotice(props: UpdateNoticeProps): () => void
     if (host.parentElement !== sidebar || host.nextElementSibling !== nav) sidebar.insertBefore(host, nav)
   }
   const schedule = (): void => {
-    if (queued) return
+    if (disposed || queued) return
     queued = true
     queueMicrotask(() => {
       queued = false
@@ -68,6 +71,7 @@ export function installSidebarUpdateNotice(props: UpdateNoticeProps): () => void
   const observer = new MutationObserver(schedule)
   observer.observe(document.body, { childList: true, subtree: true })
   return () => {
+    disposed = true
     observer.disconnect()
     root.unmount()
     host.remove()

@@ -10,6 +10,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { isNewerStableVersion, parseStableVersion, UPDATE_ROUTE_PATH, type UpdateCheckView } from '../shared/update-check.ts'
+import { parseHighlights } from '../shared/release-notes.ts'
 import { PACKAGE_NAME } from '../shared/intelligent-ui.ts'
 
 /** Registry address for the package's `latest` dist-tag (scope slash stays encoded). */
@@ -38,17 +39,48 @@ export interface UpdateCheckerOptions {
   readonly timeoutMs?: number
   readonly successTtlMs?: number
   readonly failureTtlMs?: number
+  /** Manifest override for tests; production reads the shipped `package.json`. */
+  readonly manifestUrl?: URL
 }
 
-/** Read the running package version from the package's own `package.json`. */
-export function installedVersion(): string {
+/**
+ * Read the running package version from the package's own `package.json`.
+ * @returns the stable version, or undefined when the manifest is unreadable or
+ *   names a prerelease/build version (which this card must not compare).
+ */
+export function installedVersion(manifestUrl?: URL): string | undefined {
+  const candidates = manifestUrl === undefined
+    ? [new URL('../package.json', import.meta.url), new URL('../../package.json', import.meta.url)]
+    : [manifestUrl]
+  for (const url of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(url, 'utf8')) as { version?: unknown }
+      if (typeof parsed.version === 'string' && parseStableVersion(parsed.version) !== undefined) return parsed.version
+      return undefined
+    } catch { /* try the next candidate: lib/ install layout then source layout */ }
+  }
+  return undefined
+}
+
+/** Read the repository slug used for the tag-pinned release-notes URL. */
+function releaseNotesRepository(): string | undefined {
   try {
     const url = new URL('../package.json', import.meta.url)
-    const parsed = JSON.parse(readFileSync(url, 'utf8')) as { version?: unknown }
-    return typeof parsed.version === 'string' && parseStableVersion(parsed.version) !== undefined ? parsed.version : '0.0.0'
+    const parsed = JSON.parse(readFileSync(url, 'utf8')) as { repository?: unknown }
+    const repository = typeof parsed.repository === 'string'
+      ? parsed.repository
+      : (parsed.repository as { url?: unknown } | undefined)?.url
+    if (typeof repository !== 'string') return undefined
+    const match = /github\.com[/:]([^/]+\/[^/.]+)(?:\.git)?$/u.exec(repository.trim())
+    return match?.[1]
   } catch {
-    return '0.0.0'
+    return undefined
   }
+}
+
+/** Tag-pinned raw URL of one release's notes document. */
+function releaseNotesUrl(repository: string, version: string): string {
+  return `https://raw.githubusercontent.com/${repository}/v${version}/release-notes/${version}.md`
 }
 
 /**
@@ -57,7 +89,8 @@ export function installedVersion(): string {
  * @returns a function resolving one {@link UpdateCheckView}; it never rejects.
  */
 export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => Promise<UpdateCheckView> {
-  const current = installedVersion()
+  const installed = installedVersion(options.manifestUrl)
+  const current = installed ?? '0.0.0'
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
   const now = options.now ?? Date.now
   const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS
@@ -66,7 +99,7 @@ export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => P
   let cached: { at: number; ttl: number; view: UpdateCheckView } | undefined
   let inflight: Promise<UpdateCheckView> | undefined
 
-  const read = async (): Promise<UpdateCheckView> => {
+  const read = async (): Promise<{ view: UpdateCheckView; notesRead: boolean }> => {
     const response = await fetchImpl(REGISTRY_LATEST_URL, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
@@ -74,7 +107,25 @@ export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => P
     if (!response.ok) throw new Error(`registry answered ${response.status}`)
     const payload = await response.json() as { version?: unknown }
     const latest = parseStableVersion(payload.version) === undefined ? null : String(payload.version)
-    return { current, latest, updateAvailable: latest !== null && isNewerStableVersion(latest, current) }
+    const updateAvailable = latest !== null && installed !== undefined && isNewerStableVersion(latest, installed)
+    if (!updateAvailable || latest === null) {
+      return { view: { current, latest, updateAvailable: false, highlights: [] }, notesRead: true }
+    }
+    const repository = releaseNotesRepository()
+    if (repository === undefined) {
+      return { view: { current, latest, updateAvailable: true, highlights: [] }, notesRead: false }
+    }
+    try {
+      const notesResponse = await fetchImpl(releaseNotesUrl(repository, latest), {
+        headers: { accept: 'text/plain' },
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!notesResponse.ok) throw new Error(`notes answered ${notesResponse.status}`)
+      const highlights = parseHighlights(await notesResponse.text()).slice(0, 6)
+      return { view: { current, latest, updateAvailable: true, highlights }, notesRead: highlights.length > 0 }
+    } catch {
+      return { view: { current, latest, updateAvailable: true, highlights: [] }, notesRead: false }
+    }
   }
 
   return async () => {
@@ -82,12 +133,14 @@ export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => P
     if (cached !== undefined && at - cached.at < cached.ttl) return cached.view
     if (inflight !== undefined) return inflight
     inflight = read()
-      .then((view) => {
-        cached = { at, ttl: successTtlMs, view }
+      .then(({ view, notesRead }) => {
+        // A version update without readable highlights retries soon: the notes
+        // may have been committed after the registry read or the raw CDN failed.
+        cached = { at, ttl: view.updateAvailable && !notesRead ? failureTtlMs : successTtlMs, view }
         return view
       })
       .catch(() => {
-        const view: UpdateCheckView = { current, latest: null, updateAvailable: false }
+        const view: UpdateCheckView = { current, latest: null, updateAvailable: false, highlights: [] }
         cached = { at, ttl: failureTtlMs, view }
         return view
       })

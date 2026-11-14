@@ -1,14 +1,14 @@
 /**
- * Sidebar update card for this extension.
+ * Sidebar update card and its anchored release-notes popover.
  *
- * The Host checks npm once per session and serves a same-origin answer; this
- * card appears only when a newer stable version is published. The whole card
- * is one button: it opens this bundle's Plugins detail page, where DSH owns the
- * actual update. The card is mounted into the sidebar's normal flow (see
- * sidebar-update.ts) so it pushes the panel rows down instead of covering
- * Plugins, Automation tasks or anything else.
+ * The Host checks npm once per session and serves a same-origin answer with the
+ * latest stable version and that release's reviewed highlights. The card sits
+ * in the sidebar's normal flow (below New Session, above the panel list) and
+ * opens a fixed popover beside it: the popover lists the update points and its
+ * arrow opens this bundle's Plugins detail page, where DSH owns the update.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { PACKAGE_NAME } from '../shared/intelligent-ui.ts'
 import { UPDATE_ROUTE_PATH, type UpdateCheckView } from '../shared/update-check.ts'
 import type { Translate } from '../shared/locales.ts'
@@ -16,6 +16,13 @@ import { RemixIcon } from '../lib/components/remix-icon.tsx'
 
 /** Short package name shown in the sidebar card. */
 const SHORT_NAME = PACKAGE_NAME.split('/').at(-1) ?? PACKAGE_NAME
+/** Gap between the card and its popover / viewport gutter. */
+const POPOVER_GAP = 12
+/** Popover width bounds. */
+const POPOVER_MIN_WIDTH = 240
+const POPOVER_MAX_WIDTH = 360
+/** Missing Highlights section fallback copy. */
+const POPOVER_EMPTY_KEY = 'update.noHighlights'
 
 /** Props for the mounted card; the host supplies navigation and the locale seat. */
 export interface UpdateNoticeProps {
@@ -25,6 +32,14 @@ export interface UpdateNoticeProps {
   readonly translate: () => Translate
   /** Subscribe to locale revisions so the card re-renders after a language switch (optional on minimal hosts). */
   readonly subscribe?: (listener: () => void) => () => void
+}
+
+/** One fixed popover placement measured from the card. */
+interface PopoverPlacement {
+  readonly left: number
+  readonly top: number
+  readonly width: number
+  readonly maxHeight: number
 }
 
 /** The extension's own app icon, inlined so the sidebar card carries the brand mark. */
@@ -47,23 +62,45 @@ function PluginMark(): ReactNode {
   )
 }
 
+/** Read the popover's fixed placement beside the card, clamped to the viewport. */
+function placePopover(card: DOMRect, viewportWidth: number, viewportHeight: number): PopoverPlacement {
+  const width = Math.min(POPOVER_MAX_WIDTH, Math.max(POPOVER_MIN_WIDTH, viewportWidth - POPOVER_GAP * 2))
+  const height = Math.max(140, Math.min(360, viewportHeight - POPOVER_GAP * 2))
+  const right = card.right + POPOVER_GAP
+  if (right + width <= viewportWidth - POPOVER_GAP) {
+    const top = Math.max(POPOVER_GAP, Math.min(card.top - 6, viewportHeight - height - POPOVER_GAP))
+    return { left: right, top, width, maxHeight: height }
+  }
+  const left = Math.max(POPOVER_GAP, Math.min(card.left, viewportWidth - width - POPOVER_GAP))
+  const top = Math.max(POPOVER_GAP, Math.min(card.bottom + POPOVER_GAP, viewportHeight - height - POPOVER_GAP))
+  return { left, top, width, maxHeight: height }
+}
+
 export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNoticeProps): ReactNode {
   const [view, setView] = useState<UpdateCheckView | null>(null)
   const [, setRevision] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [placement, setPlacement] = useState<PopoverPlacement | null>(null)
+  const cardRef = useRef<HTMLButtonElement | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const titleId = useId()
   useEffect(() => {
     if (subscribe === undefined) return
     return subscribe(() => { setRevision((value) => value + 1) })
   }, [subscribe])
   const t = translate()
+
   useEffect(() => {
     let live = true
     void fetch(UPDATE_ROUTE_PATH, { cache: 'no-store' })
       .then(async (response): Promise<UpdateCheckView | null> => {
         if (!response.ok) return null
         const payload = await response.json() as UpdateCheckView
-        return payload !== null && typeof payload === 'object' && payload.updateAvailable === true && typeof payload.latest === 'string'
-          ? payload
-          : null
+        if (payload === null || typeof payload !== 'object' || payload.updateAvailable !== true || typeof payload.latest !== 'string') return null
+        const highlights = Array.isArray(payload.highlights)
+          ? payload.highlights.filter((point): point is string => typeof point === 'string').slice(0, 6)
+          : []
+        return { ...payload, highlights }
       })
       .then((next) => {
         if (live) setView(next)
@@ -71,25 +108,117 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
       .catch(() => { /* offline or an older Host: no card */ })
     return () => { live = false }
   }, [])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement(null)
+      return
+    }
+    const card = cardRef.current
+    if (card === null) return
+    const place = (): void => {
+      const rect = card.getBoundingClientRect()
+      setPlacement(placePopover(rect, window.innerWidth, window.innerHeight))
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    popoverRef.current?.querySelector<HTMLElement>('[data-dsh-iui-update-open]')?.focus()
+    const onPointer = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (target === null) return
+      if (cardRef.current?.contains(target) === true || popoverRef.current?.contains(target) === true) return
+      setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      setOpen(false)
+      cardRef.current?.focus()
+    }
+    document.addEventListener('pointerdown', onPointer, true)
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
+
   const latest = view?.latest ?? null
   if (latest === null || view === null) return null
-  const body = (
-    <>
-      <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><PluginMark /></span>
-      <span className="dsh-iui-sidebar-update-copy">
-        <span className="dsh-iui-sidebar-update-title">{t('update.title', { name: SHORT_NAME })}</span>
-        <span className="dsh-iui-sidebar-update-meta">
-          <span className="dsh-iui-sidebar-update-versions">{view.current} → {latest}</span>
-          <span className="dsh-iui-sidebar-update-action">{t('update.open')}</span>
-        </span>
-      </span>
-      <span className="dsh-iui-sidebar-update-chevron" aria-hidden="true"><RemixIcon name="arrow-right-s-line" size={16} /></span>
-    </>
-  )
-  if (openDetails === undefined) return <div className="dsh-iui-sidebar-update" data-dsh-iui-sidebar-update data-version={latest}>{body}</div>
+  const highlights = view.highlights
+  const popover = open && placement !== null ? createPortal(
+    <div
+      ref={popoverRef}
+      id={titleId}
+      className="dsh-iui-update-popover"
+      data-dsh-iui-update-popover
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`${titleId}-title`}
+      style={{ left: `${placement.left}px`, top: `${placement.top}px`, width: `${placement.width}px`, maxHeight: `${placement.maxHeight}px` }}
+    >
+      <div className="dsh-iui-update-popover-head">
+        <div className="dsh-iui-update-popover-titles">
+          <strong id={`${titleId}-title`}>{t('update.highlights')}</strong>
+          <span className="dsh-iui-update-popover-version">{view.current} → {latest}</span>
+        </div>
+        {openDetails === undefined ? null : (
+          <button
+            type="button"
+            className="dsh-iui-update-popover-arrow"
+            data-dsh-iui-update-open
+            aria-label={t('update.openDetails')}
+            title={t('update.openDetails')}
+            onClick={() => { setOpen(false); openDetails() }}
+          >
+            <RemixIcon name="arrow-right-up-line" size={16} />
+          </button>
+        )}
+      </div>
+      {highlights.length === 0
+        ? <p className="dsh-iui-update-popover-empty">{t(POPOVER_EMPTY_KEY)}</p>
+        : (
+          <ul className="dsh-iui-update-popover-points">
+            {highlights.map((point, index) => <li key={`${index}:${point}`}>{point}</li>)}
+          </ul>
+        )}
+    </div>,
+    document.body,
+  ) : null
+
   return (
-    <button type="button" className="dsh-iui-sidebar-update" data-dsh-iui-sidebar-update data-version={latest} onClick={() => { openDetails() }}>
-      {body}
-    </button>
+    <>
+      <button
+        ref={cardRef}
+        type="button"
+        className={`dsh-iui-sidebar-update${open ? ' is-open' : ''}`}
+        data-dsh-iui-sidebar-update
+        data-version={latest}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? titleId : undefined}
+        onClick={() => { setOpen((value) => !value) }}
+      >
+        <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><PluginMark /></span>
+        <span className="dsh-iui-sidebar-update-copy">
+          <span className="dsh-iui-sidebar-update-title">{t('update.title', { name: SHORT_NAME })}</span>
+          <span className="dsh-iui-sidebar-update-meta">
+            <span className="dsh-iui-sidebar-update-versions">{view.current} → {latest}</span>
+            <span className="dsh-iui-sidebar-update-action">{t('update.open')}</span>
+          </span>
+        </span>
+        <span className="dsh-iui-sidebar-update-chevron" aria-hidden="true"><RemixIcon name="arrow-right-s-line" size={16} /></span>
+      </button>
+      {popover}
+    </>
   )
 }

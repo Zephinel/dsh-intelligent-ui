@@ -713,6 +713,9 @@ export const zh = {
   'edit.availableBlocks': '{count} 个可编辑区块',
   'update.title': '{name} 有更新可用',
   'update.open': '点击查看详情',
+  'update.highlights': '更新要点',
+  'update.openDetails': '打开插件详情',
+  'update.noHighlights': '该版本未提供更新要点，可在插件详情页查看完整说明。',
 } as const
 
 /** English dictionary, checked complete against the Chinese key set. */
@@ -1394,6 +1397,9 @@ export const en: Record<keyof typeof zh, string> = {
   'edit.availableBlocks': '{count} editable blocks',
   'update.title': 'Update available for {name}',
   'update.open': 'View details',
+  'update.highlights': "What's new",
+  'update.openDetails': 'Open plugin details',
+  'update.noHighlights': 'This release has no published highlights. Open the plugin details for the full notes.',
 }
 
 /**

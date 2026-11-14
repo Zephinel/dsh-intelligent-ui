@@ -229,18 +229,19 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 **发布一个版本**：
 
 1. 更新 `package.json` / `package-lock.json` 的版本、`CHANGELOG.md`、README 状态与版本 pin、相关 docs；
-2. 运行 `npm run check`；
-3. 提交并推送 `main`；
-4. 创建并推送与版本一致的 tag：
+2. 编写并人工审核 `release-notes/<version>.md`（`## Highlights` 至少一条；格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果）；
+3. 运行 `npm run check`；
+4. 提交并推送 `main`；
+5. 创建并推送与版本一致的 tag：
 
 ```bash
 git tag v0.5.0
 git push origin main --follow-tags
 ```
 
-5. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.5.0 — 2026-10-25`），正文概述该版本变更；npm publish 由 tag 触发，Release 页面需单独创建。
+6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.5.0 — 2026-10-25`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
 
-`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
+`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段与 `release-notes/<version>.md` 有已审核的 `## Highlights`，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
 > 版本号约定：正式版使用稳定 semver（如 `0.5.0`，tag `v0.5.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 

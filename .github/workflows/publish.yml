@@ -16,8 +16,9 @@
 #   git push origin v0.5.0
 #
 # The job fails if the tag does not match package.json, if `npm run check` or
-# `npm run pack:check` fails, or if CHANGELOG.md has no section for the version,
-# so a mistyped or undocumented tag cannot publish. `check:release` (install the
+# `npm run pack:check` fails, if CHANGELOG.md has no section for the version, or
+# if `release-notes/<version>.md` has no reviewed Highlights bullets, so a
+# mistyped, undocumented or un-reviewed tag cannot publish. `check:release` (install the
 # tarball into a throwaway DSH_HOME and serve it) is still a local pre-release
 # gate: wire it in here only after its Linux runner behaviour is verified.
 name: publish
@@ -78,6 +79,11 @@ jobs:
             exit 1
           fi
           echo "changelog section ok: ${version}"
+
+      - name: Reviewed release notes exist for this version
+        # The update card reads these Highlights from the tag-pinned raw file;
+        # the file must be reviewed and committed before the tag is pushed.
+        run: npm run check:release-notes
 
       - name: Publish with provenance
         run: npm publish --access public --tag latest --provenance

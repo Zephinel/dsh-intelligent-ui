@@ -2338,6 +2338,135 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.dsh-iui-sidebar-update.is-open {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 52%, transparent);
+}
+
+.dsh-iui-sidebar-update.is-open .dsh-iui-sidebar-update-chevron {
+  transform: rotate(90deg);
+}
+
+.dsh-iui-sidebar-update-chevron {
+  transition: transform 120ms ease;
+}
+
+.dsh-iui-update-popover {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+
+.dsh-iui-update-popover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dsh-iui-update-popover-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.dsh-iui-update-popover-titles strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dsh-iui-update-popover-version {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+}
+
+.dsh-iui-update-popover-arrow {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.dsh-iui-update-popover-arrow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-update-popover-arrow:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.dsh-iui-update-popover-points {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dsh-iui-update-popover-points li {
+  position: relative;
+  padding-left: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.dsh-iui-update-popover-points li::before {
+  position: absolute;
+  top: 0.55em;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  content: "";
+}
+
+.dsh-iui-update-popover-empty {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-iui-sidebar-update-chevron {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .dsh-iui-update-popover,
+  .dsh-iui-update-popover-arrow {
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+}
+
 [data-sidebar-collapsed="true"] .dsh-iui-sidebar-update-host {
   display: none;
 }
