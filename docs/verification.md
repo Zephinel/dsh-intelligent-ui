@@ -1082,7 +1082,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 ## 2026-11-14 — 0.6.0 发布
 
-- **发布**：tag `v0.6.0`（annotated，指向 `ee1e511`）触发 publish workflow（run 43605229838）；`npm publish --access public --tag latest --provenance` 成功，registry 稍后显示 **0.6.0** 为 `latest`，dist attestations 带 SLSA provenance；GitHub Release 已创建。tag 固定的 `release-notes/0.6.0.md` 与 `.en.md` 返回 200，更新提示在 0.5.0 用户上可获得已审核要点。
+- **发布**：tag `v0.6.0`（annotated，指向 `ee1e511`）触发 publish workflow（run 43605229838）；`npm publish --access public --tag latest --provenance` 成功，registry 稍后显示 **0.6.0** 为 `latest`，dist attestations 带 SLSA provenance；GitHub Release 已创建。tag 固定的 `release-notes/0.6.0.md` 与 `.en.md` 返回 200。**更正**：侧栏更新卡片是 0.6.0 新增的能力，安装 0.5.0 的用户没有这段代码，因此不会看到该卡片（他们只会看到 DSH 插件页自带的更新提示）；0.6.0 用户会在下一次版本（0.6.1+）发布时看到侧栏卡片与这些要点。
 - **发布 job 的假红**：workflow 的 registry 校验只重试 5 次 ×3 s，publish 成功后 packument 传播约 7 分钟，校验因此失败并让 run 变红；`npm view` 当时仍返回 0.5.0，但 `dist-tags`/版本端点最终为 0.6.0。已把校验改为直接轮询 registry 端点、最多 10 分钟（见 Unreleased Fixed），避免后续版本重演。
 - **门禁**：本机 `npm run check` PASS；Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`sidebar-update` **23 checks**；构建 host **850 kB**、client **4.21 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,366** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：`check:release` 在发版前本机 PASS（65 个打包文件与安装副本一致）；publish workflow 不运行浏览器套件（这些在 main CI 已跑）；GitHub Release 正文为人工创建（workflow 不自动建 Release）。
