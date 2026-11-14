@@ -23,14 +23,17 @@ export interface UpdateNoticeProps {
   readonly openDetails?: () => void
   /** Bind the active locale at render time; calling it again follows a language switch. */
   readonly translate: () => Translate
-  /** Subscribe to locale revisions so the card re-renders after a language switch. */
-  readonly subscribe: (listener: () => void) => () => void
+  /** Subscribe to locale revisions so the card re-renders after a language switch (optional on minimal hosts). */
+  readonly subscribe?: (listener: () => void) => () => void
 }
 
 export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNoticeProps): ReactNode {
   const [view, setView] = useState<UpdateCheckView | null>(null)
   const [, setRevision] = useState(0)
-  useEffect(() => subscribe(() => { setRevision((value) => value + 1) }), [subscribe])
+  useEffect(() => {
+    if (subscribe === undefined) return
+    return subscribe(() => { setRevision((value) => value + 1) })
+  }, [subscribe])
   const t = translate()
   useEffect(() => {
     let live = true

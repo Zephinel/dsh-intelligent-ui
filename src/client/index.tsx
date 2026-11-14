@@ -166,7 +166,9 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => installSidebarUpdateNotice({
     openDetails: openPluginDetails,
     translate: () => ctx.locale.bind(NS),
-    subscribe: (listener) => ctx.locale.subscribe(listener),
+    subscribe: typeof ctx.locale.subscribe === 'function'
+      ? (listener) => ctx.locale.subscribe(listener)
+      : undefined,
   }), 'intelligent-ui: sidebar update card')
   // One document-level layer gives every plugin input the same orbit focus cue.
   ctx.effect(() => {
