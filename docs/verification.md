@@ -1100,9 +1100,3 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **实现**：`locale/zh.json`、`locale/en.json` 增加 `meta.detail`；两份指引各约 10 行，说明常用设置、实验性「回答即文档」与模板/修订入口，并链接完整文档。`test/packaging/manifest.test.mjs` 新增断言：detail 路径存在、非空、<4 KiB、语言匹配。
 - **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **67** 文件，非构建 **3,819,912** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：本地验证的是 manifest/守护测试与打包清单；DSH 页面实际渲染需升级到包含该 locale 的版本（npm 发布后）或在 file: 安装的 profile 重启后查看。
-
-## 2026-11-14 — 0.6.2 发布准备
-
-- **背景**：把 0.6.1 之后的插件详情改动收束为 0.6.2：`locale/zh.json`、`locale/en.json` 声明 `meta.detail`，指向 `locale/detail.zh.md` / `locale/detail.en.md` 的简短设置指引；README 继续服务 GitHub/npm/文档。版本、CHANGELOG `## [0.6.2] - 2026-11-14`、`release-notes/0.6.2.md` / `.en.md`、README/development 的 latest pin 已就绪。
-- **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **67** 文件，非构建 **3,819,958** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
-- **待办**：维护者审核 release-notes 后打 `v0.6.2` tag；发布后 DSH 插件详情页会显示新的简短指引，README 不再出现在该页。

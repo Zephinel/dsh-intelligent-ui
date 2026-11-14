@@ -7,11 +7,9 @@ been published yet.
 
 ## [Unreleased]
 
-## [0.6.2] - 2026-11-14
-
 ### Added
 
-- **A concise bilingual guide replaces the README on the Plugins detail page.** `locale/zh.json` and `locale/en.json` now declare `meta.detail`, pointing at `locale/detail.zh.md` / `locale/detail.en.md`; DSH reads that settings-oriented document first and only falls back to the package README when the field is absent. The README still serves GitHub, npm, and the repository docs. Final gate: Node **821/821** (Host **320**, Client **464**, packaging **37**), 10/10 browser suites, `artifact-edit` **944 checks**, build host **858 kB**, client **4.20 MB** (js 3.96 / css 249.4), pack **67 files**; non-build **3,819,958** bytes; `check:docs-facts` and `check:pack-facts` pass.
+- **A concise bilingual guide replaces the README on the Plugins detail page.** `locale/zh.json` and `locale/en.json` now declare `meta.detail`, pointing at `locale/detail.zh.md` / `locale/detail.en.md`; DSH reads that settings-oriented document first and only falls back to the package README when the field is absent. The README still serves GitHub, npm, and the repository docs. Final gate: Node **821/821** (Host **320**, Client **464**, packaging **37**), 10/10 browser suites, `artifact-edit` **944 checks**, build host **858 kB**, client **4.20 MB** (js 3.96 / css 249.4), pack **67 files**; non-build **3,819,912** bytes; `check:docs-facts` and `check:pack-facts` pass.
 
 ## [0.6.1] - 2026-11-14
 
