@@ -61,13 +61,13 @@ export function verifyFacts(facts, read) {
       expectMatch(file, new RegExp(`Artifact 区块编辑套件 \\*\\*${facts.artifactEditChecks}\\*\\* 条检查`), `artifact-edit ${facts.artifactEditChecks} checks`)
       expectMatch(file, new RegExp(`嵌套编辑渲染套件 \\*\\*${facts.nestedRendererChecks}\\*\\* 条检查`), `nested renderer ${facts.nestedRendererChecks} checks`)
       expectMatch(file, new RegExp(`图片导出 \\*\\*${facts.imageExportChecks}\\*\\* 条断言`), `image export ${facts.imageExportChecks} assertions`)
-      expectMatch(file, new RegExp(`浏览器 \\*\\*${facts.browserSuites}/9\\*\\* 套件通过`), `${facts.browserSuites}/9 browser suites`)
+      expectMatch(file, new RegExp(`浏览器 \\*\\*${facts.browserSuites}/${facts.browserSuites}\\*\\* 套件通过`), `${facts.browserSuites}/${facts.browserSuites} browser suites`)
     } else {
       expectMatch(file, new RegExp(`Host ${facts.host}, Client ${facts.client}, packaging ${facts.packaging}`), 'Host/Client/packaging split')
       expectMatch(file, new RegExp(`\\*\\*${facts.artifactEditChecks}\\*\\* checks in the Artifact block-editing suite`), `artifact-edit ${facts.artifactEditChecks} checks`)
       expectMatch(file, new RegExp(`\\*\\*${facts.nestedRendererChecks}\\*\\* checks in the nested edit-renderer suite`), `nested renderer ${facts.nestedRendererChecks} checks`)
       expectMatch(file, new RegExp(`\\*\\*${facts.imageExportChecks}\\*\\* image-export assertions`), `image export ${facts.imageExportChecks} assertions`)
-      expectMatch(file, new RegExp(`\\*\\*${facts.browserSuites}/9\\*\\* browser suites`), `${facts.browserSuites}/9 browser suites`)
+      expectMatch(file, new RegExp(`\\*\\*${facts.browserSuites}/${facts.browserSuites}\\*\\* browser suites`), `${facts.browserSuites}/${facts.browserSuites} browser suites`)
     }
   }
 
@@ -91,8 +91,7 @@ export function verifyFacts(facts, read) {
   for (const file of ['CHANGELOG.md']) {
     expect(file, node)
     expect(file, `${facts.packFiles} files`)
-    expect(file, facts.packedBytes.toLocaleString('en-US'))
-    expect(file, facts.unpackedBytes.toLocaleString('en-US'))
+    expect(file, facts.nonBuildUnpackedBytes.toLocaleString('en-US'))
     assertNoSwappedAuthority(file, read(file), 'Host/Client split')
   }
 
@@ -108,9 +107,9 @@ export function verifyFacts(facts, read) {
       `${facts.buildHostKb} kB`,
       `${facts.clientCssKb.toFixed(1)}`,
       `js ${facts.clientJsMb.toFixed(2)}`,
-      `${facts.browserSuites}/9`,
-      facts.packedBytes.toLocaleString('en-US'),
-      facts.unpackedBytes.toLocaleString('en-US'),
+      `${facts.browserSuites}/${facts.browserSuites}`,
+      `${facts.packFiles}`,
+      facts.nonBuildUnpackedBytes.toLocaleString('en-US'),
     ]
     for (const fragment of required) {
       if (!latest.includes(fragment)) failures.push(`${file} (latest record): missing ${JSON.stringify(fragment)}`)
@@ -172,7 +171,7 @@ export function runCli(root, io = console) {
     return 1
   }
   const node = `${facts.nodeTotal}/${facts.nodeTotal}`
-  io.log(`doc-facts: ok (Node ${node}; artifact-edit ${facts.artifactEditChecks}; image-export ${facts.imageExportChecks}; pack ${facts.packedBytes}/${facts.unpackedBytes})`)
+  io.log(`doc-facts: ok (Node ${node}; artifact-edit ${facts.artifactEditChecks}; image-export ${facts.imageExportChecks}; pack ${facts.packFiles} files; non-build ${facts.nonBuildUnpackedBytes} bytes)`)
   return 0
 }
 

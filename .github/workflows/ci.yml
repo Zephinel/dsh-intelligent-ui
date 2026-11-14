@@ -147,7 +147,7 @@ jobs:
           - name: artifact-edit
             suites: artifact-edit
           - name: other-suites
-            suites: on-demand style-panel style-theme export-image standalone-page article-layout settings-picker nested-edit-renderer
+            suites: on-demand style-panel style-theme export-image standalone-page article-layout settings-picker nested-edit-renderer sidebar-update
     steps:
       - name: Check out
         uses: actions/checkout@v7

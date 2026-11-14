@@ -50,7 +50,7 @@
     "check:release": "node scripts/release-check.mjs",
     "prepare": "node scripts/build.mjs",
     "check:theme": "node test/renderer/theme-torture.mjs",
-    "test:browser": "node test/browser/on-demand.e2e.mjs && node test/browser/style-panel.e2e.mjs && node test/browser/style-theme.e2e.mjs && node test/browser/export-image.e2e.mjs && node test/browser/standalone-page.e2e.mjs && node test/browser/article-layout.e2e.mjs && node test/browser/settings-picker.e2e.mjs && node test/browser/artifact-edit.e2e.mjs && node test/browser/nested-edit-renderer.e2e.mjs",
+    "test:browser": "node test/browser/on-demand.e2e.mjs && node test/browser/style-panel.e2e.mjs && node test/browser/style-theme.e2e.mjs && node test/browser/export-image.e2e.mjs && node test/browser/standalone-page.e2e.mjs && node test/browser/article-layout.e2e.mjs && node test/browser/settings-picker.e2e.mjs && node test/browser/sidebar-update.e2e.mjs && node test/browser/artifact-edit.e2e.mjs && node test/browser/nested-edit-renderer.e2e.mjs",
     "capture:readme": "node scripts/capture-screenshots.mjs && node scripts/capture-editor-screenshot.mjs && node scripts/capture-editor-screenshot.mjs --en && node scripts/build-readme-bento.mjs",
     "check:docs-facts": "node scripts/check-doc-facts.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs",

@@ -1,6 +1,6 @@
 # Browser E2E
 
-Nine focused suites boot a temporary HTTP server (or a local file) + headless
+Ten focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
@@ -161,6 +161,7 @@ events but not the full DSH Web integration.
   header/collapse chrome), inline and saved-template theme exports in forced light/dark, free temporary/template and legacy mixed-layout exports at wide/narrow widths in light/dark, the inlined theme, the `@ToAssistant` copy toast, and the remove-follow-up variant: a mixed Card keeps its prose while only its follow-up control (and form fields) is hidden, a root-level follow-up hides only its control, and a pure follow-up Card disappears whole.
   Run `npm run build` first so the standalone artifacts exist.
 
+- `sidebar-update.e2e.mjs` mounts the real sidebar update card into a minimal DSH-shaped sidebar: insertion between New Session and the panel nav inside the column width, the split click targets (the label opens the highlights popover; the rest of the card navigates), the always-right arrow, Escape close, collapsed-rail hiding, the Chinese/English notes variants and the empty no-update page (23 checks).
 - `nested-edit-renderer.e2e.mjs` mounts the edit-mode nested library and measures
   the `display:contents` wrappers: card/text 0px drift, innermost click and
   hover, overlay union rects, the reorder path mapping and unchanged ordinary

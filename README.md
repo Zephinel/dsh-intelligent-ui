@@ -201,9 +201,9 @@ dsh web
 | `npm run check` | 提交前完整检查：typecheck、构建、Node 测试、renderer 检查、文档事实/链接与打包事实检查 |
 | `npm run pack:check` | 预览 npm 包最终文件清单，不发布 |
 | `npm run check:release` | 打包产物解包后校验每个打包路径都在 checkout 中存在，并对 `lib/`、`skills/`、`locale/` 与 bundle patch 全量哈希比对，再装进一次性 `$DSH_HOME`（独立端口），校验安装后文件集合与哈希、插件挂载、实际提供的 client bundle 与卸载；不改动现有 profile，需要 `dsh` 与 `pnpm` 在 PATH 上 |
-| `npm run test:browser` | 先构建；运行 9 个浏览器套件，需要 Chrome |
+| `npm run test:browser` | 先构建；运行 10 个浏览器套件，需要 Chrome |
 
-- 当前验证记录（本地 `main` 已推送并与 origin/main 同步；含 Auto 智能格式决策、已合并的修订舞台/版本条与区块编排批量操作、composer 通知与草稿行 chip、本轮独立复审修复与侧栏更新提示（Host 查 npm latest、点击打开插件详情页））：Node 测试 **821/821**（Host 320、Client 464、packaging 37；覆盖区块编辑/编排/多卡片/分支/恢复/草稿持久化/临时样式/嵌套编辑/层级排序/结构操作/容器扩展/模型新增/跨容器移动/结构预览/严格保护/运行时状态/面板动画与宽度适配、实验性文档模式（提示词/工具/回放/浏览器渲染）、修订历史与删除回退、本地图片来源、活动舞台与可见性回落、最近任务式版本条与截图缩略图、顶层与嵌套区块批量操作（批量排序/复制/删除与草稿确认）、编辑流水线（结构操作待执行队列、批量保存/取消、整体说明显式保存、总预览 Apply、结构修订后草稿重映射与模型请求自动发送、深层页面（CST 深度≤10）根级结构操作、Phase A 复审修复（嵌套 Apply 重建、队列阻塞普通 Send、attached 保留、预览契约与诚实自动发送）、Phase B 复审修复（删除显示修订的回退选择与只读恢复、图片导出具体错误、版本条 props 来源、20 上限单一定义、文档事实检查器上下文匹配）等特性）；renderer 解析/渲染各 **42/42**，CSS/组件契约 **50/50** 与 **63/63**，排版 **22/22**，i18n **4** 个程序，嵌套 CSS 补偿契约 **28/28 direct + 5/5 scoped**；浏览器 **9/9** 套件通过，其中设置页模板交换 **101** 条、按需流程 **114** 条、交互页面 **50** 条、图片导出 **76** 条断言，Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查。浏览器测试覆盖组件/契约；真实模型验证范围与尚未覆盖的场景见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)（历史记录）。
+- 当前验证记录（本地 `main` 已推送并与 origin/main 同步；含 Auto 智能格式决策、已合并的修订舞台/版本条与区块编排批量操作、composer 通知与草稿行 chip、本轮独立复审修复与侧栏更新提示（Host 查 npm latest、点击打开插件详情页））：Node 测试 **821/821**（Host 320、Client 464、packaging 37；覆盖区块编辑/编排/多卡片/分支/恢复/草稿持久化/临时样式/嵌套编辑/层级排序/结构操作/容器扩展/模型新增/跨容器移动/结构预览/严格保护/运行时状态/面板动画与宽度适配、实验性文档模式（提示词/工具/回放/浏览器渲染）、修订历史与删除回退、本地图片来源、活动舞台与可见性回落、最近任务式版本条与截图缩略图、顶层与嵌套区块批量操作（批量排序/复制/删除与草稿确认）、编辑流水线（结构操作待执行队列、批量保存/取消、整体说明显式保存、总预览 Apply、结构修订后草稿重映射与模型请求自动发送、深层页面（CST 深度≤10）根级结构操作、Phase A 复审修复（嵌套 Apply 重建、队列阻塞普通 Send、attached 保留、预览契约与诚实自动发送）、Phase B 复审修复（删除显示修订的回退选择与只读恢复、图片导出具体错误、版本条 props 来源、20 上限单一定义、文档事实检查器上下文匹配）等特性）；renderer 解析/渲染各 **42/42**，CSS/组件契约 **50/50** 与 **63/63**，排版 **22/22**，i18n **4** 个程序，嵌套 CSS 补偿契约 **28/28 direct + 5/5 scoped**；浏览器 **10/10** 套件通过，其中设置页模板交换 **101** 条、按需流程 **114** 条、交互页面 **50** 条、图片导出 **76** 条断言，Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查。浏览器测试覆盖组件/契约；真实模型验证范围与尚未覆盖的场景见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)（历史记录）。
 - `node scripts/capture-screenshots.mjs` 以固定 DSH token、生产组件与假服务在 Chrome 2x 重建面板、提示、临时结果与设置截图；英文 UI，卡片壳层图标用 lucide 替身。
 - `npm run check` 里的排版检查（typography）需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
 
@@ -224,7 +224,7 @@ npm 包：[`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephin
 ## 贡献
 
 - 问题与功能请求：使用 [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues)。
-- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑本地门禁：CHANGELOG/PRODUCT/docs 等纯文档改动只跑文档检查，README 属打包内容走全量门禁；main 上的代码改动另跑 9 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
+- 提交 PR 前运行 `npm run check`；CI（[`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)）在 PR 与 main 上跑本地门禁：CHANGELOG/PRODUCT/docs 等纯文档改动只跑文档检查，README 属打包内容走全量门禁；main 上的代码改动另跑 10 个浏览器套件。发布由 [GitHub Actions Trusted Publishing 工作流](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml)在 `v*` tag 上执行，流程见开发文档。
 - 贡献者与 AI 协作代理都应遵循[文档同步技能](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md)：行为、文案或计数变化时，同步中英 README、`CHANGELOG.md` 与 `docs/` 对应文档。checkout 中以本地 `.agents/skills/sync-iui-docs/SKILL.md` 为准。
 - 维护者：[@Zephinel](https://github.com/Zephinel)。
 

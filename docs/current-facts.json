@@ -3,7 +3,7 @@
   "host": 320,
   "client": 464,
   "packaging": 37,
-  "browserSuites": 9,
+  "browserSuites": 10,
   "artifactEditChecks": 944,
   "nestedRendererChecks": 75,
   "imageExportChecks": 76,
@@ -12,7 +12,5 @@
   "clientJsMb": 3.96,
   "clientCssKb": 249.4,
   "packFiles": 65,
-  "packedBytes": 6126093,
-  "unpackedBytes": 13172238,
-  "nonBuildUnpackedBytes": 3818208
+  "nonBuildUnpackedBytes": 3818258
 }

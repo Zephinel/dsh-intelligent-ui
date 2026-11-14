@@ -20,7 +20,7 @@ const FACTS = {
   host: 305,
   client: 457,
   packaging: 23,
-  browserSuites: 9,
+  browserSuites: 10,
   artifactEditChecks: 920,
   nestedRendererChecks: 75,
   imageExportChecks: 76,
@@ -29,8 +29,7 @@ const FACTS = {
   clientJsMb: 3.95,
   clientCssKb: 242.8,
   packFiles: 65,
-  packedBytes: 6077725,
-  unpackedBytes: 13083208,
+  nonBuildUnpackedBytes: 3818208,
 }
 
 /**
@@ -41,15 +40,15 @@ const FACTS = {
 function fixtureDocs(overrides = {}) {
   const facts = FACTS
   const node = `${facts.nodeTotal}/${facts.nodeTotal}`
-  const packSize = `${facts.packedBytes.toLocaleString('en-US')}/${facts.unpackedBytes.toLocaleString('en-US')}`
+  const nonBuild = `${facts.nonBuildUnpackedBytes.toLocaleString('en-US')}`
   const docs = {
-    'README.md': `Node **${node}**（Host ${facts.host}、Client ${facts.client}、packaging ${facts.packaging}）；Artifact 区块编辑套件 **${facts.artifactEditChecks}** 条检查，嵌套编辑渲染套件 **${facts.nestedRendererChecks}** 条检查，图片导出 **${facts.imageExportChecks}** 条断言；浏览器 **${facts.browserSuites}/9** 套件通过。`,
-    'README.en.md': `**${node}** Node tests (Host ${facts.host}, Client ${facts.client}, packaging ${facts.packaging}); **${facts.artifactEditChecks}** checks in the Artifact block-editing suite, **${facts.nestedRendererChecks}** checks in the nested edit-renderer suite, **${facts.imageExportChecks}** image-export assertions; **${facts.browserSuites}/9** browser suites passed.`,
+    'README.md': `Node **${node}**（Host ${facts.host}、Client ${facts.client}、packaging ${facts.packaging}）；Artifact 区块编辑套件 **${facts.artifactEditChecks}** 条检查，嵌套编辑渲染套件 **${facts.nestedRendererChecks}** 条检查，图片导出 **${facts.imageExportChecks}** 条断言；浏览器 **${facts.browserSuites}/${facts.browserSuites}** 套件通过。`,
+    'README.en.md': `**${node}** Node tests (Host ${facts.host}, Client ${facts.client}, packaging ${facts.packaging}); **${facts.artifactEditChecks}** checks in the Artifact block-editing suite, **${facts.nestedRendererChecks}** checks in the nested edit-renderer suite, **${facts.imageExportChecks}** image-export assertions; **${facts.browserSuites}/${facts.browserSuites}** browser suites passed.`,
     'docs/architecture.md': `## 分支验证\nNode **${node}**（Host **${facts.host}**、Client **${facts.client}**、packaging **${facts.packaging}**）；\`artifact-edit\` **${facts.artifactEditChecks} checks**；构建 host **${facts.buildHostKb} kB**、client **${facts.clientMb.toFixed(2)} MB**（js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)} kB）。\n结构操作现在统一走「待执行队列 → 总预览 → Apply」流水线。`,
     'docs/architecture.en.md': `## Branch verification\nNode **${node}** (Host **${facts.host}**, Client **${facts.client}**, packaging **${facts.packaging}**); \`artifact-edit\` **${facts.artifactEditChecks} checks**; build host **${facts.buildHostKb} kB**, client **${facts.clientMb.toFixed(2)} MB** (js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)} kB).`,
-    'CHANGELOG.md': `## [Unreleased]\nNode **${node}**; Host **${facts.host}**, Client **${facts.client}**, packaging ${facts.packaging}; pack ${facts.packFiles} files ${packSize}.`,
-    'docs/verification.md': `# History\n\n## Old record\nNode 1/1\n\n## Newest record\nNode **${node}** = Host **${facts.host}** + Client **${facts.client}** + packaging **${facts.packaging}**；- N1：Host **${facts.host}**、Client **${facts.client}**、packaging ${facts.packaging}；\`artifact-edit\` **${facts.artifactEditChecks} checks**；构建 host ${facts.buildHostKb} kB、client ${facts.clientJsMb.toFixed(2)} MB（js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)}）；浏览器 ${facts.browserSuites}/9；pack ${packSize}。`,
-    'docs/verification.en.md': `# History\n\n## Old record\nNode 1/1\n\n## Newest record\nNode **${node}** = Host **${facts.host}** + Client **${facts.client}** + packaging **${facts.packaging}**; - N1: Host **${facts.host}**, Client **${facts.client}**, packaging ${facts.packaging}; \`artifact-edit\` **${facts.artifactEditChecks} checks**; build host ${facts.buildHostKb} kB, client ${facts.clientJsMb.toFixed(2)} MB (js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)}); browser ${facts.browserSuites}/9; pack ${packSize}.`,
+    'CHANGELOG.md': `## [Unreleased]\nNode **${node}**; Host **${facts.host}**, Client **${facts.client}**, packaging ${facts.packaging}; pack ${facts.packFiles} files; non-build ${nonBuild} bytes.`,
+    'docs/verification.md': `# History\n\n## Old record\nNode 1/1\n\n## Newest record\nNode **${node}** = Host **${facts.host}** + Client **${facts.client}** + packaging **${facts.packaging}**；- N1：Host **${facts.host}**、Client **${facts.client}**、packaging ${facts.packaging}；\`artifact-edit\` **${facts.artifactEditChecks} checks**；构建 host ${facts.buildHostKb} kB、client ${facts.clientJsMb.toFixed(2)} MB（js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)}）；浏览器 ${facts.browserSuites}/${facts.browserSuites}；pack ${facts.packFiles} files; non-build ${nonBuild} bytes。`,
+    'docs/verification.en.md': `# History\n\n## Old record\nNode 1/1\n\n## Newest record\nNode **${node}** = Host **${facts.host}** + Client **${facts.client}** + packaging **${facts.packaging}**; - N1: Host **${facts.host}**, Client **${facts.client}**, packaging ${facts.packaging}; \`artifact-edit\` **${facts.artifactEditChecks} checks**; build host ${facts.buildHostKb} kB, client ${facts.clientJsMb.toFixed(2)} MB (js ${facts.clientJsMb.toFixed(2)} / css ${facts.clientCssKb.toFixed(1)}); browser ${facts.browserSuites}/${facts.browserSuites}; pack ${facts.packFiles} files; non-build ${nonBuild} bytes.`,
     'docs/limitations.md': '结构操作先进入本轮待执行队列，底部「应用」先显示总预览；选择其他修订即恢复可编辑。',
     'docs/limitations.en.md': 'Structural operations first enter the pending queue; **Apply** opens the total preview; selecting another revision restores editing.',
     'docs/usage.md': '结构操作先进入本轮待执行队列；点「应用」打开总预览；选择其他修订即恢复可编辑。',
@@ -107,7 +106,7 @@ test('a Host/Client swap in the newest verification record fails', () => {
 })
 
 test('bare numbers without their context do not satisfy the split', () => {
-  const failures = failuresFor({ 'README.en.md': `Node 785/785 ${FACTS.host} ${FACTS.client} ${FACTS.packaging} 920 75 76 9/9` })
+  const failures = failuresFor({ 'README.en.md': `Node 785/785 ${FACTS.host} ${FACTS.client} ${FACTS.packaging} 920 75 76 10/10` })
   assert.equal(failures.some(failure => failure.includes('Host/Client/packaging split')), true)
 })
 
