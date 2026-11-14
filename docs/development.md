@@ -13,10 +13,10 @@
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.6.0
+# npm；当前 latest 为 0.6.1
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.0
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.1
 # 或从 GitHub 安装
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -235,15 +235,15 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 5. 创建并推送与版本一致的 tag：
 
 ```bash
-git tag v0.6.0
+git tag v0.6.1
 git push origin main --follow-tags
 ```
 
-6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.6.0 — 2026-11-14`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
+6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.6.1 — 2026-11-14`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
 
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段与 `release-notes/<version>.md` 有已审核的 `## Highlights`，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
-> 版本号约定：正式版使用稳定 semver（如 `0.6.0`，tag `v0.6.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
+> 版本号约定：正式版使用稳定 semver（如 `0.6.1`，tag `v0.6.1`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 
 > 旧的 granular token 直接发布方式将在 2027-01 移除；这个流程不依赖长期 token。
 

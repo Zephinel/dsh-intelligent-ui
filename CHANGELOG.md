@@ -7,8 +7,11 @@ been published yet.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-14
+
 ### Fixed
 
+- **Bundled OpenUI parser upgraded to 1.1.1 (availability fix).** The shipped host bundle embedded `@openuidev/lang-core@1.0.1`, whose `resolveRef()` re-materialized shared references on every use with no memoization: a ~400-byte generated program with doubling references could block the Host event loop for seconds and eventually OOM the process (a model-authored `render_ui` program was enough). `@openuidev/lang-core` and `@openuidev/react-lang` are now `^1.1.1` (lock resolves 1.1.1), the rebuilt host bundle reports 1.1.1 and contains the memoized resolver; the reported N=18 program dropped from 2.4 s / 466 MB to milliseconds in the bounded local reproduction. This is an availability-only fix; no data-disclosure path. The residual unresolved-reference class noted upstream is not addressed here. Final gate: Node **821/821** (Host **320**, Client **464**, packaging **37**), 10/10 browser suites, `artifact-edit` **944 checks**, build host **858 kB**, client **4.20 MB** (js 3.96 / css 249.4), pack **65 files**; non-build **3,818,283** bytes; `check:docs-facts` and `check:pack-facts` pass.
 - **Registry verification waits for npm propagation.** The publish workflow asked npm for the new version for only five attempts × 3 s and treated a stale packument as a failed publish, even though `npm publish` had succeeded (0.6.0 appeared through the registry about seven minutes later). The step now polls the dist-tags endpoint plus the version endpoint directly for up to ten minutes before failing.
 
 ## [0.6.0] - 2026-11-14

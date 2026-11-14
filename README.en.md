@@ -20,7 +20,7 @@ The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.
 Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.6.0`** (`latest`). 0.6.0 adds in-place editing of rendered results with revision history, the Auto page-vs-text decision, the experimental answer-as-document mode, local image sources, natural-language and zero-model style switching, and the sidebar update card with human-reviewed bilingual release points; 0.5.0's custom styles, on-demand generation, free layouts and template exchange remain available.
+> **Current status**: published on GitHub and npm as **`@zephinel/dsh-intelligent-ui@0.6.1`** (`latest`). 0.6.1 fixes an availability issue where the bundled OpenUI parser (1.0.1) could expand shared references exponentially and block or OOM the Host; it now bundles `@openuidev/lang-core` 1.1.1. 0.6.0's in-place editing with revision history, Auto page-vs-text decision, experimental answer-as-document mode, local images, style switching and sidebar update card remain available.
 
 [Quick start](#quick-start) · [Getting the code](#getting-the-code) · [Build, test and deploy](#build-test-and-deploy)
 
@@ -123,10 +123,10 @@ The restart examples cover a foreground `dsh web`, macOS launchd and Linux syste
 
 ## Quick start
 
-**DSH Web**: install the published 0.6.0 package and start the Web UI (first foreground run):
+**DSH Web**: install the published 0.6.1 package and start the Web UI (first foreground run):
 
 ```bash
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.0
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.1
 dsh web
 ```
 
@@ -137,7 +137,7 @@ Alternative sources replace the install command above: use `dsh plugin --profile
 **DSH Desktop** needs no terminal command — install it inside the app:
 
 1. Open **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**).
-2. Enter `@zephinel/dsh-intelligent-ui@0.6.0` (or just the package name for the latest), then click **Install**.
+2. Enter `@zephinel/dsh-intelligent-ui@0.6.1` (or just the package name for the latest), then click **Install**.
 3. When the install finishes, click **Enable now**; if the **UI** control does not appear, quit and reopen DSH Desktop.
 
 The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found.

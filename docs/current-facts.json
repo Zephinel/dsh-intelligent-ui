@@ -7,10 +7,12 @@
   "artifactEditChecks": 944,
   "nestedRendererChecks": 75,
   "imageExportChecks": 76,
-  "buildHostKb": 850,
-  "clientMb": 4.21,
+  "buildHostKb": 858,
+  "clientMb": 4.2,
   "clientJsMb": 3.96,
   "clientCssKb": 249.4,
   "packFiles": 65,
-  "nonBuildUnpackedBytes": 3818366
+  "nonBuildUnpackedBytes": 3818283,
+  "packedBytes": 6128933,
+  "unpackedBytes": 13179932
 }
