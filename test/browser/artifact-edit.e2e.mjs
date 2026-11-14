@@ -278,7 +278,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   /** Remove one queued structure operation after its row has re-rendered. */
   const removePendingOp = async () => {
     await wait('!!document.querySelector("[data-dsh-iui-edit-pending-op-remove]")', 'pending op remove action')
-    await removePendingOp()
+    await click('[data-dsh-iui-edit-pending-op-remove]')
   }
   const openArrangementEditor = async id => {
     await wait(`!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'previous editor settled')
