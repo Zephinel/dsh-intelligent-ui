@@ -711,6 +711,8 @@ export const zh = {
   'edit.discard': '放弃修改',
   'edit.keepEditing': '继续编辑',
   'edit.availableBlocks': '{count} 个可编辑区块',
+  'update.title': '{name} 有更新可用',
+  'update.open': '点击查看详情',
 } as const
 
 /** English dictionary, checked complete against the Chinese key set. */
@@ -1390,6 +1392,8 @@ export const en: Record<keyof typeof zh, string> = {
   'edit.discard': 'Discard',
   'edit.keepEditing': 'Keep editing',
   'edit.availableBlocks': '{count} editable blocks',
+  'update.title': 'Update available for {name}',
+  'update.open': 'View details',
 }
 
 /**

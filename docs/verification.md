@@ -1064,3 +1064,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **测试/守卫**：`test/packaging/manifest.test.mjs` 增加两条断言（`npm run check` 链路包含 `check:pack-facts`；docs-only 分类只覆盖非打包文档）；`scripts/check-pack-facts.mjs` 为独立脚本，失败时提示重测并更新 current-facts。**平台校正**：首次 Linux CI 运行（run 43518528118）因本地/runner 的 `lib/` 构建字节相差 8,306 字节（总 unpacked 13,149,185 vs 13,140,829）失败，说明绝对 `unpackedSize` 不可移植；守卫改为只比对文件数与 `lib/` 之外的非构建字节和 3,816,896。
 - **实测门禁**：`npm run check` PASS；Node **810/810** = Host **309** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言；`npm run pack:check` **65** 文件，压缩 **6,121,241** 字节，解包 **13,149,185** 字节（本机）；`check:pack-facts` ok（65 files; non-build unpacked 3,816,896 bytes）；构建 host **846 kB**、client **4.20 MB**（js 3.96 / CSS 244.8 kB）；`git diff --check` 通过。
 - **证据边界**：该守卫不校验压缩后的 tarball 字节（与 npm/tar/gzip 版本相关）；构建产物若在本地与 Linux runner 间存在字节差异，会让 `unpackedSize` 比对失败——首次 Linux CI 运行会验证构建确定性，如失败则需把守卫改为按文件类型或允许差值。
+
+
+## 2026-11-14 — 侧栏更新提示
+
+- **背景**：DSH 插件页已有更新检查，但入口较深；本插件新增 Host 侧 `GET /api/intelligent-ui/update`（读取 npm `latest`：成功缓存 6 小时、失败 5 分钟、5 秒超时，离线/失败返回 `latest: null`），浏览器侧在侧栏插入一张正常文档流内的「有更新可用」卡片（当前版本 → 最新版本），点击打开本插件详情页；不做自动更新。
+- **位置与实现**：DSH 0.2.2-rc.1 的侧栏契约没有 New Session 与面板列表之间的 slot（`sidebar.workspaces` 是 ui-workspace 独占的 single 槽），因此 `src/client/sidebar-update.ts` 在面板 `<nav>` 前插入一个 React host；卡片跟随 DSH 语言切换重渲染，侧栏折叠为 rail 时隐藏；侧栏结构不匹配时不插入（静默降级、不破坏布局）。`test/host/update-routes.test.mjs` 覆盖稳定版比较、缓存、失败静默、GET-only 与连接拒绝。
+- **实测门禁**：`npm run check` PASS；Node **816/816** = Host **315** + Client **464** + packaging **37**；浏览器 **9/9** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言；构建 host **848 kB**、client **4.20 MB**（js 3.96 / CSS 246.9 kB）；`npm run pack:check` **65** 文件，压缩 **6,123,601** 字节，解包 **13,159,407** 字节（非构建 **3,817,537** 字节）；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。临时 Chrome 探针（未入库）验证：卡片在 New Session 与 nav 之间、与两者几何无重叠、点击回调触发、`data-sidebar-collapsed=true` 时宿主 `display:none`。
+- **证据边界**：未在真实 DSH 会话中热重启验证（当前 3080 服务仍运行旧 bundle）；真实侧栏 DOM 与探针结构一致但 DSH 升级可能改变，届时卡片自动隐藏；Host 需能访问 `registry.npmjs.org`，离线时无提示。

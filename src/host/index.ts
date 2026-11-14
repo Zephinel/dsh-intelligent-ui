@@ -51,6 +51,7 @@ import {
 import { createStyleStore } from './style-store.ts'
 import { createResultStore } from './result-store.ts'
 import { registerStyleRoutes } from './style-routes.ts'
+import { registerUpdateRoute } from './update-routes.ts'
 import { createArtifactRevisionStore, registerArtifactRevisionRoutes } from './artifact-revisions.ts'
 import { registerArtifactBaseRoute } from './artifact-base.ts'
 import {
@@ -605,6 +606,7 @@ export function apply(ctx: {
   registerStyleRoutes(ctx as never, store, results)
   registerArtifactRevisionRoutes(ctx as never, revisions, artifactPrograms)
   registerArtifactBaseRoute(ctx as never, { revisions, programs: artifactPrograms })
+  registerUpdateRoute(ctx as never)
   registerArtifactStructureRoute(ctx as never, {
     revisions,
     programs: artifactPrograms,

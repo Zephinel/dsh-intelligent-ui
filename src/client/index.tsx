@@ -42,6 +42,7 @@ import { ToggleControl, type ToggleControlInjected } from './ToggleControl.tsx'
 import { enableCommand, onDemandCommand, startModeSync, styleCommand } from './commands.ts'
 import { clientToken } from './client-token.ts'
 import { OnDemandHint, type OnDemandHintInjected } from './OnDemandHint.tsx'
+import { installSidebarUpdateNotice } from './sidebar-update.ts'
 import type { ComposerAccess } from './composer.ts'
 import { styleCatalog } from './styles.ts'
 import { styleActions } from './style-actions.ts'
@@ -87,6 +88,9 @@ let workspaceImageRemote: WorkspaceImageRemote | undefined
 /** One stable resolver per Session, so card renders do not rebind image effects. */
 const imageResolvers = new Map<string, ImageSourceResolver>()
 
+/** Plugin-manager navigation, when this deployment ships the Plugins panel. */
+let pluginNavigation: { openBundle(name: string): void } | undefined
+
 /**
  * Register the Turn-tail cards, the compact `render_ui` Tool row, the composer
  * Intelligent UI switch, the per-message export entry, and the extension's
@@ -97,6 +101,21 @@ export function apply(ctx: ClientContext): void {
   const token = clientToken()
   // Optional: local image sources need the workspace-files client namespace.
   // Deferred injection keeps the plugin loading on Hosts without that service.
+  // Optional: the update notice's action opens this bundle's Plugins detail page.
+  // A minimal deployment without the Plugins panel keeps the notice text only.
+  ctx.inject?.(['pluginNavigation'], (scope: unknown) => {
+    const scoped = scope as {
+      readonly pluginNavigation?: { openBundle(name: string): void }
+      effect?(fn: () => unknown): unknown
+    }
+    pluginNavigation = scoped.pluginNavigation
+    scoped.effect?.(() => () => { pluginNavigation = undefined })
+  })
+  /** Open the Plugins detail page; a missing panel leaves the action inert. */
+  const openPluginDetails = (): void => {
+    pluginNavigation?.openBundle(PACKAGE_NAME)
+  }
+
   ctx.inject?.(['remote.workspaceFiles'], (scope: unknown) => {
     const scoped = scope as {
       readonly remote?: { readonly workspaceFiles?: WorkspaceImageRemote }
@@ -140,6 +159,15 @@ export function apply(ctx: ClientContext): void {
   // Both dictionaries go in one registration so every slot below can translate
   // through the `t` seat. A later locale switch re-renders the mounted outlets.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'intelligent-ui: dictionaries')
+  // A newer published version becomes one in-flow card in the sidebar, directly
+  // above the panel list; its action opens this bundle's Plugins detail page.
+  // DSH 0.2.2-rc.1 has no slot for that position, so the card mounts into the
+  // sidebar's own DOM (see sidebar-update.ts) instead of covering the panel rows.
+  ctx.effect(() => installSidebarUpdateNotice({
+    openDetails: openPluginDetails,
+    translate: () => ctx.locale.bind(NS),
+    subscribe: (listener) => ctx.locale.subscribe(listener),
+  }), 'intelligent-ui: sidebar update card')
   // One document-level layer gives every plugin input the same orbit focus cue.
   ctx.effect(() => {
     const host = document.createElement('div')
