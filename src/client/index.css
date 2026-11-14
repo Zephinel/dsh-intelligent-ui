@@ -2261,9 +2261,36 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-primary-foreground, #fff);
+}
+
+/* The extension's app mark (icon.svg) inlined with theme tokens so the sidebar
+   card carries the plugin identity in both light and dark shells. */
+.dsh-iui-sidebar-update-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.dsh-iui-sidebar-update-tile {
+  fill: var(--dsw-alias-bg-layer-2);
+}
+
+.dsh-iui-sidebar-update-edge {
+  stroke: var(--dsw-alias-border-l2);
+}
+
+.dsh-iui-sidebar-update-spark,
+.dsh-iui-sidebar-update-line-one,
+.dsh-iui-sidebar-update-line-two {
+  fill: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-sidebar-update-line-one {
+  fill-opacity: 0.82;
+}
+
+.dsh-iui-sidebar-update-line-two {
+  fill-opacity: 0.38;
 }
 
 .dsh-iui-sidebar-update-copy {
@@ -2322,8 +2349,4 @@
     color: ButtonText;
   }
 
-  .dsh-iui-sidebar-update-icon {
-    background: ButtonText;
-    color: Canvas;
-  }
 }

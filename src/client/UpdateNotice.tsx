@@ -27,6 +27,26 @@ export interface UpdateNoticeProps {
   readonly subscribe?: (listener: () => void) => () => void
 }
 
+/** The extension's own app icon, inlined so the sidebar card carries the brand mark. */
+function PluginMark(): ReactNode {
+  return (
+    <svg className="dsh-iui-sidebar-update-mark" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="dsh-iui-sidebar-update-accent" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#5aa9ff" />
+          <stop offset="1" stopColor="#38d6a4" />
+        </linearGradient>
+      </defs>
+      <rect className="dsh-iui-sidebar-update-tile" x="2" y="2" width="60" height="60" rx="16" />
+      <rect className="dsh-iui-sidebar-update-edge" x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" fill="none" strokeWidth="1.5" />
+      <path className="dsh-iui-sidebar-update-spark" d="M26 15.5c0 5.9 3.6 9.5 9.5 9.5-5.9 0-9.5 3.6-9.5 9.5 0-5.9-3.6-9.5-9.5-9.5 5.9 0 9.5-3.6 9.5-9.5Z" />
+      <path d="M43.5 24c0 3.6 2.2 5.8 5.8 5.8-3.6 0-5.8 2.2-5.8 5.8 0-3.6-2.2-5.8-5.8-5.8 3.6 0 5.8-2.2 5.8-5.8Z" fill="url(#dsh-iui-sidebar-update-accent)" />
+      <rect className="dsh-iui-sidebar-update-line-one" x="15" y="40" width="24" height="3.4" rx="1.7" />
+      <rect className="dsh-iui-sidebar-update-line-two" x="15" y="46.4" width="15" height="3.4" rx="1.7" />
+    </svg>
+  )
+}
+
 export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNoticeProps): ReactNode {
   const [view, setView] = useState<UpdateCheckView | null>(null)
   const [, setRevision] = useState(0)
@@ -55,7 +75,7 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
   if (latest === null || view === null) return null
   const body = (
     <>
-      <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><RemixIcon name="download-2-line" size={16} /></span>
+      <span className="dsh-iui-sidebar-update-icon" aria-hidden="true"><PluginMark /></span>
       <span className="dsh-iui-sidebar-update-copy">
         <span className="dsh-iui-sidebar-update-title">{t('update.title', { name: SHORT_NAME })}</span>
         <span className="dsh-iui-sidebar-update-meta">
