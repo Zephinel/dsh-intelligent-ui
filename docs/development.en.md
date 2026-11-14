@@ -229,7 +229,7 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 **Publishing a version**:
 
 1. Update the version in `package.json` / `package-lock.json`, `CHANGELOG.md`, the README status and version pins, and the matching docs;
-2. write and human-review `release-notes/<version>.md` (`## Highlights` with at least one bullet; format in `release-notes/README.md`; `npm run check:release-notes` previews the gate locally);
+2. write and human-review `release-notes/<version>.md` (required) plus an optional `release-notes/<version>.en.md` for English UIs (the Host falls back to the default file when it is missing); `## Highlights` with at least one bullet, format in `release-notes/README.md`; `npm run check:release-notes` previews the gate locally;
 3. run `npm run check`;
 4. commit and push `main`;
 5. create and push a tag that matches the version:

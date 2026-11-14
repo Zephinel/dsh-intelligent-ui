@@ -28,7 +28,22 @@ const highlights = parseHighlights(markdown)
 if (highlights.length === 0) {
   console.error(`release-notes: release-notes/${version}.md has no "## Highlights" bullets`)
   process.exitCode = 1
-} else {
-  console.log(`release-notes: ok (${version}; ${highlights.length} highlight(s))`)
+}
+
+// The English variant is optional (the Host falls back to the default file),
+// but when committed it must contain reviewed Highlights as well.
+const englishFile = resolve(root, 'release-notes', `${version}.en.md`)
+let english = null
+try {
+  english = parseHighlights(readFileSync(englishFile, 'utf8'))
+} catch { /* no English notes; the Host falls back to the default file */ }
+if (english !== null && english.length === 0) {
+  console.error(`release-notes: release-notes/${version}.en.md has no "## Highlights" bullets`)
+  process.exitCode = 1
+}
+
+if (process.exitCode === 0 || process.exitCode === undefined) {
+  console.log(`release-notes: ok (${version}; ${highlights.length} highlight(s)${english === null ? '' : `, ${english.length} English`})`)
   for (const point of highlights) console.log(`  - ${point}`)
+  for (const point of english ?? []) console.log(`  - [en] ${point}`)
 }

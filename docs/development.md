@@ -229,7 +229,7 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 **发布一个版本**：
 
 1. 更新 `package.json` / `package-lock.json` 的版本、`CHANGELOG.md`、README 状态与版本 pin、相关 docs；
-2. 编写并人工审核 `release-notes/<version>.md`（`## Highlights` 至少一条；格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果）；
+2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；
 3. 运行 `npm run check`；
 4. 提交并推送 `main`；
 5. 创建并推送与版本一致的 tag：

@@ -78,9 +78,18 @@ function releaseNotesRepository(): string | undefined {
   }
 }
 
-/** Tag-pinned raw URL of one release's notes document. */
-function releaseNotesUrl(repository: string, version: string): string {
-  return `https://raw.githubusercontent.com/${repository}/v${version}/release-notes/${version}.md`
+/** Notes variant selected from the client language (English falls back to the default file). */
+export type ReleaseNotesVariant = 'default' | 'en'
+
+/** Normalize a client locale id into the notes variant this extension ships. */
+export function releaseNotesVariant(language: string | null | undefined): ReleaseNotesVariant {
+  return language !== null && language !== undefined && language.trim().toLowerCase().startsWith('en') ? 'en' : 'default'
+}
+
+/** Tag-pinned raw URL of one release's notes document (English suffix when requested). */
+export function releaseNotesUrl(repository: string, version: string, variant: ReleaseNotesVariant = 'default'): string {
+  const suffix = variant === 'en' ? '.en' : ''
+  return `https://raw.githubusercontent.com/${repository}/v${version}/release-notes/${version}${suffix}.md`
 }
 
 /**
@@ -88,7 +97,7 @@ function releaseNotesUrl(repository: string, version: string): string {
  * @param options - fetch/time overrides for tests.
  * @returns a function resolving one {@link UpdateCheckView}; it never rejects.
  */
-export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => Promise<UpdateCheckView> {
+export function createUpdateChecker(options: UpdateCheckerOptions = {}): (language?: string | null) => Promise<UpdateCheckView> {
   const installed = installedVersion(options.manifestUrl)
   const current = installed ?? '0.0.0'
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
@@ -96,10 +105,19 @@ export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => P
   const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS
   const successTtlMs = options.successTtlMs ?? SUCCESS_TTL_MS
   const failureTtlMs = options.failureTtlMs ?? FAILURE_TTL_MS
-  let cached: { at: number; ttl: number; view: UpdateCheckView } | undefined
-  let inflight: Promise<UpdateCheckView> | undefined
+  const cached = new Map<ReleaseNotesVariant, { at: number; ttl: number; view: UpdateCheckView }>()
+  const inflight = new Map<ReleaseNotesVariant, Promise<UpdateCheckView>>()
 
-  const read = async (): Promise<{ view: UpdateCheckView; notesRead: boolean }> => {
+  const readNotes = async (repository: string, latest: string, variant: ReleaseNotesVariant): Promise<string[]> => {
+    const response = await fetchImpl(releaseNotesUrl(repository, latest, variant), {
+      headers: { accept: 'text/plain' },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!response.ok) throw new Error(`notes answered ${response.status}`)
+    return parseHighlights(await response.text()).slice(0, 6)
+  }
+
+  const read = async (variant: ReleaseNotesVariant): Promise<{ view: UpdateCheckView; notesRead: boolean }> => {
     const response = await fetchImpl(REGISTRY_LATEST_URL, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
@@ -115,39 +133,42 @@ export function createUpdateChecker(options: UpdateCheckerOptions = {}): () => P
     if (repository === undefined) {
       return { view: { current, latest, updateAvailable: true, highlights: [] }, notesRead: false }
     }
-    try {
-      const notesResponse = await fetchImpl(releaseNotesUrl(repository, latest), {
-        headers: { accept: 'text/plain' },
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-      if (!notesResponse.ok) throw new Error(`notes answered ${notesResponse.status}`)
-      const highlights = parseHighlights(await notesResponse.text()).slice(0, 6)
-      return { view: { current, latest, updateAvailable: true, highlights }, notesRead: highlights.length > 0 }
-    } catch {
-      return { view: { current, latest, updateAvailable: true, highlights: [] }, notesRead: false }
+    // An English request prefers <version>.en.md and falls back to the reviewed
+    // default file (also when the English file exists but has no Highlights).
+    const variants: readonly ReleaseNotesVariant[] = variant === 'en' ? ['en', 'default'] : ['default']
+    for (const candidate of variants) {
+      try {
+        const highlights = await readNotes(repository, latest, candidate)
+        if (highlights.length > 0) return { view: { current, latest, updateAvailable: true, highlights }, notesRead: true }
+      } catch { /* try the fallback variant */ }
     }
+    return { view: { current, latest, updateAvailable: true, highlights: [] }, notesRead: false }
   }
 
-  return async () => {
+  return async (language?: string | null) => {
+    const variant = releaseNotesVariant(language)
     const at = now()
-    if (cached !== undefined && at - cached.at < cached.ttl) return cached.view
-    if (inflight !== undefined) return inflight
-    inflight = read()
+    const hit = cached.get(variant)
+    if (hit !== undefined && at - hit.at < hit.ttl) return hit.view
+    const running = inflight.get(variant)
+    if (running !== undefined) return running
+    const request = read(variant)
       .then(({ view, notesRead }) => {
         // A version update without readable highlights retries soon: the notes
         // may have been committed after the registry read or the raw CDN failed.
-        cached = { at, ttl: view.updateAvailable && !notesRead ? failureTtlMs : successTtlMs, view }
+        cached.set(variant, { at, ttl: view.updateAvailable && !notesRead ? failureTtlMs : successTtlMs, view })
         return view
       })
       .catch(() => {
         const view: UpdateCheckView = { current, latest: null, updateAvailable: false, highlights: [] }
-        cached = { at, ttl: failureTtlMs, view }
+        cached.set(variant, { at, ttl: failureTtlMs, view })
         return view
       })
       .finally(() => {
-        inflight = undefined
+        inflight.delete(variant)
       })
-    return inflight
+    inflight.set(variant, request)
+    return request
   }
 }
 
@@ -179,7 +200,8 @@ export function registerUpdateRoute(
           res.end()
           return
         }
-        void check().then((view) => {
+        const language = new URL(req.url ?? UPDATE_ROUTE_PATH, 'http://localhost').searchParams.get('lang')
+        void check(language).then((view) => {
           const body = JSON.stringify(view)
           res.writeHead(200, {
             'content-type': 'application/json; charset=utf-8',

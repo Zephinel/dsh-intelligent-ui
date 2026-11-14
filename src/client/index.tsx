@@ -169,6 +169,9 @@ export function apply(ctx: ClientContext): void {
     subscribe: typeof ctx.locale.subscribe === 'function'
       ? (listener) => ctx.locale.subscribe(listener)
       : undefined,
+    locale: () => {
+      try { return ctx.locale.getLocale().active } catch { return 'en' }
+    },
   }), 'intelligent-ui: sidebar update card')
   // One document-level layer gives every plugin input the same orbit focus cue.
   ctx.effect(() => {

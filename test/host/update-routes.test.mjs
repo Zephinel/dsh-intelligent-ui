@@ -52,9 +52,10 @@ function request(route, { method = 'GET', url = UPDATE_ROUTE_PATH } = {}) {
 }
 
 const NOTES = '## Highlights\n- `侧栏` [更新](https://example.com) 提示\n- **第二**点\n\n## Details\n- 不算要点\n'
+const NOTES_EN = '## Highlights\n- English point one\n- English point two\n'
 
 /** Stub the registry + raw notes fetches and record every URL. */
-function stubFetch({ version = '0.6.0', versionError = false, notes = NOTES, notesError = false } = {}) {
+function stubFetch({ version = '0.6.0', versionError = false, notes = NOTES, notesError = false, englishNotes = NOTES_EN, englishError = false } = {}) {
   const calls = []
   globalThis.fetch = async (url) => {
     calls.push(String(url))
@@ -63,8 +64,9 @@ function stubFetch({ version = '0.6.0', versionError = false, notes = NOTES, not
       return { ok: true, status: 200, async json() { return { version } } }
     }
     if (String(url).includes('raw.githubusercontent.com')) {
-      if (notesError) return { ok: false, status: 404, async text() { return '' } }
-      return { ok: true, status: 200, async text() { return notes } }
+      const english = String(url).includes('.en.md')
+      if (english ? englishError : notesError) return { ok: false, status: 404, async text() { return '' } }
+      return { ok: true, status: 200, async text() { return english ? englishNotes : notes } }
     }
     throw new Error(`unexpected fetch ${String(url)}`)
   }
@@ -104,6 +106,33 @@ test('the route reports the newer version with its reviewed highlights and cache
   const second = await request(route)
   assert.deepEqual(JSON.parse(second.body).highlights, ['侧栏 更新 提示', '第二点'])
   assert.equal(calls.length, 2, 'the successful answer is cached for the process')
+})
+
+test('an English client gets the language-specific notes and caches them separately', async () => {
+  const calls = stubFetch()
+  const { route } = mount()
+  assert.deepEqual((await request(route)).body && JSON.parse((await request(route)).body).highlights, ['侧栏 更新 提示', '第二点'])
+  calls.length = 0
+  const english = JSON.parse((await request(route, { url: `${UPDATE_ROUTE_PATH}?lang=en` })).body)
+  assert.deepEqual(english.highlights, ['English point one', 'English point two'])
+  assert.deepEqual(calls, [
+    'https://registry.npmjs.org/@zephinel%2Fdsh-intelligent-ui/latest',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.en.md',
+  ])
+  assert.equal(JSON.parse((await request(route, { url: `${UPDATE_ROUTE_PATH}?lang=en` })).body).highlights[0], 'English point one')
+  assert.equal(calls.length, 2, 'the English answer is cached on its own')
+})
+
+test('an English request falls back to the default notes when the English file is missing', async () => {
+  const calls = stubFetch({ englishError: true })
+  const { route } = mount()
+  const result = JSON.parse((await request(route, { url: `${UPDATE_ROUTE_PATH}?lang=en` })).body)
+  assert.deepEqual(result.highlights, ['侧栏 更新 提示', '第二点'])
+  assert.deepEqual(calls, [
+    'https://registry.npmjs.org/@zephinel%2Fdsh-intelligent-ui/latest',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.en.md',
+    'https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v0.6.0/release-notes/0.6.0.md',
+  ])
 })
 
 test('the route stays silent when the registry read fails', async () => {

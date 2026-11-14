@@ -32,6 +32,8 @@ export interface UpdateNoticeProps {
   readonly translate: () => Translate
   /** Subscribe to locale revisions so the card re-renders after a language switch (optional on minimal hosts). */
   readonly subscribe?: (listener: () => void) => () => void
+  /** Active DSH locale id; selects the English release-notes variant when it starts with `en`. */
+  readonly locale?: () => string
 }
 
 /** One fixed popover placement measured from the card. */
@@ -76,8 +78,9 @@ function placePopover(card: DOMRect, viewportWidth: number, viewportHeight: numb
   return { left, top, width, maxHeight: height }
 }
 
-export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNoticeProps): ReactNode {
+export function UpdateNotice({ openDetails, translate, subscribe, locale }: UpdateNoticeProps): ReactNode {
   const [view, setView] = useState<UpdateCheckView | null>(null)
+  const [localeId, setLocaleId] = useState(() => locale?.() ?? 'en')
   const [, setRevision] = useState(0)
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<PopoverPlacement | null>(null)
@@ -86,13 +89,17 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
   const titleId = useId()
   useEffect(() => {
     if (subscribe === undefined) return
-    return subscribe(() => { setRevision((value) => value + 1) })
-  }, [subscribe])
+    return subscribe(() => {
+      setLocaleId(locale?.() ?? 'en')
+      setRevision((value) => value + 1)
+    })
+  }, [subscribe, locale])
   const t = translate()
 
   useEffect(() => {
     let live = true
-    void fetch(UPDATE_ROUTE_PATH, { cache: 'no-store' })
+    const query = typeof localeId === 'string' && localeId !== '' ? `?lang=${encodeURIComponent(localeId)}` : ''
+    void fetch(`${UPDATE_ROUTE_PATH}${query}`, { cache: 'no-store' })
       .then(async (response): Promise<UpdateCheckView | null> => {
         if (!response.ok) return null
         const payload = await response.json() as UpdateCheckView
@@ -107,7 +114,7 @@ export function UpdateNotice({ openDetails, translate, subscribe }: UpdateNotice
       })
       .catch(() => { /* offline or an older Host: no card */ })
     return () => { live = false }
-  }, [])
+  }, [localeId])
 
   useLayoutEffect(() => {
     if (!open) {
