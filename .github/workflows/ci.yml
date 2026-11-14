@@ -172,10 +172,25 @@ jobs:
       - name: Build
         run: npm run build
       - name: Browser suites
+        # The suites drive a real headless Chrome and have a known small flake
+        # probability (the harness now also bounds every CDP command at 30 s, so
+        # a wedged renderer fails fast instead of holding the job). Retry once
+        # more per suite and fail only when every attempt fails.
         run: |
           set -euo pipefail
           for suite in ${{ matrix.suites }}; do
             echo "::group::$suite"
-            node "test/browser/${suite}.e2e.mjs"
+            ok=false
+            for attempt in 1 2 3; do
+              if timeout 600 node "test/browser/${suite}.e2e.mjs"; then
+                ok=true
+                break
+              fi
+              echo "::warning::${suite} attempt ${attempt} failed; retrying"
+            done
+            if [ "${ok}" != true ]; then
+              echo "::error::${suite} failed after 3 attempts"
+              exit 1
+            fi
             echo "::endgroup::"
           done

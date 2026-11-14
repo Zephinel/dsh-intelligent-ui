@@ -162,7 +162,16 @@ export async function connectCdp(port) {
 
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++sequence
-    pending.set(id, { resolve, reject })
+    // A wedged renderer must fail the suite in seconds instead of holding a CI
+    // job for its 40-minute limit; every command answers well under this bound.
+    const timer = setTimeout(() => {
+      pending.delete(id)
+      reject(new Error(`CDP command timed out: ${method}`))
+    }, 30_000)
+    pending.set(id, {
+      resolve: value => { clearTimeout(timer); resolve(value) },
+      reject: error => { clearTimeout(timer); reject(error) },
+    })
     socket.send(JSON.stringify({ id, method, params }))
   })
   const evaluate = async (expression) => {
