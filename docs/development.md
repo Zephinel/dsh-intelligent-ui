@@ -232,11 +232,11 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；
 3. 运行 `npm run check`；
 4. 提交并推送 `main`；
-5. 创建并推送与版本一致的 tag：
+5. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送）：
 
 ```bash
-git tag v0.6.1
-git push origin main --follow-tags
+git tag -a v0.6.1 -m "0.6.1 — 2026-11-14"
+git push origin v0.6.1
 ```
 
 6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.6.1 — 2026-11-14`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。

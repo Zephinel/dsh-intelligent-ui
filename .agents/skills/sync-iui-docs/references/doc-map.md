@@ -60,6 +60,7 @@ Paths are repo-root relative. Load this before auditing. A file with mixed class
 | `docs/plans/artifact-version-switcher/README.md` | As-planned research/decision record (2026-11-09) | Implementation landed later on main (the revision stage/version bar M1–M4 records in `docs/verification*.md`). Keep the plan text and its historical status line; do not rewrite it to describe the implementation |
 | `docs/plans/style-edit-integration/README.md` | Completed integration plan record (2026-11-08) | Historical: the style/edit integration shipped. Keep the design decisions; current behavior lives in `docs/architecture*.md` and `docs/verification*.md` |
 | `.agents/skills/sync-iui-docs/**`（SKILL.md + references） | Maintenance metadata (not shipped) | Agent instructions for doc sync plus the doc map and guard expectations; not product docs. Refresh when the doc inventory, guards or expected counts change |
+| `.agents/skills/release-iui/SKILL.md` + `AGENTS.md` | Maintenance metadata / agent routing (not shipped) | Release procedure and approval gates: version, CHANGELOG, bilingual release notes, local gates, tag, publish workflow, registry verification, GitHub Release, issue follow-up. Not product docs; keep in step with `docs/development*.md`, `publish.yml` and `release-notes/README.md` |
 | `vendor/**` docs and upstream links | External / vendored | Don't align with this implementation |
 
 ## Classification rules for a new doc

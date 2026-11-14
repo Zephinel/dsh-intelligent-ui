@@ -232,11 +232,11 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 2. write and human-review `release-notes/<version>.md` (required) plus an optional `release-notes/<version>.en.md` for English UIs (the Host falls back to the default file when it is missing); `## Highlights` with at least one bullet, format in `release-notes/README.md`; `npm run check:release-notes` previews the gate locally;
 3. run `npm run check`;
 4. commit and push `main`;
-5. create and push a tag that matches the version:
+5. create and push an annotated tag that matches the version (`main` was pushed in step 4):
 
 ```bash
-git tag v0.6.1
-git push origin main --follow-tags
+git tag -a v0.6.1 -m "0.6.1 — 2026-11-14"
+git push origin v0.6.1
 ```
 
 6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.6.1 — 2026-11-14`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.

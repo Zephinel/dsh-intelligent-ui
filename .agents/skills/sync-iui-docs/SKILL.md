@@ -17,7 +17,7 @@ This skill works on documentation only — editing when sync is authorized, repo
 - After changing behavior, user-visible copy, counts, dependencies, requirements, install steps, or release state under `src/`, `skills/intelligent-ui/`, `locale/`, `package.json`, `scripts/`, or the docs guards in `test/` — including appending or moving entries in `CHANGELOG.md`.
 - When `npm run check`, a docs-consistency test, or a link check fails.
 - When asked to check, sync, or update the extension's README pair, the detailed docs under `docs/`, Agent Skill references, locale meta, test/renderer README, or release/ship-status claims.
-- Before release, or after a DSH version or dependency upgrade.
+- Before release (load the `release-iui` skill first; this skill only syncs the docs), or after a DSH version or dependency upgrade.
 
 Near misses: prose polish belongs to `write`; code review to `check`; roadmap or proposal writing to a planning workflow; implementing behavior a doc promises is normal implementation, not this skill.
 
