@@ -49,6 +49,8 @@ const REQUIRED_PACK_FILES = [
   'lib/standalone.css',
   'locale/en.json',
   'locale/zh.json',
+  'locale/detail.zh.md',
+  'locale/detail.en.md',
   'skills/intelligent-ui/SKILL.md',
 ]
 /** Number of reference files shipped beside SKILL.md. */

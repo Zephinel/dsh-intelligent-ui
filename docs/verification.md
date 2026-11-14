@@ -1093,3 +1093,16 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **发布结果**：维护者审核后打 tag `v0.6.1`，publish workflow（run 43609493251）**success**；npm **0.6.1** 为 `latest`，provenance 校验通过，GitHub Release 已创建；`release-notes/0.6.1.md` / `.en.md` 在 tag 上可读（2+2 条要点）。
 - **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10**，`artifact-edit` **944 checks**、`nested-edit-renderer` 75、图片导出 76、`sidebar-update` 23；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **65** 文件，非构建 **3,818,283** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：这是 availability-only 修复；上游指出的“未解析引用仍可能超线性”不在本次范围（后续可加解析预算/离线程解析）；0.5.0/0.6.0 用户需通过 DSH 插件页升级，侧栏更新卡片只在已安装 0.6.0 的用户收到 0.6.1 时第一次生效。
+
+## 2026-11-14 — 插件详情改用简短指引
+
+- **背景**：DSH Plugins 详情页的详细介绍优先读取 `locale/<lang>.json` 的 `meta.detail`，缺失时回退包根 `README.md`。此前没有配置，页面显示完整 README；现改为 `locale/detail.zh.md` / `locale/detail.en.md` 的简短设置指引（README 继续服务 GitHub/npm/文档）。
+- **实现**：`locale/zh.json`、`locale/en.json` 增加 `meta.detail`；两份指引各约 10 行，说明常用设置、实验性「回答即文档」与模板/修订入口，并链接完整文档。`test/packaging/manifest.test.mjs` 新增断言：detail 路径存在、非空、<4 KiB、语言匹配。
+- **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **67** 文件，非构建 **3,819,912** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **证据边界**：本地验证的是 manifest/守护测试与打包清单；DSH 页面实际渲染需升级到包含该 locale 的版本（npm 发布后）或在 file: 安装的 profile 重启后查看。
+
+## 2026-11-14 — 0.6.2 发布准备
+
+- **背景**：把 0.6.1 之后的插件详情改动收束为 0.6.2：`locale/zh.json`、`locale/en.json` 声明 `meta.detail`，指向 `locale/detail.zh.md` / `locale/detail.en.md` 的简短设置指引；README 继续服务 GitHub/npm/文档。版本、CHANGELOG `## [0.6.2] - 2026-11-14`、`release-notes/0.6.2.md` / `.en.md`、README/development 的 latest pin 已就绪。
+- **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **67** 文件，非构建 **3,819,958** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **待办**：维护者审核 release-notes 后打 `v0.6.2` tag；发布后 DSH 插件详情页会显示新的简短指引，README 不再出现在该页。

@@ -20,7 +20,7 @@
 基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带一个随插件自动注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.6.1`**（`latest`）。0.6.1 修复内置 OpenUI parser 的指数展开导致的 Host 卡顿/OOM（`@openuidev/lang-core` 1.0.1 → 1.1.1）；0.6.0 的就地编辑与修订历史、Auto 页面/文字决策、实验性「回答即文档」、本地图片、样式切换与侧栏更新提示继续可用。
+> **当前状态**：已发布到 GitHub 与 npm，npm 版本 **`@zephinel/dsh-intelligent-ui@0.6.2`**（`latest`）。0.6.2 把插件详情页的详细介绍改为随语言切换的简短设置指引（README 仍用于 GitHub/npm/文档）；0.6.1 的内置 parser 安全修复与 0.6.0 的就地编辑、修订历史、Auto 页面/文字决策、实验性「回答即文档」、本地图片、样式切换与侧栏更新提示继续可用。
 
 [快速开始](#快速开始) · [获取代码](#获取代码) · [构建、测试与部署](#构建测试与部署)
 
@@ -123,10 +123,10 @@ git --version    # 仅获取源码时需要
 
 ## 快速开始
 
-**DSH Web**：从 npm 安装已发布的 0.6.1，再启动 Web UI（首次前台运行示例）：
+**DSH Web**：从 npm 安装已发布的 0.6.2，再启动 Web UI（首次前台运行示例）：
 
 ```bash
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.1
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
@@ -137,7 +137,7 @@ dsh web
 **DSH Desktop（桌面版）** 不需要终端命令，在应用内安装：
 
 1. 侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）。
-2. 输入 `@zephinel/dsh-intelligent-ui@0.6.1`（或只填包名装最新版），点 **安装**。
+2. 输入 `@zephinel/dsh-intelligent-ui@0.6.2`（或只填包名装最新版），点 **安装**。
 3. 安装完成后点 **立即启用**；若输入框右侧没有 **UI** 控件，退出并重开 DSH Desktop。
 
 桌面版的 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝。国内镜像可能晚于 npm 官方源同步刚发布的版本；装不到时把安装源切回 npm 官方源。

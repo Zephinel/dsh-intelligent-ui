@@ -13,10 +13,10 @@ Requires DSH 0.2.2 (the `dsh` CLI) and Node 24. The browser half additionally re
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.6.1
+# npm; current latest is 0.6.2
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
 # pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.1
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # or install from GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -200,7 +200,7 @@ npm run pack:check     # confirm the final published file list
 | `lib/index.js` / `lib/client.js` / `lib/standalone.js` / `lib/standalone.css` | build artifacts published to npm; the last two are the standalone renderer assets for interactive-page export |
 | `cordis.patch.yml` | DSH bundle patch (inserts the `intelligent-ui` row) |
 | `.github/workflows/publish.yml` | tag-triggered release workflow (Trusted Publishing / OIDC + provenance); not shipped in the npm package |
-| `locale/en.json` / `locale/zh.json` | display name and description for the plugin marketplace/plugin detail page |
+| `locale/en.json` / `locale/zh.json` | display name and description for the plugin marketplace/plugin detail page; `meta.detail` names the concise detail guide (`locale/detail.*.md`), falling back to the README when absent |
 | `src/shared/locales.ts` | bilingual UI dictionaries (`ctx.locale` registration and the renderer's English fallback) |
 | `README.md` / `README.en.md` | Chinese / English docs, linked to each other at the top |
 | `docs/` | detailed docs (architecture, development, verification); not shipped in the npm package |
@@ -235,15 +235,15 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 5. create and push a tag that matches the version:
 
 ```bash
-git tag v0.6.1
+git tag v0.6.2
 git push origin main --follow-tags
 ```
 
-6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.6.1 — 2026-11-14`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.
+6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.6.2 — 2026-11-14`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.
 
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version and reviewed `## Highlights` in `release-notes/<version>.md` (`npm run check:release-notes`), then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag by polling the registry endpoints directly for up to ten minutes to cover propagation delay. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
 
-> Version convention: production releases use stable semver (for example `0.6.1`, tag `v0.6.1`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
+> Version convention: production releases use stable semver (for example `0.6.2`, tag `v0.6.2`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
 

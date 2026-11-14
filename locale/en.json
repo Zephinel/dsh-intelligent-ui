@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Intelligent UI",
-    "description": "Interactive answers for DeepSeek Harness: maps, charts, forms and articles, with custom visual templates and chat-native on-demand generation. Use temporary results immediately, adjust or save them later; manage templates and export images or interactive pages."
+    "description": "Interactive answers for DeepSeek Harness: maps, charts, forms and articles, with custom visual templates and chat-native on-demand generation. Use temporary results immediately, adjust or save them later; manage templates and export images or interactive pages.",
+    "detail": "locale/detail.en.md"
   }
 }

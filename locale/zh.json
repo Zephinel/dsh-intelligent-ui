@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "智能 UI",
-    "description": "DeepSeek Harness 的交互式回答：地图、图表、表单与文章，支持自定义视觉模板和聊天内按需生成。临时结果可直接使用、调整或事后保存，并可管理模板、导出图片或交互页面。"
+    "description": "DeepSeek Harness 的交互式回答：地图、图表、表单与文章，支持自定义视觉模板和聊天内按需生成。临时结果可直接使用、调整或事后保存，并可管理模板、导出图片或交互页面。",
+    "detail": "locale/detail.zh.md"
   }
 }

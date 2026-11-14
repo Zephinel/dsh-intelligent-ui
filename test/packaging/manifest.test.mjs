@@ -20,6 +20,8 @@ const REQUIRED_FILES = [
   'lib/standalone.js',
   'lib/standalone.css',
   'cordis.patch.yml',
+  'locale/detail.zh.md',
+  'locale/detail.en.md',
   'icon.svg',
   'LICENSE',
   'NOTICE',
@@ -158,6 +160,10 @@ test('plugin display metadata is valid and localized', () => {
   for (const [language, locale] of [['en', en], ['zh', zh]]) {
     assert.ok(typeof locale.meta.title === 'string' && locale.meta.title.length > 0, `${language} meta.title`)
     assert.ok(typeof locale.meta.description === 'string' && locale.meta.description.length > 0, `${language} meta.description`)
+    assert.ok(typeof locale.meta.detail === 'string' && locale.meta.detail.endsWith(`detail.${language}.md`), `${language} meta.detail names its guide`)
+    const detail = read(locale.meta.detail)
+    assert.ok(detail.trim().length > 0, `${language} detail guide is non-empty`)
+    assert.ok(detail.length < 4096, `${language} detail guide stays concise`)
   }
   assert.deepEqual(Object.keys(en.meta).sort(), Object.keys(zh.meta).sort(), 'meta key sets match')
   assert.match(zh.meta.title, /[\u4e00-\u9fff]/u, 'Chinese display title is translated')
