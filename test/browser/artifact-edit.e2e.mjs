@@ -275,6 +275,11 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
     await wait('!document.querySelector("[data-dsh-iui-edit-apply-preview]")', 'apply preview closed')
   }
   const pendingOpLabels = () => read(`[...document.querySelectorAll('[data-dsh-iui-edit-pending-op]')].map(row => row.textContent.trim())`)
+  /** Remove one queued structure operation after its row has re-rendered. */
+  const removePendingOp = async () => {
+    await wait('!!document.querySelector("[data-dsh-iui-edit-pending-op-remove]")', 'pending op remove action')
+    await removePendingOp()
+  }
   const openArrangementEditor = async id => {
     await wait(`!document.querySelector('[data-dsh-iui-edit-panel][data-closing="true"]')`, 'previous editor settled')
     await rowMenu(arrangementSelector(id))
@@ -1722,7 +1727,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.activeElement?.hasAttribute('data-dsh-iui-edit-row-menu') === true`, 'delete focus returns to the row trigger')
   check(await read(`document.activeElement?.hasAttribute('data-dsh-iui-edit-row-menu')`), true, 'queueing returns focus to the row trigger')
   check(await read('!!document.querySelector("[data-dsh-iui-edit-view]")'), true, 'queueing a delete keeps the editor open')
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queued delete removed')
   await new Promise(resolve => setTimeout(resolve, 200))
   await shot('harness-polish-delete-confirm.png')
@@ -2111,7 +2116,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'queued op survives the props rebase')
   await wait(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`, 'props rebase chip queue summary')
   check(await read(`[...document.querySelectorAll('[data-chip="artifact-edit"]')].some(el => (el.getAttribute('data-chip-label') ?? '').includes('结构操作 1 项'))`), true, 'the chip still reports the queued operation after the rebase')
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'props scenario queue cleared')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'dirty editor closed')
@@ -2263,7 +2268,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-apply-preview-failed]')).includes('权威程序记录'), true, 'the duplicate preview explains the missing authoritative program')
   check((await text('[data-dsh-iui-edit-apply-preview-failed]')).includes('重新渲染'), true, 'the duplicate preview offers the re-render fallback')
   await applyPreviewCancel()
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'legacy editor closed')
   // Old Host without the registration route: the card degrades without blocking,
@@ -3853,7 +3858,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'queued op restored after reload')
   check((await pendingOpLabels())[0].includes('复制'), true, 'the restored queue row keeps its operation')
   check((await text('[data-dsh-iui-edit-pending-count]')).includes('1'), true, 'the restored pending section counts the operation')
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'queue persistence op removed')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'queue persistence editor closed')
@@ -3889,7 +3894,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check((await text('[data-dsh-iui-edit-apply-preview-confirm]')), '存在冲突，暂时不能应用', 'the disabled confirm explains the block')
   check((await read('window.__conflictCalls')).length, 0, 'a conflicting round sends no Host request')
   await applyPreviewCancel()
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'conflict queue cleared')
   // Duplicate queue entries are rejected the same way.
   await rowMenu('[data-dsh-iui-edit-arrangement-row][data-block-id="b1"]')
@@ -3921,7 +3926,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`[...document.querySelectorAll('[data-dsh-iui-edit-apply-conflict]')].some(el => el.getAttribute('data-kind') === 'styleMixed')`), true, 'the mixed style instruction is reported as a conflict')
   await applyPreviewCancel()
   await click('[data-dsh-iui-edit-style-clear]')
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await read('window.__project({ styleEdit: false })')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'conflict editor closed')
@@ -3986,7 +3991,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'the depth conflict disables Apply')
   check((await read('window.__veryDeepCalls')).length, 0, 'the depth conflict sends no Host request')
   await applyPreviewCancel()
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'very deep queue cleared')
   await read(`window.__queueStructureOp('very-deep-call-1', { op: 'move', blockId: 'b1', targetParentBlockId: 'b2' })`)
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 1`, 'very deep queued nested move')
@@ -3997,7 +4002,7 @@ main { margin:24px auto; max-width:var(--dsh-chat-content-width); }
   check(await read(`document.querySelector('[data-dsh-iui-edit-apply-preview-confirm]').disabled`), true, 'the nested-target conflict disables Apply')
   check((await read('window.__veryDeepCalls')).length, 0, 'the nested-target conflict sends no Host request')
   await applyPreviewCancel()
-  await click('[data-dsh-iui-edit-pending-op-remove]')
+  await removePendingOp()
   await wait(`document.querySelectorAll('[data-dsh-iui-edit-pending-op]').length === 0`, 'very deep move queue cleared')
   await click('[data-dsh-iui-edit-exit-panel]')
   await wait('!document.querySelector("[data-dsh-iui-edit-view]")', 'very deep editor closed')
