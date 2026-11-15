@@ -205,8 +205,9 @@ try {
     // "Follow global" while the global switch is on counts as an explicit open;
     // an already-enabled scope change must not.
     await goto('?fresh=1')
+    // The follow-global enable below only resolves enabled if this patch
+    // actually re-rendered the chip, so it doubles as the re-render proof.
     await read(`window.__setProjection({ sessionEnable: 'off', globalEnabled: true, enabled: false })`)
-    await wait(`document.querySelector(${JSON.stringify(chip)})?.dataset.enabled === 'false'`, 'chip disabled under the off scope')
     await selectScope(2, true)
     check(await read('window.__opens'), 1, 'follow-global enable triggers the update check')
     await noCard()

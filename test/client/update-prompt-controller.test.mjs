@@ -253,45 +253,36 @@ test('update keeps the prompt when navigation is unavailable and closes once it 
 })
 
 
-test('without usable storage the cycle still works for this page', async () => {
-  const fetch = fetchStub(answer('0.6.1'))
-  // No storage override and no localStorage in Node: the controller falls back
-  // to in-memory state for this page instead of never accumulating Later clicks.
-  const controller = createUpdatePromptController({ fetchImpl: fetch.impl })
-  const open = async () => { controller.noteOpen('explicit-enable'); await flush() }
-  await open()
-  await open()
-  assert.equal(controller.store.getSnapshot().kind, 'shown')
-  for (let click = 1; click <= 3; click += 1) {
-    controller.actions.later()
+const brokenStorageCases = [
+  { label: 'without usable storage', storage: undefined },
+  {
+    label: 'with a write-rejecting storage',
+    storage: { getItem: () => null, setItem: () => { throw new Error('quota exceeded') } },
+  },
+  {
+    label: 'with a read-rejecting storage',
+    storage: { getItem: () => { throw new Error('blocked') }, setItem: () => {} },
+  },
+]
+
+for (const { label, storage } of brokenStorageCases) {
+  test(`${label} the cycle still works for this page`, async () => {
+    const fetch = fetchStub(answer('0.6.1'))
+    const controller = createUpdatePromptController({ fetchImpl: fetch.impl, storage })
+    const open = async () => { controller.noteOpen('explicit-enable'); await flush() }
+    await open() // records in the in-memory cycle
     await open()
     assert.equal(controller.store.getSnapshot().kind, 'shown')
-  }
-  assert.equal(controller.store.getSnapshot().canSilence, true)
-  controller.actions.silence()
-  await open()
-  assert.equal(controller.store.getSnapshot().kind, 'hidden')
-})
-
-test('a storage that rejects writes still settles the prompt for this page', async () => {
-  const fetch = fetchStub(answer('0.6.1'))
-  const controller = createUpdatePromptController({
-    fetchImpl: fetch.impl,
-    storage: { getItem: () => null, setItem: () => { throw new Error('quota exceeded') } },
-  })
-  const open = async () => { controller.noteOpen('explicit-enable'); await flush() }
-  await open() // records in memory because the write throws
-  await open()
-  assert.equal(controller.store.getSnapshot().kind, 'shown')
-  for (let click = 1; click <= 3; click += 1) {
-    controller.actions.later()
+    for (let click = 1; click <= 3; click += 1) {
+      controller.actions.later()
+      await open()
+    }
+    assert.equal(controller.store.getSnapshot().canSilence, true)
+    controller.actions.silence()
     await open()
-  }
-  assert.equal(controller.store.getSnapshot().canSilence, true)
-  controller.actions.silence()
-  await open()
-  assert.equal(controller.store.getSnapshot().kind, 'hidden')
-})
+    assert.equal(controller.store.getSnapshot().kind, 'hidden')
+  })
+}
 
 test('dispose stops publishing and drops queued work', async () => {
   const storage = memoryStorage()

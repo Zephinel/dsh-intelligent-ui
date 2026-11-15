@@ -1121,7 +1121,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 ## 2026-11-15 — 更新提示第二遍复审修复
 
 - **背景**：第一轮修复后的第二次独立复审（Standards / Spec）仍指出 1 个 MAJOR 与若干 MINOR/NIT：排队竞态用例没有真正进入 `running` 分支、follow-global 触发与「已启用不重复触发」无覆盖、无可用存储时与「会话内生效」注释矛盾、README 分支状态过时、两处注释/限制说明措辞不准确；本轮全部修复。
-- **实现**：浏览器套件新增 follow-global 启用路径与「已是启用状态再切 scope 不重复触发」断言（`window.__opens` 计数 + 可注入 projection），当前 39 checks；控制器测试改为真正制造「检查在途 + 再次 noteOpen 入队」后在途检查被用户关闭丢弃，并新增无存储与「写入抛错」存储的页面内回退用例；`UpdatePromptView` 去掉仅测试使用的 `laterClicks`，`isStableVersion(pending)` 冗余判断删除；控制器在缺存储、访问抛错或写入抛错时用内存状态维持本页计数与「不再提醒」；README 验证行改为说明当前分支与未推送/未合并状态；`index.tsx` 注释、limitations 的「页面启动只在全局启用时检查」措辞、英文架构标题同步。
-- **测试**：Node 客户端 **494** 条（纯状态机 19 + 控制器 11 等）；`update-prompt` e2e **39 checks** 连续 3 次通过。
-- **门禁**：`npm run check` PASS；Node **851/851** = Host **320** + Client **494** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,806** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **实现**：浏览器套件新增 follow-global 启用路径与「已是启用状态再切 scope 不重复触发」断言（`window.__opens` 计数 + 可注入 projection），当前 39 checks；控制器测试改为真正制造「检查在途 + 再次 noteOpen 入队」后在途检查被用户关闭丢弃，并新增无存储、「写入抛错」与「读取抛错」存储的页面内回退用例（表驱动）；`UpdatePromptView` 去掉仅测试使用的 `laterClicks`，`isStableVersion(pending)` 冗余判断删除；控制器在缺存储、访问抛错或写入抛错时用内存状态维持本页计数与「不再提醒」；README 验证行改为说明当前分支与未推送/未合并状态；`index.tsx` 注释、limitations 的「页面启动只在全局启用时检查」措辞、英文架构标题同步。
+- **测试**：Node 客户端 **495** 条（纯状态机 19 + 控制器 12 等）；`update-prompt` e2e **39 checks** 连续 3 次通过。
+- **门禁**：`npm run check` PASS；Node **852/852** = Host **320** + Client **495** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,806** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：两轮复审均为独立 subagent 只读审查；本轮复审结论待关闭验证。真实 DSH 集成仍以隔离实例为准，线上 3080 需重启后才加载新 bundle。
