@@ -121,15 +121,16 @@ const styles = {
 
 // The projection is observable so tests can simulate a deployment-wide switch
 // being on while the session scope is off (the "follow global" enable path).
-const projectionStore = { ...projection }
+// Every patch publishes a new snapshot identity so useSyncExternalStore re-renders.
+let projectionSnapshot = { ...projection }
 const projectionListeners = new Set<() => void>()
 const subscribeProjection = (listener: () => void) => {
   projectionListeners.add(listener)
   return () => { projectionListeners.delete(listener) }
 }
-const useProjection = () => useSyncExternalStore(subscribeProjection, () => projectionStore, () => projectionStore)
+const useProjection = () => useSyncExternalStore(subscribeProjection, () => projectionSnapshot, () => projectionSnapshot)
 page.__setProjection = (patch: Partial<typeof projection>) => {
-  Object.assign(projectionStore, patch)
+  projectionSnapshot = { ...projectionSnapshot, ...patch }
   for (const listener of projectionListeners) listener()
 }
 page.__opens = 0

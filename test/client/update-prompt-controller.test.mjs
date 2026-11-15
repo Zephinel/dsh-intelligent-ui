@@ -273,6 +273,26 @@ test('without usable storage the cycle still works for this page', async () => {
   assert.equal(controller.store.getSnapshot().kind, 'hidden')
 })
 
+test('a storage that rejects writes still settles the prompt for this page', async () => {
+  const fetch = fetchStub(answer('0.6.1'))
+  const controller = createUpdatePromptController({
+    fetchImpl: fetch.impl,
+    storage: { getItem: () => null, setItem: () => { throw new Error('quota exceeded') } },
+  })
+  const open = async () => { controller.noteOpen('explicit-enable'); await flush() }
+  await open() // records in memory because the write throws
+  await open()
+  assert.equal(controller.store.getSnapshot().kind, 'shown')
+  for (let click = 1; click <= 3; click += 1) {
+    controller.actions.later()
+    await open()
+  }
+  assert.equal(controller.store.getSnapshot().canSilence, true)
+  controller.actions.silence()
+  await open()
+  assert.equal(controller.store.getSnapshot().kind, 'hidden')
+})
+
 test('dispose stops publishing and drops queued work', async () => {
   const storage = memoryStorage()
   const fetch = fetchStub(answer('0.6.1'))

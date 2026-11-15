@@ -7,10 +7,11 @@
  * Drives the production trigger path: the real composer chip (ToggleControl →
  * `noteExplicitOpen` → controller) and the deployment-wide settings watcher,
  * with a stubbed Host route and real browser storage. Covers the
- * record-then-ask cycle, cross-reload persistence, the per-version later
- * counter and its "do not remind" action, details expansion, Escape/outside
- * close, the update navigation guard, default-open starts, the no-update page
- * and the English copy/variant.
+ * record-then-ask cycle, the follow-global enable path and the already-enabled
+ * no-retrigger rule, cross-reload persistence, the per-version later counter
+ * and its "do not remind" action, details expansion, Escape/outside close, the
+ * update navigation guard, default-open starts, the no-update page and the
+ * English copy/variant.
  */
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'

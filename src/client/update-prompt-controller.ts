@@ -132,8 +132,9 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
   const language = options.language ?? (() => '')
   const storage = resolveStorage(options.storage)
   let snapshot: UpdatePromptSnapshot = HIDDEN
-  /** Fallback cycle while storage is unusable, so one page can still settle the prompt. */
+  /** Fallback cycle when storage is missing, blocks access, or rejects writes. */
   let memoryState: UpdatePromptState = {}
+  let memoryActive = storage === undefined
   const listeners = new Set<() => void>()
   let disposed = false
   let running = false
@@ -149,20 +150,25 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
   }
 
   const readState = (): UpdatePromptState => {
-    if (storage === undefined) return memoryState
+    if (memoryActive || storage === undefined) return memoryState
     try {
       return parseUpdatePromptState(storage.getItem(UPDATE_PROMPT_STORAGE_KEY))
     } catch {
+      // Once access fails, this page switches to the in-memory cycle for good:
+      // a later read must not resurrect an older stored document.
+      memoryActive = true
       return memoryState
     }
   }
 
   const writeState = (state: UpdatePromptState): void => {
-    if (storage === undefined) { memoryState = state; return }
+    if (memoryActive || storage === undefined) { memoryState = state; return }
     try {
       storage.setItem(UPDATE_PROMPT_STORAGE_KEY, serializeUpdatePromptState(state))
+      memoryState = state
     } catch {
       /* A full or read-only storage keeps this page's cycle in memory. */
+      memoryActive = true
       memoryState = state
     }
   }
