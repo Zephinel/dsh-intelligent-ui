@@ -37,7 +37,7 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
 4. `release-notes/<version>.md` (required) and optional `release-notes/<version>.en.md`:
    - `## Highlights` with **2–6 short, user-facing bullets**; no implementation detail unless the user wants it.
    - The publish workflow refuses a tag whose notes file is missing or has no Highlights; an English file is validated when present and falls back to the default file.
-   - Keep each bullet plain user language; the sidebar update card renders these verbatim.
+   - Keep each bullet plain user language; the update prompt renders these verbatim.
 5. Update current version/status claims:
    - README pair status block and install pins (`README.md`, `README.en.md`);
    - `docs/development*.md` latest pin/tag examples;
@@ -113,7 +113,7 @@ gh run watch <run-id> --exit-status --interval 10
    { cat release-notes/<version>.md; echo; echo "---"; echo; cat release-notes/<version>.en.md; } > /tmp/release-<version>.md
    gh release create v<version> --title "<version> — <UTC date>" --notes-file /tmp/release-<version>.md
    ```
-2. Verify the tag-pinned raw notes are readable (the update card fetches these):
+2. Verify the tag-pinned raw notes are readable (the update prompt fetches these):
    ```bash
    curl -fsS "https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v<version>/release-notes/<version>.md" >/dev/null
    ```

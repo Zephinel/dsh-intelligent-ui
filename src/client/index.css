@@ -2219,82 +2219,77 @@
   border: 0;
 }
 
-/* ── Sidebar update card ────────────────────────────────────────────────────
-   One in-flow card above the sidebar panel list when npm has a newer stable
-   version. The host is a normal sidebar child, so it pushes Plugins /
-   Automation tasks down rather than covering them; it is hidden while the
-   sidebar is collapsed to the rail. */
-.dsh-iui-sidebar-update-host {
-  display: contents;
-}
-
-.dsh-iui-sidebar-update {
+/* ── Update prompt ──────────────────────────────────────────────────────────
+   One frame-wide prompt rendered into the shell's `shell.overlay` list slot.
+   That layer is click-through, so only this card opts back into pointer events.
+   The prompt appears only when the plugin-open rules decide to ask (the second
+   explicit composer enable after a detection, or a default-on start), so it
+   stays out of the sidebar flow and cannot collide with other plugins' sidebar
+   mutations. */
+.dsh-iui-update-prompt {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 70;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
   box-sizing: border-box;
-  width: 100%;
-  margin: 2px 0 4px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 32%, transparent);
-  border-radius: var(--dsw-radius-md);
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 9%, var(--dsw-alias-bg-layer-1));
+  width: min(360px, calc(100vw - 40px));
+  padding: 14px;
+  border: 0;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 28%);
+  pointer-events: auto;
 }
 
-.dsh-iui-sidebar-update:hover {
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 13%, var(--dsw-alias-bg-layer-1));
-  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, transparent);
+.dsh-iui-update-prompt-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
 }
 
-.dsh-iui-sidebar-update:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 1px;
-}
-
-.dsh-iui-sidebar-update-icon {
+.dsh-iui-update-prompt-icon {
   display: inline-flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
 }
 
-/* The extension's app mark (icon.svg) inlined with theme tokens so the sidebar
-   card carries the plugin identity in both light and dark shells. */
-.dsh-iui-sidebar-update-mark {
+/* The extension's app mark (icon.svg) inlined with theme tokens so the prompt
+   carries the plugin identity in both light and dark shells. */
+.dsh-iui-update-prompt-mark {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
 }
 
-.dsh-iui-sidebar-update-tile {
+.dsh-iui-update-prompt-tile {
   fill: var(--dsw-alias-bg-layer-2);
 }
 
-.dsh-iui-sidebar-update-edge {
+.dsh-iui-update-prompt-edge {
   stroke: var(--dsw-alias-border-l2);
 }
 
-.dsh-iui-sidebar-update-spark,
-.dsh-iui-sidebar-update-line-one,
-.dsh-iui-sidebar-update-line-two {
+.dsh-iui-update-prompt-spark,
+.dsh-iui-update-prompt-line-one,
+.dsh-iui-update-prompt-line-two {
   fill: var(--dsw-alias-label-primary);
 }
 
-.dsh-iui-sidebar-update-line-one {
+.dsh-iui-update-prompt-line-one {
   fill-opacity: 0.82;
 }
 
-.dsh-iui-sidebar-update-line-two {
+.dsh-iui-update-prompt-line-two {
   fill-opacity: 0.38;
 }
 
-.dsh-iui-sidebar-update-copy {
+.dsh-iui-update-prompt-titles {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -2302,142 +2297,114 @@
   min-width: 0;
 }
 
-.dsh-iui-sidebar-update-title {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 500;
+.dsh-iui-update-prompt-title {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.dsh-iui-sidebar-update-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
+.dsh-iui-update-prompt-versions {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 11px;
   line-height: 1.35;
 }
 
-.dsh-iui-sidebar-update-versions {
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dsh-iui-update-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.dsh-iui-sidebar-update-action {
-  flex: none;
-  padding: 0;
+.dsh-iui-update-prompt-primary,
+.dsh-iui-update-prompt-secondary,
+.dsh-iui-update-prompt-link {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 10px;
   border: 0;
+  border-radius: var(--dsw-radius-md);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dsh-iui-update-prompt-primary {
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+  font-weight: 500;
+}
+
+.dsh-iui-update-prompt-secondary {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-iui-update-prompt-link {
+  height: 24px;
+  padding: 0 4px;
   background: transparent;
   color: var(--dsw-alias-state-business-primary);
-  font: inherit;
-  cursor: pointer;
-  pointer-events: auto;
 }
 
-.dsh-iui-sidebar-update-action:focus-visible {
+.dsh-iui-update-prompt-silence {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-iui-update-prompt-primary:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 86%, var(--dsw-alias-label-primary));
+}
+
+.dsh-iui-update-prompt-secondary:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 18%, transparent);
+}
+
+.dsh-iui-update-prompt-link:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-iui-update-prompt-primary:focus-visible,
+.dsh-iui-update-prompt-secondary:focus-visible,
+.dsh-iui-update-prompt-link:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
 
-.dsh-iui-sidebar-update-chevron {
-  display: inline-flex;
+.dsh-iui-update-prompt-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+/* A short, faint rule above the section heading — deliberately not full width. */
+.dsh-iui-update-prompt-details::before {
+  display: block;
   flex: none;
-  color: var(--dsw-alias-label-tertiary);
+  height: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);
+  content: "";
 }
 
-.dsh-iui-sidebar-update.is-open {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 52%, transparent);
-}
-
-.dsh-iui-sidebar-update {
-  position: relative;
-}
-
-/* The whole card navigates; only the "view details" label opens the popover. */
-.dsh-iui-sidebar-update-hit {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  padding: 0;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  cursor: pointer;
-}
-
-.dsh-iui-sidebar-update-hit:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 1px;
-}
-
-.dsh-iui-sidebar-update-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.dsh-iui-update-popover {
-  position: fixed;
-  z-index: 61;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-  box-sizing: border-box;
-  padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
-}
-
-.dsh-iui-update-popover-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.dsh-iui-update-popover-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  font-size: 12px;
-}
-
-.dsh-iui-update-popover-titles strong {
+.dsh-iui-update-prompt-details-title {
   font-size: 12px;
   font-weight: 600;
 }
 
-.dsh-iui-update-popover-version {
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 11px;
-}
-
-.dsh-iui-update-popover-points {
+.dsh-iui-update-prompt-points {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.dsh-iui-update-popover-points li {
+.dsh-iui-update-prompt-points li {
   position: relative;
   padding-left: 12px;
   color: var(--dsw-alias-label-secondary);
@@ -2446,7 +2413,7 @@
   overflow-wrap: anywhere;
 }
 
-.dsh-iui-update-popover-points li::before {
+.dsh-iui-update-prompt-points li::before {
   position: absolute;
   top: 0.55em;
   left: 2px;
@@ -2457,7 +2424,7 @@
   content: "";
 }
 
-.dsh-iui-update-popover-empty {
+.dsh-iui-update-prompt-empty {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
@@ -2465,22 +2432,8 @@
 }
 
 @media (forced-colors: active) {
-  .dsh-iui-update-popover {
-    border-color: ButtonText;
+  .dsh-iui-update-prompt {
     background: Canvas;
     color: ButtonText;
   }
-}
-
-[data-sidebar-collapsed="true"] .dsh-iui-sidebar-update-host {
-  display: none;
-}
-
-@media (forced-colors: active) {
-  .dsh-iui-sidebar-update {
-    border-color: ButtonText;
-    background: Canvas;
-    color: ButtonText;
-  }
-
 }

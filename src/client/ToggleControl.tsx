@@ -52,6 +52,8 @@ export interface ToggleControlInjected {
   readonly setStyle: (style: StylePreference) => Promise<string | null>
   readonly armOnDemand?: (clientToken: string) => Promise<string | null>
   readonly focusComposer?: () => void
+  /** Notify the update prompt after this explicit command turns the plugin on. */
+  readonly noteExplicitOpen?: () => void
 }
 
 /** Full props: standard Session kit, the composer's locked owner prop, and the injected commands. */
@@ -158,6 +160,7 @@ export function ToggleControl({
   setStyle,
   armOnDemand,
   focusComposer,
+  noteExplicitOpen,
   t = fallbackT,
 }: ToggleControlProps): ReactNode {
   const readMode = useProjection as unknown as ModeProjectionReader
@@ -270,6 +273,7 @@ export function ToggleControl({
     setOpen(false)
     setError(null)
     setBusy(true)
+    const wasEnabled = view.enabled
     void runCommand(flip, scope).then((failure) => {
       setBusy(false)
       setError(failure)
@@ -280,6 +284,8 @@ export function ToggleControl({
           enabled: scope === 'on' ? true : scope === 'off' ? false : view.globalEnabled,
           pending: false,
         }, sessionId, projected)
+        const nowEnabled = scope === 'on' || (scope === 'inherit' && view.globalEnabled)
+        if (!wasEnabled && nowEnabled) noteExplicitOpen?.()
       }
     })
   }
