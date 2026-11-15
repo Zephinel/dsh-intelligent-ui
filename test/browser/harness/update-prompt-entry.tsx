@@ -1,29 +1,25 @@
 /**
- * Harness for the update prompt: the production controller with a stubbed
- * Host route and in-memory storage, rendering the real `shell.overlay` entry.
+ * Harness for the update prompt: the production controller plus the real
+ * composer chip, a stubbed Host route, real browser storage and a fake
+ * deployment-wide settings source.
  *
- * The E2E drives the same plugin-open signals the shell produces (the composer
- * chip's explicit enable and the deployment-wide default-open start) and reads
- * the real React prompt and its persisted state.
+ * The E2E therefore drives the same signals the shell produces — the chip's
+ * explicit enable (through `ToggleControl.noteExplicitOpen`) and the settings
+ * watcher — instead of calling the controller directly.
  */
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { UpdatePrompt } from '../../../src/client/UpdatePrompt.tsx'
+import { ToggleControl } from '../../../src/client/ToggleControl.tsx'
 import { createUpdatePromptController } from '../../../src/client/update-prompt-controller.ts'
 import { parseUpdatePromptState, UPDATE_PROMPT_STORAGE_KEY } from '../../../src/client/update-prompt.ts'
 
 const params = new URLSearchParams(location.search)
 const lang = params.get('lang') === 'en' ? 'en' : 'zh'
 const hasUpdate = params.get('update') !== '0'
-
-const response = {
-  current: '0.6.1',
-  latest: hasUpdate ? '0.6.2' : '0.6.1',
-  updateAvailable: hasUpdate,
-  highlights: lang === 'en'
-    ? ['The prompt waits for the next open', 'Later counts per version', 'No sidebar DOM is touched']
-    : ['提示等到下一次打开才出现', '「下次再说」按版本累计', '不再插入侧栏 DOM'],
-}
+const globalOn = params.get('global') === '1'
+const noNavigation = params.get('nonav') === '1'
+if (params.get('fresh') === '1') localStorage.clear()
 
 const dictionary = lang === 'en'
   ? {
@@ -52,34 +48,89 @@ const translate = (key: string, values?: Record<string, string | number>): strin
 }
 
 const page = window as unknown as {
-  __controller: ReturnType<typeof createUpdatePromptController>
   __opened: number
   __fetches: string[]
-  __storage: Map<string, string>
   __promptState: () => unknown
+  __setGlobal: (enabled: boolean) => void
 }
 page.__opened = 0
 page.__fetches = []
-const memory = new Map<string, string>()
-page.__storage = memory
-page.__promptState = () => parseUpdatePromptState(memory.get(UPDATE_PROMPT_STORAGE_KEY) ?? null)
+page.__promptState = () => parseUpdatePromptState(localStorage.getItem(UPDATE_PROMPT_STORAGE_KEY))
 
 const controller = createUpdatePromptController({
-  openDetails: () => { page.__opened += 1 },
+  openDetails: () => {
+    if (noNavigation) return false
+    page.__opened += 1
+    return true
+  },
   language: () => lang,
   fetchImpl: (async (input: string | URL | Request): Promise<Response> => {
     page.__fetches.push(String(input))
-    return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json' } })
+    const payload = {
+      current: '0.5.0',
+      latest: hasUpdate ? '0.6.1' : '0.5.0',
+      updateAvailable: hasUpdate,
+      highlights: lang === 'en'
+        ? ['The prompt waits for the next open', 'Later counts per version', 'No sidebar DOM is touched']
+        : ['提示等到下一次打开才出现', '「下次再说」按版本累计', '不再插入侧栏 DOM'],
+    }
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch,
   storage: {
-    getItem: (key: string) => memory.get(key) ?? null,
-    setItem: (key: string, value: string) => { memory.set(key, value) },
+    getItem: (key: string) => localStorage.getItem(key),
+    setItem: (key: string, value: string) => { localStorage.setItem(key, value) },
   },
 })
-page.__controller = controller
 
-createRoot(document.getElementById('root')!).render(createElement(UpdatePrompt as never, {
-  prompt: controller.store,
-  actions: controller.actions,
-  t: translate,
-}))
+const settingsListeners = new Set<() => void>()
+let settingsSnapshot: { status: string; value?: { globalEnabled?: boolean } } = {
+  status: 'ready',
+  value: { globalEnabled: globalOn },
+}
+page.__setGlobal = (enabled: boolean) => {
+  settingsSnapshot = { status: 'ready', value: { globalEnabled: enabled } }
+  for (const listener of settingsListeners) listener()
+}
+controller.watchGlobalSetting({
+  getSnapshot: () => settingsSnapshot,
+  subscribe: (listener) => {
+    settingsListeners.add(listener)
+    return () => { settingsListeners.delete(listener) }
+  },
+})
+
+const projection = {
+  sessionEnable: 'inherit',
+  sessionStyle: 'auto',
+  globalEnabled: false,
+  globalStyle: 'auto',
+  enabled: false,
+  style: 'auto',
+  pending: false,
+  onDemand: null,
+}
+const catalogSnapshot = { status: 'ready' as const, templates: [] }
+const styles = {
+  subscribe: () => () => {},
+  getSnapshot: () => catalogSnapshot,
+  ensure: async () => {},
+  refresh: async () => {},
+}
+
+createRoot(document.getElementById('root')!).render(createElement('div', null,
+  createElement(ToggleControl as never, {
+    useProjection: () => projection,
+    locked: false,
+    sessionId: 'harness-session',
+    styles,
+    flip: async () => null,
+    setStyle: async () => null,
+    noteExplicitOpen: () => controller.noteOpen('explicit-enable'),
+    t: translate,
+  }),
+  createElement(UpdatePrompt as never, {
+    prompt: controller.store,
+    actions: controller.actions,
+    t: translate,
+  }),
+))

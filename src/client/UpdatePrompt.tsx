@@ -7,14 +7,14 @@
  * plugin on by default. It never blocks the app (the overlay layer is
  * click-through; only the card opts into pointer events) and it carries the
  * four decisions from the update flow: update, later, details, and — from the
- * fourth prompt for one version on — do not remind.
+ * fourth prompt for one version on — do not remind. Escape or a click outside
+ * the card settles it exactly like "later".
  */
-import { useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the ui-layout `shell.overlay` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { PACKAGE_NAME } from '../shared/intelligent-ui.ts'
-import { LATER_CLICKS_BEFORE_SILENCE } from './update-prompt.ts'
 import type { UpdatePromptActions, UpdatePromptStore } from './update-prompt-controller.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 
@@ -62,13 +62,36 @@ export function UpdatePrompt({ prompt, actions, t = fallbackT }: UpdatePromptPro
     prompt.getSnapshot,
     prompt.getSnapshot,
   )
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  const shown = snapshot.kind === 'shown'
+
+  useEffect(() => {
+    if (!shown) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      actions.later()
+    }
+    const onPointer = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (target === null || cardRef.current?.contains(target) === true) return
+      actions.later()
+    }
+    document.addEventListener('keydown', onKey, true)
+    document.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('pointerdown', onPointer, true)
+    }
+  }, [shown, actions])
+
   if (snapshot.kind !== 'shown') return null
   const title = t('update.prompt.title', { name: SHORT_NAME })
   return (
     <div
+      ref={cardRef}
       className="dsh-iui-update-prompt"
       data-dsh-iui-update-prompt
-      data-version={snapshot.latest}
       role="region"
       aria-label={title}
     >
@@ -101,13 +124,13 @@ export function UpdatePrompt({ prompt, actions, t = fallbackT }: UpdatePromptPro
         >
           {t(snapshot.expanded ? 'update.prompt.hideDetails' : 'update.prompt.details')}
         </button>
-        {snapshot.laterClicks >= LATER_CLICKS_BEFORE_SILENCE
+        {snapshot.canSilence
           ? (
             <button
               type="button"
               className="dsh-iui-update-prompt-link dsh-iui-update-prompt-silence"
               data-dsh-iui-update-action="dont-remind"
-              onClick={actions.dontRemind}
+              onClick={actions.silence}
             >{t('update.prompt.dontRemind')}</button>
           )
           : null}

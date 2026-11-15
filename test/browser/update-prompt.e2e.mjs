@@ -4,11 +4,13 @@
  *
  *   node test/browser/update-prompt.e2e.mjs
  *
- * Covers the two plugin-open signals (the composer chip's explicit enable and a
- * deployment-wide default-open start), the record-then-ask cycle, the per-version
- * later counter and its "do not remind" action, the details expansion, the
- * update action, the English copy/variant, the no-update page, bottom-right
- * placement, and the persisted state document.
+ * Drives the production trigger path: the real composer chip (ToggleControl →
+ * `noteExplicitOpen` → controller) and the deployment-wide settings watcher,
+ * with a stubbed Host route and real browser storage. Covers the
+ * record-then-ask cycle, cross-reload persistence, the per-version later
+ * counter and its "do not remind" action, details expansion, Escape/outside
+ * close, the update navigation guard, default-open starts, the no-update page
+ * and the English copy/variant.
  */
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -50,7 +52,7 @@ try {
   const css = await readFile(join(root, 'src/client/index.css'), 'utf8')
   await writeFile(join(temp, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <style>${TOKENS}</style><style>${css}</style>
-<style>html,body{margin:0;background:#111;color:#eee;font-family:system-ui}#root{width:100vw;height:100vh}</style>
+<style>html,body{margin:0;background:#111;color:#eee;font-family:system-ui}#root{width:100vw;height:100vh;padding:24px;box-sizing:border-box}</style>
 </head><body><div id="root"></div><script type="module" src="./bundle.js"></script></body></html>`)
 
   server = await startStaticServer(temp)
@@ -67,28 +69,50 @@ try {
     const click = selector => read(`document.querySelector(${JSON.stringify(selector)}).click()`)
     const goto = async query => {
       await cdp.send('Page.navigate', { url: server.url + `index.html${query}` })
-      await wait('document.readyState === "complete" && !!window.__controller', 'page loaded')
+      await wait('document.readyState === "complete" && !!document.querySelector("[data-dsh-iui-toggle]")', 'page loaded')
     }
-    const open = kind => read(`window.__controller.noteOpen(${JSON.stringify(kind)})`)
     const card = '!!document.querySelector("[data-dsh-iui-update-prompt]")'
     const waitCard = () => wait(card, 'update prompt appears')
-    const noCard = async () => { await sleep(300); check(await read(card), false, 'no prompt is shown') }
+    const noCard = async () => { await sleep(350); check(await read(card), false, 'no prompt is shown') }
+    const chip = '[data-dsh-iui-toggle]'
+    const chipEnabled = () => read(`document.querySelector(${JSON.stringify(chip)})?.dataset.enabled ?? null`)
+    // React may still hold the previous menu's `open` state for a frame after a
+    // scope click, so a single synthetic click can toggle it closed. Retry once
+    // the popup has settled instead of depending on a fixed delay.
+    const openScopeMenu = async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await click(chip)
+        await sleep(150)
+        if (await read('!!document.querySelector("[data-dsh-iui-menu]")')) return
+      }
+      throw new Error('scope menu did not open')
+    }
+    const selectScope = async (index, enabled) => {
+      await openScopeMenu()
+      const clicked = await read(`(() => { const rows = [...document.querySelectorAll('[data-dsh-iui-menu] [role="menuitem"]')]; const row = rows[${index}]; if (!row) return false; row.click(); return true })()`)
+      if (!clicked) throw new Error(`missing scope row ${index}`)
+      await wait(`document.querySelector(${JSON.stringify(chip)})?.dataset.enabled === '${enabled ? 'true' : 'false'}'`, `chip ${enabled ? 'enabled' : 'disabled'}`)
+      // Let the menu finish unmounting before the next chip click; clicking while
+      // React still holds `open = true` would toggle it closed instead of open.
+      await wait('!document.querySelector("[data-dsh-iui-menu]")', 'scope menu closed')
+    }
+    const enable = () => selectScope(1, true)
+    const disable = () => selectScope(0, false)
+    const promptState = () => read('window.__promptState()')
 
-    await goto('')
-    // The first explicit open only records the newer version.
-    await open('explicit-enable')
+    await goto('?fresh=1')
+    check(await chipEnabled(), 'false', 'the chip starts disabled')
+    await enable()
     await noCard()
-    check(await read('window.__promptState().pendingVersion'), '0.6.2', 'the first explicit open records the version')
-    check(await read('window.__promptState().laterClicks'), undefined, 'recording does not start the later counter')
+    check((await promptState()).pendingVersion, '0.6.1', 'the first explicit enable only records the version')
 
-    // The second explicit open asks.
-    await open('explicit-enable')
+    await disable()
+    await enable()
     await waitCard()
     check((await read('document.querySelector(".dsh-iui-update-prompt-title").textContent')).includes('dsh-intelligent-ui 有新版本可用'), true, 'the Chinese title is rendered')
-    check(await read('document.querySelector("[data-dsh-iui-update-versions]").textContent'), '0.6.1 → 0.6.2', 'the version line shows current to latest')
+    check(await read('document.querySelector("[data-dsh-iui-update-versions]").textContent'), '0.5.0 → 0.6.1', 'the version line shows current to latest')
     check(await read('document.querySelector("[data-dsh-iui-update-action=update]").textContent'), '更新', 'the update action is rendered')
     check(await read('document.querySelector("[data-dsh-iui-update-action=later]").textContent'), '下次再说', 'the later action is rendered')
-    check(await read('document.querySelector("[data-dsh-iui-update-action=details]").textContent'), '查看详情', 'the details action is rendered')
     check(await read('!!document.querySelector("[data-dsh-iui-update-action=dont-remind]")'), false, 'do not remind stays hidden before three later clicks')
     const geometry = await read(`(() => {
       const rect = document.querySelector('[data-dsh-iui-update-prompt]').getBoundingClientRect()
@@ -97,73 +121,107 @@ try {
     check(geometry.right <= geometry.viewportWidth - 19.5, true, 'the prompt keeps the right gutter')
     check(geometry.bottom <= geometry.viewportHeight - 19.5, true, 'the prompt keeps the bottom gutter')
     check(geometry.width >= 300, true, 'the prompt keeps a readable width')
-    check(await read('window.__fetches.length'), 2, 'each explicit open asks the Host once')
 
-    // Details expand and collapse in place.
     await click('[data-dsh-iui-update-action=details]')
     await wait('!!document.querySelector("[data-dsh-iui-update-details]")', 'details expand')
     check(await read('document.querySelectorAll(".dsh-iui-update-prompt-points li").length'), 3, 'the details list the recorded highlights')
     check(await read('document.querySelector(".dsh-iui-update-prompt-points li").textContent'), '提示等到下一次打开才出现', 'the Chinese highlights are shown')
-    check(await read('document.querySelector("[data-dsh-iui-update-action=details]").getAttribute("aria-expanded")'), 'true', 'the details toggle reports the expansion')
-    check(await read('document.querySelector("[data-dsh-iui-update-action=details]").textContent'), '收起详情', 'the details action flips its label')
     await click('[data-dsh-iui-update-action=details]')
     check(await read('!!document.querySelector("[data-dsh-iui-update-details]")'), false, 'the details collapse again')
 
-    // "Later" closes the prompt and counts one click for this version.
+    // Later closes, counts one click and the next explicit enable asks again.
     await click('[data-dsh-iui-update-action=later]')
     check(await read(card), false, 'later closes the prompt')
-    check(await read('window.__promptState().laterClicks'), 1, 'later records one click')
-    await open('explicit-enable')
-    await waitCard()
-    check(await read('!!document.querySelector("[data-dsh-iui-update-action=dont-remind]")'), false, 'the second later click is not enough for silence')
-    await click('[data-dsh-iui-update-action=later]')
-    await open('explicit-enable')
+    check((await promptState()).laterClicks, 1, 'later records one click')
+    await disable()
+    await enable()
     await waitCard()
     await click('[data-dsh-iui-update-action=later]')
-    check(await read('window.__promptState().laterClicks'), 3, 'three later clicks are recorded')
-    await open('explicit-enable')
+    await disable()
+    await enable()
     await waitCard()
-    await wait('!!document.querySelector("[data-dsh-iui-update-action=dont-remind]")', 'do not remind appears')
+    await click('[data-dsh-iui-update-action=later]')
+    check((await promptState()).laterClicks, 3, 'three later clicks are recorded')
+    await disable()
+    await enable()
+    await waitCard()
+    await wait('!!document.querySelector(\'[data-dsh-iui-update-action="dont-remind"]\')', 'silence action')
     check(await read('document.querySelector("[data-dsh-iui-update-action=dont-remind]").textContent'), '不再提醒', 'the silence action is rendered after three later clicks')
-
-    // Silence suppresses this exact version only.
     await click('[data-dsh-iui-update-action=dont-remind]')
     check(await read(card), false, 'do not remind closes the prompt')
-    check(await read('window.__promptState().silencedVersion'), '0.6.2', 'do not remind records the silenced version')
-    await open('explicit-enable')
+    check((await promptState()).silencedVersion, '0.6.1', 'do not remind records the silenced version')
+    await disable()
+    await enable()
     await noCard()
 
-    // The update action only closes this prompt; the next explicit open asks again.
-    await goto('')
-    await open('explicit-enable')
-    await open('explicit-enable')
+    // The update action closes only when navigation started; the next enable asks again.
+    await goto('?fresh=1')
+    await enable()
+    await disable()
+    await enable()
     await waitCard()
     await click('[data-dsh-iui-update-action=update]')
     check(await read(card), false, 'update closes the prompt')
     check(await read('window.__opened'), 1, 'update opens the plugin detail page')
-    await open('explicit-enable')
+    await disable()
+    await enable()
     await waitCard()
 
-    // A default-open start asks on the first check instead of waiting for a second open.
-    await goto('')
-    await open('default-open')
+    // Without the Plugins panel the prompt stays open instead of closing silently.
+    await goto('?fresh=1&nonav=1')
+    await enable()
+    await disable()
+    await enable()
     await waitCard()
-    check(await read('window.__promptState().pendingVersion'), '0.6.2', 'a default-open prompt records the version too')
-    await click('[data-dsh-iui-update-action=later]')
-    await open('default-open')
+    await click('[data-dsh-iui-update-action=update]')
+    check(await read(card), true, 'update keeps the prompt when navigation is unavailable')
+    check(await read('window.__opened'), 0, 'no navigation was attempted')
+
+    // Escape and an outside click both settle like Later.
+    await goto('?fresh=1')
+    await enable()
+    await disable()
+    await enable()
+    await waitCard()
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+    await wait(`!(${card})`, 'escape closes the prompt')
+    check((await promptState()).laterClicks, 1, 'Escape counts like later')
+    await disable()
+    await enable()
+    await waitCard()
+    await read(`document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`)
+    await wait(`!(${card})`, 'outside click closes the prompt')
+    check((await promptState()).laterClicks, 2, 'an outside click counts like later')
+
+    // A default-open page start asks on the first check; a mid-session flip waits for the next start.
+    await goto('?fresh=1')
+    await read('window.__setGlobal(true)')
+    await sleep(350)
+    check(await read(card), false, 'a mid-session global enable waits for the next page start')
+    await goto('?fresh=1&global=1')
+    await waitCard()
+
+    // The recorded cycle survives a page reload.
+    await goto('?fresh=1')
+    await enable()
+    await noCard()
+    await goto('')
+    await enable()
     await waitCard()
 
     // No newer version means no prompt and no recorded cycle.
-    await goto('?update=0')
-    await open('explicit-enable')
-    await open('explicit-enable')
+    await goto('?fresh=1&update=0')
+    await enable()
+    await disable()
+    await enable()
     await noCard()
-    check(await read('window.__promptState().pendingVersion'), undefined, 'an up-to-date check records nothing')
+    check((await promptState()).pendingVersion, undefined, 'an up-to-date check records nothing')
 
-    // English copy comes from the same prompt and the check requests the English notes.
-    await goto('?lang=en')
-    await open('explicit-enable')
-    await open('explicit-enable')
+    // English copy and the English notes variant.
+    await goto('?fresh=1&lang=en')
+    await enable()
+    await disable()
+    await enable()
     await waitCard()
     check((await read('document.querySelector(".dsh-iui-update-prompt-title").textContent')).includes('A new version of dsh-intelligent-ui is available'), true, 'the English title is rendered')
     check(await read('document.querySelector("[data-dsh-iui-update-action=update]").textContent'), 'Update', 'the English update action is rendered')

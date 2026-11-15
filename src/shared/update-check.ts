@@ -1,11 +1,11 @@
 /**
- * Update-check contract shared by the Host route and the browser notice.
+ * Update-check contract shared by the Host route and the browser update prompt.
  *
  * The extension cannot see npm from the browser reliably, so the Host exposes
- * one cached read of the package's `latest` dist-tag. The browser renders a
- * compact notice only when that tag is a stable version newer than the running
- * package; the notice lists the reviewed release highlights and links to this
- * bundle's Plugins detail page, where DSH itself owns the actual update.
+ * one cached read of the package's `latest` dist-tag. The browser's staged
+ * prompt asks only when that tag is a stable version newer than the running
+ * package; it lists the reviewed release highlights and links to this bundle's
+ * Plugins detail page, where DSH itself owns the actual update.
  */
 
 /** Same-origin Host route serving the update check. */

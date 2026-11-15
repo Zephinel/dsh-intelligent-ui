@@ -19,7 +19,6 @@
  * drive the whole state machine without a browser.
  */
 import {
-  compareStableVersions,
   isNewerStableVersion,
   parseStableVersion,
   type UpdateCheckView,
@@ -53,11 +52,6 @@ function isStableVersion(value: unknown): value is string {
   return typeof value === 'string' && parseStableVersion(value) !== undefined
 }
 
-/** Version comparison that treats an unreadable `current` as unknown. */
-function isNewerThan(candidate: string, current: string): boolean {
-  return compareStableVersions(candidate, current) !== undefined && isNewerStableVersion(candidate, current)
-}
-
 /** Persisted state of the prompt cycle for one browser. */
 export interface UpdatePromptState {
   /** Newer version detected by an earlier open and not yet settled. */
@@ -83,7 +77,7 @@ export interface UpdatePromptView {
 /** What one plugin-open event should do to the prompt. */
 export type UpdatePromptDecision =
   | { readonly action: 'none'; readonly state: UpdatePromptState }
-  | { readonly action: 'record'; readonly state: UpdatePromptState; readonly version: string }
+  | { readonly action: 'record'; readonly state: UpdatePromptState }
   | { readonly action: 'prompt'; readonly state: UpdatePromptState; readonly prompt: UpdatePromptView }
 
 /**
@@ -95,7 +89,7 @@ function isKnownCurrent(current: string): boolean {
 }
 
 /** Reset the recorded cycle while keeping a still-relevant silence marker. */
-function settled(state: UpdatePromptState, current: string): UpdatePromptState {
+function clearedCycle(state: UpdatePromptState, current: string): UpdatePromptState {
   if (!isKnownCurrent(current)) return state
   const silenced = state.silencedVersion
   if (silenced === undefined) return {}
@@ -104,7 +98,7 @@ function settled(state: UpdatePromptState, current: string): UpdatePromptState {
 }
 
 /** State after one version becomes the thing being asked about. */
-function asking(state: UpdatePromptState, version: string, highlights: readonly string[]): UpdatePromptState {
+function withPendingVersion(state: UpdatePromptState, version: string, highlights: readonly string[]): UpdatePromptState {
   return {
     pendingVersion: version,
     ...highlights.length === 0 ? {} : { pendingHighlights: [...highlights] },
@@ -146,25 +140,25 @@ export function decideUpdatePrompt(
       pending !== undefined
       && isStableVersion(pending)
       && isKnownCurrent(current)
-      && isNewerThan(pending, current)
+      && isNewerStableVersion(pending, current)
       && state.silencedVersion !== pending
     ) {
       const highlights = normalizeHighlights(state.pendingHighlights)
       return {
         action: 'prompt',
-        state: asking(state, pending, highlights),
+        state: withPendingVersion(state, pending, highlights),
         prompt: { current, latest: pending, highlights, laterClicks: laterClicksFor(state, pending) },
       }
     }
-    return { action: 'none', state: settled(state, current) }
+    return { action: 'none', state: clearedCycle(state, current) }
   }
 
   if (state.silencedVersion === latest) {
-    return { action: 'none', state: state.pendingVersion === latest ? settled(state, current) : state }
+    return { action: 'none', state: state.pendingVersion === latest ? clearedCycle(state, current) : state }
   }
   const storedHighlights = state.pendingVersion === latest ? normalizeHighlights(state.pendingHighlights) : []
   const highlights = freshHighlights.length > 0 ? freshHighlights : storedHighlights
-  const next = asking(state, latest, highlights)
+  const next = withPendingVersion(state, latest, highlights)
   if (trigger === 'default-open' || state.pendingVersion !== undefined) {
     return {
       action: 'prompt',
@@ -172,7 +166,7 @@ export function decideUpdatePrompt(
       prompt: { current, latest, highlights, laterClicks: laterClicksFor(state, latest) },
     }
   }
-  return { action: 'record', state: next, version: latest }
+  return { action: 'record', state: next }
 }
 
 /**
@@ -224,10 +218,12 @@ export function parseUpdatePromptState(raw: string | null | undefined): UpdatePr
     laterClicks?: number
     silencedVersion?: string
   } = {}
-  if (isStableVersion(record.pendingVersion)) state.pendingVersion = record.pendingVersion
-  if (Array.isArray(record.pendingHighlights)) {
-    const highlights = normalizeHighlights(record.pendingHighlights)
-    if (highlights.length > 0) state.pendingHighlights = highlights
+  if (isStableVersion(record.pendingVersion)) {
+    state.pendingVersion = record.pendingVersion
+    if (Array.isArray(record.pendingHighlights)) {
+      const highlights = normalizeHighlights(record.pendingHighlights)
+      if (highlights.length > 0) state.pendingHighlights = highlights
+    }
   }
   if (
     isStableVersion(record.laterVersion)

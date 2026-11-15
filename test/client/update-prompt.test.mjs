@@ -29,7 +29,6 @@ const view = (current, latest, highlights = []) => ({
 test('the first explicit open records a newer version without prompting', () => {
   const decision = decideUpdatePrompt(view('0.6.1', '0.6.2', ['修正 A', '修正 B']), 'explicit-enable', {})
   assert.equal(decision.action, 'record')
-  assert.equal(decision.version, '0.6.2')
   assert.deepEqual(decision.state, { pendingVersion: '0.6.2', pendingHighlights: ['修正 A', '修正 B'] })
 })
 
@@ -179,14 +178,17 @@ test('the stored document rejects unreadable fields and dangling counters', () =
     laterClicks: -1,
     silencedVersion: '0.6.1-rc.1',
   }))
-  assert.deepEqual(parsed, { pendingHighlights: ['有效', '也有效'] })
+  // Highlights only exist as part of a pending version, so they are dropped too.
+  assert.deepEqual(parsed, {})
 })
 
 test('the stored document caps highlights and keeps only a paired later counter', () => {
   const parsed = parseUpdatePromptState(JSON.stringify({
     schema: UPDATE_PROMPT_SCHEMA_VERSION,
+    pendingVersion: '0.6.2',
     pendingHighlights: ['一', '二', '三', '四', '五', '六', '七'],
     laterVersion: '0.6.2',
+    laterClicks: 2,
   }))
-  assert.deepEqual(parsed, { pendingHighlights: ['一', '二', '三', '四', '五', '六'] })
+  assert.deepEqual(parsed, { pendingVersion: '0.6.2', pendingHighlights: ['一', '二', '三', '四', '五', '六'], laterVersion: '0.6.2', laterClicks: 2 })
 })

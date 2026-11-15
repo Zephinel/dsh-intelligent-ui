@@ -7,8 +7,10 @@
  * - `noteOpen('explicit-enable')` runs after the composer chip successfully
  *   enables the plugin for one session (the first sighting only records).
  * - `watchGlobalSetting()` follows the deployment-wide switch on the Plugins
- *   detail page; while that switch enables the plugin by default, every page
- *   start asks as soon as the cached check answers.
+ *   detail page; when that switch already enables the plugin on this page load,
+ *   the first ready settings snapshot asks as soon as the cached check answers.
+ *   A switch flipped mid-session takes effect on the next page start, matching
+ *   "on every app start".
  *
  * The check itself is the existing same-origin Host route, so no registry or
  * release-notes read happens in the browser.
@@ -17,12 +19,14 @@ import { UPDATE_ROUTE_PATH, type UpdateCheckView } from '../shared/update-check.
 import {
   decideUpdatePrompt,
   noteUpdatePromptLater,
+  offersSilence,
   parseUpdatePromptState,
   serializeUpdatePromptState,
   silenceUpdatePromptVersion,
   UPDATE_PROMPT_STORAGE_KEY,
   type UpdatePromptState,
   type UpdatePromptTrigger,
+  type UpdatePromptView,
 } from './update-prompt.ts'
 
 /** Prompt snapshot while nothing is shown. */
@@ -31,13 +35,11 @@ export interface HiddenUpdatePrompt {
 }
 
 /** Prompt snapshot while the overlay entry is on screen. */
-export interface ShownUpdatePrompt {
+export interface ShownUpdatePrompt extends UpdatePromptView {
   readonly kind: 'shown'
-  readonly current: string
-  readonly latest: string
-  readonly highlights: readonly string[]
-  readonly laterClicks: number
   readonly expanded: boolean
+  /** Whether this prompt offers the "do not remind" action. */
+  readonly canSilence: boolean
 }
 
 /** One immutable snapshot read by the overlay component. */
@@ -45,12 +47,12 @@ export type UpdatePromptSnapshot = HiddenUpdatePrompt | ShownUpdatePrompt
 
 /** User actions the overlay component calls. */
 export interface UpdatePromptActions {
-  /** Open this bundle's Plugins detail page and close the prompt. */
+  /** Open this bundle's Plugins detail page; keeps the prompt when navigation is unavailable. */
   readonly update: () => void
   /** Close this prompt for now and count one "later" click. */
   readonly later: () => void
   /** Stop asking about the shown version. */
-  readonly dontRemind: () => void
+  readonly silence: () => void
   /** Expand or collapse the recorded release-note points. */
   readonly toggleDetails: () => void
 }
@@ -72,8 +74,11 @@ export interface GlobalEnableSource {
 
 /** Injectable dependencies; production uses the page's fetch and localStorage. */
 export interface UpdatePromptControllerOptions {
-  /** Navigate to this bundle's Plugins detail page; absent on minimal deployments. */
-  readonly openDetails?: () => void
+  /**
+   * Navigate to this bundle's Plugins detail page.
+   * @returns whether navigation started; false/undefined keeps the prompt open.
+   */
+  readonly openDetails?: () => boolean
   /** Active DSH locale id, used to ask for the matching release-notes variant. */
   readonly language?: () => string
   /** Fetch override for tests. */
@@ -102,6 +107,21 @@ export interface UpdatePromptController {
 const HIDDEN: UpdatePromptSnapshot = { kind: 'hidden' }
 
 /**
+ * Resolve the browser storage once; restricted contexts can throw on access and
+ * then keep the prompt session-local.
+ * @param override - injected storage for tests.
+ * @returns a storage-like object, or undefined when none is usable.
+ */
+function resolveStorage(override: UpdatePromptControllerOptions['storage']): Pick<Storage, 'getItem' | 'setItem'> | undefined {
+  if (override !== undefined) return override
+  try {
+    return typeof localStorage === 'undefined' ? undefined : localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Create the prompt controller for one browser page.
  * @param options - navigation, locale and test overrides.
  * @returns the controller registration keeps for the page's lifetime.
@@ -109,20 +129,14 @@ const HIDDEN: UpdatePromptSnapshot = { kind: 'hidden' }
 export function createUpdatePromptController(options: UpdatePromptControllerOptions = {}): UpdatePromptController {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
   const language = options.language ?? (() => '')
-  const storage = (): Pick<Storage, 'getItem' | 'setItem'> | undefined => {
-    if (options.storage !== undefined) return options.storage
-    try {
-      return typeof localStorage === 'undefined' ? undefined : localStorage
-    } catch {
-      /* Restricted browser contexts can throw on access; the prompt then lives for one page. */
-      return undefined
-    }
-  }
+  const storage = resolveStorage(options.storage)
   let snapshot: UpdatePromptSnapshot = HIDDEN
   const listeners = new Set<() => void>()
   let disposed = false
   let running = false
   let queued: UpdatePromptTrigger | null = null
+  /** Bumped whenever the user settles the prompt so in-flight checks cannot re-open it. */
+  let actionRevision = 0
   let stopGlobalSetting: (() => void) | undefined
 
   const publish = (next: UpdatePromptSnapshot): void => {
@@ -133,7 +147,7 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
 
   const readState = (): UpdatePromptState => {
     try {
-      return parseUpdatePromptState(storage()?.getItem(UPDATE_PROMPT_STORAGE_KEY))
+      return parseUpdatePromptState(storage?.getItem(UPDATE_PROMPT_STORAGE_KEY))
     } catch {
       return {}
     }
@@ -141,7 +155,7 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
 
   const writeState = (state: UpdatePromptState): void => {
     try {
-      storage()?.setItem(UPDATE_PROMPT_STORAGE_KEY, serializeUpdatePromptState(state))
+      storage?.setItem(UPDATE_PROMPT_STORAGE_KEY, serializeUpdatePromptState(state))
     } catch {
       /* A full or read-only storage keeps the prompt session-local instead of breaking it. */
     }
@@ -161,18 +175,18 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
   }
 
   const run = async (trigger: UpdatePromptTrigger): Promise<void> => {
+    const revisionAtStart = actionRevision
     const view = await readCheck()
-    if (disposed) return
+    // A user action while the check was in flight wins; its state is authoritative.
+    if (disposed || revisionAtStart !== actionRevision) return
     const decision = decideUpdatePrompt(view, trigger, readState())
     writeState(decision.state)
     if (decision.action !== 'prompt') return
     publish({
       kind: 'shown',
-      current: decision.prompt.current,
-      latest: decision.prompt.latest,
-      highlights: decision.prompt.highlights,
-      laterClicks: decision.prompt.laterClicks,
+      ...decision.prompt,
       expanded: false,
+      canSilence: offersSilence(decision.state, decision.prompt.latest),
     })
   }
 
@@ -191,19 +205,30 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
     })
   }
 
+  /** Mark a user decision and drop any queued check that would fight it. */
+  const userSettled = (): void => {
+    actionRevision += 1
+    queued = null
+  }
+
   const actions: UpdatePromptActions = {
     update: () => {
       if (snapshot.kind !== 'shown') return
+      // Without the Plugins panel there is nowhere to go: keep the prompt rather
+      // than closing it silently.
+      if (options.openDetails?.() !== true) return
+      userSettled()
       publish(HIDDEN)
-      options.openDetails?.()
     },
     later: () => {
       if (snapshot.kind !== 'shown') return
+      userSettled()
       writeState(noteUpdatePromptLater(readState(), snapshot.latest))
       publish(HIDDEN)
     },
-    dontRemind: () => {
+    silence: () => {
       if (snapshot.kind !== 'shown') return
+      userSettled()
       writeState(silenceUpdatePromptVersion(readState(), snapshot.latest))
       publish(HIDDEN)
     },
@@ -225,14 +250,13 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
     stopGlobalSetting?.()
     stopGlobalSetting = undefined
     if (disposed || source === undefined) return () => {}
-    let enabled: boolean | undefined
+    let evaluated = false
     const evaluate = (): void => {
-      if (disposed) return
+      if (disposed || evaluated) return
       const state = source.getSnapshot()
       if (state.status !== 'ready') return
-      const next = state.value?.globalEnabled === true
-      if (next && enabled !== true) noteOpen('default-open')
-      enabled = next
+      evaluated = true
+      if (state.value?.globalEnabled === true) noteOpen('default-open')
     }
     const off = source.subscribe(evaluate)
     evaluate()

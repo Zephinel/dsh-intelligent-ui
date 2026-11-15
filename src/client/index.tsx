@@ -112,9 +112,14 @@ export function apply(ctx: ClientContext): void {
     pluginNavigation = scoped.pluginNavigation
     scoped.effect?.(() => () => { pluginNavigation = undefined })
   })
-  /** Open the Plugins detail page; a missing panel leaves the action inert. */
-  const openPluginDetails = (): void => {
-    pluginNavigation?.openBundle(PACKAGE_NAME)
+  /**
+   * Open the Plugins detail page.
+   * @returns whether navigation started; a missing panel keeps the prompt open.
+   */
+  const openPluginDetails = (): boolean => {
+    if (pluginNavigation === undefined) return false
+    pluginNavigation.openBundle(PACKAGE_NAME)
+    return true
   }
   // The update prompt is a frame-wide overlay entry driven by two plugin-open
   // signals: the composer chip's explicit enable and the deployment-wide switch

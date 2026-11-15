@@ -255,10 +255,9 @@ export function ToggleControl({
     setOpen(true)
   }
 
-  // The answer-style panel is available only when this session resolves to an
-  // enabled state (explicit `on`, or follow-global while the global switch is
-  // on). Selecting a scope never opens it; only the two explicit entries do.
-  const opensStyle = (scope: SessionEnable): boolean =>
+  // One resolver for "choosing this scope leaves the plugin enabled": the style
+  // entry availability and the update-prompt explicit-open signal both use it.
+  const resolvesEnabled = (scope: SessionEnable): boolean =>
     scope === 'on' || (scope === 'inherit' && view.globalEnabled)
 
   const choose = (scope: SessionEnable): void => {
@@ -266,7 +265,7 @@ export function ToggleControl({
     // Clicking the active entry opens the style panel instead of re-running a
     // no-op command; when the active scope resolves to disabled, just close.
     if (scope === sessionEnable) {
-      if (opensStyle(scope)) openPanel()
+      if (resolvesEnabled(scope)) openPanel()
       else setOpen(false)
       return
     }
@@ -284,8 +283,7 @@ export function ToggleControl({
           enabled: scope === 'on' ? true : scope === 'off' ? false : view.globalEnabled,
           pending: false,
         }, sessionId, projected)
-        const nowEnabled = scope === 'on' || (scope === 'inherit' && view.globalEnabled)
-        if (!wasEnabled && nowEnabled) noteExplicitOpen?.()
+        if (!wasEnabled && resolvesEnabled(scope)) noteExplicitOpen?.()
       }
     })
   }
