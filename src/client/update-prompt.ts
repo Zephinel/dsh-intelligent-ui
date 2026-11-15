@@ -71,7 +71,6 @@ export interface UpdatePromptView {
   readonly current: string
   readonly latest: string
   readonly highlights: readonly string[]
-  readonly laterClicks: number
 }
 
 /** What one plugin-open event should do to the prompt. */
@@ -119,7 +118,8 @@ function laterClicksFor(state: UpdatePromptState, version: string): number {
  * @param view - the Host's answer, or null when the route itself was unreachable.
  * @param trigger - why the check ran.
  * @param state - previously persisted state.
- * @returns the action plus the state that must be persisted after it.
+ * @returns the action plus the state that must be persisted after it; the
+ *   `canSilence` question is answered from that state by {@link offersSilence}.
  */
 export function decideUpdatePrompt(
   view: UpdateCheckView | null,
@@ -138,7 +138,6 @@ export function decideUpdatePrompt(
     const pending = state.pendingVersion
     if (
       pending !== undefined
-      && isStableVersion(pending)
       && isKnownCurrent(current)
       && isNewerStableVersion(pending, current)
       && state.silencedVersion !== pending
@@ -147,7 +146,7 @@ export function decideUpdatePrompt(
       return {
         action: 'prompt',
         state: withPendingVersion(state, pending, highlights),
-        prompt: { current, latest: pending, highlights, laterClicks: laterClicksFor(state, pending) },
+        prompt: { current, latest: pending, highlights },
       }
     }
     return { action: 'none', state: clearedCycle(state, current) }
@@ -163,7 +162,7 @@ export function decideUpdatePrompt(
     return {
       action: 'prompt',
       state: next,
-      prompt: { current, latest, highlights, laterClicks: laterClicksFor(state, latest) },
+      prompt: { current, latest, highlights },
     }
   }
   return { action: 'record', state: next }

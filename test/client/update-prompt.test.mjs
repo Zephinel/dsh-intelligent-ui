@@ -36,7 +36,7 @@ test('the next explicit open prompts for the recorded version with its highlight
   const recorded = { pendingVersion: '0.6.2', pendingHighlights: ['修正 A'] }
   const decision = decideUpdatePrompt(view('0.6.1', '0.6.2', ['修正 A']), 'explicit-enable', recorded)
   assert.equal(decision.action, 'prompt')
-  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.2', highlights: ['修正 A'], laterClicks: 0 })
+  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.2', highlights: ['修正 A'] })
   assert.deepEqual(decision.state, { pendingVersion: '0.6.2', pendingHighlights: ['修正 A'] })
 })
 
@@ -48,18 +48,18 @@ test('fresh highlights win over recorded ones and are capped at six points', () 
   assert.deepEqual(decision.prompt.highlights, ['一', '二', '三', '四', '五', '六'])
 })
 
-test('a newer release keeps the later-click cycle only when the version matches', () => {
+test('a newer release prompts immediately and starts a fresh later-click cycle', () => {
   const recorded = { pendingVersion: '0.6.2', laterVersion: '0.6.2', laterClicks: 3 }
   const decision = decideUpdatePrompt(view('0.6.1', '0.6.3'), 'explicit-enable', recorded)
   assert.equal(decision.action, 'prompt')
-  assert.equal(decision.prompt.laterClicks, 0)
+  assert.equal(offersSilence(decision.state, '0.6.3'), false)
   assert.deepEqual(decision.state, { pendingVersion: '0.6.3' })
 })
 
 test('default-open prompts as soon as the check answers', () => {
   const decision = decideUpdatePrompt(view('0.6.1', '0.6.2', ['新增']), 'default-open', {})
   assert.equal(decision.action, 'prompt')
-  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.2', highlights: ['新增'], laterClicks: 0 })
+  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.2', highlights: ['新增'] })
   assert.deepEqual(decision.state, { pendingVersion: '0.6.2', pendingHighlights: ['新增'] })
 })
 
@@ -77,7 +77,7 @@ test('a failed registry read still prompts for a recorded version that remains n
   const recorded = { pendingVersion: '0.6.3', pendingHighlights: ['要点'] }
   const decision = decideUpdatePrompt(view('0.6.1', null), 'explicit-enable', recorded)
   assert.equal(decision.action, 'prompt')
-  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.3', highlights: ['要点'], laterClicks: 0 })
+  assert.deepEqual(decision.prompt, { current: '0.6.1', latest: '0.6.3', highlights: ['要点'] })
 })
 
 test('a failed registry read does not prompt for a version the user already installed', () => {
@@ -130,11 +130,10 @@ test('later clicks accumulate per version and offer silence from the third click
   assert.deepEqual(state, { laterVersion: '0.6.3', laterClicks: 1 })
 })
 
-test('the prompt re-opens with the accumulated later-click count', () => {
+test('the prompt re-opens with the accumulated later-click state', () => {
   const recorded = { pendingVersion: '0.6.2', laterVersion: '0.6.2', laterClicks: 3 }
   const decision = decideUpdatePrompt(view('0.6.1', '0.6.2'), 'explicit-enable', recorded)
   assert.equal(decision.action, 'prompt')
-  assert.equal(decision.prompt.laterClicks, 3)
   assert.equal(offersSilence(decision.state, decision.prompt.latest), true)
 })
 

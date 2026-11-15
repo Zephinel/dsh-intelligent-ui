@@ -107,8 +107,9 @@ export interface UpdatePromptController {
 const HIDDEN: UpdatePromptSnapshot = { kind: 'hidden' }
 
 /**
- * Resolve the browser storage once; restricted contexts can throw on access and
- * then keep the prompt session-local.
+ * Resolve the browser storage once; restricted contexts can throw on access.
+ * Without usable storage the controller keeps the prompt cycle in memory for
+ * this page (Later still accumulates and "do not remind" stays reachable).
  * @param override - injected storage for tests.
  * @returns a storage-like object, or undefined when none is usable.
  */
@@ -131,6 +132,8 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
   const language = options.language ?? (() => '')
   const storage = resolveStorage(options.storage)
   let snapshot: UpdatePromptSnapshot = HIDDEN
+  /** Fallback cycle while storage is unusable, so one page can still settle the prompt. */
+  let memoryState: UpdatePromptState = {}
   const listeners = new Set<() => void>()
   let disposed = false
   let running = false
@@ -146,18 +149,21 @@ export function createUpdatePromptController(options: UpdatePromptControllerOpti
   }
 
   const readState = (): UpdatePromptState => {
+    if (storage === undefined) return memoryState
     try {
-      return parseUpdatePromptState(storage?.getItem(UPDATE_PROMPT_STORAGE_KEY))
+      return parseUpdatePromptState(storage.getItem(UPDATE_PROMPT_STORAGE_KEY))
     } catch {
-      return {}
+      return memoryState
     }
   }
 
   const writeState = (state: UpdatePromptState): void => {
+    if (storage === undefined) { memoryState = state; return }
     try {
-      storage?.setItem(UPDATE_PROMPT_STORAGE_KEY, serializeUpdatePromptState(state))
+      storage.setItem(UPDATE_PROMPT_STORAGE_KEY, serializeUpdatePromptState(state))
     } catch {
-      /* A full or read-only storage keeps the prompt session-local instead of breaking it. */
+      /* A full or read-only storage keeps this page's cycle in memory. */
+      memoryState = state
     }
   }
 

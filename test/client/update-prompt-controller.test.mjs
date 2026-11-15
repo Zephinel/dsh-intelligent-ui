@@ -80,8 +80,8 @@ test('an explicit enable records first and asks on the next one, requesting the 
   const shown = controller.store.getSnapshot()
   assert.equal(shown.kind, 'shown')
   assert.deepEqual(
-    { current: shown.current, latest: shown.latest, highlights: shown.highlights, laterClicks: shown.laterClicks, canSilence: shown.canSilence },
-    { current: '0.5.0', latest: '0.6.1', highlights: ['要点'], laterClicks: 0, canSilence: false },
+    { current: shown.current, latest: shown.latest, highlights: shown.highlights, canSilence: shown.canSilence },
+    { current: '0.5.0', latest: '0.6.1', highlights: ['要点'], canSilence: false },
   )
 })
 
@@ -191,7 +191,7 @@ test('the recorded cycle survives a new page controller', async () => {
   assert.equal(second.store.getSnapshot().kind, 'shown')
 })
 
-test('a check still in flight cannot re-open the prompt after Later', async () => {
+test('a queued check cannot re-open the prompt after Later', async () => {
   const storage = memoryStorage()
   let calls = 0
   let release
@@ -209,12 +209,17 @@ test('a check still in flight cannot re-open the prompt after Later', async () =
   await flush()
   assert.equal(controller.store.getSnapshot().kind, 'shown')
 
-  controller.noteOpen('explicit-enable') // third check stays in flight
+  // The third check is in flight; a fourth open queues behind it. Settling the
+  // prompt must drop that queue, not let it re-open the prompt afterwards.
+  controller.noteOpen('explicit-enable')
+  assert.equal(calls, 3, 'the third check started')
+  controller.noteOpen('explicit-enable')
   controller.actions.later()
   assert.equal(controller.store.getSnapshot().kind, 'hidden')
   release()
   await flush()
   assert.equal(controller.store.getSnapshot().kind, 'hidden')
+  assert.equal(calls, 3, 'the queued check was dropped instead of running')
 })
 
 test('update keeps the prompt when navigation is unavailable and closes once it starts', async () => {
@@ -245,6 +250,27 @@ test('update keeps the prompt when navigation is unavailable and closes once it 
   controller.actions.update()
   assert.equal(controller.store.getSnapshot().kind, 'hidden')
   assert.equal(navigations, 1)
+})
+
+
+test('without usable storage the cycle still works for this page', async () => {
+  const fetch = fetchStub(answer('0.6.1'))
+  // No storage override and no localStorage in Node: the controller falls back
+  // to in-memory state for this page instead of never accumulating Later clicks.
+  const controller = createUpdatePromptController({ fetchImpl: fetch.impl })
+  const open = async () => { controller.noteOpen('explicit-enable'); await flush() }
+  await open()
+  await open()
+  assert.equal(controller.store.getSnapshot().kind, 'shown')
+  for (let click = 1; click <= 3; click += 1) {
+    controller.actions.later()
+    await open()
+    assert.equal(controller.store.getSnapshot().kind, 'shown')
+  }
+  assert.equal(controller.store.getSnapshot().canSilence, true)
+  controller.actions.silence()
+  await open()
+  assert.equal(controller.store.getSnapshot().kind, 'hidden')
 })
 
 test('dispose stops publishing and drops queued work', async () => {

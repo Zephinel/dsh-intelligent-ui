@@ -102,8 +102,8 @@ export function apply(ctx: ClientContext): void {
   const token = clientToken()
   // Optional: local image sources need the workspace-files client namespace.
   // Deferred injection keeps the plugin loading on Hosts without that service.
-  // Optional: the update notice's action opens this bundle's Plugins detail page.
-  // A minimal deployment without the Plugins panel keeps the notice text only.
+  // Optional: the update prompt's action opens this bundle's Plugins detail page.
+  // Without the panel the prompt keeps its Update action and stays open.
   ctx.inject?.(['pluginNavigation'], (scope: unknown) => {
     const scoped = scope as {
       readonly pluginNavigation?: { openBundle(name: string): void }

@@ -201,6 +201,21 @@ try {
     await goto('?fresh=1&global=1')
     await waitCard()
 
+    // "Follow global" while the global switch is on counts as an explicit open;
+    // an already-enabled scope change must not.
+    await goto('?fresh=1')
+    await read(`window.__setProjection({ sessionEnable: 'off', globalEnabled: true, enabled: false })`)
+    await wait(`document.querySelector(${JSON.stringify(chip)})?.dataset.enabled === 'false'`, 'chip disabled under the off scope')
+    await selectScope(2, true)
+    check(await read('window.__opens'), 1, 'follow-global enable triggers the update check')
+    await noCard()
+    await selectScope(0, false)
+    await selectScope(2, true)
+    await waitCard()
+    const opensBefore = await read('window.__opens')
+    await selectScope(1, true)
+    check(await read('window.__opens'), opensBefore, 'an already-enabled scope change does not re-trigger')
+
     // The recorded cycle survives a page reload.
     await goto('?fresh=1')
     await enable()

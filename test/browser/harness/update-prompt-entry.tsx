@@ -7,7 +7,7 @@
  * explicit enable (through `ToggleControl.noteExplicitOpen`) and the settings
  * watcher — instead of calling the controller directly.
  */
-import { createElement } from 'react'
+import { createElement, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { UpdatePrompt } from '../../../src/client/UpdatePrompt.tsx'
 import { ToggleControl } from '../../../src/client/ToggleControl.tsx'
@@ -52,6 +52,8 @@ const page = window as unknown as {
   __fetches: string[]
   __promptState: () => unknown
   __setGlobal: (enabled: boolean) => void
+  __setProjection: (patch: Partial<typeof projection>) => void
+  __opens: number
 }
 page.__opened = 0
 page.__fetches = []
@@ -117,15 +119,33 @@ const styles = {
   refresh: async () => {},
 }
 
+// The projection is observable so tests can simulate a deployment-wide switch
+// being on while the session scope is off (the "follow global" enable path).
+const projectionStore = { ...projection }
+const projectionListeners = new Set<() => void>()
+const subscribeProjection = (listener: () => void) => {
+  projectionListeners.add(listener)
+  return () => { projectionListeners.delete(listener) }
+}
+const useProjection = () => useSyncExternalStore(subscribeProjection, () => projectionStore, () => projectionStore)
+page.__setProjection = (patch: Partial<typeof projection>) => {
+  Object.assign(projectionStore, patch)
+  for (const listener of projectionListeners) listener()
+}
+page.__opens = 0
+
 createRoot(document.getElementById('root')!).render(createElement('div', null,
   createElement(ToggleControl as never, {
-    useProjection: () => projection,
+    useProjection,
     locked: false,
     sessionId: 'harness-session',
     styles,
     flip: async () => null,
     setStyle: async () => null,
-    noteExplicitOpen: () => controller.noteOpen('explicit-enable'),
+    noteExplicitOpen: () => {
+      page.__opens += 1
+      controller.noteOpen('explicit-enable')
+    },
     t: translate,
   }),
   createElement(UpdatePrompt as never, {
