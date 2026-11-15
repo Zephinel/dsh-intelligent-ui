@@ -711,10 +711,13 @@ export const zh = {
   'edit.discard': '放弃修改',
   'edit.keepEditing': '继续编辑',
   'edit.availableBlocks': '{count} 个可编辑区块',
-  'update.title': '{name} 有更新可用',
-  'update.open': '点击查看详情',
+  'update.prompt.title': '{name} 有新版本可用',
   'update.highlights': '更新要点',
-  'update.openDetails': '打开插件详情',
+  'update.prompt.update': '更新',
+  'update.prompt.later': '下次再说',
+  'update.prompt.details': '查看详情',
+  'update.prompt.hideDetails': '收起详情',
+  'update.prompt.dontRemind': '不再提醒',
   'update.noHighlights': '该版本未提供更新要点，可在插件详情页查看完整说明。',
 } as const
 
@@ -1395,10 +1398,13 @@ export const en: Record<keyof typeof zh, string> = {
   'edit.discard': 'Discard',
   'edit.keepEditing': 'Keep editing',
   'edit.availableBlocks': '{count} editable blocks',
-  'update.title': 'Update available for {name}',
-  'update.open': 'View details',
+  'update.prompt.title': 'A new version of {name} is available',
   'update.highlights': "What's new",
-  'update.openDetails': 'Open plugin details',
+  'update.prompt.update': 'Update',
+  'update.prompt.later': 'Later',
+  'update.prompt.details': 'Details',
+  'update.prompt.hideDetails': 'Hide details',
+  'update.prompt.dontRemind': "Don't remind me again",
   'update.noHighlights': 'This release has no published highlights. Open the plugin details for the full notes.',
 }
 

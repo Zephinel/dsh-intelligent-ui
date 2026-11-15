@@ -52,6 +52,8 @@ export interface ToggleControlInjected {
   readonly setStyle: (style: StylePreference) => Promise<string | null>
   readonly armOnDemand?: (clientToken: string) => Promise<string | null>
   readonly focusComposer?: () => void
+  /** Notify the update prompt after this explicit command turns the plugin on. */
+  readonly noteExplicitOpen?: () => void
 }
 
 /** Full props: standard Session kit, the composer's locked owner prop, and the injected commands. */
@@ -158,6 +160,7 @@ export function ToggleControl({
   setStyle,
   armOnDemand,
   focusComposer,
+  noteExplicitOpen,
   t = fallbackT,
 }: ToggleControlProps): ReactNode {
   const readMode = useProjection as unknown as ModeProjectionReader
@@ -252,10 +255,9 @@ export function ToggleControl({
     setOpen(true)
   }
 
-  // The answer-style panel is available only when this session resolves to an
-  // enabled state (explicit `on`, or follow-global while the global switch is
-  // on). Selecting a scope never opens it; only the two explicit entries do.
-  const opensStyle = (scope: SessionEnable): boolean =>
+  // One resolver for "choosing this scope leaves the plugin enabled": the style
+  // entry availability and the update-prompt explicit-open signal both use it.
+  const resolvesEnabled = (scope: SessionEnable): boolean =>
     scope === 'on' || (scope === 'inherit' && view.globalEnabled)
 
   const choose = (scope: SessionEnable): void => {
@@ -263,13 +265,14 @@ export function ToggleControl({
     // Clicking the active entry opens the style panel instead of re-running a
     // no-op command; when the active scope resolves to disabled, just close.
     if (scope === sessionEnable) {
-      if (opensStyle(scope)) openPanel()
+      if (resolvesEnabled(scope)) openPanel()
       else setOpen(false)
       return
     }
     setOpen(false)
     setError(null)
     setBusy(true)
+    const wasEnabled = view.enabled
     void runCommand(flip, scope).then((failure) => {
       setBusy(false)
       setError(failure)
@@ -280,6 +283,7 @@ export function ToggleControl({
           enabled: scope === 'on' ? true : scope === 'off' ? false : view.globalEnabled,
           pending: false,
         }, sessionId, projected)
+        if (!wasEnabled && resolvesEnabled(scope)) noteExplicitOpen?.()
       }
     })
   }

@@ -46,7 +46,7 @@ export interface UpdateCheckerOptions {
 /**
  * Read the running package version from the package's own `package.json`.
  * @returns the stable version, or undefined when the manifest is unreadable or
- *   names a prerelease/build version (which this card must not compare).
+ *   names a prerelease/build version (which the prompt must not compare).
  */
 export function installedVersion(manifestUrl?: URL): string | undefined {
   const candidates = manifestUrl === undefined

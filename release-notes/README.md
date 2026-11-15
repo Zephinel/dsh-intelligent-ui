@@ -5,10 +5,10 @@ pushed:
 
 - `release-notes/<version>.md` — the default (Chinese) notes; required.
 - `release-notes/<version>.en.md` — the English notes; optional, falls back to
-  the default file in the update card when absent (or when its Highlights are
+  the default file in the update prompt when absent (or when its Highlights are
   empty).
 
-The update card reads the tag-pinned raw URLs
+The update prompt reads the tag-pinned raw URLs
 `v<version>/release-notes/<version>.md` (and `.en.md` when the DSH locale starts
 with `en`), so the text a user sees for a release cannot drift after publishing.
 
@@ -16,7 +16,7 @@ with `en`), so the text a user sees for a release cannot drift after publishing.
 ## Highlights
 
 - 一句话说明用户能感知的变化
-- 另一条要点（最多 6 条；卡片弹窗直接显示这些条目）
+- 另一条要点（最多 6 条；更新提示的「查看详情」直接显示这些条目）
 
 ## Details
 

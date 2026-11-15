@@ -1100,3 +1100,28 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **实现**：`locale/zh.json`、`locale/en.json` 增加 `meta.detail`；两份指引各约 10 行，说明常用设置、实验性「回答即文档」与模板/修订入口，并链接完整文档。`test/packaging/manifest.test.mjs` 新增断言：detail 路径存在、非空、<4 KiB、语言匹配。
 - **门禁**：Node **821/821** = Host **320** + Client **464** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 249.4 kB）；`npm run pack:check` **67** 文件，非构建 **3,819,912** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：本地验证的是 manifest/守护测试与打包清单；DSH 页面实际渲染需升级到包含该 locale 的版本（npm 发布后）或在 file: 安装的 profile 重启后查看。
+
+
+## 2026-11-15 — 更新提示改为分阶段浮层
+
+- **背景**：0.6.0 的侧栏更新卡片是常驻提示，没有关闭/延后语义，且通过向侧栏列插入 DOM 实现——与其它插件的侧栏 MutationObserver 互激可在微任务级形成循环，渲染进程 100% CPU、插件加载卡死。本次把提示改为「按插件打开节奏出现」的分阶段浮层，并删除侧栏 DOM 插入。
+- **交互与状态**：`src/client/update-prompt.ts` 为纯状态机（19 条 Node 测试），状态持久化在 `localStorage` 的 `dsh-intelligent-ui.update-prompt`（schema 版本化，损坏/旧 schema 重置），按版本记录待处理版本、要点、「下次再说」次数与静默版本。输入框 chip 显式启用（「本次会话」，或「跟随全局」使插件生效）时后台请求既有 Host 路由：首次看到新版本只记录；之后的显式打开若仍有未处理版本则弹提示。全局设置启用插件（默认打开）时跟随设置表单，每次启动检查到新版本即弹。提示为 `shell.overlay` list slot 的一个 entry（React 拥有、全帧、layer 本身 click-through）：右下角卡片含「更新」「下次再说」「查看详情」；「更新」只关闭本次并跳插件详情页（DSH 执行更新）；「下次再说」关闭并按版本累计，三次后出现「不再提醒」，只静默该版本；「查看详情」就地展开要点。注册表读取失败但记录版本仍比运行版本新时继续提示；运行版本追平后清理记录。旧 `src/client/sidebar-update.ts`、`UpdateNotice.tsx` 及侧栏 DOM 插入删除。
+- **测试**：新增 `test/client/update-prompt.test.mjs`（19 条：首次记录/下次提示、全局默认直接提示、要点回退与截断、按版本计数与静默、注册表失败、版本追平清理、存储文档校验）；重写浏览器套件 `test/browser/update-prompt.e2e.mjs`（36 checks：记录→提示、右下角几何、展开/收起、三次「下次再说」后的「不再提醒」、更新跳转、默认打开即提示、无新版本、中英文与 `?lang=en`），旧 `sidebar-update.e2e.mjs` 退役。
+- **门禁**：`npm run check` PASS；Node **840/840** = Host **320** + Client **483** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **36 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,029** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **证据边界**：真实 DSH Web 集成在隔离实例（端口 3132，profile 复制自当前 web profile，加载本仓库重建后的 bundle）上用一次性 CDP 脚本验证（未入库，临时拦截 Host 更新路由以模拟存在新版本）：页面 boot 无遮罩、渲染进程无异常；chip 第一次显式打开只记录（`localStorage` 出现 `pendingVersion`，无提示），第二次显式打开在 `shell.overlay` 出现右下角提示；展开要点、三次「下次再说」后出现「不再提醒」并只静默该版本、静默后再次打开不再提示；点「更新」关闭提示并切到 Plugins 面板。该 dev profile 里 intelligent-ui 是手工 loader row（不是 profile 依赖），插件管理器没有对应 bundle 行，因此不能显示详情页；以 package 依赖安装的 profile 才会打开插件详情页（与 0.6.0 卡片行为一致）。当前 3080 服务仍运行旧 client bundle，需重启才会加载新 bundle；且运行版本等于 npm `latest`，线上不会出现提示，真实「有更新」路径要等下一个版本。多标签页/多浏览器各自保存状态（`localStorage`），不跨设备同步；本页打开期间不轮询，只在启动/显式打开时检查（Host 6 小时缓存）。提示用固定右下角定位，窄视口按 `min(360px, calc(100vw - 40px))` 收缩，未做真实屏幕阅读器审计。
+
+## 2026-11-15 — 更新提示首轮 review 修复
+
+- **背景**：独立 Standards / Spec 两轴复审更新提示改动，发现测试链路绕过真实触发、若干死代码/命名问题、README 与技能元数据残留旧说法、导航失败静默关闭、排队检查可能在用户关闭后重开、缺少 Escape/外点关闭等问题；本轮全部修复。
+- **实现**：浏览器套件改为驱动真实输入框 chip（`ToggleControl` → `noteExplicitOpen` → 控制器）与全局设置 watcher，并覆盖跨页面刷新持久化、Escape/外点关闭、导航不可用时保持提示；新增 9 条无头控制器测试（跨页面控制器持久化、排队检查竞态、导航守卫、全局开关仅页面启动触发、注册表失败回退、silence 按版本）。`offersSilence` 改为控制器产出 `canSilence`，`ShownUpdatePrompt` 直接扩展 `UpdatePromptView`；`update` 动作在 `openDetails` 返回 false 时保持提示；全局设置 watcher 只在本次页面首次 ready 时检查一次，中途开关等下次启动；用户操作后使在途检查失效；持久化仅在存在 pending 版本时保留要点；删除 `decision.version`、`data-version` 与冗余比较 helper，统一 `silence` 动作命名与内部状态构造器命名；README 状态行、`update-check.ts`/`update-routes.ts` 注释同步为「更新提示」措辞。
+- **测试**：`test/client/*.test.mjs` 新增 `update-prompt-controller.test.mjs`（9 条），纯状态机 19 条维持通过；`test/browser/update-prompt.e2e.mjs` 36 checks 改为真实触发链路并在本机连续 3 次通过。
+- **门禁**：`npm run check` PASS；Node **849/849** = Host **320** + Client **492** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **36 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,559** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **证据边界**：本轮复审为独立 subagent 只读审查；真实 DSH 集成仍以既有隔离实例验证为准，线上 3080 需重启后才加载新 bundle。
+
+## 2026-11-15 — 更新提示第二遍复审修复
+
+- **背景**：第一轮修复后的第二次独立复审（Standards / Spec）仍指出 1 个 MAJOR 与若干 MINOR/NIT：排队竞态用例没有真正进入 `running` 分支、follow-global 触发与「已启用不重复触发」无覆盖、无可用存储时与「会话内生效」注释矛盾、README 分支状态过时、两处注释/限制说明措辞不准确；本轮全部修复。
+- **实现**：浏览器套件新增 follow-global 启用路径与「已是启用状态再切 scope 不重复触发」断言（`window.__opens` 计数 + 可注入 projection），当前 39 checks；控制器测试改为真正制造「检查在途 + 再次 noteOpen 入队」后在途检查被用户关闭丢弃，并新增无存储、「写入抛错」与「读取抛错」存储的页面内回退用例（表驱动）；`UpdatePromptView` 去掉仅测试使用的 `laterClicks`，`isStableVersion(pending)` 冗余判断删除；控制器在缺存储、访问抛错或写入抛错时用内存状态维持本页计数与「不再提醒」；README 验证行改为说明当前分支与未推送/未合并状态；`index.tsx` 注释、limitations 的「页面启动只在全局启用时检查」措辞、英文架构标题同步。
+- **测试**：Node 客户端 **495** 条（纯状态机 19 + 控制器 12 等）；`update-prompt` e2e **39 checks** 连续 3 次通过。
+- **门禁**：`npm run check` PASS；Node **852/852** = Host **320** + Client **495** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,806** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
+- **证据边界**：两轮复审均为独立 subagent 只读审查；本轮复审结论待关闭验证。真实 DSH 集成仍以隔离实例为准，线上 3080 需重启后才加载新 bundle。

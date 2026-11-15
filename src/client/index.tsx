@@ -42,7 +42,8 @@ import { ToggleControl, type ToggleControlInjected } from './ToggleControl.tsx'
 import { enableCommand, onDemandCommand, startModeSync, styleCommand } from './commands.ts'
 import { clientToken } from './client-token.ts'
 import { OnDemandHint, type OnDemandHintInjected } from './OnDemandHint.tsx'
-import { installSidebarUpdateNotice } from './sidebar-update.ts'
+import { createUpdatePromptController } from './update-prompt-controller.ts'
+import { UpdatePrompt } from './UpdatePrompt.tsx'
 import type { ComposerAccess } from './composer.ts'
 import { styleCatalog } from './styles.ts'
 import { styleActions } from './style-actions.ts'
@@ -101,8 +102,8 @@ export function apply(ctx: ClientContext): void {
   const token = clientToken()
   // Optional: local image sources need the workspace-files client namespace.
   // Deferred injection keeps the plugin loading on Hosts without that service.
-  // Optional: the update notice's action opens this bundle's Plugins detail page.
-  // A minimal deployment without the Plugins panel keeps the notice text only.
+  // Optional: the update prompt's action opens this bundle's Plugins detail page.
+  // Without the panel the prompt keeps its Update action and stays open.
   ctx.inject?.(['pluginNavigation'], (scope: unknown) => {
     const scoped = scope as {
       readonly pluginNavigation?: { openBundle(name: string): void }
@@ -111,10 +112,25 @@ export function apply(ctx: ClientContext): void {
     pluginNavigation = scoped.pluginNavigation
     scoped.effect?.(() => () => { pluginNavigation = undefined })
   })
-  /** Open the Plugins detail page; a missing panel leaves the action inert. */
-  const openPluginDetails = (): void => {
-    pluginNavigation?.openBundle(PACKAGE_NAME)
+  /**
+   * Open the Plugins detail page.
+   * @returns whether navigation started; a missing panel keeps the prompt open.
+   */
+  const openPluginDetails = (): boolean => {
+    if (pluginNavigation === undefined) return false
+    pluginNavigation.openBundle(PACKAGE_NAME)
+    return true
   }
+  // The update prompt is a frame-wide overlay entry driven by two plugin-open
+  // signals: the composer chip's explicit enable and the deployment-wide switch
+  // that keeps the plugin on by default. It never inserts DOM into the shell.
+  const updatePrompt = createUpdatePromptController({
+    openDetails: openPluginDetails,
+    language: () => {
+      try { return ctx.locale.getLocale().active } catch { return 'en' }
+    },
+  })
+  ctx.effect(() => () => updatePrompt.dispose(), 'intelligent-ui: update prompt lifecycle')
 
   ctx.inject?.(['remote.workspaceFiles'], (scope: unknown) => {
     const scoped = scope as {
@@ -159,20 +175,15 @@ export function apply(ctx: ClientContext): void {
   // Both dictionaries go in one registration so every slot below can translate
   // through the `t` seat. A later locale switch re-renders the mounted outlets.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'intelligent-ui: dictionaries')
-  // A newer published version becomes one in-flow card in the sidebar, directly
-  // above the panel list; its action opens this bundle's Plugins detail page.
-  // DSH 0.2.2-rc.1 has no slot for that position, so the card mounts into the
-  // sidebar's own DOM (see sidebar-update.ts) instead of covering the panel rows.
-  ctx.effect(() => installSidebarUpdateNotice({
-    openDetails: openPluginDetails,
-    translate: () => ctx.locale.bind(NS),
-    subscribe: typeof ctx.locale.subscribe === 'function'
-      ? (listener) => ctx.locale.subscribe(listener)
-      : undefined,
-    locale: () => {
-      try { return ctx.locale.getLocale().active } catch { return 'en' }
-    },
-  }), 'intelligent-ui: sidebar update card')
+  // Frame-wide update prompt: one additive `shell.overlay` entry that appears
+  // only when the plugin-open rules decide to ask (see update-prompt.ts). No
+  // sidebar DOM is touched, so shell layout changes cannot break it.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'intelligent-ui.update-prompt',
+    locale: NS,
+    inject: () => ({ prompt: updatePrompt.store, actions: updatePrompt.actions }),
+  }, UpdatePrompt))
   // One document-level layer gives every plugin input the same orbit focus cue.
   ctx.effect(() => {
     const host = document.createElement('div')
@@ -286,6 +297,7 @@ export function apply(ctx: ClientContext): void {
         armOnDemand: clientInstanceId => run(sessionId, onDemandCommand('arm', clientInstanceId)),
         flip: (scope: SessionEnable): Promise<string | null> => run(sessionId, enableCommand(scope)),
         setStyle: (style: StylePreference): Promise<string | null> => run(sessionId, styleCommand(style)),
+        noteExplicitOpen: () => updatePrompt.noteOpen('explicit-enable'),
       }
     },
   }, ToggleControl))
@@ -319,6 +331,7 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['configForms'], (child) => {
     const form = child.configForms.get(HOST_ENTRY_ID) as unknown as SettingsFormLike
     settingsForm = form
+    child.effect(() => updatePrompt.watchGlobalSetting(form))
     child.slots.inject('plugins.bundle.config', () => child.slots.register({
       name: 'plugins.bundle.config',
       key: PACKAGE_NAME,
