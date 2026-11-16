@@ -6,7 +6,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 
 ## Runtime and compatibility
 
-- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1** (current latest), and later DSH versions are untested.
+- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1** (npm `latest`). **0.2.2-rc.3** (the `next` channel) has a community PTC check (plugin loads, `run_code` subrow renders); this fix's card and export have not been re-verified on it, and later DSH versions are untested.
 - Build, test and release workflows use **Node.js 24**; the repository pins neither `engines` nor `.nvmrc`.
 - Validated platforms are macOS (Web + DSH Desktop) and Windows (DSH Desktop); Linux is not verified.
 - The browser half requires `@deepseek-ai/dsh-client-locale` in the deployment (DSH Web 0.2.2 includes it); a minimal profile without it cannot mount the switch or cards.

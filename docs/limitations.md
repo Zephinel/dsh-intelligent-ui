@@ -6,7 +6,7 @@
 
 ## 运行环境与兼容性
 
-- DSH 插件接口按 **0.2.2** 开发，实际验证版本是 **0.2.2-rc.1**（当前最新）；更晚的 DSH 版本未验证。
+- DSH 插件接口按 **0.2.2** 开发，实际验证版本是 **0.2.2-rc.1**（npm `latest`）；**0.2.2-rc.3**（`next` 通道）有社区 PTC 实测（插件加载、`run_code` 子调用行正常），本修复的卡片与导出尚未在其上真机复验；更晚的 DSH 版本未验证。
 - 构建/测试/发布工作流使用 **Node.js 24**；仓库没有 `engines` 或 `.nvmrc` 版本锁。
 - 已验证平台是 macOS（Web + DSH Desktop）与 Windows（DSH Desktop）；Linux 未验证。
 - 浏览器半边要求部署组合 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载。

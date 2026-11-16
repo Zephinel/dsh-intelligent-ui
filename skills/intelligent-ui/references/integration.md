@@ -9,11 +9,11 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Current status
 
-**Published.** `@zephinel/dsh-intelligent-ui@0.5.0` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. The published 0.5.0 does not include the B1/B2 style editing and revision-history deletion currently in the local main branch (not yet pushed). Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published.** `@zephinel/dsh-intelligent-ui@0.6.1` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. The published package includes the current feature set (in-place editing with revision history, Auto page-vs-text decision, experimental answer-as-document mode, local images, style switching and the PTC-dispatched `render_ui` card fix once released). Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
 
 ## Requirements
 
-- DSH **0.2.2** (validated on `0.2.2-rc.1`, current latest), Node **24**.
+- DSH **0.2.2** (validated on `0.2.2-rc.1`, npm `latest`; `0.2.2-rc.3` on the `next` channel has a community PTC check but this fix is not yet re-verified there), Node **24**.
 - The **web** profile (or any profile whose app has a browser chat surface); the client half declares `"dsh": { "client": { "platform": "web" } }`.
 - Interactive-page export additionally needs a `webServer` service so the Host can serve the standalone renderer assets; without it image export still works and page export reports a build failure.
 - Style catalog and management require Host `webServer` plus `connection.requestRejection` authentication. On-demand uses the deployment's normal default conversation model services and session events; there is no extension-owned draft model endpoint, `llm` injection or `agentDefaultModel` injection. The structured clarification path additionally needs the built-in `ask_user_question` tool; a text fallback keeps the operation pending for the next message instead of requiring an immediate re-arm.
@@ -53,9 +53,9 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm (current latest: 0.5.0)
+# npm (current latest: 0.6.1)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.5.0   # pin a version
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.1   # pin a version
 # or GitHub
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
@@ -74,7 +74,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.5.0 --dsh-version 0.2.2-rc.1 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.6.1 --dsh-version 0.2.2-rc.1 --accept-risk
 ```
 
 Remove it with the mirror command:
@@ -213,4 +213,4 @@ Work top-down; each step rules out one layer:
 - Interactive pages are self-contained but large (about 3.4–4.9 MB) and keep only the exporting theme; non-free cards keep the 760px measure and the live 12px card gap, free results use the full page width, and their photos, maps and routing still use the same third-party services as inside DSH.
 - **Image export follows the live cards, not the whole page.** Portaled overlays — an open `Popover` panel and `Celebration` confetti live on `<body>` — are visible on screen but absent from the saved PNG; everything inside the card, including an expanded `Map` dialog, is captured.
 - The `/iui` Host replies and the command palette's command description stay English even in a Chinese UI; both are DSH platform behavior, and the command palette localizes only first-party commands by identity.
-- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.5.0`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
+- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.6.1`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
