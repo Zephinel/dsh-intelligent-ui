@@ -8,11 +8,11 @@
   "nestedRendererChecks": 75,
   "imageExportChecks": 76,
   "buildHostKb": 858,
-  "clientMb": 4.2,
+  "clientMb": 4.21,
   "clientJsMb": 3.96,
   "clientCssKb": 248.5,
   "packFiles": 67,
-  "nonBuildUnpackedBytes": 3822555,
+  "nonBuildUnpackedBytes": 3822987,
   "packedBytes": 6131280,
   "unpackedBytes": 13184415
 }
