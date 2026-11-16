@@ -51,7 +51,7 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
    npm pack --dry-run --json --ignore-scripts   # non-build bytes = all non-lib/ packed files
    ```
    Update `docs/current-facts.json` and the current claims from that output. Do not quote compressed tarball bytes in docs; only the portable non-build byte sum and packed file count are guarded.
-8. **Notes review gate (never skipped implicitly).** Show the complete `release-notes/<version>.md` Highlights (plus `.en.md` when present) to the owner and wait for an explicit approve-or-changes answer before step 2 — even when the owner's message already named the version ("发布 0.6.2"). These bullets render verbatim in the update prompt and the tag pins them, so a wording fix after the tag is impossible. Quote the approved Highlights in the release commit body as evidence of what was reviewed. Only an explicit "要点没问题 / skip the review" waives this gate.
+8. **Notes review gate (never skipped implicitly).** Show the complete `release-notes/<version>.md` Highlights (plus `.en.md` when present) to the owner and wait for an explicit approve-or-changes answer before step 2 — even when the owner's message already named the version ("发布 0.6.2"). These bullets render verbatim in the update prompt and the tag pins them, so a wording fix after the tag is impossible. After approval run `node scripts/release-notes-approval.mjs`: it reprints the reviewed bullets and a `Release-Notes-Review: sha256=<hash>` line; put that line in the release commit body (the commit that gets tagged). The hash covers the version plus both notes files, so any later notes edit invalidates the approval and `publish.yml` refuses to publish. Only an explicit "要点没问题 / skip the review" waives this gate.
 
 ## 2. Gates before tagging
 
@@ -60,6 +60,7 @@ Run all of these from the prepared commit:
 ```bash
 npm run check                 # typecheck/build/tests/renderer/docs-facts/docs-links/pack-facts
 npm run check:release-notes   # release-notes highlights, default + optional English
+node scripts/release-notes-approval.mjs --verify   # the tagged commit carries the approved notes hash
 npm run pack:check            # packed manifest
 npm run check:release         # package-level install/boot/byte-identity/uninstall (local, needs dsh + pnpm)
 git diff --check
@@ -125,6 +126,7 @@ gh run watch <run-id> --exit-status --interval 10
 
 - Don't tag or publish while release-notes are still draft or without the exact-version approval.
 - Don't treat an exact-version approval as sign-off on the Highlights: the notes review (step 1.8) is a separate gate unless the owner explicitly waives it.
+- Don't tag a release commit without the `Release-Notes-Review: sha256=<hash>` line, and don't edit the notes files after approval — `publish.yml` refuses either case.
 - Don't `npm publish` locally; Trusted Publishing is the only path.
 - Don't amend, delete, or retag an already-published tag.
 - Don't rewrite released CHANGELOG sections; add a new Unreleased entry for a fix.

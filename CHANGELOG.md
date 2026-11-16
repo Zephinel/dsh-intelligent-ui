@@ -7,6 +7,10 @@ been published yet.
 
 ## [Unreleased]
 
+### Changed
+
+- **An unapproved release-notes change can no longer publish.** The update prompt renders `release-notes/<version>.md` Highlights verbatim from the tag-pinned raw file, and 0.6.2 shipped without the owner's pre-tag review because nothing mechanical bound that review to the text. The tagged release commit now must carry `Release-Notes-Review: sha256=<hash>` in its body: `scripts/release-notes-approval.mjs` reprints the bullets for the owner's review, hashes the version plus both notes files, and verifies the trailer, while `publish.yml` runs that verification against the tagged commit and refuses a missing, duplicated or mismatched approval. Any later edit to the notes (or a notes pair copied from another version) invalidates the hash, so the published Highlights are provably the reviewed ones; the local gate list and the `release-iui` skill require the step before the tag. Final gate: Node **860/860** (Host **320**, Client **501**, packaging **39**), `artifact-edit` **944 checks**, `update-prompt` **39 checks**, build host **858 kB**, client **4.21 MB** (js 3.96 / css 248.5), pack **67 files**; non-build **3,822,987** bytes; `check:docs-facts` and `check:pack-facts` pass.
+
 ## [0.6.2] - 2026-11-16
 
 ### Added

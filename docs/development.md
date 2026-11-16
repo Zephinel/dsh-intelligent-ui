@@ -229,7 +229,7 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 **发布一个版本**：
 
 1. 更新 `package.json` / `package-lock.json` 的版本、`CHANGELOG.md`、README 状态与版本 pin、相关 docs；
-2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；
+2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；审核通过后运行 `node scripts/release-notes-approval.mjs`，把打印的 `Release-Notes-Review: sha256=<hash>` 放进 release 提交正文（`publish.yml` 会校验，缺失或不匹配拒绝发布）；
 3. 运行 `npm run check`；
 4. 提交并推送 `main`；
 5. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送）：
@@ -241,7 +241,7 @@ git push origin v0.6.2
 
 6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.6.2 — 2026-11-16`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
 
-`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段与 `release-notes/<version>.md` 有已审核的 `## Highlights`，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
+`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段、`release-notes/<version>.md` 有已审核的 `## Highlights`，且 tag 提交正文的审批哈希与 notes 内容一致，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
 > 版本号约定：正式版使用稳定 semver（如 `0.6.2`，tag `v0.6.2`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 
