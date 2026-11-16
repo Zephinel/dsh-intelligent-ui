@@ -43,6 +43,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 
 - On-demand operations are memory-only: armed state expires after 10 minutes and is lost on restart; completed results survive. One active operation per session; a bound running/clarifying operation refuses re-arm and allows at most two clarification rounds.
 - The on-demand hint appears only in the initiating tab, but the Host binds the session's next human message without checking the sending tab; send from the initiating tab.
+- A `render_ui` call in an on-demand turn must be dispatched from a top-level `tool/call` and carry `temporaryStyle`; if the model dispatches `render_ui` inside `run_code` (PTC), the Host does not bind that child call to the on-demand operation, the render is rejected, and the turn shows no card or export entry (failed children are skipped by the extractor).
 - Unsent edit drafts are stored per tab in `sessionStorage`: refresh restores them, but **tabs do not share them**; `branch`, `latestRevision`, `submitFailed` and undo records are not persisted, and oversized programs are not stored.
 - Cross-tab edit leases use BroadcastChannel and only warn; they do not merge edits or block editing. Without the channel there is no warning, and the Host revision check remains authoritative.
 

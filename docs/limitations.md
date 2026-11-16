@@ -43,6 +43,7 @@
 
 - 按需操作只在内存中：等待发送（armed）10 分钟过期，重启后无法恢复；已完成结果不受影响。每会话最多一个活动操作；已绑定 running/clarifying 时不能重新武装，最多两轮澄清。
 - 按需提示只显示在发起标签页，但 Host 绑定该会话的下一条人工消息，不验证实际发送标签；请在发起标签页发送。
+- 按需轮次的 `render_ui` 必须由顶层 `tool/call` 派发并携带 `temporaryStyle`；模型若把 `render_ui` 放进 `run_code`（PTC）内派发，Host 不会把该子调用绑定到按需操作，渲染会被拒绝，轮末也不会有卡片或导出按钮（子调用失败在提取时被跳过）。
 - 未提交编辑草稿按标签页写入 `sessionStorage`：刷新可恢复，但**跨标签不共享**；`branch`、`latestRevision`、`submitFailed` 和撤销记录不持久化，超大 program 不写入。
 - 跨标签编辑租约基于 BroadcastChannel：只提示、不合并修改、不阻止继续编辑；频道不可用时无提示，Host 的修订校验仍是最终权威。
 

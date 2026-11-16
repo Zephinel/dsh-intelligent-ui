@@ -1,6 +1,7 @@
 /**
  * Pure extraction of Intelligent UI programs from one Turn's recorded
- * `tool-call` Chat nodes.
+ * `tool-call` Chat nodes, including `render_ui` calls dispatched inside a
+ * `run_code` program (PTC mode).
  *
  * This module is deliberately free of React, DOM, and DSH package imports so
  * the Node unit test can load it through Node's TypeScript stripping with no
@@ -14,15 +15,24 @@ import { RENDER_UI_TOOL, isRenderLayout, type IntelligentUIProgram } from '../sh
 import { BLOCK_EDIT_TOOL, isArtifactRevisionMeta } from '../shared/artifact-edit.ts'
 import { isCustomStyleId, isStyleSnapshot } from '../shared/style-templates.ts'
 
+/** Child Tool calls owned by one call stage, in dispatch order. */
+interface CallChildren {
+  /**
+   * PTC dispatches recorded inside this call. The Chat target attaches them to
+   * the owning root node; only `run_code` owns any.
+   */
+  readonly subCalls?: readonly ToolCallBlock[]
+}
+
 /** The subset of `PreparingToolCall` this extractor reads. */
-export interface PreparingToolCall {
+export interface PreparingToolCall extends CallChildren {
   readonly phase: 'preparing'
   readonly callId: string
   readonly name: string
 }
 
 /** The subset of `StartedToolCall` this extractor reads. */
-export interface StartedToolCall {
+export interface StartedToolCall extends CallChildren {
   readonly phase: 'start'
   readonly callId: string
   readonly name: string
@@ -31,7 +41,7 @@ export interface StartedToolCall {
 }
 
 /** The subset of `ToolResultNode` this extractor reads. */
-export interface ToolResultNode {
+export interface ToolResultNode extends CallChildren {
   readonly kind: 'tool-result'
   readonly callId: string
   /** Wire Tool name, empty when its `tool/call` left the loaded window. */
@@ -43,7 +53,10 @@ export interface ToolResultNode {
   readonly meta?: unknown
 }
 
-/** One root Tool lifecycle, exactly the `turnDataSource(turn, 'tool-call')` value. */
+/**
+ * One Tool call stage: a root lifecycle value of `turnDataSource(turn, 'tool-call')`,
+ * or a PTC child owned by a root's `subCalls`.
+ */
 export type ToolCallBlock = PreparingToolCall | StartedToolCall | ToolResultNode
 
 /** One `tool-call` Chat node: the data payload of a root Tool lifecycle. */
@@ -52,7 +65,9 @@ export interface ToolCallNode {
 }
 
 /**
- * Collect this Turn's `render_ui` programs in invocation order.
+ * Collect this Turn's `render_ui` programs in Chat anchor order, with each
+ * call's PTC children in dispatch order; calls dispatched inside a `run_code`
+ * (PTC) program count too.
  * Calls from other tools, malformed arguments, and results whose call head
  * left the loaded history window contribute nothing.
  * @param nodes - the Turn's `tool-call` node data, in anchor order.
@@ -61,33 +76,56 @@ export interface ToolCallNode {
 export function programsFromToolNodes(nodes: readonly ToolCallNode[] | undefined): IntelligentUIProgram[] {
   if (nodes === undefined) return []
   const programs: IntelligentUIProgram[] = []
-  for (const node of nodes) {
-    const program = programFromNode(node)
-    if (program !== undefined) programs.push(program)
-  }
+  for (const node of nodes) collectPrograms(node?.root, programs)
   return programs
 }
 
-/** Read one root Tool lifecycle; undefined when it is not a usable render_ui call. */
-function programFromNode(node: ToolCallNode | undefined): IntelligentUIProgram | undefined {
-  const root = node?.root
-  if (root === undefined) return undefined
-  if ('kind' in root) {
-    if (root.kind !== 'tool-result') return undefined
+/**
+ * Whether one child value is a readable call stage. The Chat target projects
+ * `subCalls` as a depth- and cycle-bounded tree, so the walk only needs to
+ * reject values the typed projection cannot actually produce.
+ * @param value - one candidate child.
+ * @returns whether it is a structural call stage.
+ */
+function isCallBlock(value: unknown): value is ToolCallBlock {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * Collect one call's program and then its PTC children's. A child of `run_code`
+ * was invoked the same way as a root call, so the same argument and result
+ * rules apply; the nesting only decides where the recorded call lives.
+ * @param block - one call stage, or a malformed replay value.
+ * @param programs - accumulator in invocation order.
+ */
+function collectPrograms(block: unknown, programs: IntelligentUIProgram[]): void {
+  if (!isCallBlock(block)) return
+  const program = programFromBlock(block)
+  if (program !== undefined) programs.push(program)
+  const children = block.subCalls
+  // Older Chat payloads and malformed replays carry no readable child list.
+  if (!Array.isArray(children)) return
+  for (const child of children) collectPrograms(child, programs)
+}
+
+/** Read one call stage; undefined when it is not a usable render_ui call. */
+function programFromBlock(block: ToolCallBlock): IntelligentUIProgram | undefined {
+  if ('kind' in block) {
+    if (block.kind !== 'tool-result') return undefined
     // A block-level edit returns only the changed block program; the Host
     // composes the full revision and projects it as result meta.
-    if (root.name === BLOCK_EDIT_TOOL) return blockEditProgram(root)
-    if (root.name !== RENDER_UI_TOOL) return undefined
+    if (block.name === BLOCK_EDIT_TOOL) return blockEditProgram(block)
+    if (block.name !== RENDER_UI_TOOL) return undefined
     // A failed render_ui call was rejected before the user ever saw a page
     // (host validation error, interruption); the Tool row owns that failure
     // state and the Turn tail shows only answers that actually rendered.
-    if (root.isError) return undefined
+    if (block.isError) return undefined
     // The paired tool/call left the loaded window, so the program is gone.
-    if (root.call === null) return undefined
-    return programFromArgs(root.call.argsRaw, root.callId, false, root.meta)
+    if (block.call === null) return undefined
+    return programFromArgs(block.call.argsRaw, block.callId, false, block.meta)
   }
-  if (root.phase !== 'start' || root.name !== RENDER_UI_TOOL) return undefined
-  return programFromArgs(root.argsRaw, root.callId, true)
+  if (block.phase !== 'start' || block.name !== RENDER_UI_TOOL) return undefined
+  return programFromArgs(block.argsRaw, block.callId, true)
 }
 
 /** Read one completed block-level edit result, which carries the full revision in meta. */
