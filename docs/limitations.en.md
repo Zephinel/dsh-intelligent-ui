@@ -6,7 +6,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 
 ## Runtime and compatibility
 
-- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1** (current latest), and later DSH versions are untested.
+- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1** (npm `latest`). **0.2.2-rc.3** (the `next` channel) has a community PTC check (plugin loads, `run_code` subrow renders); this fix's card and export have not been re-verified on it, and later DSH versions are untested.
 - Build, test and release workflows use **Node.js 24**; the repository pins neither `engines` nor `.nvmrc`.
 - Validated platforms are macOS (Web + DSH Desktop) and Windows (DSH Desktop); Linux is not verified.
 - The browser half requires `@deepseek-ai/dsh-client-locale` in the deployment (DSH Web 0.2.2 includes it); a minimal profile without it cannot mount the switch or cards.
@@ -43,6 +43,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 
 - On-demand operations are memory-only: armed state expires after 10 minutes and is lost on restart; completed results survive. One active operation per session; a bound running/clarifying operation refuses re-arm and allows at most two clarification rounds.
 - The on-demand hint appears only in the initiating tab, but the Host binds the session's next human message without checking the sending tab; send from the initiating tab.
+- A `render_ui` call in an on-demand turn must be dispatched from a top-level `tool/call` and carry `temporaryStyle`; if the model dispatches `render_ui` inside `run_code` (PTC), the Host does not bind that child call to the on-demand operation, the render is rejected, and the turn shows no card or export entry (failed children are skipped by the extractor).
 - Unsent edit drafts are stored per tab in `sessionStorage`: refresh restores them, but **tabs do not share them**; `branch`, `latestRevision`, `submitFailed` and undo records are not persisted, and oversized programs are not stored.
 - Cross-tab edit leases use BroadcastChannel and only warn; they do not merge edits or block editing. Without the channel there is no warning, and the Host revision check remains authoritative.
 

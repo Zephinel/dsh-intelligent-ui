@@ -6,7 +6,7 @@
 
 ## 运行环境与兼容性
 
-- DSH 插件接口按 **0.2.2** 开发，实际验证版本是 **0.2.2-rc.1**（当前最新）；更晚的 DSH 版本未验证。
+- DSH 插件接口按 **0.2.2** 开发，实际验证版本是 **0.2.2-rc.1**（npm `latest`）；**0.2.2-rc.3**（`next` 通道）有社区 PTC 实测（插件加载、`run_code` 子调用行正常），本修复的卡片与导出尚未在其上真机复验；更晚的 DSH 版本未验证。
 - 构建/测试/发布工作流使用 **Node.js 24**；仓库没有 `engines` 或 `.nvmrc` 版本锁。
 - 已验证平台是 macOS（Web + DSH Desktop）与 Windows（DSH Desktop）；Linux 未验证。
 - 浏览器半边要求部署组合 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）；最小自定义 profile 缺少它时开关和卡片不挂载。
@@ -43,6 +43,7 @@
 
 - 按需操作只在内存中：等待发送（armed）10 分钟过期，重启后无法恢复；已完成结果不受影响。每会话最多一个活动操作；已绑定 running/clarifying 时不能重新武装，最多两轮澄清。
 - 按需提示只显示在发起标签页，但 Host 绑定该会话的下一条人工消息，不验证实际发送标签；请在发起标签页发送。
+- 按需轮次的 `render_ui` 必须由顶层 `tool/call` 派发并携带 `temporaryStyle`；模型若把 `render_ui` 放进 `run_code`（PTC）内派发，Host 不会把该子调用绑定到按需操作，渲染会被拒绝，轮末也不会有卡片或导出按钮（子调用失败在提取时被跳过）。
 - 未提交编辑草稿按标签页写入 `sessionStorage`：刷新可恢复，但**跨标签不共享**；`branch`、`latestRevision`、`submitFailed` 和撤销记录不持久化，超大 program 不写入。
 - 跨标签编辑租约基于 BroadcastChannel：只提示、不合并修改、不阻止继续编辑；频道不可用时无提示，Host 的修订校验仍是最终权威。
 

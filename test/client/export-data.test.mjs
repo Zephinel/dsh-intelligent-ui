@@ -86,6 +86,31 @@ test('a running render_ui call is still exportable', () => {
   assert.equal(messageHasRenderUi(snapshot({ toolNodes: () => [started('c1', { program: PROGRAM })] }), MESSAGE), true)
 })
 
+test('a render_ui dispatched inside run_code (PTC) makes the message exportable', () => {
+  const ptc = {
+    root: {
+      kind: 'tool-result',
+      callId: 'call-ptc',
+      name: 'run_code',
+      isError: false,
+      call: { name: 'run_code', argsRaw: '{"code":"..."}' },
+      subCalls: [{
+        kind: 'tool-result',
+        callId: 'call-ptc:ptc:1',
+        parentCallId: 'call-ptc',
+        name: 'render_ui',
+        isError: false,
+        call: { name: 'render_ui', argsRaw: JSON.stringify({ program: PROGRAM, title: 'Inside code' }) },
+      }],
+    },
+  }
+  const other = snapshot({ toolNodes: () => [ptc] })
+  assert.equal(messageHasRenderUi(other, MESSAGE), true)
+  assert.deepEqual(programsForMessage(other, MESSAGE), [
+    { callId: 'call-ptc:ptc:1', program: PROGRAM, title: 'Inside code', running: false },
+  ])
+})
+
 test('every render_ui program of the Turn is returned in order', () => {
   const other = snapshot({
     toolNodes: () => [

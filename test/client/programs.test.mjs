@@ -36,6 +36,48 @@ function settled(callId, args, options = {}) {
   }
 }
 
+/**
+ * One settled `run_code` root that owns nested PTC dispatches.
+ * @param {string} callId @param {Record<string, unknown>[]} subCalls
+ * @param {{ isError?: boolean }} [options]
+ */
+function ptcRoot(callId, subCalls, options = {}) {
+  return {
+    root: {
+      kind: 'tool-result',
+      callId,
+      name: 'run_code',
+      isError: options.isError ?? false,
+      call: { name: 'run_code', argsRaw: '{"code":"await render_ui({...})"}' },
+      subCalls,
+    },
+  }
+}
+
+/** @param {string} callId @param {string} parentCallId @param {Record<string, unknown>} args */
+function childStarted(callId, parentCallId, args, name = 'render_ui') {
+  return { phase: 'start', callId, parentCallId, name, argsRaw: JSON.stringify(args) }
+}
+
+/**
+ * @param {string} callId
+ * @param {string} parentCallId
+ * @param {Record<string, unknown> | null} args
+ * @param {{ name?: string, isError?: boolean, meta?: unknown }} [options]
+ */
+function childSettled(callId, parentCallId, args, options = {}) {
+  const name = options.name ?? 'render_ui'
+  return {
+    kind: 'tool-result',
+    callId,
+    parentCallId,
+    name,
+    isError: options.isError ?? false,
+    call: args === null ? null : { name, argsRaw: JSON.stringify(args) },
+    ...options.meta === undefined ? {} : { meta: options.meta },
+  }
+}
+
 test('a dispatched render_ui call yields its program as running', () => {
   assert.deepEqual(programsFromToolNodes([started('call-1', { program: PROGRAM })]), [
     { callId: 'call-1', program: PROGRAM, running: true },
@@ -261,4 +303,84 @@ test('a render_ui style revision falls back to the Host-recorded meta title', ()
   const explicit = settled('style-call-8', { program: PROGRAM, title: 'Model title' })
   explicit.root.meta = { artifactId: 'call-1', revisionId: 'call-8', revision: 4, title: 'Meta title' }
   assert.equal(programsFromToolNodes([explicit])[0].title, 'Model title')
+})
+
+test('a render_ui dispatched inside run_code (PTC) is collected from subCalls', () => {
+  // DSH records a PTC dispatch as a child Tool lifecycle under the parent
+  // `run_code` node: callId "<parent>:ptc:<n>", arguments and result meta carried
+  // exactly like a root call.
+  const meta = { artifactId: 'call-ptc', revisionId: 'call-ptc:ptc:1', revision: 1 }
+  const node = ptcRoot('call-ptc', [childSettled('call-ptc:ptc:1', 'call-ptc', { program: PROGRAM, style: 'card' }, { meta })])
+  assert.deepEqual(programsFromToolNodes([node]), [{
+    callId: 'call-ptc:ptc:1',
+    program: PROGRAM,
+    style: 'card',
+    running: false,
+    artifactId: 'call-ptc',
+    revisionId: 'call-ptc:ptc:1',
+    revision: 1,
+  }])
+})
+
+test('a PTC child still running renders as running', () => {
+  const node = {
+    root: {
+      phase: 'start',
+      callId: 'call-live',
+      name: 'run_code',
+      argsRaw: '{"code":"..."}',
+      subCalls: [childStarted('call-live:ptc:1', 'call-live', { program: PROGRAM })],
+    },
+  }
+  assert.deepEqual(programsFromToolNodes([node]), [
+    { callId: 'call-live:ptc:1', program: PROGRAM, running: true },
+  ])
+})
+
+test('failed and non-render_ui PTC children contribute nothing; the shared truncation guard still applies', () => {
+  const node = ptcRoot('call-mixed', [
+    childSettled('call-mixed:ptc:1', 'call-mixed', { program: 'root = Nope()' }, { isError: true }),
+    // A child result always carries its call head in the Chat projection; the
+    // root-style window-truncation guard is shared and must skip if it ever did not.
+    childSettled('call-mixed:ptc:2', 'call-mixed', null),
+    childSettled('call-mixed:ptc:3', 'call-mixed', { program: PROGRAM }, { name: 'bash' }),
+    childSettled('call-mixed:ptc:4', 'call-mixed', { program: PROGRAM }),
+  ])
+  assert.deepEqual(programsFromToolNodes([node]), [
+    { callId: 'call-mixed:ptc:4', program: PROGRAM, running: false },
+  ])
+  // A failed parent still exposes the children that ran before it failed.
+  assert.equal(programsFromToolNodes([ptcRoot('call-failed', [
+    childSettled('call-failed:ptc:1', 'call-failed', { program: PROGRAM }),
+  ], { isError: true })]).length, 1)
+})
+
+test('nested run_code dispatches are walked recursively in dispatch order', () => {
+  const inner = {
+    kind: 'tool-result',
+    callId: 'call-outer:ptc:1',
+    parentCallId: 'call-outer',
+    name: 'run_code',
+    isError: false,
+    call: { name: 'run_code', argsRaw: '{"code":"..."}' },
+    subCalls: [childSettled('call-outer:ptc:1:ptc:1', 'call-outer:ptc:1', { program: 'inner' })],
+  }
+  const node = ptcRoot('call-outer', [
+    childSettled('call-outer:ptc:0', 'call-outer', { program: 'first' }),
+    inner,
+  ])
+  const programs = programsFromToolNodes([node, settled('call-after', { program: 'last' })])
+  assert.deepEqual(programs.map(program => program.program), ['first', 'inner', 'last'])
+})
+
+test('a malformed subCalls payload is ignored instead of throwing', () => {
+  const notAList = ptcRoot('call-bad', [])
+  notAList.root.subCalls = 'not-an-array'
+  const junk = ptcRoot('call-junk', [])
+  junk.root.subCalls = [null, 42, 'render_ui', { kind: 'tool-result', name: 'render_ui', isError: false },
+    childSettled('call-junk:ptc:1', 'call-junk', { program: PROGRAM })]
+  assert.deepEqual(programsFromToolNodes([notAList, junk, settled('call-ok', { program: PROGRAM })]), [
+    { callId: 'call-junk:ptc:1', program: PROGRAM, running: false },
+    { callId: 'call-ok', program: PROGRAM, running: false },
+  ])
 })
