@@ -1141,3 +1141,10 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **门禁**：Node **858/858** = Host **320** + Client **501** + packaging **37**；浏览器 **10/10** 套件（发布前 main CI 两个 shard 均通过），`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.21 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,822,987** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes`/`check:release` 通过。
 - **证据边界**：真实 PTC 会话中的卡片渲染仍待 issue 报告者按 0.6.2 复验（已在 issue #3 跟进）；插件市场列表跟随 npm `latest` 自身节奏更新。
 - **要点复核**：release-notes 的 Highlights 按流程应在 tag 前由 owner 人工 review；0.6.2 漏了这个 gate，发布后补审并由 owner 认可（tag 内容未改、也不可改）。`release-iui` skill 已把该 gate 改为不可隐式跳过（即使请求里已点名版本），并要求把已批准的要点引用到 release commit 作为证据。
+
+## 2026-11-17 — 发布要点审批哈希门禁
+
+- **背景**：0.6.2 的 release-notes 要点本应在 tag 前由 owner 人工 review；该 gate 之前只写在 `release-iui` skill 里，发布链路上没有任何机械约束，实际发布时被跳过。
+- **实现**：新增 `scripts/release-notes-approval.mjs`——打印当前版本要点与 `Release-Notes-Review: sha256=<hash>`（hash 覆盖版本号与中英 notes 文件），release commit 正文必须带该行；`publish.yml` 在 `check:release-notes` 之后从 tag 提交正文读取审批并与 tag 内 notes 重新计算的哈希比对，缺失、重复或不匹配都拒绝发布；`release-iui` skill 与 `docs/development` 增加对应步骤，`test/packaging/manifest.test.mjs` 守护脚本的通过/拒绝行为与 workflow 中的校验步骤。
+- **门禁**：Node **860/860** = Host **320** + Client **501** + packaging **39**；浏览器 **10/10** 套件（本改动没有 client surface，沿用 0.6.2 的 main CI 结果，合并后会再跑一次 main CI），`artifact-edit` **944 checks**、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.21 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,822,987** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：publish workflow 的拒绝路径要等下一次 tag 才在 CI 里真正执行；本次用 HEAD（无审批行）与带正确哈希的合成 commit message 验证了脚本的拒绝/通过行为，packaging 测试锁定 workflow 保留了该步骤。历史发布（≤0.6.2）没有审批行，对它们重跑发布会被拒绝（符合预期）。

@@ -6,8 +6,10 @@
  *   node --test test/packaging/manifest.test.mjs
  */
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
@@ -145,6 +147,36 @@ test('the two README languages ship, the changelog stays append-only and the doc
   assert.match(publish, /tags:\s*\n\s*- 'v\*'/, 'publish runs on v* tags')
   assert.match(publish, /npm run pack:check/, 'publish validates the packaged manifest')
   assert.match(publish, /Verify the published version and dist-tag/, 'publish verifies the registry result')
+})
+
+test('the release-notes approval script binds the approval to the notes content', () => {
+  const script = fileURLToPath(new URL('scripts/release-notes-approval.mjs', root))
+  const run = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: fileURLToPath(root), encoding: 'utf8' })
+  const notes = new URL(`release-notes/${pkg.version}.md`, root)
+  if (!existsSync(notes)) {
+    // A version bumped ahead of its notes has nothing to approve; the release gate fails elsewhere.
+    assert.equal(run('--json').status, 1, 'a version without release notes cannot be approved')
+    return
+  }
+  const json = run('--json')
+  assert.equal(json.status, 0, json.stderr)
+  const facts = JSON.parse(json.stdout)
+  assert.equal(facts.version, pkg.version)
+  assert.match(facts.sha256, /^[0-9a-f]{64}$/, 'the approval hash is a sha256 digest')
+  assert.ok(facts.files.includes(`release-notes/${pkg.version}.md`), 'the default notes are hashed')
+  const approval = `release: prepare ${pkg.version}\n\nRelease-Notes-Review: sha256=${facts.sha256}`
+  assert.equal(run('--verify', '--message', approval).status, 0, 'a matching approval passes')
+  assert.equal(run('--verify', '--message', 'release: prepare without approval').status, 1, 'a missing approval is refused')
+  assert.equal(run('--verify', '--message', `Release-Notes-Review: sha256=${'0'.repeat(64)}`).status, 1,
+    'an approval for other notes content is refused')
+})
+
+test('publish refuses a release-notes change that the owner did not approve', () => {
+  const publish = read('.github/workflows/publish.yml')
+  assert.match(publish, /npm run check:release-notes/, 'publish validates the notes format')
+  assert.match(publish, /release-notes-approval\.mjs --verify/, 'publish verifies the approved notes hash')
+  assert.match(publish, /git show -s --format=%B HEAD/, 'the approval is read from the tagged commit body')
+  assert.ok(existsSync(new URL('scripts/release-notes-approval.mjs', root)), 'the approval script stays in the repo')
 })
 
 test('the bundle patch inserts the host row under the installed package name', () => {
