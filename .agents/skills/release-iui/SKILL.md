@@ -12,7 +12,7 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
 
 - **A change request is not a release request.** Adding a feature, fixing a bug, or editing docs/README/plugin pages never authorizes a version bump, tag, push, or publish.
 - **Preparation and publishing are separate gates.** If the user says "prepare 0.6.2" or "把发布准备好", do the preparation below but stop before the tag and show the release-notes text for review.
-- **Tagging/publishing requires an explicit approval for the exact version** ("发布吧", "publish 0.6.2", "tag it"). Record the approved version in the commit and tag.
+- **Tagging/publishing requires an explicit approval for the exact version** ("发布吧", "publish 0.6.2", "tag it"). Record the approved version in the commit and tag. That approval authorizes the version only: the release-notes Highlights still need the owner's own review in step 1.8 unless the owner explicitly waives it ("要点不用 review").
 - Do not bump a version, create `release-notes/<version>*`, or rerun the publish workflow without that approval. Do not retag or republish an already-published version.
 - This skill does not override product decisions, code review, or the `sync-iui-docs` skill; use both for release docs.
 
@@ -51,7 +51,7 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
    npm pack --dry-run --json --ignore-scripts   # non-build bytes = all non-lib/ packed files
    ```
    Update `docs/current-facts.json` and the current claims from that output. Do not quote compressed tarball bytes in docs; only the portable non-build byte sum and packed file count are guarded.
-8. Show the release-notes Highlights to the user and wait for approval. Stop before step 2 (tag).
+8. **Notes review gate (never skipped implicitly).** Show the complete `release-notes/<version>.md` Highlights (plus `.en.md` when present) to the owner and wait for an explicit approve-or-changes answer before step 2 — even when the owner's message already named the version ("发布 0.6.2"). These bullets render verbatim in the update prompt and the tag pins them, so a wording fix after the tag is impossible. Quote the approved Highlights in the release commit body as evidence of what was reviewed. Only an explicit "要点没问题 / skip the review" waives this gate.
 
 ## 2. Gates before tagging
 
@@ -124,6 +124,7 @@ gh run watch <run-id> --exit-status --interval 10
 ## Don't
 
 - Don't tag or publish while release-notes are still draft or without the exact-version approval.
+- Don't treat an exact-version approval as sign-off on the Highlights: the notes review (step 1.8) is a separate gate unless the owner explicitly waives it.
 - Don't `npm publish` locally; Trusted Publishing is the only path.
 - Don't amend, delete, or retag an already-published tag.
 - Don't rewrite released CHANGELOG sections; add a new Unreleased entry for a fix.
