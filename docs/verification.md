@@ -1125,3 +1125,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **测试**：Node 客户端 **495** 条（纯状态机 19 + 控制器 12 等）；`update-prompt` e2e **39 checks** 连续 3 次通过。
 - **门禁**：`npm run check` PASS；Node **852/852** = Host **320** + Client **495** + packaging **37**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,821,806** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 通过。
 - **证据边界**：两轮复审均为独立 subagent 只读审查；本轮复审结论待关闭验证。真实 DSH 集成仍以隔离实例为准，线上 3080 需重启后才加载新 bundle。
+
+## 2026-11-16 — PTC 派发的 render_ui 卡片
+
+- **背景**：`render_ui` 经 `run_code`（PTC 模式）派发时工具返回成功，聊天流里却没有卡片。插件的轮末提取器与消息导出入口都只读每个 Turn 的 `tool-call` 节点根调用，而 DSH 把 PTC 子调用挂在父节点的 `data.root.subCalls` 下，模型在 `run_code` 内部调用的 `render_ui` 因此既不是根调用，也不在提取范围内。进程区那一行「交互式回答」不受影响：它走 keyed `tool.call.toolview` 槽位，不经过提取器。
+- **实现**：`src/client/programs.ts` 的提取器改为递归遍历 `root.subCalls`，子调用复用根调用的运行中、失败与结果 meta 规则；卡片与导出入口共用该提取器，因此两者一并恢复。
+- **测试**：新增 `test/client/programs-ptc.test.mjs`（3 条：已结算的 PTC `render_ui`、仍在运行的 PTC `render_ui`、PTC 派发的其它工具）。
+- **门禁**：Node **855/855** = Host **320** + Client **498** + packaging **37**；浏览器 **10/10** 套件、`artifact-edit` **944 checks**；构建 host **858 kB**、client **4.20 MB**（js 3.96 / css 248.5）；`npm run pack:check` **67** files，non-build **3,821,753** bytes；`check:docs-facts`、`check:docs-links`、`check:pack-facts`、`check:release-notes` 通过。
+- **证据边界**：本机为 Windows，Node 测试 855 项中 851 项通过，4 项失败均为路径分隔符与只读目录用例（`skills/intelligent-ui`、`lib/index.js` 的反斜杠路径，以及以只读目录模拟存储失败），未改动的干净树上同样失败；Linux CI 使用 LF 路径。

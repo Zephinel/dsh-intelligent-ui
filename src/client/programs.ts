@@ -19,6 +19,8 @@ export interface PreparingToolCall {
   readonly phase: 'preparing'
   readonly callId: string
   readonly name: string
+  /** PTC-dispatched child calls, when this call dispatched tools. */
+  readonly subCalls?: readonly ToolCallBlock[]
 }
 
 /** The subset of `StartedToolCall` this extractor reads. */
@@ -28,6 +30,8 @@ export interface StartedToolCall {
   readonly name: string
   /** Complete JSON arguments; dispatched calls always carry the full program. */
   readonly argsRaw: string
+  /** PTC-dispatched child calls, when this call dispatched tools. */
+  readonly subCalls?: readonly ToolCallBlock[]
 }
 
 /** The subset of `ToolResultNode` this extractor reads. */
@@ -41,6 +45,8 @@ export interface ToolResultNode {
   readonly call: { readonly name: string; readonly argsRaw: string } | null
   /** Replayable presentation meta; carries revision lineage for edited results. */
   readonly meta?: unknown
+  /** PTC-dispatched child calls, when this call dispatched tools. */
+  readonly subCalls?: readonly ToolCallBlock[]
 }
 
 /** One root Tool lifecycle, exactly the `turnDataSource(turn, 'tool-call')` value. */
@@ -62,15 +68,31 @@ export function programsFromToolNodes(nodes: readonly ToolCallNode[] | undefined
   if (nodes === undefined) return []
   const programs: IntelligentUIProgram[] = []
   for (const node of nodes) {
-    const program = programFromNode(node)
-    if (program !== undefined) programs.push(program)
+    collectPrograms(node?.root, programs)
   }
   return programs
 }
 
-/** Read one root Tool lifecycle; undefined when it is not a usable render_ui call. */
-function programFromNode(node: ToolCallNode | undefined): IntelligentUIProgram | undefined {
-  const root = node?.root
+/**
+ * Collect one Tool lifecycle and every call it dispatched through PTC.
+ *
+ * A PTC dispatch reaches the chat client as one root lifecycle whose
+ * `data.root.subCalls` holds the dispatched children, so a `render_ui` that
+ * the model called inside `run_code` is a child of the `run_code` node and
+ * never a root of its own. The children carry the same running, failed and
+ * result meta as a root call, so they reuse the same rules.
+ * @param block - the lifecycle to read, root or PTC child.
+ * @param programs - collected programs, in invocation order.
+ */
+function collectPrograms(block: ToolCallBlock | undefined, programs: IntelligentUIProgram[]): void {
+  if (block === undefined) return
+  const program = programFromBlock(block)
+  if (program !== undefined) programs.push(program)
+  for (const child of block.subCalls ?? []) collectPrograms(child, programs)
+}
+
+/** Read one Tool lifecycle; undefined when it is not a usable render_ui call. */
+function programFromBlock(root: ToolCallBlock | undefined): IntelligentUIProgram | undefined {
   if (root === undefined) return undefined
   if ('kind' in root) {
     if (root.kind !== 'tool-result') return undefined
