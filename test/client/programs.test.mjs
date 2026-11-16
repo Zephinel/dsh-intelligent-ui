@@ -337,9 +337,11 @@ test('a PTC child still running renders as running', () => {
   ])
 })
 
-test('failed, truncated and non-render_ui PTC children contribute nothing', () => {
+test('failed and non-render_ui PTC children contribute nothing; the shared truncation guard still applies', () => {
   const node = ptcRoot('call-mixed', [
     childSettled('call-mixed:ptc:1', 'call-mixed', { program: 'root = Nope()' }, { isError: true }),
+    // A child result always carries its call head in the Chat projection; the
+    // root-style window-truncation guard is shared and must skip if it ever did not.
     childSettled('call-mixed:ptc:2', 'call-mixed', null),
     childSettled('call-mixed:ptc:3', 'call-mixed', { program: PROGRAM }, { name: 'bash' }),
     childSettled('call-mixed:ptc:4', 'call-mixed', { program: PROGRAM }),
@@ -375,7 +377,8 @@ test('a malformed subCalls payload is ignored instead of throwing', () => {
   const notAList = ptcRoot('call-bad', [])
   notAList.root.subCalls = 'not-an-array'
   const junk = ptcRoot('call-junk', [])
-  junk.root.subCalls = [null, 42, 'render_ui', childSettled('call-junk:ptc:1', 'call-junk', { program: PROGRAM })]
+  junk.root.subCalls = [null, 42, 'render_ui', { kind: 'tool-result', name: 'render_ui', isError: false },
+    childSettled('call-junk:ptc:1', 'call-junk', { program: PROGRAM })]
   assert.deepEqual(programsFromToolNodes([notAList, junk, settled('call-ok', { program: PROGRAM })]), [
     { callId: 'call-junk:ptc:1', program: PROGRAM, running: false },
     { callId: 'call-ok', program: PROGRAM, running: false },

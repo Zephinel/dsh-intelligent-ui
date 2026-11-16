@@ -121,7 +121,8 @@ function programFromBlock(block: ToolCallBlock): IntelligentUIProgram | undefine
     // state and the Turn tail shows only answers that actually rendered.
     if (block.isError) return undefined
     // The paired tool/call left the loaded window, so the program is gone.
-    if (block.call === null) return undefined
+    // A malformed replay object can omit it entirely; never read fields off it.
+    if (typeof block.call !== 'object' || block.call === null) return undefined
     return programFromArgs(block.call.argsRaw, block.callId, false, block.meta)
   }
   if (block.phase !== 'start' || block.name !== RENDER_UI_TOOL) return undefined
