@@ -72,6 +72,20 @@ The **Export** button at the right of the message actions can:
 - Export all cards in the turn as one PNG (original / rounded / card; background and 1x/2x live in the plugin settings).
 - Export a single-file HTML page that stays interactive in a browser; workspace images are inlined as data URLs so it works offline, and `@ToAssistant` copies its message and asks you to paste it back into DSH.
 
+## FAQ
+
+**Must I create a template, preview or name it first?** No. Choose **On-demand UI** and describe what you need; the result is usable immediately. A name is needed only when you choose **Save as template**. A temporary result does not replace the session's selected style. See [On-demand and templates](#on-demand-and-templates).
+
+**Can I save later or keep adjusting?** Yes. Click the card's **Edit** to open the canvas: content requests and ordering travel in composer chips, while duplicate/delete/move and other structural operations first enter the pending queue and are recorded as one structural revision after you confirm the **Apply** total preview. A style can be described under **Style → Change style** or switched directly; only a theme-bearing temporary-style result has **Save as template** on the card footer, and it saves the clicked result's version rather than revisions generated later; if the registry has evicted that result, saving reports an unavailable snapshot. See [Edit a rendered page](#edit-a-rendered-page) and [Requests, drafts and revisions](#requests-drafts-and-revisions).
+
+**Why did a follow-up question not continue generation?** On-demand generation asks structured questions when material ambiguity remains: answering one resumes the same operation; after a text question, the next message automatically continues it. Only expiry, restart, failure or interruption needs a re-arm or retry; concurrent messages in multiple tabs may also consume the same intent. See [On-demand and templates](#on-demand-and-templates).
+
+**Why does an answer come back as plain text with no card?** First check that the switch is on for that session (the **UI** control in the composer, or `/iui on`). Even then the model decides whether a page helps and Auto only picks the layout when a page renders — a short answer, a concise explanation, code, a translation or an explicit text request is expected to stay in Markdown. To require a page for that turn, invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on. With the experimental **Answer as a document** enabled, a page reads as this turn's chat text without card chrome — also expected (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
+
+**Why is there no export pill under an answer?** Only answers rendered by the extension have it; it is absent when the switch is off, the model replies in text, or rendering fails. See [Export](#export) and [Known limitations](limitations.en.md).
+
+**Why did the UI not change (or show an error) after rebuilding the plugin?** A page refresh may still load the old revision: restart the DSH process that serves the Web UI, then reopen the page. See [Development and deployment](development.en.md) for the exact errors and handling.
+
 ## Related
 
 - [Architecture and behavior](architecture.en.md) — component tree, Host/Client contracts, editing and export internals.

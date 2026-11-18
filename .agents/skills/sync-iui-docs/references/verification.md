@@ -1,16 +1,16 @@
 # Verification — dsh-intelligent-ui docs
 
-Run from the repo root. Current expected values are dated 2026-11-16; derive them from the commands, never copy them forward blindly.
+Run from the repo root. Current expected values are dated 2026-11-17; derive them from the commands, never copy them forward blindly.
 
 ## Guards
 
-| Command | Expected (2026-11-16) | What it proves |
+| Command | Expected (2026-11-17) | What it proves |
 | --- | --- | --- |
-| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 857.8 kB`, `client lib/client.js 4.21 MB (js 3.96 MB, css 248.5 kB)`, `lib/standalone.js 3.37 MB + lib/standalone.css 526.9 kB`; tests: 860 total = Host 320 + Client 501 + packaging 39; `check: 42/42` gallery programs plus `49/49` runtime component descriptions; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs, zh + en fallback)`; `typography-check: 22/22`; `media-row-check: 17/17`; `pressable-select-check: 9/9`; `css-contract-check: 50/50`; `prop-contract-check: 63/63`; `nested-css-contract: 28/28 direct + 5/5 scoped`; `capture-token-contract: ok (23 alias tokens)`; `check:docs-facts` pack 67 files; non-build 3,822,987 bytes; `check:docs-links` ok; `check:pack-facts` ok (67 files; non-build unpacked 3,822,987 bytes); `check:release-notes` ok | Build artifacts, behavior, docs/consistency guards (facts, links and the packed manifest), renderer, i18n, typography and contract claims |
+| `npm run check` | typecheck `tsc --noEmit` (pass; `src/client` excluded because its DSH platform types are not local dependencies); build: `host lib/index.js 857.8 kB`, `client lib/client.js 4.21 MB (js 3.96 MB, css 248.5 kB)`, `lib/standalone.js 3.37 MB + lib/standalone.css 526.9 kB`; tests: 860 total = Host 320 + Client 501 + packaging 39; `check: 42/42` gallery programs plus `49/49` runtime component descriptions; `render-check: 42/42` plus free composition in light/dark; `contrast-check: colour contract OK`; `i18n-check: localized chrome OK (4 programs, zh + en fallback)`; `typography-check: 22/22`; `media-row-check: 17/17`; `pressable-select-check: 9/9`; `css-contract-check: 50/50`; `prop-contract-check: 63/63`; `nested-css-contract: 28/28 direct + 5/5 scoped`; `capture-token-contract: ok (23 alias tokens)`; `check:docs-facts` pack 67 files; non-build 3,769,807 bytes; `check:docs-links` ok; `check:pack-facts` ok (67 files; non-build unpacked 3,769,807 bytes); `check:release-notes` ok | Build artifacts, behavior, docs/consistency guards (facts, links and the packed manifest), renderer, i18n, typography and contract claims |
 | `npm run check:docs-links` | `docs-links: ok (… docs; … local links; … anchors; … repository links; clone URL ok)` | README/docs/Agent-Skill local links and anchors, README repository links, and the public clone URL; part of `npm run check` |
-| `npm run check:pack-facts` | `pack-facts: ok (67 files; non-build unpacked 3,822,987 bytes)` | The packed file count and the non-build (`lib/` excluded) byte sum match `docs/current-facts.json` (build first; `--ignore-scripts`); catches README text edits and added/removed packed files without depending on npm/tar/gzip versions or the host esbuild output |
+| `npm run check:pack-facts` | `pack-facts: ok (67 files; non-build unpacked 3,769,807 bytes)` | The packed file count and the non-build (`lib/` excluded) byte sum match `docs/current-facts.json` (build first; `--ignore-scripts`); catches README text edits and added/removed packed files without depending on npm/tar/gzip versions or the host esbuild output |
 | `npm run check:release-notes` | `release-notes: ok (<version>; N highlight(s)[, M English])` | `release-notes/<version>.md` exists and its `## Highlights` has at least one bullet; an optional `<version>.en.md` must also have Highlights when present; run by `publish.yml` before `npm publish`; the update prompt reads the same tag-pinned file (English UIs prefer `.en.md`, falling back to the default) |
-| `npm run pack:check` | 67 files; docs record the portable **non-build 3,822,987 bytes** via `check:pack-facts` — compressed and total unpacked sizes vary with the build/toolchain and are deliberately not quoted in docs; envelope/`files` claims still come from the command output; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs and `CHANGELOG.md` excluded) | Packaging claims, shipped-file lists, screenshot assets |
+| `npm run pack:check` | 67 files; docs record the portable **non-build 3,769,807 bytes** via `check:pack-facts` — compressed and total unpacked sizes vary with the build/toolchain and are deliberately not quoted in docs; envelope/`files` claims still come from the command output; includes `README.md`, `README.en.md`, `assets/`, `skills/`, `locale/`, `licenses/` (docs and `CHANGELOG.md` excluded) | Packaging claims, shipped-file lists, screenshot assets |
 | `node --test test/packaging/*.test.mjs` | 39 pass (doc-facts-guard 11 + guardrails 8 + install-script 3 + manifest 11 + references 6) | Package, README pair and changelog (including unique CHANGELOG bullets), screenshots, locale meta, catalog counts, prompt/Skill guardrails, decision policy, the `render_ui` contract rows, the shipped file count, the renderer-README script coverage and the CI workflow contract (PR gate, browser suites, tag publishing, packaged-manifest and registry verification) |
 | `node --test test/packaging/guardrails.test.mjs` | 8 pass | The prompt and Agent Skill keep the extension checkout read-only while answering, and the enabled-session decision policy stays single-sourced |
 | `node --test test/packaging/references.test.mjs` | 6 pass | `references/components.md` names/counts and `SKILL.md` hard-rule counts against `vendor/spec.json`; `integration.md`'s tool-contract rows against the host schemas and its shipped file count against `package.json` `files` |
@@ -26,6 +26,25 @@ Run from the repo root. Current expected values are dated 2026-11-16; derive the
 ## README and changelog structural checks
 
 `npm run check:docs-links` automates the local-link/anchor, repository-link and clone-URL checks below; the shell snippets remain the manual checks for heading parity, language switchers and changelog wiring.
+
+Anti-rot checks — run after any README edit (the contract is in `SKILL.md` § README index contract):
+
+```sh
+# The README pair is an index, not a manual: ~110-120 lines; >130 is drift
+wc -l README.md README.en.md
+
+# The documentation index stays document-level: 6 body rows per README
+grep -c '^| \[' README.md README.en.md
+
+# Long-form sections that belong in docs/ must not come back
+! grep -qE '^## (核心能力|构建、测试与部署|上架与分发|常见问题|已知限制|致谢与第三方依赖)' README.md
+! grep -qE '^## (Capabilities|Build, test and deploy|Publication and listing|FAQ|Known limitations|Credits and third-party dependencies)' README.en.md
+
+# Required survivor lines: guarded verification counts, map-data attribution, precise CI wording
+grep -q '860/860' README.md && grep -q '860/860' README.en.md && \
+grep -q 'OpenMapTiles' README.md && grep -q 'OpenMapTiles' README.en.md && \
+grep -q '纯文档改动只跑文档检查' README.md && echo 'README anti-rot OK'
+```
 
 ```sh
 # Same heading depth sequence in both languages

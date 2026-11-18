@@ -69,7 +69,7 @@ Claim groups for this extension:
 - **Card and renderer**: turn-tail placement, process-row title, default card title, fallbacks, map/code/timer chrome, chart aria, and the experimental document answer rendered as a chrome-less `section.dsh-iui-document`.
 - **UI copy**: zh/en labels and menu text from `src/shared/locales.ts`; zh docs quote zh labels, English docs quote English labels.
 - **Vocabulary and counts**: 57 components, 73 functions (14 core + 59 library), 5 action steps; component signatures; prompt size (~10K tokens / 42.9 KB, approximate; derive from `wc -c src/generated/prompt.txt`).
-- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 320 / Client 501 / packaging 39, total 860), renderer 42/42 parse + 49/49 runtime descriptions + 42/42 render, typography 22/22, i18n 4 programs, pack 67 files; non-build 3,822,987 bytes, 34 shipped screenshot assets guarded by `test/packaging/manifest.test.mjs` (language-matched captures are used by their own README, shared fixtures by both), and the packed manifest facts are guarded by `npm run check:pack-facts` (packed file count + non-build bytes vs `docs/current-facts.json`). The staged update prompt is as-built: the Host caches the npm `latest` read plus the tag-pinned `release-notes/<version>.md` highlights (English UIs request the optional `<version>.en.md` and fall back to the default file); the first explicit composer-chip enable only records a newer version, the next explicit enable shows one bottom-right `shell.overlay` prompt (Update opens this bundle's Plugins detail page, Later counts per version and adds "do not remind" from the third click, Details expands the highlights), and a deployment-wide default-open start asks on every page start; `publish.yml` gates on the reviewed notes via `check:release-notes`.
+- **Verification and packaging** (recorded in `docs/verification*.md`): test counts (Host 320 / Client 501 / packaging 39, total 860), renderer 42/42 parse + 49/49 runtime descriptions + 42/42 render, typography 22/22, i18n 4 programs, pack 67 files; non-build 3,769,807 bytes, 34 shipped screenshot assets guarded by `test/packaging/manifest.test.mjs` (language-matched captures are used by their own README, shared fixtures by both), and the packed manifest facts are guarded by `npm run check:pack-facts` (packed file count + non-build bytes vs `docs/current-facts.json`). The staged update prompt is as-built: the Host caches the npm `latest` read plus the tag-pinned `release-notes/<version>.md` highlights (English UIs request the optional `<version>.en.md` and fall back to the default file); the first explicit composer-chip enable only records a newer version, the next explicit enable shows one bottom-right `shell.overlay` prompt (Update opens this bundle's Plugins detail page, Later counts per version and adds "do not remind" from the third click, Details expands the highlights), and a deployment-wide default-open start asks on every page start; `publish.yml` gates on the reviewed notes via `check:release-notes`.
 - **Detailed docs**: `docs/architecture*.md` expands the component tree, full switch semantics, the decision policy and the experimental document mode; `docs/development*.md` expands install/uninstall, development commands, restart tips, the Config fields (including `documentMode`), the release layout and the tag-driven Trusted Publishing release flow. The READMEs link both with absolute GitHub URLs because `docs/` is not shipped in npm.
 - **Repository and contribution**: the README clone URL is the HTTPS equivalent of `git config remote.origin.url`; GitHub Issues is the contribution channel; `npm run check` is the local gate and `.github/workflows/ci.yml` runs it on PRs and main; non-packed docs-only diffs (CHANGELOG/PRODUCT/docs/.agents) take a fast path while README edits take the full gate, browser suites run on main only in two shards, and `check:release` is not in CI yet; releases are published by the tag-triggered GitHub Actions Trusted Publishing workflow (`.github/workflows/publish.yml`, OIDC + provenance); docs changes follow `.agents/skills/sync-iui-docs/SKILL.md`.
 - **Release status**: published to GitHub and npm as `@zephinel/dsh-intelligent-ui@0.6.2`; the README current-status line, the package name/homepage/repository metadata in `package.json`, and the `latest` dist-tag.
@@ -101,10 +101,11 @@ Completion criterion: guards pass or their failures are explained; the report le
 
 ## Doc-Specific Gotchas
 
-- **The README pair and each doc pair are updated together.** Heading depth, language switcher, back link, facts, and screenshot references must mirror; a one-sided edit is drift by construction.
+- **The README pair and each doc pair are updated together.** Heading depth, language switcher, back link, facts, and screenshot references must mirror; a one-sided edit is drift by construction. Keep the README an index, not a manual — see the **README index contract (anti-rot)** below.
 - **`CHANGELOG.md` is append-only history (English only).** Both READMEs link it from their documentation section; add entries under `## [Unreleased]`; move them under the released version when publishing. Never rewrite a released section. Repo-only: not in `package.json` `files`; the packaging test asserts the file exists, is linked from both READMEs, carries `Unreleased`, and stays out of the tarball.
 - **`docs/verification*.md` is not as-built truth.** Keep the verification record as history; don't rewrite past verification. Refresh only live subclaims (test counts, pack sizes, DSH version). Release planning is intentionally not part of the shipped READMEs — don't re-add a release checklist to public docs.
 - **Docs live in `docs/`, screenshots live in `assets/`.** The npm package excludes `docs/`, so the READMEs link to the detailed docs with absolute GitHub URLs; keep that if docs stay out of `files`.
+- **The README license line names the map data sources.** `NOTICE`/`licenses/` cover bundled libraries only; OpenFreeMap / OpenMapTiles / OpenStreetMap (ODbL), Esri and OSRM are remote map/routing data attributed in-map. Keep the README attribution sentence and the matching source list in `docs/limitations*.md`; do not collapse them back into a generic "NOTICE covers everything" pointer.
 - **Version-skew examples quote an old Host on purpose.** Troubleshooting and "Host/Client 版本错位" describe a stale host (`Usage: /iui [on|off]`, "already off for this session"); do not "fix" those quotes to the current host.
 - **UI copy has two languages and two layers.** Client chrome is bilingual through `src/shared/locales.ts`; model-facing text (tool description, prompt, Agent Skill body) stays English. Host `/iui` replies and command-palette descriptions are English by DSH platform behavior, not untranslated drift.
 - **Screenshots are English-UI captures.** Every image under `assets/` must be referenced by both READMEs; the set is now a card-level component tour plus examples (WebP, captured with the real renderer at 2× against DSH theme tokens). `node scripts/capture-screenshots.mjs` rebuilds the component-tour, menu/panel, armed hint, temporary-result and settings captures; the example captures come from real sessions. Re-run the script or recapture from a session — never hand-edit an image. A Chinese-UI capture needs a live Chinese session and cannot be faked.
@@ -112,6 +113,31 @@ Completion criterion: guards pass or their failures are explained; the report le
 - **`lib/` is gitignored but packaged.** Build before `npm run pack:check` or any claim about artifacts; the browser half and host bundle sizes are build outputs.
 - **`npm run typecheck` is wired** through `tsconfig.json` and `npm run check`; it excludes `src/client` because DSH platform packages are runtime-provided. Do not claim the browser half is type-checked.
 - **`references/components.md` has no generator script.** It is hand-maintained and guarded by `references.test.mjs`; update both in the same change.
+
+## README index contract (anti-rot)
+
+The README pair is a **landing page plus docs index**, not a manual. Before the 2026-11-17 cleanup it had drifted to 286 lines / ~35 KB (zh) and ~38 KB (en); the detailed copy already lived in `docs/`, so most of that length was duplication. Keep the shape by routing new detail to the docs and touching the README only when a newcomer's first screen changes.
+
+**What belongs in the README pair**
+- One-liner + example ask, the current-status note (version, market listing, the guarded compact verification line), install quick start (one Web block + Desktop steps), the four visual sections, the documentation index table, clone/prerequisites/local-dev block (one code block), contributing, license/attribution.
+- Nothing else. Switch/style semantics, editing walkthroughs, command tables, CI/release details, FAQ, market rules, known-limitation bullets, release summaries and third-party credits belong in `docs/usage*.md`, `docs/development*.md`, `docs/architecture*.md`, `docs/limitations*.md`, `CHANGELOG.md`, `NOTICE`/`licenses/`.
+
+**Routing rule for a normal feature/doc change**
+1. Detailed change → the matching `docs/` pair + `CHANGELOG.md`.
+2. README only if the change alters the first screen or the index: update the status/verification line, an existing sentence, or one index row — never add a section for it.
+3. A new `docs/` file → add exactly one document-level row to the index table in both READMEs, with an absolute GitHub URL and a language-matched target.
+4. Never split the index into task-level rows for sub-sections; group by document (~6 rows). The table answers "which document"; the document's own headings answer "which section".
+
+**Budget and drift signals**
+- Aim for ~110–120 lines / ~10–12 KB per README; above ~130 lines or ~13 KB, move detail out instead of extending.
+- Banned regrowth (all removed on 2026-11-17): the capabilities table, build/test command table, full FAQ, market list, per-feature editing walkthroughs, release highlights, credits list.
+- Keep the CI sentence precise (docs-only diffs take the docs checks; the README is packaged and takes the full gate) and keep the map-data attribution sentence.
+- Any README edit changes packed bytes: refresh `docs/current-facts.json`, the CHANGELOG gate line, the current-verification line in `docs/architecture*.md`, the newest `docs/verification*.md` record, and `references/verification.md` in the same change (see the pack-facts workflow).
+
+**Re-read before you commit a README edit**
+- First screen cold: what it is, how to try it, where to read more — all within a few lines.
+- `README.md` and `README.en.md` still share the heading depth sequence and the same index rows (localized targets).
+- Run the anti-rot and structural checks in `references/verification.md`, then the normal gates.
 
 ## Ask the Owner Before
 
@@ -146,6 +172,6 @@ Questions:
 - [`references/doc-map.md`](references/doc-map.md) — per-doc class, truth source, and existing guard for this repository. Load in step 2.
 - [`references/verification.md`](references/verification.md) — guard commands, expected outputs, README structural checks, and known non-bugs. Load in step 1 and before reporting.
 
-These two references describe the repo as of 2026-11-14. When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
+These two references describe the repo as of 2026-11-17, when the README pair became an index (see the anti-rot contract above). When the doc inventory, guards, scripts, or expected counts change, update them in the same change — they are maintenance metadata, not shipped docs.
 
 This skill lives at `.agents/skills/sync-iui-docs/` for project-local discovery. It is not listed in `package.json` `files` and is not shipped to npm.

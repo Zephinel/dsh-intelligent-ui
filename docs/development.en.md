@@ -10,6 +10,15 @@ This page expands the installation and development details summarised in the REA
 
 Requires DSH 0.2.2 (the `dsh` CLI) and Node 24. The browser half additionally requires a deployment that composes `@deepseek-ai/dsh-client-locale` (included by default in DSH Web 0.2.2; without it the switch and card do not mount, while the Host tool and prompt keep working).
 
+Install the DSH CLI and confirm the tool versions (the repository has no `engines` or `.nvmrc` pin, so pick Node 24 yourself; the Host's Node 22 build target does not mean the whole toolchain was verified on Node 22. Git is only needed to get the source, and no minimum version is specified):
+
+```bash
+npm install -g @deepseek-ai/dsh
+node --version   # v24.x
+npm --version
+dsh --version    # validated: 0.2.2-rc.1
+```
+
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
@@ -24,6 +33,8 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
 
 > The npm package name is **`@zephinel/dsh-intelligent-ui`**: the unscoped `dsh-intelligent-ui` is taken by another, unrelated project, so the package uses the `@zephinel` scope. GitHub installs are unaffected.
+
+Both install sources provide only published or committed code; neither installs uncommitted changes from the current checkout. Before the first use of a profile, `dsh plugin --profile web list` shows and initializes it.
 
 On the Web side you can also install and enable it from the **Plugins** page. DSH Desktop installs the same bundle inside the app: **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**) → enter the package name and version → **Install** → **Enable now**. The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected; if the **UI** control does not appear after enabling, quit and reopen Desktop. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found. With a bundle install the skill appears automatically along with the Host plugin and needs no separate installation.
 
@@ -106,13 +117,16 @@ npm run build          # full build of prompt + host + client
 npm run build:client   # rebuild the browser bundle only
 npm run build:host     # rebuild the Host only
 npm run typecheck      # tsc --noEmit; src/client is excluded because its runtime platform packages lack local types
+npm test               # run the Host, Client and packaging Node tests after a build
 npm run check          # typecheck + build + Host/Client/packaging tests + renderer + docs facts/links and packaged-manifest facts
 npm run check:docs-links # README/docs/Agent-Skill local links, anchors, repository links and clone URL (already inside check)
 npm run check:pack-facts # packed file count and non-build bytes match docs/current-facts.json (already inside check)
 npm run pack:check     # npm pack --dry-run, checks the final published file list
 npm run check:release  # pack → throwaway DSH_HOME install → check full packaged file hashes, mount, served bundle → uninstall (needs dsh + pnpm)
-npm run test:browser   # 9 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
+npm run test:browser   # 10 Chrome suites: on-demand, style panel, theme, image, standalone page, Article, settings, Artifact block editing and arrangement, nested edit-renderer
 ```
+
+The typography check inside `npm run check` needs a local Chrome; without one it is skipped while the other tests still run. For a non-default Chrome location, set `CHROME_BIN` (it also applies to the browser suites).
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.
 - `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version that is invoked "through the render_ui tool", and owns the decision policy (the model decides per answer whether a page helps; a session style only names the layout when it renders; explicit invocation or an explicit page request is a directive) plus the layout/spacing contract (the renderer owns the page rhythm; the model does not add root gaps or manual blank blocks); rebuild after editing.
@@ -251,6 +265,11 @@ git push origin v0.6.2
 
 Once listed, continue developing and releasing through the workflow above. Each new version does not need a new listing request.
 
-- **Version updates**: publish production releases to npm's `latest` tag and confirm it with the `npm view` command above. awesome / dsh-market automatically associates the npm package that points to this repository; the current Open Plugin Market entry has no version pin and follows `latest`. Each market refreshes on its own build schedule. Keep the npm package's `repository` pointing here and retain the GitHub `dsh-plugin` topic for automatic discovery. [awesome listing rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market maintenance rules](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
+- **Listing locations**: the extension is published to npm and GitHub (DSH has no built-in official plugin marketplace; Discover only reads user-added index sources), and every market entry follows npm `latest`:
+  - **npm package**: [`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephinel/dsh-intelligent-ui); **GitHub repository**: [Zephinel/dsh-intelligent-ui](https://github.com/Zephinel/dsh-intelligent-ui) (topics: `dsh-plugin`, `dsh-bundle`, `deepseek-harness`, `intelligent-ui`, `agent-skills`).
+  - **awesome-dsh-plugin / dsh-market**: [awesome entry](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/Zephinel__dsh-intelligent-ui.yml) · [listing page](https://awesome-dsh-plugin.com/p/Zephinel/dsh-intelligent-ui/); dsh-market's catalog comes from awesome and syncs with it.
+  - **Open Plugin Market**: [index entry](https://dshopen.org/plugins/@zephinel/dsh-intelligent-ui/) ([dshopen.org](https://dshopen.org/)).
+  - **bradeGithub/DSH-Plugins-Marketplace**: [repository](https://github.com/bradeGithub/DSH-Plugins-Marketplace), auto-indexed from the GitHub `dsh-plugin` topic.
+- **Version updates**: publish production releases to npm's `latest` tag and confirm it with `npm view @zephinel/dsh-intelligent-ui dist-tags`. awesome / dsh-market automatically associates the npm package that points to this repository; the current Open Plugin Market entry has no version pin and follows `latest`. Each market refreshes on its own build schedule. Keep the npm package's `repository` pointing here and retain the GitHub `dsh-plugin` topic for automatic discovery. [awesome listing rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market maintenance rules](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
 - **Screenshots**: update this repository's `screenshots.json` and the corresponding images, then push to the default branch. Keep 1-8 screenshots with valid repository-relative paths. Markets pick them up in a later build; no separate market PR or npm release is needed just to update marketplace screenshots. [Screenshot rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#screenshots--截图optional-recommended--可选推荐)
 - **Listing corrections**: update the relevant market entry when the package name, repository URL or category changes, or the description becomes outdated. For awesome, edit only `data/plugins/Zephinel__dsh-intelligent-ui.yml`; for Open Plugin Market, add details to the original [listing request](https://github.com/polang233/dsh-plugin-index/issues/40) or submit a correction request.
