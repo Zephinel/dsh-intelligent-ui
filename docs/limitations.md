@@ -18,7 +18,7 @@
 - 卡片在该轮**结束时**出现；生成过程中进程区只显示一行「交互式回答」。
 - 模型可能生成不合法的 OpenUI Lang；Host 会返回精确校验错误，通常同一轮内自修（实测 1–2 次），但不能保证成功。
 - 生成提示词约 10K tokens，仅在开关命中该会话时发送；关闭时工具 schema 和提示词都不出现。Article 页面更长，输出 token 和渲染时间相应增加。
-- 地图底图依赖 OpenFreeMap 瓦片，路线依赖 OSRM demo，搜索图片依赖 Wikipedia/Wikimedia；离线时地图降级为地点列表、搜索图片降级为占位块。
+- 地图底图依赖 OpenFreeMap 瓦片（© OpenMapTiles · OpenStreetMap contributors）与 Esri 的部分瓦片，路线依赖 OSRM demo，搜索图片依赖 Wikipedia/Wikimedia；离线时地图降级为地点列表、搜索图片降级为占位块。
 - `Image` 的显式来源不再用 alt 搜图：本地文件缺失、超过 10 MiB、格式不在 PNG/JPEG/WebP/GIF 白名单（含 SVG）或 http(s) 加载失败时显示错误占位。内嵌 `data:image/…;base64` 上限 512 KiB；像素上限 40 MP（本地文件与内联 `data:` 都从已知的 PNG/JPEG/GIF/WebP 头预解析，未知头回退到加载后检查，极端解压炸弹仍可能在拒绝前占用解码内存；远程图片沿用浏览器行为）；绝对路径由 Host 进程按 workspace-files 读权限读取（该接口不限于工作区，绝对路径可读工作区外文件），换 Host/换设备后可能指向不同文件；图片是渲染时快照，文件变化需重新渲染；Markdown 图片路径含空格/括号时需用 `<>` 包裹。本地图片依赖 DSH 0.2.2 的 workspace-files 服务，旧 Host 显示「当前 Host 不支持读取本地图片」占位；若该服务在卡片已渲染出错误占位后才注入，需要重新渲染卡片才能重试（resolver 身份稳定，不会自动重试）；`http(s)` 的 SVG URL 仍按浏览器 `<img>` 行为显示（不执行脚本），只有 path/data 来源的 SVG 被拒绝；沙盒 `HtmlView` 内的本地图片不支持。
 - KaTeX 依赖 DSH 壳层已加载的全局样式；该样式被移除时 `Math` 会退化为纯文本。
 - `/iui` 的 Host 回复、命令面板描述和 README 截图保持英文；浏览器 UI 文案才跟随 DSH 语言。

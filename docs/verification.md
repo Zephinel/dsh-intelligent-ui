@@ -1148,3 +1148,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **实现**：新增 `scripts/release-notes-approval.mjs`——打印当前版本要点与 `Release-Notes-Review: sha256=<hash>`（hash 覆盖版本号与中英 notes 文件），release commit 正文必须带该行；`publish.yml` 在 `check:release-notes` 之后从 tag 提交正文读取审批并与 tag 内 notes 重新计算的哈希比对，缺失、重复或不匹配都拒绝发布；`release-iui` skill 与 `docs/development` 增加对应步骤，`test/packaging/manifest.test.mjs` 守护脚本的通过/拒绝行为与 workflow 中的校验步骤。
 - **门禁**：Node **860/860** = Host **320** + Client **501** + packaging **39**；浏览器 **10/10** 套件（本改动没有 client surface，沿用 0.6.2 的 main CI 结果，合并后会再跑一次 main CI），`artifact-edit` **944 checks**、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.21 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,822,987** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：publish workflow 的拒绝路径要等下一次 tag 才在 CI 里真正执行；本次用 HEAD（无审批行）与带正确哈希的合成 commit message 验证了脚本的拒绝/通过行为，packaging 测试锁定 workflow 保留了该步骤。历史发布（≤0.6.2）没有审批行，对它们重跑发布会被拒绝（符合预期）。
+
+## 2026-11-17 — README 索引化
+
+- **背景**：README 中英两份重新变成“总索引”，不再把开关语义、编辑细节、命令表、常见问题、市场列表和验证数值堆在首页；详细说明本来就在 `docs/`，这次把 README 独有的内容补进对应文档。
+- **文档**：README 保留一句话介绍、安装、效果/生成/编辑/组件/开关截图、按文档分组的 6 行索引表、获取代码与本地开发、贡献与许可证；同步技能新增「README index contract (anti-rot)」与对应的结构检查，记录本次索引化经验并防止 README 重新膨胀；`docs/usage.md` 新增「常见问题」（中英），`docs/development.md#插件市场维护` 新增社区市场收录链接（中英）；`docs/current-facts.json`、`docs/architecture*.md` 的当前验证行与本记录按真实打包结果刷新，并同步 `.agents/skills/sync-iui-docs/references/doc-map.md`（README 段落清单）与 `verification.md`（期望字节值）。
+- **门禁**：`npm run check` PASS；Node **860/860** = Host **320** + Client **501** + packaging **39**；浏览器 **10/10** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **858 kB**、client **4.21 MB**（js 3.96 / CSS 248.5 kB）；`npm run pack:check` **67** 文件，非构建 **3,769,807** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **复审修复**：独立只读复审（对比旧 README 的逐节信息归属）发现并修复——许可证行误称地图数据在 `NOTICE`/`licenses/`（改为 README 明示 OpenFreeMap / OpenMapTiles / OpenStreetMap、Esri 与 OSRM，`docs/limitations.md` 补充来源）；`docs/development.md` 的「上面的 `npm view`」悬空引用改为真实命令；README 的 CI 表述补回「纯文档改动只跑文档检查」的快速路径；并把安装/版本确认命令、`npm test`、`dsh plugin --profile web list`、`CHROME_BIN`/Chrome 跳过说明、「安装来源不含未提交改动」等旧 README 细节补进开发文档。
+- **证据边界**：本次只改文档与事实快照，不涉及产品行为或测试计数；浏览器套件沿用 0.6.2 的 main CI 结果，未重新跑真机。
