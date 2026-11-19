@@ -4,11 +4,12 @@ Eleven focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
-- `inline-ui.e2e.mjs` mounts the default inline-UI fence layer with a settled `openui`
-  program, a streaming fence and an invalid program: the settled fence renders
-  the production renderer inside the inline surface, the streaming fence keeps
-  the plain code block, and the invalid program falls back to the localized
-  failure note instead of breaking the message.
+- `inline-ui.e2e.mjs` mounts `InlineUIFence` directly with nine fixtures (it does not boot
+  the DSH shell or the slot wiring): settled, streaming, invalid, excess-arg,
+  partial, zh-invalid, empty, non-component-root and a program switch. It checks
+  the production renderer inside the inline surface, the streaming code block,
+  full fallbacks (localized/empty/fatal), silent excess args, the partial-page
+  warning and a fresh fallback after a program change.
 - `artifact-edit.e2e.mjs` mounts the production card list with one recorded
   `render_ui` program (the 夏令时与冬令时 sample fixture) and exercises block
   editing and arrangement. The current pipeline (scenarios 48–69) also covers

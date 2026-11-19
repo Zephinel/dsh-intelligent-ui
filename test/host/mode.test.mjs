@@ -426,6 +426,8 @@ test('on-demand commands, projection and prompt are transient and session-bound'
   assert.match(prompt(), /ON-DEMAND UI/)
   assert.match(prompt(), /This turn is an on-demand UI request/, 'a bound on-demand turn requires a page')
   assert.doesNotMatch(prompt(), /Markdown by default, with two ways to add UI/, 'the ordinary delivery decision is replaced on demand')
+  assert.match(prompt(), /explicit exception to the ordinary-answer policy/, 'on-demand turns state the override explicitly')
+  assert.match(prompt(), /do not use inline `openui` fences/, 'on-demand turns forbid inline fences')
   assert.match(prompt(), /style: "free"/)
   assert.doesNotMatch(prompt(), /Answer style for this session/, 'on-demand prompt must not force the session shell')
   assert.doesNotMatch(rec.sections[0].text(promptContext('s2')), /ON-DEMAND UI/)

@@ -1177,7 +1177,7 @@ function IntelligentUICard({ program, sessionId, turnNumber, onToAssistant, t, t
             />
           </div>
         ) : (
-          <RendererBoundary t={t}>
+          <RendererBoundary t={t} resetKey={program.program}>
             <div className={style === 'article' ? 'dsh-iui-article' : undefined}>
               <OpenUIRenderer
                 program={program.program}

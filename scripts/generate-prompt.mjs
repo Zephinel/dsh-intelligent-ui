@@ -215,6 +215,11 @@ const toolResponseLine = `
 
 After a successful \`render_ui\` call the page is already on screen: the closing Markdown reply, when present, is one short sentence only.`
 
+/** Document mode writes no Markdown outside the call, so its stop rule differs. */
+const documentToolResponseLine = `
+
+After a successful \`render_ui\` call the document is already on screen: stop, and do not add a Markdown reply or closing sentence.`
+
 /**
  * Document-mode variant: the same language/component body with a preamble that
  * makes the page the reply. It must not carry the ordinary-answer inline policy:
@@ -242,6 +247,6 @@ const documentBody = withLayout.replace(inlineKnowledge, documentKnowledge)
 
 await mkdir(dirname(target), { recursive: true })
 await writeFile(target, `${preamble}${withLayout.trimEnd()}${toolResponseLine}\n`, 'utf8')
-await writeFile(documentTarget, `${documentPreamble}${documentBody.trimEnd()}${toolResponseLine}\n`, 'utf8')
+await writeFile(documentTarget, `${documentPreamble}${documentBody.trimEnd()}${documentToolResponseLine}\n`, 'utf8')
 console.log(`generate-prompt: wrote ${target}`)
 console.log(`generate-prompt: wrote ${documentTarget}`)

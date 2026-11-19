@@ -21,10 +21,10 @@
 帮我排一个上海两日游，要能勾选和调整
 ```
 
-模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两条路径都是真实组件；内嵌 UI 无需额外开关。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
+模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两条路径都是真实组件；内嵌 UI 无需额外的 inline 模式开关（仍需会话 UI 开关启用插件）。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **862/862**（Host 322、Client 501、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **869/869**（Host 323、Client 507、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 
 [效果](#效果) · [安装](#安装) · [生成与编辑](#生成与编辑) · [文档索引](#文档索引) · [本地开发](#获取代码与本地开发)
 
@@ -47,7 +47,7 @@ dsh web
 
 **DSH Desktop**：侧栏 **插件** → **添加插件**，输入 `@zephinel/dsh-intelligent-ui@0.6.2`（或只填包名装最新版）→ **安装** → **立即启用**。
 
-首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`），再发送上面的解释示例；回答正文里出现内嵌 UI 即验证成功（发送行程示例则会在该轮末尾生成页面卡片）。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
+首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`），再发送上面的解释示例；回答正文里出现内嵌 UI 即验证成功（发送行程示例则会在该轮末尾生成页面卡片）。内嵌围栏需要 DSH 0.2.2-rc.2+ 的 `conversation.chat.markdown.fence` 插槽；更早版本只显示代码块。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
 
 ## 生成与编辑
 
@@ -103,7 +103,7 @@ dsh web
 
 要提交改动时先 Fork 仓库，再克隆自己的副本。
 
-环境：DSH 0.2.2 插件接口（在 `0.2.2-rc.1` 上验证，`dsh` CLI）、Node 24 与自带的 npm、Git；浏览器半边需要 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）。扩展没有独立的开发服务器或 watch 模式：修改后重新 `npm run build` 并重启 DSH。提交前运行 `npm run check`；完整命令表、安装模式切换、CI 与发布流程见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#开发)。
+环境：DSH 0.2.2 插件接口（在 `0.2.2-rc.5` 上验证，`dsh` CLI；内嵌 UI 需要 `0.2.2-rc.2+` 的 fence 插槽）、Node 24 与自带的 npm、Git；浏览器半边需要 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）。扩展没有独立的开发服务器或 watch 模式：修改后重新 `npm run build` 并重启 DSH。提交前运行 `npm run check`；完整命令表、安装模式切换、CI 与发布流程见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#开发)。
 
 ## 贡献
 

@@ -407,7 +407,8 @@ export const ENABLED_SESSION_PREFIX =
 
 /** Prompt opening for a bound on-demand turn: the page is the requested result. */
 const ON_DEMAND_PREFIX =
-  'Intelligent UI is enabled for this session. This turn is an on-demand UI request, so render the page instead of answering in prose.\n\n'
+  'Intelligent UI is enabled for this session. This turn is an on-demand UI request, so render the page instead of answering in prose. '
+  + 'This turn is the explicit exception to the ordinary-answer policy: do not use inline `openui` fences; the page is the requested result and must be rendered through render_ui.\n\n'
 
 /**
  * Prompt opening for an ordinary answer while the experimental document mode is
@@ -526,11 +527,11 @@ function isDocumentMode(config: IntelligentUIPreferenceConfig | undefined): bool
 /** Answer-style guidance appended to the generation prompt for one session. */
 const STYLE_NOTES: Readonly<Record<AnswerStyle, string>> = {
   card:
-    '\n\nAnswer style for this session: **Card**. When this answer is better as an interactive page, build a compact, scannable card and pass '
+    '\n\nAnswer style for this session: **Card**. When you render a standalone page artifact, build a compact, scannable card and pass '
     + '`style: "card"`. Keep sections tight and do not turn the answer into a long article; when the request is very broad, '
     + 'cover it with a clear card structure rather than a wall of prose.',
   article:
-    '\n\nAnswer style for this session: **Article**. When this answer is better as an article, build an article-first page: '
+    '\n\nAnswer style for this session: **Article**. When you render a standalone page artifact as an article, build an article-first page: '
     + 'a short coverage summary, a table of contents, and one or more collapsible `Section` components whose body '
     + 'is substantial prose (use `Markdown` inside a Section). Every major part needs specific facts, causes, '
     + 'examples or debates — not a one-line bullet. All core content must be present and readable in the initial '

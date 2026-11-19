@@ -58,6 +58,8 @@ test('the enabled-session delivery policy is single-sourced and explicit invocat
   assert.doesNotMatch(documentPrompt, /The answer is Markdown by default/, 'the document prompt does not carry the inline policy')
   assert.doesNotMatch(documentPrompt, /info string is exactly `openui`/, 'the document prompt does not teach inline fences')
   assert.doesNotMatch(documentPrompt, /stays Markdown with an inline `openui` block/, 'the document prompt does not inherit the inline explanation rule')
+  assert.doesNotMatch(documentPrompt, /closing Markdown reply, when present/, 'the document prompt does not carry the ordinary closing rule')
+  assert.match(documentPrompt, /do not add a Markdown reply or closing sentence/, 'the document prompt stops without a reply')
   assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')
   for (const marker of CURRENT_SKILL_MARKERS) {
     assert.ok(skill.includes(marker), `the shipped skill carries ${JSON.stringify(marker)}`)

@@ -122,7 +122,7 @@ several = Button("Start over", Action([@Set($step, 0), @Reset($done, $note)]))
 - Prefer **references for blocks** (`mapCard`, `timelineCard`) and inline calls for leaves. References keep the root short and the page easier to repair.
 - Arguments are positional. Skipping a middle optional argument requires `null`: `Row([a, b], 3, null, null, true)`.
 - A component's first argument may itself be a binding (`$` variable) — that is what makes inputs work.
-- Exact signatures live in [components.md](components.md); argument order and enum values are enforced, and an unknown extra argument is fatal.
+- Exact signatures live in [components.md](components.md); argument order and enum values are enforced. An unknown extra argument is fatal for `render_ui`; inline fences drop it silently with a recoverable diagnostic.
 
 ## 7. `@Each` and data shapes
 

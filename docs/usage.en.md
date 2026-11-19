@@ -40,7 +40,7 @@ An ordinary answer is Markdown by default; when a chart, table, flow or small in
 The route for day one:
 
 ```openui
-root = Col([Title("Day 1"), Timeline(...), Budget(...)])
+root = Col([Title("Day 1"), Text("09:00 Yu Garden · 14:00 The Bund"), Badge("2 stops")])
 ```
 
 Day two depends on how much walking you want.
@@ -105,7 +105,7 @@ The **Export** button at the right of the message actions can:
 
 **Why does an answer come back as plain text with no card?** That is the default: explanations and analyses stay Markdown, with inline UI where it helps (see [Inline UI in the answer (the default)](#inline-ui-in-the-answer-the-default)). Turn-tail cards are for explicit deliverables you ask for — a page, dashboard, tool or editable result; say so clearly if you want one. With the switch off the model creates no new inline UI or card, but inline fences already present in a message still render; with the experimental **Answer as a document** enabled, ordinary answers become a turn-tail whole-document page again (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
 
-**Why is there no export pill under an answer?** Only answers rendered by the extension have it; it is absent when the switch is off, the model replies in text, or rendering fails. See [Export](#export) and [Known limitations](limitations.en.md).
+**Why is there no export pill under an answer?** Only a turn-tail card rendered by the extension has it; inline UI in the answer is intentionally not exportable. It is also absent when the switch is off, the model replies in text, or rendering fails. See [Export](#export) and [Known limitations](limitations.en.md).
 
 **Why did the UI not change (or show an error) after rebuilding the plugin?** A page refresh may still load the old revision: restart the DSH process that serves the Web UI, then reopen the page. See [Development and deployment](development.en.md) for the exact errors and handling.
 

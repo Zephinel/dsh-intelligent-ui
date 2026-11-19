@@ -37,6 +37,7 @@ import { I18nProvider, useT } from './i18n'
 import { ImageSourceProvider } from './components/image-source.tsx'
 import { fallbackT, type Translate } from '../shared/locales.ts'
 import type { ImageSourceResolver } from '../shared/image-source.ts'
+import { classifyDiagnostics } from './diagnostics.ts'
 
 export interface OpenUIRendererProps {
   readonly program: string
@@ -153,9 +154,6 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
   }
 }
 
-/** Diagnostics with no usable page: a missing root or an unparseable program. */
-const FATAL_CODES = new Set(['parse-failed', 'parse-exception', 'no-root'])
-
 /**
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
@@ -171,9 +169,8 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
   // the rest. Only a missing/unparseable root replaces the page with a fallback;
   // recoverable issues keep the page and add a compact warning strip. Excess
   // positional args are dropped silently (they change nothing the user sees).
-  const visible = errors.filter((error) => error.code !== 'excess-args')
-  const fatal = visible.filter((error) => error.severity !== 'warning' && FATAL_CODES.has(error.code))
-  const warnings = visible.filter((error) => error.severity !== 'warning' && !FATAL_CODES.has(error.code))
+  const { fatal, warnings } = classifyDiagnostics(errors)
+  const visible = [...fatal, ...warnings]
   const empty = program.trim() === ''
   // A parser can report no root at all (for example an unknown root component)
   // without emitting a no-root diagnostic. If nothing mounted, keep the full
@@ -195,12 +192,13 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
             <ProgramFallback message={t('fallback.noProgram')} program="" />
           ) : fatalPage ? (
             <ProgramFallback
-              message={fatal.map((error) => error.message).join(' · ')}
+              message={(fatal.length > 0 ? fatal : visible).map((error) => error.message).join(' · ')}
               program={program}
             />
           ) : (
             <>
               <Renderer
+                key={program}
                 response={program}
                 library={activeLibrary}
                 isStreaming={false}

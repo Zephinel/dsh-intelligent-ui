@@ -16,7 +16,7 @@
 npm install -g @deepseek-ai/dsh
 node --version   # v24.x
 npm --version
-dsh --version    # 已验证：0.2.2-rc.1
+dsh --version    # 已验证：0.2.2-rc.5；内嵌 UI 需要 0.2.2-rc.2+ 的 fence 插槽
 ```
 
 从 npm 或 GitHub 安装 bundle（推荐）：
@@ -53,7 +53,7 @@ node scripts/install.mjs  # 写入 $DSH_HOME/profiles/web/cordis.patch.yml（自
 node scripts/install.mjs --uninstall   # 然后同样重启 DSH Web 进程
 ```
 
-> 0.2.2-rc.1 的宿主在 patch 文件变化后会重组插件树（Host 工具立即出现），但浏览器端插件可能停留在旧 revision：**刷新页面**通常即可；仍异常再 restart。
+> 旧版 0.2.2-rc.1 的宿主在 patch 文件变化后会重组插件树（Host 工具立即出现），但浏览器端插件可能停留在旧 revision：**刷新页面**通常即可；仍异常再 restart。
 
 ### 两种安装模式与切换
 
@@ -123,13 +123,13 @@ npm run check:docs-links # 校验 README/docs/Agent Skill 的本地链接、锚�
 npm run check:pack-facts # 校验打包文件数与非构建文件字节与 docs/current-facts.json 一致（已含在 check 中）
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内全量文件哈希、挂载、client bundle → 卸载（需要 dsh + pnpm）
-npm run test:browser   # 10 个 Chrome 套件：按需生成、样式面板、主题、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染
+npm run test:browser   # 11 个 Chrome 套件：按需生成、样式面板、主题、内嵌 UI、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染
 ```
 
 `npm run check` 里的排版检查需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
-- `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护决策策略（是否出页面由模型按回答判断、样式只决定出页面时的版式、显式调用或明确要求页面是直接指令）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
+- `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护三种提示词变体（普通回答的 inline/交付物策略、document mode、on-demand 覆盖）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
 - `scripts/release-check.mjs`：发布前的包级检查。`npm pack` 产物解包后与 checkout 逐文件对比（每个打包路径都必须存在于 checkout，`lib/`、`skills/`、`locale/` 与 bundle patch 全量哈希一致），再装进一次性 `$DSH_HOME`（独立端口启动 Web），校验安装后的文件集合与哈希和 tarball 逐字节一致、组合树出现 loader row、boot graph 与实际提供的 client bundle 来自安装包、卸载后依赖/bundle row/目录全部消失。`npm pack` 会运行仓库的 `prepare` 构建（重写 ignored 的 `lib/`），但脚本不读写现有 profile、不碰运行中的服务；需要 `dsh` 与 `pnpm` 在 PATH 上。
 - `scripts/capture-screenshots.mjs`：`node scripts/capture-screenshots.mjs` 在 Chrome 2x 重建组件 tour、UI 菜单/样式面板、armed 提示、临时结果（明/暗）与插件设置截图。使用固定主题 token、生产组件与假投影/catalog/form，不需运行 DSH；壳层卡片图标用 lucide 替身。`--dark --out-dir=/tmp/iui-dark` 可在独立目录重跑全套深色截图；没有 Chrome 时跳过。禁止手工编辑图片。
@@ -188,7 +188,7 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 
 仓库有两个 GitHub Actions 工作流（GitHub-hosted `ubuntu-latest`，Node 24；Chrome 由 runner 提供，步骤里解析其路径并断言存在，避免排版检查静默跳过）：
 
-- [`ci.yml`](../.github/workflows/ci.yml)：`changes` job 先判断改动是否只涉及 CHANGELOG/PRODUCT/docs/.agents（README 属打包内容，走全量门禁）；`verify` job **在 PR 与 main push 上始终运行**（因此 required status check 不会因 paths 过滤被跳过），全量改动跑 `npm run check`（typecheck/build/Node/renderer/docs-facts/docs-links/pack-facts）和生成物检查，纯文档改动（CHANGELOG/PRODUCT/docs/.agents）只跑 `check:docs-facts` + `check:docs-links`（数秒级）；README 属于打包内容，因此 README 改动走全量门禁，由 `check:pack-facts` 校验非构建打包字节；`browser` job 只在 main push 与手动触发时跑 10 个 Chrome 套件，并拆成 2 个 shard：`artifact-edit` 单独一个（本地实测约占整套 78 秒中的 58 秒），其余 9 个套件另一个；首个真实 CI 运行实测套件合计 88 秒，拆分后由最长 shard 决定 wall time。它不作为 PR 门禁（该套件有已知的少量 flake 概率）。CI 中每个套件单次上限 600 秒、最多尝试 3 次（全失败才判红）；harness 对每条 CDP 命令设 30 秒超时，卡死的 Chrome 会快速失败而不是拖住 job。
+- [`ci.yml`](../.github/workflows/ci.yml)：`changes` job 先判断改动是否只涉及 CHANGELOG/PRODUCT/docs/.agents（README 属打包内容，走全量门禁）；`verify` job **在 PR 与 main push 上始终运行**（因此 required status check 不会因 paths 过滤被跳过），全量改动跑 `npm run check`（typecheck/build/Node/renderer/docs-facts/docs-links/pack-facts）和生成物检查，纯文档改动（CHANGELOG/PRODUCT/docs/.agents）只跑 `check:docs-facts` + `check:docs-links`（数秒级）；README 属于打包内容，因此 README 改动走全量门禁，由 `check:pack-facts` 校验非构建打包字节；`browser` job 只在 main push 与手动触发时跑 11 个 Chrome 套件，并拆成 2 个 shard：`artifact-edit` 单独一个（本地实测约占整套 78 秒中的 58 秒），其余 10 个套件另一个；首个真实 CI 运行实测套件合计 88 秒，拆分后由最长 shard 决定 wall time。它不作为 PR 门禁（该套件有已知的少量 flake 概率）。CI 中每个套件单次上限 600 秒、最多尝试 3 次（全失败才判红）；harness 对每条 CDP 命令设 30 秒超时，卡死的 Chrome 会快速失败而不是拖住 job。
 - 并发：PR 使用同一并发组且 `cancel-in-progress`，连续推送只保留最新一次；main 每个 commit 使用独立组（含 SHA），保证 main 上每个提交都完整跑过，符合发版分支要求。
 - 缓存：只使用 `actions/setup-node` 的 npm 缓存（按 lockfile 键）；`lib/` 是 ignored 构建产物且完整构建约 0.8 秒，不缓存。
 - [`publish.yml`](../.github/workflows/publish.yml)：`v*` tag 触发，流程见[发布（Trusted Publishing）](#发布trusted-publishing)。

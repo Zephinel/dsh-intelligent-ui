@@ -23,7 +23,7 @@ Complete reference for the OpenUI Lang vocabulary this extension ships: **57 com
 
 - Component names are case-sensitive: `Title`, not `title`; `SegmentedControl`, not `Segmented`.
 - Enums are exact strings: `Title("x", "giant")` fails; the error lists the allowed values.
-- Never add an argument that is not in the signature: extra arguments are a fatal error (`Text takes 8 arg(s), got 9`).
+- Never add an argument that is not in the signature: for `render_ui`, extra arguments are a fatal error (`Text takes 8 arg(s), got 9`); an inline `openui` fence drops extras silently with a recoverable diagnostic.
 - A component used at the root must be a component call, and the convention is `root = Col([...])`.
 
 ## Layout (11 components)

@@ -94,6 +94,17 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.match(plugin.ENABLED_SESSION_PREFIX, /Use one form per answer/)
 })
 
+test('Card and Article style notes are layout-only for standalone page artifacts', () => {
+  for (const style of ['card', 'article']) {
+    const { sections } = mount({ answerStyle: { get: () => style } })
+    const prompt = sections[0].text()
+    assert.match(prompt, new RegExp(`Answer style for this session: \\*\\*${style === 'card' ? 'Card' : 'Article'}\\*\\*`))
+    assert.match(prompt, /When you render a standalone page artifact/)
+    assert.doesNotMatch(prompt, /When this answer is better as an interactive page/)
+    assert.doesNotMatch(prompt, /When this answer is better as an article/)
+  }
+})
+
 test('the free-composition preference appends its advisory note to the prompt', () => {
   const { sections } = mount({ freeComposition: { get: () => true } })
   assert.match(sections[0].text(), /Free-form layout is on/)
@@ -121,6 +132,8 @@ test('document mode uses a dedicated prompt without the ordinary inline policy',
   assert.doesNotMatch(prompt, /do not call render_ui for an ordinary answer/)
   assert.doesNotMatch(prompt, /info string is exactly `openui`/)
   assert.doesNotMatch(prompt, /stays Markdown with an inline `openui` block/)
+  assert.doesNotMatch(prompt, /closing Markdown reply, when present/)
+  assert.match(prompt, /do not add a Markdown reply or closing sentence/)
 })
 
 test('document mode renders ordinary answers as one free document and rejects card-style calls', async () => {

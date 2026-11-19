@@ -314,4 +314,4 @@ Before finishing, walk your output and verify:
 - Read a number input for a count or amount through @Default and @Clamp with a sensible minimum, e.g. @Clamp(@Default($people, 1), 1, 50), so 0, empty or negative cannot divide by zero or zero out the page.
 - Answer a safety warning, or a question whose whole answer is a bare fact or a term restatement, in plain Markdown directly; when a page serves the answer, write the whole answer as one document program instead. Judge by whether the page improves understanding, not by whether text could describe it.
 
-After a successful `render_ui` call the page is already on screen: the closing Markdown reply, when present, is one short sentence only.
+After a successful `render_ui` call the document is already on screen: stop, and do not add a Markdown reply or closing sentence.

@@ -21,10 +21,10 @@ Explanations and analyses stay Markdown; where it helps, the model writes [OpenU
 Plan two days in Shanghai, with checkboxes and adjustments
 ```
 
-Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both paths use real components; inline UI needs no extra switch. Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
+Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both paths use real components; inline UI needs no extra inline-mode switch (the session UI switch still enables the plugin). Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm; `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`, and the plugin is listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **862/862** (Host 322, Client 501, packaging 39); **11/11** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+> **Current status**: published on GitHub and npm; `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`, and the plugin is listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **869/869** (Host 323, Client 507, packaging 39); **11/11** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 [What it looks like](#what-it-looks-like) · [Install](#install) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Getting the code and local development](#getting-the-code-and-local-development)
 
@@ -47,7 +47,7 @@ If a Web process is already running, restart it after installing; open the URL i
 
 **DSH Desktop**: sidebar **Plugins** → **Add plugin**, enter `@zephinel/dsh-intelligent-ui@0.6.2` (or just the package name for the latest version) → **Install** → **Enable now**.
 
-For first use, click **UI**, choose "This session only" (or send `/iui on`), then send the explanation example above; inline UI in the reply confirms it works (the itinerary request renders a card at the end instead). Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+For first use, click **UI**, choose "This session only" (or send `/iui on`), then send the explanation example above; inline UI in the reply confirms it works (the itinerary request renders a card at the end instead). Inline fences need the `conversation.chat.markdown.fence` slot in DSH 0.2.2-rc.2+; earlier builds show a code block. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
 
 ## Generate and edit
 
@@ -103,7 +103,7 @@ dsh web
 
 To submit changes, fork the repository and clone your copy first.
 
-Environment: the DSH 0.2.2 plugin API (validated on `0.2.2-rc.1`, `dsh` CLI), Node 24 with its bundled npm, and Git; the browser half needs `@deepseek-ai/dsh-client-locale` (DSH Web 0.2.2 includes it by default). The extension has no separate development server or watch mode: rebuild with `npm run build` and restart DSH after a change. Run `npm run check` before submitting; the full command table, install-mode switching, CI and release flow are in [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development).
+Environment: the DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`, `dsh` CLI; inline UI needs the fence slot in `0.2.2-rc.2+`), Node 24 with its bundled npm, and Git; the browser half needs `@deepseek-ai/dsh-client-locale` (DSH Web 0.2.2 includes it by default). The extension has no separate development server or watch mode: rebuild with `npm run build` and restart DSH after a change. Run `npm run check` before submitting; the full command table, install-mode switching, CI and release flow are in [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development).
 
 ## Contributing
 

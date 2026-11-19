@@ -7,7 +7,7 @@
 1. **Read the error text.** Fatal program-validation errors use `render_ui: the program is not valid openui-lang and was not shown. Fix it and call render_ui again. ` and then list one or more findings separated by `; `. Fix **all** findings, not just the first.
 2. **Locate the statement.** The finding names a field path (`/text`, `/children`, `/size`), a component (`Unknown component "Baz"`), a function (`Unknown function "@Magic"`) or a signature. Match it to the offending statement.
 3. **Fix the smallest thing.** A rejected program is never partially rendered, so there is no advantage in rewriting the whole page. Change the argument, the name or the missing reference.
-4. **Call `render_ui` again in the same turn.** Two or three attempts are normal; the validator errors are precise. If the same finding comes back twice, the fix did not apply — re-read the program rather than rephrasing the message.
+4. **Call `render_ui` again in the same turn.** Try at most two fixes; the validator errors are precise. If the same finding comes back after two fixes, fall back to text and say so. Simplifying the program can be one of the two fixes, but do not loop.
 5. **On success, stop.** The page is on screen; do not call `render_ui` a second time in the same turn. Close with at most one short sentence. If warnings came back, fix them and re-call once; a successful call with warnings still renders, but the missing pieces are user-visible.
 6. **If retries keep failing**, degrade deliberately: remove the most complex block (Map, HtmlView, nested `@Each`), keep the shell and the core content, call once more, and tell the user in one sentence that the interactive part could not be shown.
 
