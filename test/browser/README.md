@@ -1,9 +1,13 @@
 # Browser E2E
 
-Eleven focused suites boot a temporary HTTP server (or a local file) + headless
+Twelve focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
+- `anchored-overlay.e2e.mjs` mounts the shared `useAnchoredPopup` hook with a tall
+  fixed panel and pinches the page 1.5x around its trigger. It asserts the panel
+  stays inside the visual viewport and gets a max-height cap; this is the
+  regression for the live-GUI style-panel clipping.
 - `inline-ui.e2e.mjs` mounts `InlineUIFence` directly with nine fixtures (it does not boot
   the DSH shell or the slot wiring): settled, streaming, invalid, excess-arg,
   partial, zh-invalid, empty, non-component-root and a program switch. It checks

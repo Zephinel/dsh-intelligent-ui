@@ -12,6 +12,7 @@
  * button, which keeps restore/delete management in one place.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
+import { fitFixedBox, useVisualViewportRevision } from '../visual-viewport.ts'
 import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 import type { ArtifactHistoryProgramResponse, ArtifactHistoryResponse } from '../../shared/artifact-edit.ts'
@@ -117,6 +118,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
     [allLocalRevisions, artifactId],
   )
   const [placement, setPlacement] = useState<{ left: number; top: number; width: number } | null>(null)
+  useVisualViewportRevision()
   const [focusedId, setFocusedId] = useState<string>(currentRevisionId)
   const [pendingId, setPendingId] = useState<string | undefined>()
   const pendingRef = useRef(false)
@@ -370,9 +372,10 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
     }
   }
 
+  const fitted = placement === null ? null : fitFixedBox({ left: placement.left, top: placement.top, width: placement.width, maxHeight: BAR_MAX_HEIGHT })
   const style: CSSProperties | undefined = placement === null
     ? { left: 0, top: 0, width: BAR_MAX_WIDTH, opacity: 0 }
-    : { left: placement.left, top: placement.top, width: placement.width }
+    : { left: fitted?.left ?? placement.left, top: fitted?.top ?? placement.top, width: fitted?.width ?? placement.width, maxHeight: fitted?.maxHeight }
 
   return createPortal(
     <div

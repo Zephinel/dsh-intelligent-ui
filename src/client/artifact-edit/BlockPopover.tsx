@@ -13,6 +13,7 @@
  * text asks for an inline discard confirmation instead of a page-level dialog.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import { fitFixedBox, useVisualViewportRevision } from '../visual-viewport.ts'
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession } from './contracts.ts'
 import { QuickBlockProps } from './QuickBlockProps.tsx'
@@ -71,6 +72,7 @@ function BlockPopoverBody({ t, session, actions, scheme, blockId }: BlockPopover
   const textarea = useRef<HTMLTextAreaElement>(null)
   const textareaId = useId()
   const [placement, setPlacement] = useState<Placement | null>(null)
+  useVisualViewportRevision()
   const placedAnchor = useRef<DOMRect | null>(null)
   const [discardConfirm, setDiscardConfirm] = useState(false)
   /** Restore focus to the block only when the close came from the popover. */

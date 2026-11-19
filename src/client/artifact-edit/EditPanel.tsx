@@ -28,6 +28,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react'
+import { fitFixedBox, useVisualViewportRevision } from '../visual-viewport.ts'
 import { createPortal } from 'react-dom'
 import { blockKindLabel, type ArtifactEditActions, type ArtifactEditSession, type ArtifactStyleTargetOption, type BatchOrderMode, type PendingApplyConflict, type PendingStructureOp } from './contracts.ts'
 import { MAX_ARTIFACT_STRUCTURE_OPERATIONS, type ArtifactStyleTarget } from '../../shared/artifact-structure.ts'
@@ -242,9 +243,10 @@ function RequestHoverCard({ t, block, order, instruction, onEnter, onLeave }: {
     }
   }, [block.blockId])
 
+  const fitted = placement === null ? null : fitFixedBox(placement)
   const style: CSSProperties = placement === null
     ? { left: 0, top: 0, opacity: 0, pointerEvents: 'none' }
-    : { left: placement.left, top: placement.top, maxHeight: placement.maxHeight }
+    : { left: fitted?.left ?? placement.left, top: fitted?.top ?? placement.top, maxHeight: fitted?.maxHeight ?? placement.maxHeight }
 
   return createPortal(
     <div
@@ -610,7 +612,7 @@ function StructureActions({ t, blockId, title, busy, confirming, moveOpen, onEdi
           data-dsh-iui-edit-row-menu-panel
           role={confirming ? 'dialog' : 'menu'}
           aria-label={`${t('edit.moreActions')}: ${title}`}
-          style={placement === null ? { left: 0, top: 0, width, opacity: 0 } : { ...placement, width }}
+          style={placement === null ? { left: 0, top: 0, width, opacity: 0 } : { ...fitFixedBox({ ...placement, width }), width }}
           onKeyDown={onMenuKeyDown}
           onClick={event => { event.stopPropagation() }}
         >
@@ -859,6 +861,7 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
 
 /** Artifact edit panel: requests, block arrangement, global instruction, summary. */
 export function EditPanel({ t, session, actions, closing = false, onOpenHistory, hoveredBlockId = null, onHoverBlock, styleEditSupported = false, styleSwitchSupported = false, styleTargets = [], onPreviewStyleTarget }: EditPanelProps): ReactElement {
+  useVisualViewportRevision()
   const globalId = useId()
   const stylePanelId = useId()
   const applyTitleId = useId()

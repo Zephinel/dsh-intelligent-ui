@@ -8,6 +8,7 @@
  * pointerdown/Escape, and stays anchored through panel width transitions.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { fitFixedBox, useVisualViewportRevision } from '../visual-viewport.ts'
 import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 
@@ -39,6 +40,7 @@ const CLOSE_DELAY = 350
 export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<Placement | null>(null)
+  useVisualViewportRevision()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const tipRef = useRef<HTMLDivElement>(null)
   const pinned = useRef(false)
@@ -172,7 +174,7 @@ export function InfoTip({ label, text, testId }: InfoTipProps): ReactElement {
           role="tooltip"
           id={id}
           data-dsh-iui-info-tooltip
-          style={placement === null ? { left: 0, top: 0, width: WIDTH, opacity: 0 } : placement}
+          style={placement === null ? { left: 0, top: 0, width: WIDTH, opacity: 0 } : { ...placement, ...fitFixedBox(placement) }}
           onPointerEnter={event => {
             if (event.pointerType !== 'mouse') return
             cancelClose()

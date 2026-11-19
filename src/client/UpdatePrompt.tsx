@@ -10,13 +10,14 @@
  * fourth prompt for one version on — do not remind. Escape or a click outside
  * the card settles it exactly like "later".
  */
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the ui-layout `shell.overlay` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { PACKAGE_NAME } from '../shared/intelligent-ui.ts'
 import type { UpdatePromptActions, UpdatePromptStore } from './update-prompt-controller.ts'
 import { fallbackT, type Translate } from '../shared/locales.ts'
+import { useVisualViewportRevision } from './visual-viewport.ts'
 
 /** Short package name shown in the prompt title. */
 const SHORT_NAME = PACKAGE_NAME.split('/').at(-1) ?? PACKAGE_NAME
@@ -64,6 +65,20 @@ export function UpdatePrompt({ prompt, actions, t = fallbackT }: UpdatePromptPro
   )
   const cardRef = useRef<HTMLDivElement | null>(null)
   const shown = snapshot.kind === 'shown'
+  const viewportRevision = useVisualViewportRevision()
+  const [frame, setFrame] = useState({ right: 20, bottom: 20, maxWidth: 360 })
+  useLayoutEffect(() => {
+    const vv = window.visualViewport
+    const offsetLeft = vv?.offsetLeft ?? 0
+    const offsetTop = vv?.offsetTop ?? 0
+    const width = vv?.width ?? window.innerWidth
+    const height = vv?.height ?? window.innerHeight
+    setFrame({
+      right: Math.max(20, window.innerWidth - (offsetLeft + width) + 20),
+      bottom: Math.max(20, window.innerHeight - (offsetTop + height) + 20),
+      maxWidth: Math.max(200, Math.min(360, width - 40)),
+    })
+  }, [viewportRevision])
 
   useEffect(() => {
     if (!shown) return
@@ -94,6 +109,7 @@ export function UpdatePrompt({ prompt, actions, t = fallbackT }: UpdatePromptPro
       data-dsh-iui-update-prompt
       role="region"
       aria-label={title}
+      style={{ right: frame.right, bottom: frame.bottom, maxWidth: frame.maxWidth }}
     >
       <div className="dsh-iui-update-prompt-head">
         <span className="dsh-iui-update-prompt-icon" aria-hidden="true"><PluginMark /></span>

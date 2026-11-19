@@ -8,6 +8,7 @@
  * selection ring on the active option.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { fitFixedBox, useVisualViewportRevision } from '../visual-viewport.ts'
 import { createPortal } from 'react-dom'
 import { RemixIcon } from '../../lib/components/remix-icon.tsx'
 
@@ -53,6 +54,7 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [placement, setPlacement] = useState<Placement | null>(null)
+  useVisualViewportRevision()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const listboxId = useId()
@@ -190,7 +192,7 @@ export function QuickSelect({ value, options, ariaLabel, onChange, disabled = fa
           aria-activedescendant={`${listboxId}-opt-${active}`}
           data-dsh-iui-quick-menu
           tabIndex={-1}
-          style={{ left: placement?.left, top: placement?.top, width: placement?.width, maxHeight: placement?.maxHeight }}
+          style={placement === null ? undefined : { left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight, ...fitFixedBox(placement) }}
           onKeyDown={onMenuKeyDown}
         >
           {options.map((option, index) => (

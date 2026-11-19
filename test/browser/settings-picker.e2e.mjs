@@ -406,7 +406,7 @@ try {
   assert.equal(await read(`document.activeElement===document.querySelector('${dialog} input[maxlength="30"]')`), true)
   assert.match(await read(`document.querySelector('${dialog}').textContent`), /我已阅读并理解上述风险/)
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 700, deviceScaleFactor: 1, mobile: false })
-  await cdp.waitFor(`document.querySelector('${dialog}').getBoundingClientRect().right<=390`, 'narrow dialog layout')
+  await cdp.waitFor(`(() => {const r=document.querySelector('${dialog}').getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=390&&r.bottom<=700})()`, 'narrow dialog layout')
   const bounds = await read(`(() => {const el=document.querySelector('${dialog}');const r=el.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,scroll:el.scrollHeight>el.clientHeight}})()`)
   assert.equal(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= 390 && bounds.bottom <= 700, true)
   assert.equal(bounds.scroll, true, 'long preview scrolls without clipping the dialog')

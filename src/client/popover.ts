@@ -6,6 +6,7 @@
  * surfaces from growing subtly different interaction rules.
  */
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
+import { clamp, useVisualViewportRevision, visualViewportBounds } from './visual-viewport.ts'
 
 /** Fixed-position placement measured from the trigger. */
 /** Gap between a popup's bottom edge and the trigger's top edge. */
@@ -59,6 +60,7 @@ export function useAnchoredPopup(
 ): PopupPlacement | null {
   const [placement, setPlacement] = useState<PopupPlacement | null>(null)
   const { minWidth, maxWidth, margin = 12, maxHeight = false, alignEnd = false } = options
+  const viewportRevision = useVisualViewportRevision()
 
   useLayoutEffect(() => {
     if (!open || triggerRef.current === null) {
@@ -67,44 +69,51 @@ export function useAnchoredPopup(
     }
     const trigger = triggerRef.current
     const place = (): void => {
+      const bounds = visualViewportBounds(margin)
       const viewport = window.innerWidth
       const rect = trigger.getBoundingClientRect()
       const bottom = Math.max(margin, window.innerHeight - rect.top + POPUP_TRIGGER_GAP)
       if (alignEnd) {
         // The caller sizes the popup from its content; only the edge and width
-        // cap are placed here.
+        // cap are placed here. Clamp the right edge to the visual viewport.
+        const right = clamp(viewport - rect.right, viewport - bounds.right, viewport - bounds.left)
         setPlacement({
-          right: Math.min(Math.max(margin, viewport - rect.right), viewport - margin),
-          maxWidth: Math.min(maxWidth, viewport - margin * 2),
+          right,
+          maxWidth: Math.min(maxWidth, bounds.width),
           bottom,
-          ...maxHeight ? { maxHeight: Math.max(0, window.innerHeight - bottom - margin) } : {},
+          ...maxHeight ? { maxHeight: Math.max(0, rect.top - POPUP_TRIGGER_GAP - bounds.top - margin) } : {},
         })
         return
       }
-      const width = Math.min(maxWidth, Math.max(minWidth, viewport - margin * 2))
-      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewport - width - margin))
+      const width = Math.min(maxWidth, Math.max(0, bounds.width))
+      const left = clamp(rect.left, bounds.left, Math.max(bounds.left, bounds.right - Math.max(minWidth, width)))
       setPlacement({
         left,
         bottom,
         width,
-        // A minimum height can push a scrollable panel above a short viewport.
-        ...maxHeight ? { maxHeight: Math.max(0, window.innerHeight - bottom - margin) } : {},
+        // A tall panel must scroll within the visible space above its trigger.
+        ...maxHeight ? { maxHeight: Math.max(0, rect.top - POPUP_TRIGGER_GAP - bounds.top - margin) } : {},
       })
     }
     place()
     window.addEventListener('resize', place)
-    return () => { window.removeEventListener('resize', place) }
-  }, [open, triggerRef, minWidth, maxWidth, margin, maxHeight, alignEnd])
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, triggerRef, minWidth, maxWidth, margin, maxHeight, alignEnd, viewportRevision])
 
   // An end-aligned popup wider than the space left of its trigger would clip
   // at the left edge. Once mounted, nudge its right edge right until it fits.
   useLayoutEffect(() => {
     if (!open || !alignEnd || popupRef?.current === null || popupRef?.current === undefined || placement === null) return
     const rect = popupRef.current.getBoundingClientRect()
-    if (rect.left >= margin) return
-    const right = Math.max(margin, window.innerWidth - margin - rect.width)
+    const bounds = visualViewportBounds(margin)
+    if (rect.left >= bounds.left) return
+    const right = clamp(window.innerWidth - rect.width - margin, window.innerWidth - bounds.right, window.innerWidth - bounds.left)
     setPlacement(current => current === null || current.right === right ? current : { ...current, right })
-  }, [open, alignEnd, popupRef, placement, margin])
+  }, [open, alignEnd, popupRef, placement, margin, viewportRevision])
 
   return placement
 }

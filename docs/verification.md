@@ -1205,3 +1205,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **声明刷新**：`skills/intelligent-ui/references/integration.md` 的验证版本改为 **0.2.2-rc.5**（fence 插槽仍需 rc.2+），allow-version 示例改为 rc.5；limitations/CHANGELOG 同步。当前 docs 中未再找到“DSH 原生支持消息内嵌 UI 后移除开关”的表述（该说法已在早前移除；`docs/verification*.md` 的历史段落保持原样）。
 - **门禁**：`npm run check` PASS；Node **869/869** = Host **323** + Client **507** + packaging **39**；浏览器 **11/11**（本轮文档变更未重跑，沿用上一轮最终结果），`artifact-edit` **944 checks**、图片导出 **76**、`update-prompt` **39 checks**；构建 host **901 kB**、client **4.21 MB**（js 3.96 / CSS 249.2 kB）；pack **67** 文件，非构建 **3,779,361** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：定位与错误分类结论来自源码/DSH rc.5 类型审计，未做真实缩放/平移 GUI 验证；浮层迁移尚未实施。
+
+## 2026-11-19 — 自绘浮层的 visualViewport 适配与真实缩放复验
+
+- **背景**：在 rc.5 真机上用 1.5x 捏合复现了 style panel 顶部被裁切（面板仍按布局坐标 `y=12..486` 定位，而可视区域从 `y=171` 开始）；同类风险存在于作用域/模板/导出菜单、编辑画布浮层、更新提示和输入光环。DSH rc.2 起原生菜单改用 CSS Anchor Positioning，我们的浮层仍使用 `fixed`/绝对定位加 `getBoundingClientRect()`。
+- **实现**：新增 `src/client/visual-viewport.ts`（可视区域 bounds、`useVisualViewportRevision`、`fitFixedBox`）；`useAnchoredPopup`、`StylePopover`、`UpdatePrompt` 及 `ArtifactVersionBar`/`BlockPopover`/`EditPanel`/`InfoTip`/`QuickSelect` 接入可视区域 clamp 与高度上限，更新提示按可视区域 inset 定位。新增 `anchored-overlay.e2e.mjs`：1.5x 捏合后断言高面板仍在可视区域内；新增 `visual-viewport` 单元测试。未迁移到 CSS Anchor Positioning，`InputOrbit` 仍按输入框几何。
+- **测试**：隔离 rc.5 实例的真实 StylePanel 在修复后：捏合前 `top 24`，捏合后 `top 204`、可视区 `top 180`、`bottom 514.5` 在 `788.7` 内，`max-height 310.5px`（修复前实测 `top 12` 对可视区 `top 171`，被裁切）。Node 869→**872**（Host 323、Client 510、packaging 39），浏览器 **12/12**（新增 anchored-overlay 套件）；`tsc --noEmit` 通过。
+- **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；`npm run pack:check` **67** 文件，非构建 **3,779,407** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：更新提示浮层因当前无新版本未触发；`InputOrbit` 未单独做捏合/平移测试；编辑画布浮层只加了通用 fit，未逐个真机复验；未迁移到 CSS Anchor Positioning。
