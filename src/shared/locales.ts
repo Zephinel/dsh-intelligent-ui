@@ -266,6 +266,7 @@ export const zh = {
   'fallback.couldNotRender': '生成的 UI 无法渲染。',
   'fallback.showProgram': '显示 UI 程序',
   'fallback.noProgram': '未提供程序。',
+  'fallback.partial': '部分内容未能渲染。',
 
   // Component chrome.
   'code.copy': '复制',
@@ -958,6 +959,7 @@ export const en: Record<keyof typeof zh, string> = {
   'fallback.couldNotRender': 'This generated UI could not be rendered.',
   'fallback.showProgram': 'Show the UI program',
   'fallback.noProgram': 'No program was provided.',
+  'fallback.partial': 'Some parts of this UI could not be rendered.',
 
   'code.copy': 'Copy',
   'code.copied': 'Copied',

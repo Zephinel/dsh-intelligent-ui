@@ -37,11 +37,12 @@
 }
 
 /*
- * Experimental in-message UI mode: a settled `openui` fence renders in place of
- * its code block. The fence's own block box owns the vertical spacing between
- * message blocks, so this surface adds no margin; it only gives the rendered
- * block a quiet layer above the prose. While the fence streams (or the program
- * fails) the chat's plain code block stays in place of this surface.
+ * Inline UI: a settled `openui` fence renders in place of its code block. The
+ * fence's own block box owns the vertical spacing between message blocks, so
+ * this surface adds no margin; it only gives the rendered block a quiet layer
+ * above the prose. While the fence streams the chat's plain code block stays;
+ * a settled program that cannot render keeps the renderer's own fallback inside
+ * this surface rather than restoring the code block.
  */
 .dsh-iui-inline-ui {
   box-sizing: border-box;

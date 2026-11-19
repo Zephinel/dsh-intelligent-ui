@@ -1,5 +1,5 @@
 /**
- * In-message UI mode: renders one settled `openui` Markdown fence in place.
+ * Inline UI: renders one settled `openui` Markdown fence in place.
  *
  * The DSH chat renders each Markdown fence with a language + content through the
  * session-scoped `conversation.chat.markdown.fence` hoc slot. This layer owns the
@@ -19,14 +19,10 @@ import { RendererBoundary } from './RendererBoundary.tsx'
 
 /** Props of one fenced `openui` block, plus the plugin-injected identities. */
 export interface InlineUIFenceProps {
-  /** Fence language (lowercased by the slot); this layer only mounts for `openui`. */
-  readonly lang?: string
   /** The complete program written inside the fence. */
   readonly code: string
   /** True while the assistant message is still streaming the fence. */
   readonly streaming?: boolean
-  /** The rest of the fence info string, when the model added parameters. */
-  readonly meta?: string
   /** The plain code block supplied by the chat; shown while streaming. */
   readonly children?: ReactNode
   /** DSH locale seat; defaults to English when rendered outside a slot. */
@@ -48,10 +44,10 @@ export function InlineUIFence({
   // Scope each inline block's Section/Toc anchors so several fences in one
   // message cannot collide on generated DOM ids.
   const scopeId = useId()
-  if (streaming || code.trim() === '') return <>{children}</>
+  if (streaming) return <>{children}</>
   return (
     <div className="dsh-iui-inline-ui" data-dsh-intelligent-ui="inline-fence" data-dsh-iui-inline="true">
-      <RendererBoundary t={t}>
+      <RendererBoundary t={t} resetKey={code}>
         <OpenUIRenderer
           program={code}
           scopeId={scopeId}

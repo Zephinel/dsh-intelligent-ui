@@ -35,6 +35,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { InputOrbit } from './InputOrbit.tsx'
 import { IntelligentUICards, type IntelligentUICardsInjected } from './IntelligentUICards.tsx'
 import { InlineUIFence } from './InlineUI.tsx'
+import { startFollowUp } from './follow-up.ts'
 import { ExportAction, type ExportActionInjected } from './ExportAction.tsx'
 import { RenderUiRow } from './RenderUiRow.tsx'
 import { SettingsPage, type SettingsFormLike, type SettingsPageInjected } from './SettingsPage.tsx'
@@ -252,11 +253,12 @@ export function apply(ctx: ClientContext): void {
       }
     },
   }, IntelligentUICards))
-  // In-message UI mode: one language-keyed fence layer renders each settled
-  // `openui` program in the assistant Markdown. While the fence streams, the
-  // slot keeps the plain code block (the layer renders its children), so a
-  // partial program is never parsed. The injected actions mirror a card's
-  // follow-up and local-image capabilities without a turn-tail result.
+  // Inline UI: one language-keyed fence layer renders each settled `openui`
+  // program in the assistant Markdown. It is registered regardless of the
+  // session enable switch, matching recorded turn-tail cards: the switch gates
+  // prompting/tools for new answers, not the display of already-written UI.
+  // While the fence streams, the slot keeps the plain code block (the layer
+  // renders its children), so a partial program is never parsed.
   ctx.slots.inject('conversation.chat.markdown.fence', () => ctx.slots.register({
     name: 'conversation.chat.markdown.fence',
     key: 'openui',
@@ -267,13 +269,7 @@ export function apply(ctx: ClientContext): void {
       onToAssistant: (message: string): void => {
         const binding = ctx.sessions.binding(sessionId)
         if (binding === undefined) return
-        try {
-          const input = ctx.conversation.input.for(binding.ctx)
-          input.setDraft(message)
-          input.submit()
-        } catch (error) {
-          console.warn('[intelligent-ui] could not start a follow-up message', error)
-        }
+        startFollowUp(ctx.conversation.input.for(binding.ctx), message)
       },
     }),
   }, InlineUIFence))

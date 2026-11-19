@@ -468,6 +468,9 @@
 .dsh-iui-fallback-details { margin: 0; color: var(--iui-content-muted); font-size: 12px; line-height: 18px; }
 .dsh-iui-fallback-details > summary { cursor: pointer; }
 .dsh-iui-fallback-details pre { max-height: 260px; margin: 8px 0 0; padding: 10px 12px; overflow: auto; border-radius: var(--iui-radius-md); background: var(--iui-surface-strong); color: var(--iui-content-ink); font: 12px/1.5 var(--iui-mono); white-space: pre-wrap; }
+.dsh-iui-warning { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--iui-border); border-radius: var(--iui-radius-md); background: var(--iui-surface); }
+.dsh-iui-warning-title { margin: 0; color: var(--iui-content-ink); font-size: 12px; line-height: 18px; font-weight: 560; }
+.dsh-iui-warning-message { margin: 0; color: var(--iui-content-muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 
 /* Display tracking is tuned for Latin. CJK glyphs already sit on a full em, so a
    negative track makes Chinese, Japanese and Korean headings feel cramped: drop it. */

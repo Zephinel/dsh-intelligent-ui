@@ -17,6 +17,8 @@ import {
   type ReactElement,
   type ReactNode,
   useCallback,
+  useLayoutEffect,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -112,6 +114,17 @@ function ProgramFallback({ message, program }: { message: string; program: strin
   )
 }
 
+/** Compact warning for a partly rendered program; keeps the usable page visible. */
+function ProgramWarning({ messages }: { messages: readonly string[] }): ReactElement {
+  const t = useT()
+  return (
+    <div className="dsh-iui-warning" role="status">
+      <p className="dsh-iui-warning-title">{t('fallback.partial')}</p>
+      <p className="dsh-iui-warning-message">{messages.join(' · ')}</p>
+    </div>
+  )
+}
+
 interface BoundaryProps {
   readonly program: string
   readonly children: ReactNode
@@ -140,29 +153,51 @@ class RendererBoundary extends Component<BoundaryProps, { failure: string | null
   }
 }
 
+/** Diagnostics with no usable page: a missing root or an unparseable program. */
+const FATAL_CODES = new Set(['parse-failed', 'parse-exception', 'no-root'])
+
 /**
  * Renders a complete OpenUI Lang program. `title` is display chrome owned by
  * the DSH card, so it is accepted but not rendered here.
  */
 export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, scheme, t = fallbackT, blockSlots = false, nestedBlockSlots = false, runtimeState, onRuntimeStateChange, resolveImage }: OpenUIRendererProps): ReactElement {
   const activeLibrary = nestedBlockSlots ? nestedEditLibrary : blockSlots ? blockEditLibrary : library
-  const [errors, setErrors] = useState<OpenUIError[]>([])
-  const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
-  // Warnings still render; only real errors get the fallback note. The
-  // permissive parser also reports recoverable diagnostics such as excess
-  // positional args (they are dropped) while still rendering the program; a
-  // "could not be rendered" banner over a working page would contradict it.
-  const fatal = errors.filter((error) => error.severity !== 'warning' && error.code !== 'excess-args')
+  // Scope diagnostics to their program so a retry or a revised card cannot
+  // inherit stale errors; errors reported during the first render are kept.
+  const [diagnostics, setDiagnostics] = useState<{ program: string; errors: OpenUIError[] }>({ program, errors: [] })
+  const onError = useCallback((list: OpenUIError[]) => setDiagnostics({ program, errors: list }), [program])
+  const errors = diagnostics.program === program ? diagnostics.errors : []
+  // The parser is permissive: most diagnostics drop a subtree but still render
+  // the rest. Only a missing/unparseable root replaces the page with a fallback;
+  // recoverable issues keep the page and add a compact warning strip. Excess
+  // positional args are dropped silently (they change nothing the user sees).
+  const visible = errors.filter((error) => error.code !== 'excess-args')
+  const fatal = visible.filter((error) => error.severity !== 'warning' && FATAL_CODES.has(error.code))
+  const warnings = visible.filter((error) => error.severity !== 'warning' && !FATAL_CODES.has(error.code))
   const empty = program.trim() === ''
+  // A parser can report no root at all (for example an unknown root component)
+  // without emitting a no-root diagnostic. If nothing mounted, keep the full
+  // fallback; if a subtree dropped but the page rendered, warn and keep it.
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [rendered, setRendered] = useState(false)
+  useLayoutEffect(() => {
+    setRendered(hostRef.current?.querySelector('[class^="iui-"], [class*=" iui-"]') !== null)
+  }, [program, diagnostics])
+  const fatalPage = fatal.length > 0 || (visible.length > 0 && !rendered)
 
   return (
     <I18nProvider t={t}>
       <ImageSourceProvider resolver={resolveImage}>
       <ArticleScope.Provider value={scopeId}>
-      <div className="dsh-iui-host dsh-iui-root" style={themeStyle} data-iui-scheme={scheme}>
+      <div ref={hostRef} className="dsh-iui-host dsh-iui-root" style={themeStyle} data-iui-scheme={scheme}>
         <RendererBoundary program={program}>
           {empty ? (
             <ProgramFallback message={t('fallback.noProgram')} program="" />
+          ) : fatalPage ? (
+            <ProgramFallback
+              message={fatal.map((error) => error.message).join(' · ')}
+              program={program}
+            />
           ) : (
             <>
               <Renderer
@@ -174,11 +209,8 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
                 {...runtimeState === undefined ? {} : { initialState: runtimeState }}
                 {...onRuntimeStateChange === undefined ? {} : { onStateUpdate: onRuntimeStateChange }}
               />
-              {fatal.length > 0 && (
-                <ProgramFallback
-                  message={fatal.map((error) => error.message).join(' · ')}
-                  program={program}
-                />
+              {warnings.length > 0 && (
+                <ProgramWarning messages={warnings.map((error) => error.message)} />
               )}
             </>
           )}

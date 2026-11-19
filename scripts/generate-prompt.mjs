@@ -53,7 +53,7 @@ The page travels inside a tool call, not in your Markdown reply:
 - When you render, follow the session note for the layout (the Answer style note, or the on-demand request note): Card, Article, a free layout, or a saved template. When it names Card or Article, pass that layout; in Auto, pass the layout you chose; a saved template needs its exact styleId.
 - If the user explicitly invokes the \`intelligent-ui\` skill (\`/intelligent-ui\`) or explicitly asks for a page, dashboard, card or UI, use this skill: answer with inline UI when the request is an explanation, or with \`render_ui\` when it asks for a standalone deliverable. Prose is allowed only when the user also asked for text or the tools are unavailable.
 - You may write at most one short introductory sentence in Markdown before calling the tool. After the successful call, stop or add one short sentence; never repeat the page's content in prose, and never paste the openui-lang program into your Markdown reply.
-- If the tool reports a parse error, fix the program and call \`render_ui\` again in the same turn.
+- If the tool reports a parse error, fix the program and call \`render_ui\` again in the same turn. If it still fails after you fix it twice in this turn, fall back to text and say so.
 - The call is the only preflight you need: a rejected program is never shown, and the findings name the exact problem. Do not build a local harness, and do not create, edit or delete files in the Intelligent UI extension's own checkout (including its \`test/renderer/.build/\`) to test a program; keep any draft in a temporary directory outside the repository. Editing the extension itself is a separate task the user has to ask for explicitly.
 - One successful call per turn; a rejected call may be retried. A successful call must not be followed by a second \`render_ui\` call in the same turn.
 
@@ -215,6 +215,33 @@ const toolResponseLine = `
 
 After a successful \`render_ui\` call the page is already on screen: the closing Markdown reply, when present, is one short sentence only.`
 
+/**
+ * Document-mode variant: the same language/component body with a preamble that
+ * makes the page the reply. It must not carry the ordinary-answer inline policy:
+ * a session cannot be both "Markdown with openui fences" and "one document
+ * program", and tests assert the two generated prompts stay disjoint.
+ */
+const documentPreamble = `You are an AI assistant in document mode: your reply is ONE interactive document written in openui-lang.
+
+## Document mode contract
+Document mode is on for this deployment. For an ordinary answer, write the whole answer as one complete openui-lang program:
+- Put all prose, headings, lists, tables, code and interactive or visual blocks inside the program, in reading order, so the page reads like a normal answer.
+- Call \`render_ui\` exactly once with \`style: "free"\`, omitting \`styleId\` and \`temporaryStyle\`. Do not write any Markdown outside the tool call: no introduction and no closing sentence.
+- Do not use inline \`openui\` fences in document mode; the page itself is the reply.
+- If no page serves the answer, answer in plain Markdown as usual. If \`render_ui\` still fails after you fix it twice in this turn, fall back to Markdown and say so.
+- On-demand results, saved templates and Artifact edit requests keep their own recorded card contract and layout; document mode does not override them.
+
+The program itself follows every rule below.`
+const documentTarget = resolve(root, 'src/generated/document-prompt.txt')
+
+/** Document mode must not inherit the inline explanation rule from the shared body. */
+const inlineKnowledge = '- Answer a safety warning, or a question whose whole answer is a bare fact or a term restatement, in Markdown text directly; an explanation of how a concept, mechanism or process works (a loop, a request path, stages, relations, data to explore) stays Markdown with an inline `openui` block where it helps. Judge by whether UI improves understanding, not by whether text could describe it.'
+const documentKnowledge = '- Answer a safety warning, or a question whose whole answer is a bare fact or a term restatement, in plain Markdown directly; when a page serves the answer, write the whole answer as one document program instead. Judge by whether the page improves understanding, not by whether text could describe it.'
+if (!withLayout.includes(inlineKnowledge)) throw new Error('generate-prompt: the document knowledge rewrite is stale')
+const documentBody = withLayout.replace(inlineKnowledge, documentKnowledge)
+
 await mkdir(dirname(target), { recursive: true })
 await writeFile(target, `${preamble}${withLayout.trimEnd()}${toolResponseLine}\n`, 'utf8')
+await writeFile(documentTarget, `${documentPreamble}${documentBody.trimEnd()}${toolResponseLine}\n`, 'utf8')
 console.log(`generate-prompt: wrote ${target}`)
+console.log(`generate-prompt: wrote ${documentTarget}`)

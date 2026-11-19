@@ -53,7 +53,7 @@ A deployment may enable **document mode** (Plugin detail page → Experimental).
 
 ## Inline UI in ordinary answers
 
-Ordinary explanations use Markdown with inline UI by default; there is no switch or mode to turn on. When a visual or interactive block helps the reader, write normal Markdown and place each **complete** program in a fenced code block whose info string is exactly `openui`, at the place where it belongs:
+Ordinary explanations use Markdown with inline UI by default; there is no separate inline-mode switch. The session UI switch still gates whether the model is prompted for UI/tools for new answers; a fence already written in a message is rendered by the client even after the switch is turned off (like recorded cards). When a visual or interactive block helps the reader, write normal Markdown and place each **complete** program in a fenced code block whose info string is exactly `openui`, at the place where it belongs:
 
 ````markdown
 The route for day one:
@@ -67,7 +67,7 @@ Day two depends on how much walking you want.
 
 - One fence is one complete program (`root = …`); use as many fences as the answer needs, and keep the prose outside them. Do not wrap the whole answer in a program.
 - Do not call `render_ui` for an ordinary answer. When the answer is itself a standalone deliverable, use the page-artifact workflow instead (one form per answer, never both).
-- The client renders a settled fence in place; while it streams it shows as a code block. An invalid program keeps the renderer's failure note instead of rendering a partial page. Inline programs are not preflighted by the Host, so keep each fence focused and correct rather than adding a large experimental composition.
+- The client renders a settled fence in place; while it streams it shows as a code block. A program that cannot render at all keeps the renderer's failure note; a program that drops only some parts keeps the usable page and adds a compact warning. Inline programs are not preflighted by the Host, so keep each fence focused and correct rather than adding a large experimental composition.
 - The rendered block has no card header, editing entry or revision history, but keeps component interaction and `@ToAssistant` follow-ups. The fence source is part of the message, so copying, search and transcript export keep the program text.
 - An explicit `/intelligent-ui` or "use UI" request still follows the delivery decision: inline for an explanation, a page artifact for a deliverable.
 

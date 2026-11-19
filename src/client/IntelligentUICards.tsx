@@ -29,6 +29,7 @@ import { useStyleScheme } from './theme-mode.ts'
 import { programsFromToolNodes, type ToolCallNode } from './programs.ts'
 import { recordRuntimeState, runtimeStateForProgram } from './runtime-state.ts'
 import { RendererBoundary } from './RendererBoundary.tsx'
+import { startFollowUp } from './follow-up.ts'
 import { fillComposer, type ComposerAccess } from './composer.ts'
 import { SaveResultAction } from './SaveResultAction.tsx'
 import { styleActions as defaultStyleActions, type StyleActions } from './style-actions.ts'
@@ -252,14 +253,7 @@ export function IntelligentUICards({
   // The renderer calls this when an in-card action should continue in the
   // composer: seed the draft with the model-authored message and submit it.
   const toAssistant = useCallback((message: string): void => {
-    const actions = inputActions as InputActions | undefined
-    if (actions === undefined) return
-    try {
-      actions.setDraft(message)
-      actions.submit()
-    } catch (error) {
-      console.warn('[intelligent-ui] could not start a follow-up message', error)
-    }
+    startFollowUp(inputActions as InputActions | undefined, message)
   }, [inputActions])
   const adjust = async (program: IntelligentUIProgram): Promise<string | null> => {
     const failure = await adjustStyle!(program)
@@ -358,7 +352,7 @@ function DocumentCard({ program, scheme, onToAssistant, t, resolveImage }: {
       data-dsh-iui-document="true"
       data-dsh-iui-call-id={program.callId}
     >
-      <RendererBoundary t={t}>
+      <RendererBoundary t={t} resetKey={program.program}>
         <OpenUIRenderer
           program={program.program}
           title={program.title}

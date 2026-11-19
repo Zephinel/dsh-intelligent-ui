@@ -7,21 +7,22 @@ This is a practical tour of the extension. For implementation details, Host/Clie
 ## Turn it on
 
 1. Click the **UI** control to the right of the composer and choose **This session only**, or send `/iui on`.
-2. A structured answer is then rendered as a card at the end of its turn.
+2. An ordinary answer is then written as Markdown; when a chart, table or interactive block helps, the UI is embedded directly in the answer body. Only when you explicitly ask for a standalone page, dashboard, tool or editable result does the model render a card at the end of that turn.
 3. To enable it for new sessions by default, open **Plugins → Intelligent UI** and turn on **Enable in all sessions**.
 
-While the switch is off the model does not see `render_ui` and answers in text; turn it back on. To force a card (or when the model still answers in text), invoke the skill explicitly with `/intelligent-ui` in an enabled session.
+While the switch is off the model does not see `render_ui` and new ordinary answers do not embed UI, so it answers in text; inline fences already written in a message still render in the client (like recorded cards). Turn it back on. Ordinary explanations need no explicit skill invocation; for a turn-tail card (editable, exportable, savable as a template) ask clearly for a page/dashboard/tool/editable result, or invoke `/intelligent-ui` in an enabled session and say it is a deliverable.
 
 ## Ask
 
-Describe the page and the interactive parts you need, for example:
+Describe what you want directly, for example:
 
-- "Plan two days in Shanghai, with checkboxes and adjustments"
-- "Build a 7-speed bicycle shifting simulator"
-- "Turn these tables into a filterable sales dashboard"
-- "Introduce Chinese history with expandable dynasties"
+- "Explain the difference between a harness and a model" — the answer stays Markdown, with UI embedded in the middle of the answer where a diagram, table or flow helps.
+- "Plan a two-day Shanghai trip that I can tick off and adjust" — a standalone page you can use, so the model renders a turn-tail card.
+- "Build a 7-speed bicycle shifting simulator" — a standalone interactive tool, a turn-tail card.
+- "Turn these tables into a filterable sales dashboard" — a deliverable dashboard, a turn-tail card.
+- "Explain Chinese history with collapsible dynasties" — an explanatory answer, with inline UI in the message.
 
-The model decides whether an answer uses a page: it renders one when structure, visuals, interaction or computation help, and answers in Markdown when text serves better. The layout used for a page can be set per session under **UI → Display style** — Card / Article, or Auto (Card, Article or a free layout).
+The model picks the form from the nature of the answer: **explanations, analyses and comparisons** stay Markdown with inline UI where it helps; a **standalone interactive deliverable** (a page, dashboard, tool, form, game or editable result) is the only case that calls `render_ui` for a turn-tail card; text alone when that suffices. One answer uses one UI form, never both. When a card renders, choose the per-session layout under **UI → Display style**: Card / Article, or Auto (Card, Article or a free layout); inline blocks inherit the renderer theme and ignore the display style.
 
 ## Answer as a document (experimental)
 
@@ -46,7 +47,7 @@ Day two depends on how much walking you want.
 ````
 
 - One fence is one complete program (`root = …`); the model may place several fences anywhere in one answer, and the prose outside them is still the answer.
-- While a fence streams it shows as a plain code block; once settled the client renders it in place. An invalid program shows the renderer's fallback note without breaking the rest of the message.
+- While a fence streams it shows as a plain code block; once settled the client renders it in place. A program that cannot render at all shows the renderer's fallback note; a program that drops only some parts keeps the usable page and adds a compact warning, without breaking the rest of the message.
 - Inline blocks keep component interaction and `@ToAssistant` follow-ups, but have no card editing, revision history, saved templates or image/HTML export. Their source is part of the message, so copy, search and transcript export keep the program text.
 - Only the Web renderer shows the rendered UI; TUI/headless clients see the code block. An older DSH without the `conversation.chat.markdown.fence` slot also shows the code block.
 - For a standalone page that is editable, exportable or savable as a template, ask for a page/dashboard/tool/editable result; the model then calls `render_ui` for a turn-tail card instead (the two forms are alternatives). See [Known limitations](limitations.en.md).
@@ -102,7 +103,7 @@ The **Export** button at the right of the message actions can:
 
 **Why did a follow-up question not continue generation?** On-demand generation asks structured questions when material ambiguity remains: answering one resumes the same operation; after a text question, the next message automatically continues it. Only expiry, restart, failure or interruption needs a re-arm or retry; concurrent messages in multiple tabs may also consume the same intent. See [On-demand and templates](#on-demand-and-templates).
 
-**Why does an answer come back as plain text with no card?** That is the default: explanations and analyses stay Markdown, with inline UI where it helps (see [Inline UI in the answer (the default)](#inline-ui-in-the-answer-the-default)). Turn-tail cards are for explicit deliverables you ask for — a page, dashboard, tool or editable result; say so clearly if you want one. With the switch off there is neither inline UI nor a card; with the experimental **Answer as a document** enabled, ordinary answers become a turn-tail whole-document page again (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
+**Why does an answer come back as plain text with no card?** That is the default: explanations and analyses stay Markdown, with inline UI where it helps (see [Inline UI in the answer (the default)](#inline-ui-in-the-answer-the-default)). Turn-tail cards are for explicit deliverables you ask for — a page, dashboard, tool or editable result; say so clearly if you want one. With the switch off the model creates no new inline UI or card, but inline fences already present in a message still render; with the experimental **Answer as a document** enabled, ordinary answers become a turn-tail whole-document page again (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
 
 **Why is there no export pill under an answer?** Only answers rendered by the extension have it; it is absent when the switch is off, the model replies in text, or rendering fails. See [Export](#export) and [Known limitations](limitations.en.md).
 

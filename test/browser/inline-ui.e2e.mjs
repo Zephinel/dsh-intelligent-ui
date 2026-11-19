@@ -34,12 +34,13 @@ body { margin:20px; } #root { max-width:700px; }
   cdp = await connectCdp(browser.port)
   await cdp.send('Page.enable')
   await cdp.send('Runtime.enable')
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 3 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 6 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui")[1]?.querySelector(".dsh-iui-fallback") !== null', 'invalid program fallback')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui")[3]?.querySelector(".dsh-iui-warning") !== null', 'partial program warning')
 
   const report = await cdp.evaluate(`(() => {
     const inline = [...document.querySelectorAll('.dsh-iui-inline-ui')]
-    const first = inline[0], second = inline[1], third = inline[2]
+    const first = inline[0], second = inline[1], third = inline[2], fourth = inline[3], fifth = inline[4], sixth = inline[5]
     const streaming = document.querySelector('pre[data-fixture=streaming-code]')
     const firstHost = first?.querySelector('.dsh-iui-host')
     const css = first === undefined ? null : getComputedStyle(first)
@@ -57,12 +58,20 @@ body { margin:20px; } #root { max-width:700px; }
       secondFallback: second?.querySelector('.dsh-iui-fallback') !== null,
       secondFallbackText: second?.innerText ?? '',
       thirdFallback: third?.querySelector('.dsh-iui-fallback') !== null,
+      thirdWarning: third?.querySelector('.dsh-iui-warning') !== null,
       thirdRendered: (third?.innerText ?? '').includes('Extra args fixture'),
       thirdHasSvg: third?.querySelector('.iui-svg') !== null,
+      fourthFallback: fourth?.querySelector('.dsh-iui-fallback') !== null,
+      fourthWarning: fourth?.querySelector('.dsh-iui-warning') !== null,
+      fourthRendered: (fourth?.innerText ?? '').includes('Partial fixture'),
+      fifthFallback: fifth?.querySelector('.dsh-iui-fallback') !== null,
+      fifthFallbackText: fifth?.innerText ?? '',
+      sixthFallback: sixth?.querySelector('.dsh-iui-fallback') !== null,
+      sixthFallbackText: sixth?.innerText ?? '',
       scrollOverflow: document.documentElement.scrollWidth <= innerWidth,
     }
   })()`)
-  assert.equal(report.inlineCount, 3, 'settled fences render one inline surface each; the streaming fence stays code')
+  assert.equal(report.inlineCount, 6, 'settled fences render one inline surface each; the streaming fence stays code')
   assert.equal(report.firstFlag, 'true')
   assert.equal(report.firstHasHost, true, 'the settled fence mounts the production renderer')
   assert.equal(report.firstHasProgram, true, 'the settled fence renders the program content')
@@ -74,10 +83,18 @@ body { margin:20px; } #root { max-width:700px; }
   assert.equal(report.secondFallback, true, 'an invalid program falls back instead of breaking the message')
   assert.match(report.secondFallbackText, /could not be rendered/, 'the fallback names the failure')
   assert.equal(report.thirdFallback, false, 'recoverable excess args do not add a contradictory fallback')
+  assert.equal(report.thirdWarning, false, 'excess args change nothing the user sees, so they add no warning')
   assert.equal(report.thirdRendered, true, 'recoverable excess args still render the program')
   assert.equal(report.thirdHasSvg, true, 'the permissive parser keeps the component that carried the extra arg')
+  assert.equal(report.fourthFallback, false, 'a partial program keeps its usable page')
+  assert.equal(report.fourthWarning, true, 'a partial program adds a compact warning instead of the full fallback')
+  assert.equal(report.fourthRendered, true, 'the usable root content of the partial program still renders')
+  assert.equal(report.fifthFallback, true, 'an invalid program still gets the full fallback')
+  assert.match(report.fifthFallbackText, /无法渲染/, 'the locale seat localizes the fallback copy')
+  assert.equal(report.sixthFallback, true, 'an empty settled fence shows the no-program fallback')
+  assert.match(report.sixthFallbackText, /No program was provided/, 'the no-program fallback is explicit')
   assert.equal(report.scrollOverflow, true, 'the inline surface never scrolls the message horizontally')
-  console.log('inline-ui E2E: OK (settled program renders inline, streaming fence keeps code, invalid program falls back, excess args render without a false fallback)')
+  console.log('inline-ui E2E: OK (settled inline, streaming code, invalid fallback, excess args silent, partial warning, localized fallback)')
 } finally {
   cdp?.close()
   await browser?.cleanup()

@@ -55,9 +55,10 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   const { tool, sections } = mount()
   assert.equal(tool.name, 'render_ui')
   assert.match(tool.description, /openui-lang/)
-  assert.match(tool.description, /standalone interactive page artifact/, 'the tool description is artifact-only')
+  assert.match(tool.description, /Render an interactive page for the user/, 'the tool description is mode-neutral')
+  assert.match(tool.description, /In the default policy/, 'the tool description scopes the default policy')
   assert.match(tool.description, /fenced `openui` code block inside the reply instead/, 'the tool description names the inline alternative')
-  assert.match(tool.description, /Do not call it to present an ordinary explanation/, 'the tool description forbids page artifacts for explanations')
+  assert.match(tool.description, /document mode is on, the page itself is the reply/, 'the tool description covers document mode')
   assert.equal(tool.parameters.type, 'object')
   assert.deepEqual(tool.parameters.required, ['program', 'style'])
   assert.deepEqual(Object.keys(tool.parameters.properties).sort(), ['editRequestId', 'program', 'style', 'styleId', 'temporaryStyle', 'title'].sort())
@@ -81,6 +82,10 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.match(enabledText, /standalone interactive deliverable/)
   assert.match(enabledText, /Use one form per answer/)
   assert.match(enabledText, /a pending edit request overrides the ordinary-answer delivery decision/)
+  assert.match(enabledText, /When you decide to render a standalone page artifact/, 'the Auto note is layout-only')
+  assert.doesNotMatch(enabledText, /Decide the answer format yourself/, 'the Auto note no longer owns the delivery decision')
+  assert.doesNotMatch(enabledText, /When this answer is better as an interactive page/, 'the Card note is layout-only')
+  assert.doesNotMatch(enabledText, /the page itself is the reply/, 'the normal prompt does not carry the document contract')
   // `enabledText` is the prefix plus the static prompt, and both carry the
   // tie-break sentence; assert on the prefix itself so deleting it from
   // ENABLED_SESSION_PREFIX cannot stay green through the prompt copy.
@@ -103,6 +108,19 @@ test('document mode replaces the style note with the whole-answer document contr
   assert.match(prompt, /Document mode is on for this deployment/)
   assert.doesNotMatch(prompt, /Answer style for this session: \*\*/)
   assert.doesNotMatch(prompt, /Free-form layout is on/)
+})
+
+test('document mode uses a dedicated prompt without the ordinary inline policy', () => {
+  const { sections } = mount({ documentMode: { get: () => true } })
+  const prompt = sections[0].text()
+  assert.match(prompt, /your reply is ONE interactive document/)
+  assert.match(prompt, /Put all prose, headings, lists, tables, code and interactive or visual blocks inside the program/)
+  assert.match(prompt, /Call `render_ui` exactly once with `style: "free"`/)
+  assert.match(prompt, /Do not use inline `openui` fences in document mode/)
+  assert.doesNotMatch(prompt, /The answer is Markdown by default/)
+  assert.doesNotMatch(prompt, /do not call render_ui for an ordinary answer/)
+  assert.doesNotMatch(prompt, /info string is exactly `openui`/)
+  assert.doesNotMatch(prompt, /stays Markdown with an inline `openui` block/)
 })
 
 test('document mode renders ordinary answers as one free document and rejects card-style calls', async () => {

@@ -21,6 +21,7 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 const skill = read('skills/intelligent-ui/SKILL.md')
 const prompt = read('src/generated/prompt.txt')
+const documentPrompt = read('src/generated/document-prompt.txt')
 const troubleshooting = read('skills/intelligent-ui/references/troubleshooting.md')
 const spec = JSON.parse(read('vendor/spec.json'))
 
@@ -52,6 +53,11 @@ test('the enabled-session delivery policy is single-sourced and explicit invocat
   assert.match(prompt, /Use one form per answer/i, 'the prompt never mixes inline UI and a page artifact')
   assert.match(prompt, /a free layout/i, 'the prompt names the free layout among the session layouts')
   assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
+  assert.match(prompt, /If it still fails after you fix it twice in this turn/, 'the retry cap and text fallback are kept')
+  assert.match(documentPrompt, /## Document mode contract/, 'the document prompt carries its own contract')
+  assert.doesNotMatch(documentPrompt, /The answer is Markdown by default/, 'the document prompt does not carry the inline policy')
+  assert.doesNotMatch(documentPrompt, /info string is exactly `openui`/, 'the document prompt does not teach inline fences')
+  assert.doesNotMatch(documentPrompt, /stays Markdown with an inline `openui` block/, 'the document prompt does not inherit the inline explanation rule')
   assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')
   for (const marker of CURRENT_SKILL_MARKERS) {
     assert.ok(skill.includes(marker), `the shipped skill carries ${JSON.stringify(marker)}`)

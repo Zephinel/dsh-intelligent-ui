@@ -24,6 +24,7 @@ import z from '@deepseek-ai/schemastery'
 import { createParser } from '@openuidev/lang-core'
 import librarySpec from '../../vendor/spec.json'
 import promptText from '../generated/prompt.txt'
+import documentPromptText from '../generated/document-prompt.txt'
 import { installSessionControls, readPreference, type IntelligentUIPreferenceConfig } from './mode.ts'
 import {
   DEFAULT_EXPORT_BACKGROUND,
@@ -537,9 +538,7 @@ const STYLE_NOTES: Readonly<Record<AnswerStyle, string>> = {
     + 'Include a reachable `Toc` and at least one `Section`; the Host rejects an article call without both. '
     + 'Pass `style: "article"`.',
   auto:
-    '\n\nAnswer style for this session: **Auto**. Decide the answer format yourself. '
-    + 'Render a page when it genuinely helps: interactive, structured, visual or computational answers — a dashboard, map, '
-    + 'chart, form, planner, calculator, game, comparison, timeline or data to explore. Choose the layout that fits: '
+    '\n\nAnswer style for this session: **Auto**. When you decide to render a standalone page artifact, choose the layout that fits: '
     + '**Card** for a compact interactive page; **Article** for a detailed, in-depth, long-form or comprehensive explanation '
     + '(coverage summary + reachable `Toc` + substantial `Section` prose); **free** when neither shell fits — compose the page shape '
     + 'yourself without a Card/Article wrapper, with `Toc` and `Section` optional. '
@@ -646,7 +645,9 @@ export function apply(ctx: {
       // fence UI and page artifacts are part of the ordinary answer policy. A
       // bound on-demand turn keeps the "render the page" opening and its style.
       const document = !operationNote && isDocumentMode(config)
-      const section = !document && isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
+      const section = document
+        ? documentPromptText
+        : isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
       const template = document ? undefined : mode.templateFor(sessionId)
       const style = mode.styleFor(sessionId)
       const note = operationNote ? '' : document ? DOCUMENT_MODE_NOTE : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
@@ -825,10 +826,11 @@ ${section}`
   ctx.tools.register({
     name: RENDER_UI_TOOL,
     description:
-      'Render a standalone interactive page artifact at the end of the turn. Call it only when the user asks for a deliverable '
+      'Render an interactive page for the user. In the default policy, call it only when the user asks for a deliverable '
       + 'to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the '
-      + 'intelligent-ui skill for such a deliverable. Do not call it to present an ordinary explanation: in that case answer in '
-      + 'Markdown and put each UI block in a fenced `openui` code block inside the reply instead. Pass a complete openui-lang '
+      + 'intelligent-ui skill for such a deliverable. For an ordinary explanation in the default policy, answer in Markdown '
+      + 'and put each UI block in a fenced `openui` code block inside the reply instead. When the system prompt says document '
+      + 'mode is on, the page itself is the reply and this default-policy restriction does not apply. Pass a complete openui-lang '
       + 'program that follows the Intelligent UI rules in the system prompt. '
       + 'The user sees the rendered page; do not repeat its content in prose. Pass `style` set to the session layout: '
       + '"card" or "article", or in Auto the layout you chose ("card", "article" or "free"); a selected free template uses '

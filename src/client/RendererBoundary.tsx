@@ -13,6 +13,8 @@ interface RendererBoundaryProps {
   readonly children: ReactNode
   /** Locale seat supplied by the Turn-tail card; English outside a slot. */
   readonly t?: Translate
+  /** Change this when the rendered program changes so a crash gets a fresh attempt. */
+  readonly resetKey?: string
 }
 
 interface RendererBoundaryState {
@@ -31,6 +33,11 @@ export class RendererBoundary extends Component<RendererBoundaryProps, RendererB
   /** Report the crash for diagnosis without rethrowing into the Chat tree. */
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[intelligent-ui] renderer failed', error, info.componentStack)
+  }
+
+  /** A new program (a retry or a revised card) gets a fresh attempt. */
+  override componentDidUpdate(previous: RendererBoundaryProps): void {
+    if (previous.resetKey !== this.props.resetKey && this.state.failed) this.setState({ failed: false })
   }
 
   /** Render the card body, or the compact fallback after a crash. */
