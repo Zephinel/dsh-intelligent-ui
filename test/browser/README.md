@@ -4,7 +4,7 @@ Eleven focused suites boot a temporary HTTP server (or a local file) + headless
 Chrome and drive the real components through CDP. They check DOM, layout and
 events but not the full DSH Web integration.
 
-- `inline-ui.e2e.mjs` mounts the in-message UI fence layer with a settled `openui`
+- `inline-ui.e2e.mjs` mounts the default inline-UI fence layer with a settled `openui`
   program, a streaming fence and an invalid program: the settled fence renders
   the production renderer inside the inline surface, the streaming fence keeps
   the plain code block, and the invalid program falls back to the localized

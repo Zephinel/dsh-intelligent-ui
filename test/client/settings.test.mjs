@@ -67,15 +67,13 @@ function render(options = {}) {
 
 test('off shows every control with its default state', () => {
   const html = render()
-  assert.equal((html.match(/role="switch"/g) ?? []).length, 5)
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 4)
   assert.match(html, /aria-checked="false"/)
   assert.match(html, /aria-label="Enable in all sessions"/)
   assert.match(html, /aria-label="Free-form layout"/)
   assert.match(html, /aria-label="Answer as a document \(experimental\)"/)
-  assert.match(html, /aria-label="In-message UI \(experimental\)"/)
-  assert.match(html, /Off: ordinary answers render as turn-tail cards or a document/)
-  assert.match(html, /Off: answers render as Card \/ Article cards/)
-  assert.match(html, /stopgap for in-message UI/)
+  assert.match(html, /Off: ordinary answers use Markdown with inline UI/)
+  assert.match(html, /whole-document presentation/)
   assert.match(html, /aria-describedby="[^"]+ [^"]+"/)
   assert.match(html, /Global defaults/)
   assert.match(html, /Off: new sessions start disabled/)
@@ -92,9 +90,7 @@ test('off shows every control with its default state', () => {
 test('on reflects the global enable, style, and free-composition values', () => {
   const html = render({ form: form({ value: { globalEnabled: true, answerStyle: 'article', freeComposition: true, documentMode: true } }) })
   assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 4)
-  const inline = render({ form: form({ value: { inlineMode: true } }) })
-  assert.match(inline, /On: ordinary answers are Markdown with UI blocks written as ```openui fenced programs/)
-  assert.match(html, /On: a rendered answer drops the card shell/)
+  assert.match(html, /On: ordinary answers become one chromeless document page/)
   assert.match(html, /On: new sessions start with Intelligent UI enabled/)
   assert.match(html, /On: layout and typography guidance becomes advisory/)
   assert.match(html, /data-active="true"/)
@@ -114,7 +110,7 @@ test('image export shows its defaults: white background and 2x', () => {
   assert.match(html, /Resolution/)
   assert.match(html, /Remove follow-up actions/)
   assert.match(html, /Remove follow-up actions<\/div>[\s\S]*?aria-checked="true"/, 'removing follow-ups is the default')
-  assert.equal((html.match(/role="switch"/g) ?? []).length, 5, 'the export and both experimental groups add their switches')
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 4, 'the export and document groups add their switches')
 })
 
 test('image export reflects stored background and scale', () => {

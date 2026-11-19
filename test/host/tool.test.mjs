@@ -55,9 +55,9 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   const { tool, sections } = mount()
   assert.equal(tool.name, 'render_ui')
   assert.match(tool.description, /openui-lang/)
-  assert.match(tool.description, /a term restatement/, 'the tool description names the text branch')
-  assert.match(tool.description, /an explanation of how something works is a page even when the prose version would be short/, 'the tool description resolves the short-and-conceptual case')
-  assert.match(tool.description, /a code snippet, a translation, chit-chat/, 'the tool description lists the text cases the prompt lists')
+  assert.match(tool.description, /standalone interactive page artifact/, 'the tool description is artifact-only')
+  assert.match(tool.description, /fenced `openui` code block inside the reply instead/, 'the tool description names the inline alternative')
+  assert.match(tool.description, /Do not call it to present an ordinary explanation/, 'the tool description forbids page artifacts for explanations')
   assert.equal(tool.parameters.type, 'object')
   assert.deepEqual(tool.parameters.required, ['program', 'style'])
   assert.deepEqual(Object.keys(tool.parameters.properties).sort(), ['editRequestId', 'program', 'style', 'styleId', 'temporaryStyle', 'title'].sort())
@@ -75,15 +75,18 @@ test('registers the render_ui tool with its argument schema and one prompt secti
   assert.ok(enabledText.length > 10_000)
   assert.match(enabledText, /Answer style for this session: \*\*Auto\*\*/)
   assert.match(enabledText, /Pass `style: "card"`, `"article"` or `"free"`/)
-  assert.match(enabledText, /answer in Markdown without calling render_ui/)
-  assert.match(enabledText, /There is no default format/)
-  assert.match(enabledText, /an explanation of how something works is a page even when the prose version would be short/)
-  assert.match(enabledText, /a pending edit request overrides the ordinary page-vs-text decision/)
+  assert.match(enabledText, /The answer is Markdown by default/)
+  assert.match(enabledText, /info string is exactly `openui`/)
+  assert.match(enabledText, /do not call render_ui for an ordinary answer/)
+  assert.match(enabledText, /standalone interactive deliverable/)
+  assert.match(enabledText, /Use one form per answer/)
+  assert.match(enabledText, /a pending edit request overrides the ordinary-answer delivery decision/)
   // `enabledText` is the prefix plus the static prompt, and both carry the
   // tie-break sentence; assert on the prefix itself so deleting it from
   // ENABLED_SESSION_PREFIX cannot stay green through the prompt copy.
-  assert.match(plugin.ENABLED_SESSION_PREFIX, /For each ordinary answer, decide whether an interactive page serves the request better than text/)
-  assert.match(plugin.ENABLED_SESSION_PREFIX, /When both seem to fit, the kind decides/)
+  assert.match(plugin.ENABLED_SESSION_PREFIX, /The answer is Markdown by default/)
+  assert.match(plugin.ENABLED_SESSION_PREFIX, /do not call render_ui for an ordinary answer/)
+  assert.match(plugin.ENABLED_SESSION_PREFIX, /Use one form per answer/)
 })
 
 test('the free-composition preference appends its advisory note to the prompt', () => {
@@ -120,35 +123,20 @@ test('document mode renders ordinary answers as one free document and rejects ca
   )
 })
 
-test('in-message UI mode replaces the style note with the fenced-program contract', () => {
-  const { sections } = mount({ inlineMode: { get: () => true }, answerStyle: { get: () => 'card' } })
+test('ordinary answers default to inline fences while page artifacts stay available for deliverables', async () => {
+  const { tool, sections } = mount({ answerStyle: { get: () => 'card' } })
   const prompt = sections[0].text()
-  assert.match(prompt, /in-message UI mode: the answer is ordinary Markdown/)
+  assert.match(prompt, /The answer is Markdown by default/)
   assert.match(prompt, /info string is exactly `openui`/)
-  assert.match(prompt, /Do not call render_ui for an ordinary answer/)
-  assert.match(prompt, /In-message UI mode is on for this deployment/)
-  assert.doesNotMatch(prompt, /Answer style for this session: \*\*/)
-  assert.doesNotMatch(prompt, /Free-form layout is on/)
-})
-
-test('in-message UI takes precedence over document mode when both are on', () => {
-  const { sections } = mount({ inlineMode: { get: () => true }, documentMode: { get: () => true } })
-  const prompt = sections[0].text()
-  assert.match(prompt, /in-message UI mode: the answer is ordinary Markdown/)
-  assert.doesNotMatch(prompt, /document mode: when a page serves the answer/)
-  assert.doesNotMatch(prompt, /Document mode is on for this deployment/)
-})
-
-test('in-message UI mode rejects ordinary render_ui calls with the fence instruction', async () => {
-  const { tool } = mount({ answerStyle: { get: () => 'card' }, inlineMode: { get: () => true } })
-  await assert.rejects(
-    () => tool.execute({ program: VALID, style: 'card' }),
-    /in-message UI mode writes the answer as Markdown with fenced `openui` programs/,
-  )
-  await assert.rejects(
-    () => tool.execute({ program: VALID, style: 'free' }),
-    /do not call render_ui for an ordinary answer/,
-  )
+  assert.match(prompt, /do not call render_ui for an ordinary answer/)
+  assert.match(prompt, /standalone interactive deliverable/)
+  assert.match(prompt, /Use one form per answer/)
+  assert.doesNotMatch(prompt, /in-message UI mode/)
+  // The Answer style note still applies when the model decides to render a page artifact.
+  assert.match(prompt, /Answer style for this session: \*\*Card\*\*/)
+  // An ordinary render_ui call is not rejected: the deliverable branch stays open.
+  const result = await tool.execute({ program: VALID, style: 'card' })
+  assert.equal(result.style, 'card')
 })
 
 test('ordinary renders record their resolved layout for replay', async () => {

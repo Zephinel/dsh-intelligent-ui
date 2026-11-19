@@ -34,12 +34,12 @@ body { margin:20px; } #root { max-width:700px; }
   cdp = await connectCdp(browser.port)
   await cdp.send('Page.enable')
   await cdp.send('Runtime.enable')
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 2 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 3 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui")[1]?.querySelector(".dsh-iui-fallback") !== null', 'invalid program fallback')
 
   const report = await cdp.evaluate(`(() => {
     const inline = [...document.querySelectorAll('.dsh-iui-inline-ui')]
-    const first = inline[0], second = inline[1]
+    const first = inline[0], second = inline[1], third = inline[2]
     const streaming = document.querySelector('pre[data-fixture=streaming-code]')
     const firstHost = first?.querySelector('.dsh-iui-host')
     const css = first === undefined ? null : getComputedStyle(first)
@@ -56,10 +56,13 @@ body { margin:20px; } #root { max-width:700px; }
       streamingHasSurface: streaming?.closest('.dsh-iui-inline-ui') !== null,
       secondFallback: second?.querySelector('.dsh-iui-fallback') !== null,
       secondFallbackText: second?.innerText ?? '',
+      thirdFallback: third?.querySelector('.dsh-iui-fallback') !== null,
+      thirdRendered: (third?.innerText ?? '').includes('Extra args fixture'),
+      thirdHasSvg: third?.querySelector('.iui-svg') !== null,
       scrollOverflow: document.documentElement.scrollWidth <= innerWidth,
     }
   })()`)
-  assert.equal(report.inlineCount, 2, 'settled fences render one inline surface each; the streaming fence stays code')
+  assert.equal(report.inlineCount, 3, 'settled fences render one inline surface each; the streaming fence stays code')
   assert.equal(report.firstFlag, 'true')
   assert.equal(report.firstHasHost, true, 'the settled fence mounts the production renderer')
   assert.equal(report.firstHasProgram, true, 'the settled fence renders the program content')
@@ -70,8 +73,11 @@ body { margin:20px; } #root { max-width:700px; }
   assert.equal(report.streamingHasSurface, false, 'the streaming fence is not wrapped in the inline surface')
   assert.equal(report.secondFallback, true, 'an invalid program falls back instead of breaking the message')
   assert.match(report.secondFallbackText, /could not be rendered/, 'the fallback names the failure')
+  assert.equal(report.thirdFallback, false, 'recoverable excess args do not add a contradictory fallback')
+  assert.equal(report.thirdRendered, true, 'recoverable excess args still render the program')
+  assert.equal(report.thirdHasSvg, true, 'the permissive parser keeps the component that carried the extra arg')
   assert.equal(report.scrollOverflow, true, 'the inline surface never scrolls the message horizontally')
-  console.log('inline-ui E2E: OK (settled program renders inline, streaming fence keeps code, invalid program falls back)')
+  console.log('inline-ui E2E: OK (settled program renders inline, streaming fence keeps code, invalid program falls back, excess args render without a false fallback)')
 } finally {
   cdp?.close()
   await browser?.cleanup()

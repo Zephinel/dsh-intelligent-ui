@@ -11,10 +11,11 @@
 
 /** Wording the shipped skill must contain. */
 export const CURRENT_SKILL_MARKERS = [
-  'the model decides the format per answer',
-  'loads this skill only when it renders',
+  'the model decides the delivery form per answer',
+  'loads this skill only when it renders UI',
   'applies it rather than restating it',
   'Draw the mechanism',
+  '## Inline UI in ordinary answers',
   '## Document mode (experimental)',
 ]
 
@@ -29,4 +30,10 @@ export const RETIRED_SKILL_MARKERS = [
   'would only decorate a short answer',
   'A knowledge or explainer topic is not automatically a prose answer',
   'adds the decision boundary',
+  'In-message UI mode (experimental)',
+  'in-message UI mode',
+  'do not call `render_ui` for an ordinary answer: the Host rejects it',
+  'an explanation of how something works is a page even when the prose version would be short',
+  'There is no default format',
+  'the model decides the format per answer',
 ]

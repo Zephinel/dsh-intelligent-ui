@@ -44,13 +44,12 @@ test('the troubleshooting reference repeats the guardrail with the failure it pr
   assert.match(troubleshooting, /rejected program is never partially rendered/i, 'the reference explains why retrying is safe')
 })
 
-test('the enabled-session policy is single-sourced and explicit invocation is a directive', () => {
-  assert.match(prompt, /decide the format for each answer/i, 'the prompt makes the model choose page vs text')
-  assert.match(prompt, /answer in Markdown when a page would only decorate a short answer/i, 'the prompt names when text wins')
-  assert.match(prompt, /there is no default format/i, 'the prompt states that Auto has no default format')
-  assert.match(prompt, /judge by whether the page improves understanding/i, 'the prompt names the value criterion')
-  assert.match(prompt, /When both sides seem to fit, the kind decides/i, 'the prompt resolves the short-and-conceptual case')
-  assert.match(prompt, /explanation of how something works is a page even when the prose version would be short/i, 'the prompt makes mechanism explanations page-first')
+test('the enabled-session delivery policy is single-sourced and explicit invocation is a directive', () => {
+  assert.match(prompt, /answer is Markdown by default/i, 'the prompt makes Markdown the default answer')
+  assert.match(prompt, /fenced code block whose info string is exactly `openui`/i, 'the prompt names the inline UI form')
+  assert.match(prompt, /do not call `render_ui` for an ordinary answer/i, 'the prompt reserves render_ui for deliverables')
+  assert.match(prompt, /standalone page artifact/i, 'the prompt names the page artifact form')
+  assert.match(prompt, /Use one form per answer/i, 'the prompt never mixes inline UI and a page artifact')
   assert.match(prompt, /a free layout/i, 'the prompt names the free layout among the session layouts')
   assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
   assert.match(skill, /decision policy is owned by the injected/i, 'the skill points at the single policy source')

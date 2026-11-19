@@ -19,7 +19,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
   ANSWER_STYLE_FIELD,
   DOCUMENT_MODE_FIELD,
-  INLINE_MODE_FIELD,
   EXPORT_BACKGROUND_FIELD,
   EXPORT_SCALES,
   EXPORT_BACKGROUND_PRESETS,
@@ -87,7 +86,6 @@ type WritableField =
   | typeof ANSWER_STYLE_FIELD
   | typeof FREE_COMPOSITION_FIELD
   | typeof DOCUMENT_MODE_FIELD
-  | typeof INLINE_MODE_FIELD
   | typeof EXPORT_BACKGROUND_FIELD
   | typeof EXPORT_SCALE_FIELD
   | typeof EXPORT_REMOVE_FOLLOWUPS_FIELD
@@ -148,7 +146,6 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
   const answerStyle = isStyleId(storedStyle) ? storedStyle : 'auto'
   const free = snapshot.value?.freeComposition === true
   const documentMode = snapshot.value?.documentMode === true
-  const inlineMode = snapshot.value?.inlineMode === true
   const exportSettings = readImageExportSettings(snapshot.value)
   // Custom background picker: a preset palette plus a hex field, no native
   // browser color dialog. It opens under the row and dismisses on outside click.
@@ -180,20 +177,6 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
       savingRef.current = false
       sectionRef.current?.removeAttribute('aria-busy')
     }
-  }
-
-  /**
-   * Toggle one experimental answer mode and keep the two mutually exclusive;
-   * the settings writes are sequential because one save is in flight at a time.
-   * @param mode - which experimental mode the switch controls.
-   */
-  const toggleExperimental = async (mode: 'document' | 'inline'): Promise<void> => {
-    const own = mode === 'document' ? documentMode : inlineMode
-    const other = mode === 'document' ? inlineMode : documentMode
-    const ownField = mode === 'document' ? DOCUMENT_MODE_FIELD : INLINE_MODE_FIELD
-    const otherField = mode === 'document' ? INLINE_MODE_FIELD : DOCUMENT_MODE_FIELD
-    if (!own && other) await save(otherField, false)
-    await save(ownField, !own)
   }
 
   useEffect(() => {
@@ -351,19 +334,9 @@ export function SettingsPage({ settingsForm, styles, styleActions, t = fallbackT
           checked={documentMode}
           disabled={locked}
           describedBy={`${idPrefix}-document ${idPrefix}-document-note ${noteId}`}
-          onToggle={() => { void toggleExperimental('document') }}
+          onToggle={() => { void save(DOCUMENT_MODE_FIELD, !documentMode) }}
         />
         <p id={`${idPrefix}-document-note`} className="dsh-iui-settings-hint">{t('settings.document.note')}</p>
-        <SwitchRow
-          label={t('settings.inline.label')}
-          hint={inlineMode ? t('settings.inline.on') : t('settings.inline.off')}
-          idPrefix={`${idPrefix}-inline`}
-          checked={inlineMode}
-          disabled={locked}
-          describedBy={`${idPrefix}-inline ${idPrefix}-inline-note ${noteId}`}
-          onToggle={() => { void toggleExperimental('inline') }}
-        />
-        <p id={`${idPrefix}-inline-note`} className="dsh-iui-settings-hint">{t('settings.inline.note')}</p>
       </div>
 
       <div className="dsh-iui-settings-group" aria-labelledby={`${idPrefix}-export`}>

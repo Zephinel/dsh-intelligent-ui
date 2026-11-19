@@ -122,14 +122,6 @@ export const FREE_COMPOSITION_FIELD = 'freeComposition'
  */
 export const DOCUMENT_MODE_FIELD = 'documentMode'
 
-/**
- * Volatile boolean field for the experimental in-message UI mode. When on, an
- * ordinary answer is ordinary Markdown and interactive UI blocks ride inside
- * the message as fenced `openui` programs: the client renders those fences in
- * place. The page never becomes the turn-tail result.
- */
-export const INLINE_MODE_FIELD = 'inlineMode'
-
 /** Volatile boolean field enabling Intelligent UI in every session by default. */
 export const GLOBAL_ENABLED_FIELD = 'globalEnabled'
 
@@ -212,8 +204,6 @@ export interface IntelligentUISettings {
   readonly freeComposition?: boolean
   /** Experimental document mode: render an ordinary answer as the message body. */
   readonly documentMode?: boolean
-  /** Experimental in-message UI mode: render ordinary-answer UI blocks as fenced `openui` programs inside the Markdown message. */
-  readonly inlineMode?: boolean
   /** Whether every session starts enabled; a session override still wins. */
   readonly globalEnabled?: boolean
   /** Deployment-wide default answer style; a session override still wins. */

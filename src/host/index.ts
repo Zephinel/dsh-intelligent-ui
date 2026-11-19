@@ -80,9 +80,6 @@ export const Config = z.object({
   freeComposition: z.boolean().default(false).volatile(),
   // Experimental: an ordinary rendered answer is the chat message body itself.
   documentMode: z.boolean().default(false).volatile(),
-  // Experimental: an ordinary answer is Markdown and UI blocks live inside the
-  // message as fenced `openui` programs (no turn-tail render_ui result).
-  inlineMode: z.boolean().default(false).volatile(),
   globalEnabled: z.boolean().volatile(),
   answerStyle: z.string().max(64).volatile(),
   // Image-export defaults. The beautification frame is chosen per export and
@@ -196,8 +193,9 @@ const PARAMETERS = {
     program: {
       type: 'string',
       description:
-        'The complete openui-lang program for the answer. Statement per line; define root = Col(...) first. '
-        + 'Every named statement must be reachable from root. This is the UI the user sees.',
+        'The complete openui-lang program for a standalone page artifact. Statement per line; define root = Col(...) first. '
+        + 'Every named statement must be reachable from root. For inline UI in an ordinary Markdown answer, write the program in '
+        + 'a fenced `openui` block in the reply instead of calling this tool.',
     },
     title: {
       type: 'string',
@@ -396,13 +394,15 @@ function countStatements(program: string): number {
  * Sentence prepended to the generation prompt while the switch admits the
  * session. The generation prompt itself is static; this line makes the user's
  * opt-in explicit instead of leaving the model to infer it from the tool's
- * presence, and states the per-answer page-vs-text decision in one place.
+ * presence, and states the per-answer delivery decision in one place: Markdown
+ * with inline `openui` fences for explanations, a standalone page artifact only
+ * for an explicit deliverable.
  */
 export const ENABLED_SESSION_PREFIX =
-  'Intelligent UI is enabled for this session. There is no default format. For each ordinary answer, decide whether an interactive page serves the request better than text. '
-  + 'Render when showing the answer helps the reader understand faster or more accurately; otherwise answer in Markdown without calling render_ui. '
-  + 'When both seem to fit, the kind decides: a bare fact or a term restatement stays text, while an explanation of how something works is a page even when the prose version would be short. '
-  + 'The Answer style note below picks the layout when you render; a pending Artifact edit request follows its own instructions below.\n\n'
+  'Intelligent UI is enabled for this session. The answer is Markdown by default, with two ways to add UI. '
+  + 'For an explanation, analysis or comparison, keep the answer in Markdown and, where a visual or interactive block helps the reader understand faster, write ONE complete OpenUI Lang program (starting with `root = `) inside a fenced code block whose info string is exactly `openui`, at that place in the answer; use as many fences as the answer needs, one complete program per fence, and do not call render_ui for an ordinary answer. '
+  + 'Call render_ui only when the user asks for a standalone interactive deliverable to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the intelligent-ui skill for such a deliverable; the page appears at the end of the turn and the Answer style note below picks its layout. '
+  + 'Use one form per answer (inline fences or one page artifact), never both; when no UI helps, answer in plain Markdown. A pending Artifact edit request follows its own instructions below.\n\n'
 
 /** Prompt opening for a bound on-demand turn: the page is the requested result. */
 const ON_DEMAND_PREFIX =
@@ -430,24 +430,6 @@ const DOCUMENT_MODE_NOTE =
   + 'interactive components placed between the parts they explain. The Card compactness and Article reading playbooks do not constrain '
   + 'this document, and the layout/typography guidance is advisory; the hard rules, theme tokens and readable text still apply.'
 
-/**
- * Session prefix for the experimental in-message UI mode: the answer stays
- * ordinary Markdown and each UI block is one fenced `openui` program inside the
- * message. The turn-tail render_ui card is not used for ordinary answers.
- */
-const INLINE_SESSION_PREFIX =
-  'Intelligent UI is enabled for this session in in-message UI mode: the answer is ordinary Markdown, and interactive UI blocks live inside the message body. '
-  + 'For each ordinary answer, decide whether a UI block serves the request better than text alone. '
-  + 'When it does, write ONE complete OpenUI Lang program (starting with `root = `) inside a fenced code block whose info string is exactly `openui`, placed where it belongs in the answer; write the surrounding prose and any non-UI content as normal Markdown. '
-  + 'Use as many `openui` fences as the answer needs; each fence is one complete program, and a fence renders in place, so do not repeat its content as prose and do not wrap the whole answer in a program. '
-  + 'Do not call render_ui for an ordinary answer. A pending Artifact edit request follows its own instructions below; when no UI block serves the answer, answer in plain Markdown.\n\n'
-
-/** Format note that replaces the session style/free-composition notes in in-message UI mode. */
-const INLINE_MODE_NOTE =
-  '\n\nIn-message UI mode is on for this deployment: each fenced `openui` program renders inline in the chat message instead of a turn-tail card. '
-  + 'A program is a self-contained block without card title or page chrome; use it for the part of the answer that is clearer as a visual or interactive surface and keep the prose outside it. '
-  + 'The layout and typography playbooks are advisory for these blocks; the hard rules, theme tokens and readable text still apply.'
-
 /** Prompt suffix appended when the deployment enables free composition. */
 const FREE_COMPOSITION_NOTE =
   '\n\nFree-form layout is on for this deployment: the layout and typography playbook in the intelligent-ui skill, '
@@ -457,7 +439,7 @@ const FREE_COMPOSITION_NOTE =
 /** Routing note for artifact block-edit requests observed by the Host. */
 const ARTIFACT_EDIT_NOTE =
   '\n\nArtifact edit requests: when the latest user message contains an <artifact-edit-request> envelope that lists target blocks, '
-  + 'a pending edit request overrides the ordinary page-vs-text decision: apply it with the tool its envelope names. '
+  + 'a pending edit request overrides the ordinary-answer delivery decision: apply it with the tool its envelope names. '
   + 'For a block edit, do not rewrite the whole page with render_ui. Call `edit_ui_blocks` exactly once with a mini program `root = Col([...])` '
   + 'holding only those selected blocks\' updated top-level expressions in request order, plus any new helper statements; '
   + 'the Host splices them back into the unchanged page. The full page in the envelope is read-only reference. '
@@ -538,15 +520,6 @@ function isFreeComposition(config: IntelligentUIPreferenceConfig | undefined): b
  */
 function isDocumentMode(config: IntelligentUIPreferenceConfig | undefined): boolean {
   return readPreference(config?.documentMode, (value): value is boolean => value === true) === true
-}
-
-/**
- * Read the experimental in-message UI preference from its live config reference.
- * @param config - the plugin Config resolved by the Host, when settings are composed.
- * @returns true only when the deployment opted in; a missing ref means off.
- */
-function isInlineMode(config: IntelligentUIPreferenceConfig | undefined): boolean {
-  return readPreference(config?.inlineMode, (value): value is boolean => value === true) === true
 }
 
 /** Answer-style guidance appended to the generation prompt for one session. */
@@ -669,17 +642,16 @@ export function apply(ctx: {
       const sessionId = context?.agent?.session?.id
       if (!mode.enabledFor(sessionId)) return ''
       const operationNote = onDemand.promptNote(sessionId)
-      // In-message UI takes precedence over document mode when both experimental
-      // switches are on. Both own ordinary answers only: a bound on-demand turn
-      // keeps the "render the page" opening and its result styling.
-      const inline = !operationNote && isInlineMode(config)
-      const document = !operationNote && !inline && isDocumentMode(config)
-      const section = !inline && !document && isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
-      const template = inline || document ? undefined : mode.templateFor(sessionId)
+      // Document mode is the only remaining presentation override: both inline
+      // fence UI and page artifacts are part of the ordinary answer policy. A
+      // bound on-demand turn keeps the "render the page" opening and its style.
+      const document = !operationNote && isDocumentMode(config)
+      const section = !document && isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
+      const template = document ? undefined : mode.templateFor(sessionId)
       const style = mode.styleFor(sessionId)
-      const note = operationNote ? '' : inline ? INLINE_MODE_NOTE : document ? DOCUMENT_MODE_NOTE : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
+      const note = operationNote ? '' : document ? DOCUMENT_MODE_NOTE : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
       // Keep the style instruction near the top, before the long DSL reference.
-      const prefix = operationNote ? ON_DEMAND_PREFIX : inline ? INLINE_SESSION_PREFIX : document ? DOCUMENT_SESSION_PREFIX : ENABLED_SESSION_PREFIX
+      const prefix = operationNote ? ON_DEMAND_PREFIX : document ? DOCUMENT_SESSION_PREFIX : ENABLED_SESSION_PREFIX
       return `${prefix}${operationNote ? `${operationNote}\n\n` : ''}${note}${ARTIFACT_EDIT_NOTE}
 
 ${section}`
@@ -853,14 +825,11 @@ ${section}`
   ctx.tools.register({
     name: RENDER_UI_TOOL,
     description:
-      'Render an interactive answer as UI in the chat. Pass a complete openui-lang program that follows the '
-      + 'Intelligent UI rules in the system prompt. Intelligent UI is enabled for the session; there is no default format, so decide for each answer '
-      + 'whether a page serves it better than text: use it when showing the answer helps the reader understand faster or more accurately — structured, visual, interactive or computed answers '
-      + '(introductions, explainers, timelines, comparisons, dashboards, step-by-step guides, maps, drawings, forms, '
-      + 'planners, games or calculators); answer in prose when a page would add nothing (a single fact, a term restatement, '
-      + 'a one-sentence definition that does not explain how something works, a code snippet, a translation, chit-chat, '
-      + 'an explicit text request, content that cannot be shown as a page, or after rendering fails). '
-      + 'When both seem to fit, the kind decides: a bare fact or a term restatement stays text, while an explanation of how something works is a page even when the prose version would be short. '
+      'Render a standalone interactive page artifact at the end of the turn. Call it only when the user asks for a deliverable '
+      + 'to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the '
+      + 'intelligent-ui skill for such a deliverable. Do not call it to present an ordinary explanation: in that case answer in '
+      + 'Markdown and put each UI block in a fenced `openui` code block inside the reply instead. Pass a complete openui-lang '
+      + 'program that follows the Intelligent UI rules in the system prompt. '
       + 'The user sees the rendered page; do not repeat its content in prose. Pass `style` set to the session layout: '
       + '"card" or "article", or in Auto the layout you chose ("card", "article" or "free"); a selected free template uses '
       + 'its styleId with no temporaryStyle. Article pages use Toc and collapsible Section blocks; Card pages stay compact. '
@@ -1034,16 +1003,6 @@ ${section}`
       // A pending block edit applies the artifact's recorded style/template; the
       // session's current style only governs ordinary renders.
       const applyingBlockEdit = peekedBlockEdit !== undefined
-      // Experimental in-message UI: ordinary answers are Markdown carrying
-      // fenced `openui` programs rendered by the client. Only the on-demand and
-      // block-edit flows still render through the tool.
-      if (!temporary && !applyingBlockEdit && isInlineMode(config)) {
-        throw new Error(
-          'render_ui: in-message UI mode writes the answer as Markdown with fenced `openui` programs; do not call render_ui for an ordinary answer. '
-          + 'Write one complete OpenUI Lang program (starting with `root = `) in a ```openui fenced code block inside your answer instead. '
-          + 'On-demand results, saved templates and Artifact edit requests keep their own render_ui flow.',
-        )
-      }
       // Experimental document mode: an ordinary answer becomes one free-layout
       // document that the client presents as the message body. On-demand
       // results, artifact edits and saved templates keep their recorded layout.

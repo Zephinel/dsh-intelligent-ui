@@ -9,16 +9,22 @@
 [![DSH](https://img.shields.io/badge/DSH-0.2.2-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
 [![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
 
-**Turn a DeepSeek Harness (DSH) model answer into a page you can actually use.** After installing and enabling the plugin, ask directly:
+**Let DeepSeek Harness (DSH) answers grow interactive UI right inside them.** After installing and enabling the plugin, ask normally:
+
+```text
+Explain the difference between a harness and a model
+```
+
+Explanations and analyses stay Markdown; where it helps, the model writes [OpenUI Lang 1.0](https://openui.com) into an `openui` fence in the answer — maps, photos, charts, flows, checklists, forms and SVG drawings sit directly inside the reply, read together with the prose. When you need a standalone page you can actually use, ask for it:
 
 ```text
 Plan two days in Shanghai, with checkboxes and adjustments
 ```
 
-The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.0](https://openui.com) program; at the end of the turn, DSH renders it into an interactive page — maps, photos, charts, checklists, forms, SVG drawings and mini-games are all real components. Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
+Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both paths use real components; inline UI needs no extra switch. Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: published on GitHub and npm; `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`, and the plugin is listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **863/863** (Host 323, Client 501, packaging 39); **11/11** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+> **Current status**: published on GitHub and npm; `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`, and the plugin is listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **861/861** (Host 321, Client 501, packaging 39); **11/11** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 [What it looks like](#what-it-looks-like) · [Install](#install) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Getting the code and local development](#getting-the-code-and-local-development)
 
@@ -26,7 +32,7 @@ The model calls the `render_ui` tool and writes its answer as an [OpenUI Lang 1.
 
 ![Overview: itinerary page, editing canvas and settings](assets/intelligent-ui-readme-overview-en.webp)
 
-The page appears at the end of the answer. Its `$variables`, `@Set` and `@functions` all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request. Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer.
+An explanation's UI appears inside the answer; a standalone page appears as a card at the end of the answer. Its `$variables`, `@Set` and `@functions` all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request. Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer.
 
 ## Install
 
@@ -41,7 +47,7 @@ If a Web process is already running, restart it after installing; open the URL i
 
 **DSH Desktop**: sidebar **Plugins** → **Add plugin**, enter `@zephinel/dsh-intelligent-ui@0.6.2` (or just the package name for the latest version) → **Install** → **Enable now**.
 
-For first use, click **UI**, choose "This session only" (or send `/iui on`), then send the itinerary example above; an interactive page at the end of that turn confirms it works. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+For first use, click **UI**, choose "This session only" (or send `/iui on`), then send the explanation example above; inline UI in the reply confirms it works (the itinerary request renders a card at the end instead). Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
 
 ## Generate and edit
 
@@ -49,7 +55,7 @@ For first use, click **UI**, choose "This session only" (or send `/iui on`), the
 
 The composite above comes from real DSH sessions (DeepSeek V4.1 Flash · Max): one renderer produced the itinerary, dashboard and quiz, not hand-written samples.
 
-The model decides whether an answer uses a page or text by whether it helps the reader understand faster and more accurately — a concept, mechanism/process, structure, comparison, data or interaction gets a page; a bare fact, a one-sentence definition, code/translation, chit-chat or an explicit text request stays in Markdown. When a page is warranted, choose Card / Article per session under **UI → Display style**, or let **Auto** choose; **On-demand UI** only describes the request and picks no template.
+The model picks the form the answer needs: **explanations, analyses and comparisons** stay Markdown with inline UI where a chart, table, flow or small interaction helps; a **standalone interactive deliverable** — a page, dashboard, tool, form, game or editable result — is the only case that calls `render_ui` to produce a turn-tail card; plain text when that suffices. One answer never uses both forms. When a standalone page renders, choose Card / Article per session under **UI → Display style**, or let **Auto** choose; **On-demand UI** only describes the request and picks no template.
 
 ![Editing canvas: orbit glow, style section (Switch style + style instruction), row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
 

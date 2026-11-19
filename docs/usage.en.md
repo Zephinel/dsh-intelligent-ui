@@ -27,25 +27,29 @@ The model decides whether an answer uses a page: it renders one when structure, 
 
 With **Answer as a document (experimental)** enabled under **Plugins → Intelligent UI → Experimental**, an ordinary rendered answer has no card header, collapse control or frame and reads as this turn's chat message text. The model puts prose, headings, tables and interactive blocks into one page and adds no Markdown outside it; this suits explanations, analyses and debugging answers that should read like a reply rather than a deliverable.
 
-Note: this is a stopgap for in-message UI — the page still lives at the turn tail, and copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing. On-demand generation, saved templates and Artifact edit requests still render as cards. The switch affects future answers only; a recorded document answer keeps its recorded presentation, and new answers go back to Card / Article cards when it is off. See [Known limitations](limitations.en.md) for the full boundaries.
+Note: this is an experimental whole-document presentation — the page still lives at the turn tail, and copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing. On-demand generation, saved templates and Artifact edit requests still render as cards. The switch affects future answers only; a recorded document answer keeps its recorded presentation, and new answers return to the default when it is off (Markdown with inline UI; explicit deliverables still render a card). See [Known limitations](limitations.en.md) for the full boundaries.
 
-For true in-message UI, use **In-message UI (experimental)** in the next section: it renders UI directly inside the message Markdown instead of waiting for a turn-tail result.
+Ordinary explanations do not need this switch: the inline UI in the next section is the default and its content really lives in the message body.
 
-## In-message UI (experimental)
+## Inline UI in the answer (the default)
 
-With **In-message UI (experimental)** enabled under **Plugins → Intelligent UI → Experimental**, an ordinary answer is regular Markdown and UI blocks are written inside the message as fenced code blocks whose info string is `openui`: the model places a complete OpenUI Lang program where a chart, table or interactive block helps, and the Web client renders it in place. This suits answers that explain and illustrate at the same time — the deliverable is still text and code you can copy, search and export, not a card at the turn tail.
+An ordinary answer is Markdown by default; when a chart, table, flow or small interaction helps, the UI is written inside the answer as a fenced code block whose info string is `openui`, and the Web client renders it in place. There is no separate mode switch: with the session's UI switch on, the model naturally embeds UI where it helps — you do not have to say "put the page in the reply".
 
 ````markdown
-Day one's route:
+The route for day one:
 
 ```openui
 root = Col([Title("Day 1"), Timeline(...), Budget(...)])
 ```
 
-Day two depends on your energy...
+Day two depends on how much walking you want.
 ````
 
-While the fence streams it shows the plain code block, and the rendered block replaces it once the fence settles; an invalid program shows the renderer's fallback note instead of breaking the rest of the message. Inline blocks keep component interaction and `@ToAssistant` follow-ups, but offer no card editing, revision history, saved templates or image/HTML export. The switch is mutually exclusive with **Answer as a document (experimental)**; on-demand generation, saved templates and Artifact edit requests still render as cards. The content belongs to the message Markdown, so copy, search and transcript export keep the fence source; only the Web renderer shows the rendered UI, and TUI/headless clients show the code block. See [Known limitations](limitations.en.md) for the boundaries.
+- One fence is one complete program (`root = …`); the model may place several fences anywhere in one answer, and the prose outside them is still the answer.
+- While a fence streams it shows as a plain code block; once settled the client renders it in place. An invalid program shows the renderer's fallback note without breaking the rest of the message.
+- Inline blocks keep component interaction and `@ToAssistant` follow-ups, but have no card editing, revision history, saved templates or image/HTML export. Their source is part of the message, so copy, search and transcript export keep the program text.
+- Only the Web renderer shows the rendered UI; TUI/headless clients see the code block. An older DSH without the `conversation.chat.markdown.fence` slot also shows the code block.
+- For a standalone page that is editable, exportable or savable as a template, ask for a page/dashboard/tool/editable result; the model then calls `render_ui` for a turn-tail card instead (the two forms are alternatives). See [Known limitations](limitations.en.md).
 
 ## Images
 
@@ -98,7 +102,7 @@ The **Export** button at the right of the message actions can:
 
 **Why did a follow-up question not continue generation?** On-demand generation asks structured questions when material ambiguity remains: answering one resumes the same operation; after a text question, the next message automatically continues it. Only expiry, restart, failure or interruption needs a re-arm or retry; concurrent messages in multiple tabs may also consume the same intent. See [On-demand and templates](#on-demand-and-templates).
 
-**Why does an answer come back as plain text with no card?** First check that the switch is on for that session (the **UI** control in the composer, or `/iui on`). Even then the model decides whether a page helps and Auto only picks the layout when a page renders — a short answer, a concise explanation, code, a translation or an explicit text request is expected to stay in Markdown. To require a page for that turn, invoke the skill explicitly with `/intelligent-ui` in a session where the switch is on. With the experimental **Answer as a document** enabled, a page reads as this turn's chat text without card chrome — also expected (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)); with **In-message UI** enabled the answer itself is Markdown and `openui` fences render in the message body (see [In-message UI (experimental)](#in-message-ui-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
+**Why does an answer come back as plain text with no card?** That is the default: explanations and analyses stay Markdown, with inline UI where it helps (see [Inline UI in the answer (the default)](#inline-ui-in-the-answer-the-default)). Turn-tail cards are for explicit deliverables you ask for — a page, dashboard, tool or editable result; say so clearly if you want one. With the switch off there is neither inline UI nor a card; with the experimental **Answer as a document** enabled, ordinary answers become a turn-tail whole-document page again (only the Web renderer shows it, with no card editing entry or revision history; see [Answer as a document (experimental)](#answer-as-a-document-experimental)). See [Turn it on](#turn-it-on) and [Ask](#ask).
 
 **Why is there no export pill under an answer?** Only answers rendered by the extension have it; it is absent when the switch is off, the model replies in text, or rendering fails. See [Export](#export) and [Known limitations](limitations.en.md).
 

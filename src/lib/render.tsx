@@ -148,8 +148,11 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
   const activeLibrary = nestedBlockSlots ? nestedEditLibrary : blockSlots ? blockEditLibrary : library
   const [errors, setErrors] = useState<OpenUIError[]>([])
   const onError = useCallback((list: OpenUIError[]) => setErrors(list), [])
-  // Warnings still render; only real errors get the fallback note.
-  const fatal = errors.filter((error) => error.severity !== 'warning')
+  // Warnings still render; only real errors get the fallback note. The
+  // permissive parser also reports recoverable diagnostics such as excess
+  // positional args (they are dropped) while still rendering the program; a
+  // "could not be rendered" banner over a working page would contradict it.
+  const fatal = errors.filter((error) => error.severity !== 'warning' && error.code !== 'excess-args')
   const empty = program.trim() === ''
 
   return (

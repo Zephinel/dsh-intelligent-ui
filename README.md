@@ -9,16 +9,22 @@
 [![DSH](https://img.shields.io/badge/DSH-0.2.2-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
 [![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
 
-**把 DeepSeek Harness（DSH）的模型回答变成一张真正能用的页面。** 安装并启用后直接提问：
+**让 DeepSeek Harness（DSH）的回答里直接长出可交互界面。** 安装并启用后，像平常一样提问：
+
+```text
+解释一下 harness 和 model 的区别
+```
+
+解释、分析类回答保持 Markdown，需要时模型会把 [OpenUI Lang 1.0](https://openui.com) 写进正文里的 `openui` 围栏——地图、照片、图表、流程、清单、表单、SVG 绘图都直接内嵌在回答中间，随文字一起阅读。要一个真正能用的独立页面时，直接说：
 
 ```text
 帮我排一个上海两日游，要能勾选和调整
 ```
 
-模型调用 `render_ui` 工具，把答案写成一份 [OpenUI Lang 1.0](https://openui.com) 程序；DSH 在该轮结束时把它渲染成可交互页面——地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
+模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两条路径都是真实组件；内嵌 UI 无需额外开关。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **863/863**（Host 323、Client 501、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **861/861**（Host 321、Client 501、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 
 [效果](#效果) · [安装](#安装) · [生成与编辑](#生成与编辑) · [文档索引](#文档索引) · [本地开发](#获取代码与本地开发)
 
@@ -26,7 +32,7 @@
 
 ![总览：行程页面、编辑画布与设置页](assets/intelligent-ui-readme-overview-zh.webp)
 
-页面在回答末尾出现，里面的 `$变量`、`@Set`、`@functions` 都在浏览器本地执行：勾选、滑动条、Stepper、计时器、预算分配都不再请求模型。只有真正需要继续对话的动作（`@ToAssistant`，例如表单提交）会把一条简短消息放回输入框。
+普通解释的 UI 内嵌在回答正文里；独立页面的卡片出现在回答末尾。里面的 `$变量`、`@Set`、`@functions` 都在浏览器本地执行：勾选、滑动条、Stepper、计时器、预算分配都不再请求模型。只有真正需要继续对话的动作（`@ToAssistant`，例如表单提交）会把一条简短消息放回输入框。
 
 ## 安装
 
@@ -41,7 +47,7 @@ dsh web
 
 **DSH Desktop**：侧栏 **插件** → **添加插件**，输入 `@zephinel/dsh-intelligent-ui@0.6.2`（或只填包名装最新版）→ **安装** → **立即启用**。
 
-首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`），再发送上面的行程示例；该轮结束后出现可交互页面即验证成功。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
+首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`），再发送上面的解释示例；回答正文里出现内嵌 UI 即验证成功（发送行程示例则会在该轮末尾生成页面卡片）。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
 
 ## 生成与编辑
 
@@ -49,7 +55,7 @@ dsh web
 
 上面的组合图来自真实 DSH 会话（DeepSeek V4.1 Flash · Max）：同一套渲染器生成了行程、数据看板和小测，不是手写样例。
 
-模型按「是否让用户更快、更准地理解」决定这次回答用页面还是文字——概念、机制/流程、结构、对比、数据或交互用页面；裸事实、一句话定义、代码/翻译、闲聊或明确要文字时直接用 Markdown。要出页面时，可在 **UI → 显示样式** 按会话选 Card / Article，或交给 **Auto**；**按需生成** 则只描述需求、不选模板。
+模型按「这次回答需要什么形式」选择：**解释、分析、对比**保持 Markdown，需要时在正文里内嵌图/表/流程/小交互；**独立的可交互交付物**——页面、看板、工具、表单、游戏、可编辑结果——才调用 `render_ui` 在轮末生成卡片；文字足够时就是纯 Markdown。同一个回答不会同时使用两种形式。生成独立页面时，可在 **UI → 显示样式** 按会话选 Card / Article，或交给 **Auto**；**按需生成** 则只描述需求、不选模板。
 
 ![编辑画布：轨道光晕、样式区、行尾 More 菜单、编排与请求面板](assets/intelligent-ui-editing-zh.webp)
 
