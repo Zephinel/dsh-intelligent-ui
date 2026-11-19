@@ -22,12 +22,10 @@ dsh --version    # 已验证：0.2.2-rc.5；内嵌 UI 需要 0.2.2-rc.2+ 的 fen
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm；当前 latest 为 0.6.2
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-# 固定版本
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
-# 或从 GitHub 安装
+# main：包含正文内嵌 UI（尚未发布，需构建工具链）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
+# npm 稳定版 0.6.2：只有轮末卡片
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
 # DSH Desktop：退出并重开应用；systemd/launchd：重启对应服务）
 ```

@@ -22,12 +22,10 @@ dsh --version    # validated: 0.2.2-rc.5; inline UI needs the fence slot in 0.2.
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm; current latest is 0.6.2
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-# pin the version
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
-# or install from GitHub
+# main: includes inline UI (unreleased; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
+# npm stable 0.6.2: turn-tail cards only
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
 # DSH Desktop: quit and reopen the app; systemd/launchd: restart the corresponding service)
 ```

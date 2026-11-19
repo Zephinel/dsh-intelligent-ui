@@ -9,7 +9,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Current status
 
-**Published.** `@zephinel/dsh-intelligent-ui@0.6.2` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`. The published package includes the current feature set (in-place editing with revision history, inline UI in ordinary answers, standalone page artifacts for deliverables, experimental answer-as-document mode, local images, style switching and the PTC-dispatched `render_ui` card fix). Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published stable:** `@zephinel/dsh-intelligent-ui@0.6.2` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`; that package has turn-tail cards, in-place editing with revision history, standalone pages, local images and style switching, but **no inline UI**. The four-form inline UI is new on `main` and unreleased on npm; install the GitHub bundle or a local checkout to use it. The next npm release will carry it. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
 
 ## Requirements
 
@@ -54,11 +54,10 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm (current latest: 0.6.2)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2   # pin a version
-# or GitHub
+# main (inline UI, unreleased; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
+# npm 0.6.2 (stable, turn-tail cards only)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 ```
 
 The npm package name is **`@zephinel/dsh-intelligent-ui`** (the unscoped `dsh-intelligent-ui` is owned by an unrelated project), published under the `@zephinel` npm scope.
@@ -123,7 +122,7 @@ dsh --profile web --dump-config | grep -n intelligent-ui   # the entry must be c
 Verification checklist (remember the switch is off by default):
 
 0. **Switch present.** The composer shows the **UI** chip in `conversation.input.activity`; its menu offers **Off**, **This session only**, and **Follow global** (localized: 「关闭 / 仅本会话 / 跟随全局」 in a Chinese UI); Follow global shows the current global state under the row. Pick **This session only** (or run `/iui on`) before checking the tool and prompt; with the switch off, steps 1–2 are expected to *fail* by design. The Plugin detail page exposes the global enablement switch, the default Answer style and Free-form layout.
-1. **Tool present while on.** With the switch admitting the session, it exposes `render_ui` with the argument schema `{ program: string, style: "card"|"article"|"free", title?: string, styleId?: string, temporaryStyle?: StyleSnapshot }`. Authorized new on-demand generation requires free layout; adjustments preserve the registered parent layout. Both override session style guidance; otherwise the effective style is built-in or a visible saved template; Auto requires the model to pass the concrete style it chose (`card`, `article` or `free`), and any ordinary style may answer in Markdown when a page would add nothing. The model-facing description starts "Render an interactive answer as UI in the chat". With the switch off (or scoped to another session), the request tool list must **not** contain `render_ui`.
+1. **Tool present while on.** With the switch admitting the session, it exposes `render_ui` with the argument schema `{ program: string, style: "card"|"article"|"free", title?: string, styleId?: string, temporaryStyle?: StyleSnapshot, editRequestId?: string }`. Authorized new on-demand generation requires free layout; adjustments preserve the registered parent layout. Both override session style guidance; otherwise the effective style is built-in or a visible saved template; Auto requires the model to pass the concrete style it chose (`card`, `article` or `free`), and any ordinary style may answer in Markdown when a page would add nothing. The model-facing description starts "Render an interactive page for the user." With the switch off (or scoped to another session), the request tool list must **not** contain `render_ui`.
 2. **Prompt present while on.** With the switch on, the composed system prompt contains the OpenUI Lang section (order 3100) with the 57-component catalog and the effective style note; with the switch off the section resolves to an empty string.
 3. **Card works.** Ask the model to render a trivial page, or let the skill lead it. The turn ends with a card titled by `title` (or the localized default "Interactive answer" / 「交互式回答」) containing the rendered UI; the process area shows one such row, not the raw program.
 4. **Skill present.** When the profile composes the skill registry, the session catalog lists `intelligent-ui`; loading it returns the body of `skills/intelligent-ui/SKILL.md`. Without a skill service the tool still works and only the catalog entry is missing.
@@ -204,7 +203,7 @@ Work top-down; each step rules out one layer:
 
 ## Known limits
 
-- The card appears at the **end of the turn** (turn-tail), never inline mid-answer; during generation the process row reads the localized "Interactive answer" (「交互式回答」 in a Chinese UI).
+- The **page card** appears at the end of the turn (turn-tail); an `openui` fence renders inline in the message. During card generation the process row reads the localized "Interactive answer" (「交互式回答」 in a Chinese UI).
 - Model-authored programs occasionally fail validation; the host returns exact errors and the model is expected to self-repair in the same turn. Repeated failures are a prompt/model issue, not a host issue.
 - The generation prompt is about 10K tokens and is sent **only for a session the switch admits**; otherwise the prompt section is empty and the tool schema is hidden. Prompt caching absorbs most of the cost while on.
 - Photos, map tiles and routing are third-party services with offline fallbacks (see [troubleshooting.md](troubleshooting.md#runtime-fallbacks-valid-program-degraded-media)).

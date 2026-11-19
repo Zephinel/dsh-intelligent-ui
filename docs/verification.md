@@ -1221,3 +1221,10 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **资产/结构**：`assets` 增至 **36** 张，新增两张语言配对截图并加入 `test/packaging/manifest.test.mjs` 的 language-specific 集合；README 仍为 **120** 行（zh 11,050 B / en 12,045 B）。
 - **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（本轮仅文档/截图变更未重跑，沿用上一轮）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；`npm run pack:check` **69** 文件，非构建 **3,980,731** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：两张图是真实模型会话的单次捕获，不可精确复现；英文图从第二段开始裁剪以避开模型一句无关开场；没有改动代码或渲染器。
+
+## 2026-11-19 — 区分 npm 0.6.2 稳定版与 main 内嵌 UI
+
+- **背景**：README 和 shipped skill 把正文内嵌 UI 写成 npm `0.6.2` 的已验证能力，但 `v0.6.2` tag 没有 inline fence/`InlineUI`，CHANGELOG 也把该功能列在 `Unreleased`；用户安装 0.6.2 后按 README 的解释示例验证会失败。
+- **改动**：README 与 `skills/intelligent-ui/references/integration.md` 明确区分：npm `0.6.2` 是稳定版（轮末卡片、编辑、导出、模板），正文内嵌 UI 是 `main` 上尚未发布的功能；README Web 安装给出 GitHub main（含内嵌）与 npm 0.6.2（仅卡片）两个命令，first-use 分别说明预期；Desktop 注明 marketplace 0.6.2 只有卡片。`docs/development*.md` 的安装块同步。README 由 120 行增至 **123** 行（仍在预算内）。
+- **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（本轮仅文档变更未重跑，沿用上一轮）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；pack **69** 文件，非构建 **3,981,354** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：未创建 0.6.3 tag、未发布 npm；尚未解决的技能问题（无效 inline 示例、组合形态文案冲突、warning 重试规则等）留待下一步。
