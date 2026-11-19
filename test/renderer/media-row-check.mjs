@@ -124,6 +124,10 @@ const results = await cdp.evaluate(`(() => {
   if (fallback !== null) { check('fixture renders', false, 'renderer fallback: ' + fallback.innerText.slice(0, 160)); return checks }
 
   const css = (el, prop) => (el ? getComputedStyle(el) : null)?.getPropertyValue(prop) ?? ''
+  // Chrome 158+ serializes the legacy flex alignment values as flow-start /
+  // flow-end in computed styles; older Chrome uses flex-start / flex-end. Both
+  // names denote the same flex alignment.
+  const flexAlign = (value) => value.replace(/^flow-(start|end)$/, 'flex-$1')
   const width = (el) => el?.getBoundingClientRect().width ?? 0
   const ratio = (el) => {
     const value = css(el, 'aspect-ratio')
@@ -140,7 +144,7 @@ const results = await cdp.evaluate(`(() => {
   check('explicit thumbnail keeps its 0.7 aspect ratio', near(ratio(compactImage), 0.7, 0.02), css(compactImage, 'aspect-ratio'))
   check('compact thumbnail row stays short', (compact?.getBoundingClientRect().height ?? 999) < 100, (compact?.getBoundingClientRect().height ?? 'missing') + 'px')
   check('program Row gap is not overridden', css(compact, 'gap') === '12px', css(compact, 'gap'))
-  check('program Row align is not overridden', css(compact, 'align-items') === 'flex-start', css(compact, 'align-items'))
+  check('program Row align is not overridden', flexAlign(css(compact, 'align-items')) === 'flex-start', css(compact, 'align-items'))
 
   const media = rowOf(wide, 'Media copy')
   const mediaImage = imageOf(media)
@@ -152,7 +156,7 @@ const results = await cdp.evaluate(`(() => {
   const boxedImage = imageOf(boxed)
   check('unsized Box media row keeps the 120-200px slot', width(boxedImage) >= 119 && width(boxedImage) <= 201, width(boxedImage) + 'px')
   check('unsized Box media row defaults to 4:3', near(ratio(boxedImage), 4 / 3, 0.02), css(boxedImage, 'aspect-ratio'))
-  check('unsized Box media row is top-aligned with the group gap', css(boxed, 'gap') === '16px' && css(boxed, 'align-items') === 'flex-start', css(boxed, 'gap') + ' / ' + css(boxed, 'align-items'))
+  check('unsized Box media row is top-aligned with the group gap', css(boxed, 'gap') === '16px' && flexAlign(css(boxed, 'align-items')) === 'flex-start', css(boxed, 'gap') + ' / ' + css(boxed, 'align-items'))
 
   const sized = rowOf(wide, 'Sized copy')
   const sizedImage = imageOf(sized)

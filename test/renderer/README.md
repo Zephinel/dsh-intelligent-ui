@@ -90,8 +90,10 @@ node test/renderer/media-row-check.mjs
 Renders photos inside Rows through headless Chrome and asserts the media-row
 defaults yield to explicit program sizing: a `Box` with an inline width keeps it,
 `SearchImage(aspectRatio)` wins over the 4:3 default, and Row gap/align still
-apply. It covers plain photos, captioned boxes and Pressable-wrapped photos, so a
-stylesheet default can no longer shrink or resize a program-sized image.
+apply. Alignment values are compared after normalizing Chrome 158+'s
+`flow-start`/`flow-end` serialization of the legacy flex keywords. It covers
+plain photos, captioned boxes and Pressable-wrapped photos, so a stylesheet
+default can no longer shrink or resize a program-sized image.
 
 ## Pressable select check
 
