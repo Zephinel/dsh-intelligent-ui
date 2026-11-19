@@ -13,14 +13,14 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Requirements
 
-- DSH **0.2.2** (validated on `0.2.2-rc.1`, npm `latest`; `0.2.2-rc.3` on the `next` channel has a community PTC check but the current build is not yet systematically re-verified there; `0.2.2-rc.5` has a local Host/Client mount check and a natural-prompt real-GUI inline-rendering test), Node **24**. Inline UI fences additionally need the `conversation.chat.markdown.fence` client slot introduced in DSH 0.2.2-rc.2; on an older Host the `openui` fences stay plain code blocks.
+- DSH **0.2.2** (validated on `0.2.2-rc.5`: Host/Client mount plus a natural-prompt real-GUI inline-rendering test; `0.2.2-rc.3` on the `next` channel has a community PTC check, while card editing/export were not systematically re-verified there), Node **24**. Inline UI fences additionally need the `conversation.chat.markdown.fence` client slot introduced in DSH 0.2.2-rc.2; on an older Host the `openui` fences stay plain code blocks.
 - The **web** profile (or any profile whose app has a browser chat surface); the client half declares `"dsh": { "client": { "platform": "web" } }`.
 - Interactive-page export additionally needs a `webServer` service so the Host can serve the standalone renderer assets; without it image export still works and page export reports a build failure.
 - Style catalog and management require Host `webServer` plus `connection.requestRejection` authentication. On-demand uses the deployment's normal default conversation model services and session events; there is no extension-owned draft model endpoint, `llm` injection or `agentDefaultModel` injection. The structured clarification path additionally needs the built-in `ask_user_question` tool; a text fallback keeps the operation pending for the next message instead of requiring an immediate re-arm.
 - The app composes the client locale service (`@deepseek-ai/dsh-client-locale`; DSH Web includes it by default). The browser half requires the `locale` service: without it the switch and the card do not mount, while the Host tool and prompt keep working. UI dictionaries live in `src/shared/locales.ts` (`zh` as the key-set source of truth, `en` checked complete); the renderer falls back to English outside DSH.
 - Network access for the nice-to-haves: Wikipedia/Wikimedia (photo search), OpenFreeMap tiles and OSRM demo routing (Map). Offline, the page still renders with the fallbacks described below.
 - Runtime dependency **`@deepseek-ai/schemastery`** (~3.18.5), installed with the package; the Host uses it only for the Plugin detail page Config schema.
-- The package declares **no `engines.dsh` yet**; it was verified against `0.2.2-rc.1`. A later DSH may refuse it until a compatible release lands or an exact-version exemption is granted (below).
+- The package declares **no `engines.dsh` yet**; it was verified against `0.2.2-rc.5`. A later DSH may refuse it until a compatible release lands or an exact-version exemption is granted (below).
 
 ## Session switch and answer style
 
@@ -75,7 +75,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.6.2 --dsh-version 0.2.2-rc.1 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.6.2 --dsh-version 0.2.2-rc.5 --accept-risk
 ```
 
 Remove it with the mirror command:
