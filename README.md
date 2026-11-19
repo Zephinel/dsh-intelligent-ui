@@ -21,7 +21,7 @@
 帮我排一个上海两日游，要能勾选和调整
 ```
 
-模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两条路径都是真实组件；内嵌 UI 无需额外的 inline 模式开关（仍需会话 UI 开关启用插件）。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
+模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两种 UI 形式都是真实组件，也可以同时使用：正文内嵌负责解释，轮末卡片负责交付；内嵌 UI 无需额外的 inline 模式开关（仍需会话 UI 开关启用插件）。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
 > **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **869/869**（Host 323、Client 507、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
@@ -55,7 +55,7 @@ dsh web
 
 上面的组合图来自真实 DSH 会话（DeepSeek V4.1 Flash · Max）：同一套渲染器生成了行程、数据看板和小测，不是手写样例。
 
-模型按「这次回答需要什么形式」选择：**解释、分析、对比**保持 Markdown，需要时在正文里内嵌图/表/流程/小交互；**独立的可交互交付物**——页面、看板、工具、表单、游戏、可编辑结果——才调用 `render_ui` 在轮末生成卡片；文字足够时就是纯 Markdown。同一个回答不会同时使用两种形式。生成独立页面时，可在 **UI → 显示样式** 按会话选 Card / Article，或交给 **Auto**；**按需生成** 则只描述需求、不选模板。
+模型按「这次回答需要什么形式」在四种交付方式中选择：纯 Markdown、正文内嵌、轮末卡片、或“正文内嵌解释 + 轮末交付页”。**解释、分析、对比**通常保持 Markdown 并按需内嵌；**独立的可交互交付物**——页面、看板、工具、表单、游戏、可编辑结果——用 `render_ui` 生成轮末卡片；两者角色不同时可以出现在同一个回答里，但不会重复同一份内容，且最多一张卡片。**Auto** 由模型选择这四种交付方式（并在出卡片时选版式）；生成独立页面时，也可在 **UI → 显示样式** 按会话固定 Card / Article；**按需生成** 则只描述需求、不选模板。
 
 ![编辑画布：轨道光晕、样式区、行尾 More 菜单、编排与请求面板](assets/intelligent-ui-editing-zh.webp)
 

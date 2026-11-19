@@ -395,15 +395,16 @@ function countStatements(program: string): number {
  * Sentence prepended to the generation prompt while the switch admits the
  * session. The generation prompt itself is static; this line makes the user's
  * opt-in explicit instead of leaving the model to infer it from the tool's
- * presence, and states the per-answer delivery decision in one place: Markdown
- * with inline `openui` fences for explanations, a standalone page artifact only
- * for an explicit deliverable.
+ * presence, and states the per-answer delivery decision in one place: plain
+ * Markdown, inline `openui` fences, one standalone page artifact, or an inline
+ * explanation plus one page artifact.
  */
 export const ENABLED_SESSION_PREFIX =
-  'Intelligent UI is enabled for this session. The answer is Markdown by default, with two ways to add UI. '
-  + 'For an explanation, analysis or comparison, keep the answer in Markdown and, where a visual or interactive block helps the reader understand faster, write ONE complete OpenUI Lang program (starting with `root = `) inside a fenced code block whose info string is exactly `openui`, at that place in the answer; use as many fences as the answer needs, one complete program per fence, and do not call render_ui for an ordinary answer. '
-  + 'Call render_ui only when the user asks for a standalone interactive deliverable to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the intelligent-ui skill for such a deliverable; the page appears at the end of the turn and the Answer style note below picks its layout. '
-  + 'Use one form per answer (inline fences or one page artifact), never both; when no UI helps, answer in plain Markdown. A pending Artifact edit request follows its own instructions below.\n\n'
+  'Intelligent UI is enabled for this session. Choose the form that serves each answer: plain Markdown; Markdown with inline `openui` fences; one standalone page artifact via render_ui; or an inline explanation plus one page artifact. '
+  + 'For an explanation, analysis or comparison, keep the answer in Markdown and, where a visual or interactive block helps the reader understand faster, write ONE complete OpenUI Lang program (starting with `root = `) inside a fenced code block whose info string is exactly `openui`, at that place in the answer; use as many fences as the answer needs, one complete program per fence. '
+  + 'Call render_ui when the user asks for a standalone interactive deliverable to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the intelligent-ui skill for such a deliverable; the page appears at the end of the turn and the Answer style note below picks its layout. '
+  + 'You may also add one page artifact to an inline explanation when the answer both explains with visuals and delivers a separate usable page: keep the roles distinct, never duplicate the same content, and prefer the simplest form. At most one page artifact per answer. '
+  + 'When no UI helps, answer in plain Markdown. A pending Artifact edit request follows its own instructions below.\n\n'
 
 /** Prompt opening for a bound on-demand turn: the page is the requested result. */
 const ON_DEMAND_PREFIX =
@@ -539,7 +540,7 @@ const STYLE_NOTES: Readonly<Record<AnswerStyle, string>> = {
     + 'Include a reachable `Toc` and at least one `Section`; the Host rejects an article call without both. '
     + 'Pass `style: "article"`.',
   auto:
-    '\n\nAnswer style for this session: **Auto**. When you decide to render a standalone page artifact, choose the layout that fits: '
+    '\n\nAnswer style for this session: **Auto**. Decide both the delivery form (plain Markdown, inline UI, one page artifact, or an inline explanation plus one page artifact) and, when you include a page, the layout that fits: '
     + '**Card** for a compact interactive page; **Article** for a detailed, in-depth, long-form or comprehensive explanation '
     + '(coverage summary + reachable `Toc` + substantial `Section` prose); **free** when neither shell fits — compose the page shape '
     + 'yourself without a Card/Article wrapper, with `Toc` and `Section` optional. '
@@ -827,11 +828,13 @@ ${section}`
   ctx.tools.register({
     name: RENDER_UI_TOOL,
     description:
-      'Render an interactive page for the user. In the default policy, call it only when the user asks for a deliverable '
+      'Render an interactive page for the user. In the default policy, call it when the user asks for a standalone deliverable '
       + 'to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the '
-      + 'intelligent-ui skill for such a deliverable. For an ordinary explanation in the default policy, answer in Markdown '
-      + 'and put each UI block in a fenced `openui` code block inside the reply instead. When the system prompt says document '
-      + 'mode is on, the page itself is the reply and this default-policy restriction does not apply. Pass a complete openui-lang '
+      + 'intelligent-ui skill for such a deliverable. You may also call it alongside an inline explanation when the answer needs '
+      + 'both an explanation and a separate usable page, keeping the roles distinct and never duplicating content; render at most '
+      + 'one page per answer. For an explanation that needs only inline UI, answer in Markdown with fenced `openui` blocks '
+      + 'instead. When the system prompt says document mode is on, the page itself is the reply and this default-policy '
+      + 'restriction does not apply. Pass a complete openui-lang '
       + 'program that follows the Intelligent UI rules in the system prompt. '
       + 'The user sees the rendered page; do not repeat its content in prose. Pass `style` set to the session layout: '
       + '"card" or "article", or in Auto the layout you chose ("card", "article" or "free"); a selected free template uses '

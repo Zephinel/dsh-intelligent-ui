@@ -46,11 +46,11 @@ test('the troubleshooting reference repeats the guardrail with the failure it pr
 })
 
 test('the enabled-session delivery policy is single-sourced and explicit invocation is a directive', () => {
-  assert.match(prompt, /answer is Markdown by default/i, 'the prompt makes Markdown the default answer')
+  assert.match(prompt, /Choose the form that serves each answer/i, 'the prompt names the four delivery forms')
   assert.match(prompt, /fenced code block whose info string is exactly `openui`/i, 'the prompt names the inline UI form')
-  assert.match(prompt, /do not call `render_ui` for an ordinary answer/i, 'the prompt reserves render_ui for deliverables')
   assert.match(prompt, /standalone page artifact/i, 'the prompt names the page artifact form')
-  assert.match(prompt, /Use one form per answer/i, 'the prompt never mixes inline UI and a page artifact')
+  assert.match(prompt, /inline explanation plus one page artifact/i, 'the prompt allows both forms in one answer')
+  assert.match(prompt, /at most one page artifact per answer/i, 'the prompt caps the page artifact count')
   assert.match(prompt, /a free layout/i, 'the prompt names the free layout among the session layouts')
   assert.match(prompt, /explicitly invokes the `intelligent-ui` skill/i, 'explicit invocation is a directive in the prompt')
   assert.match(prompt, /If it still fails after you fix it twice in this turn/, 'the retry cap and text fallback are kept')

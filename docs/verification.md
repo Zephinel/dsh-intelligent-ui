@@ -1188,3 +1188,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **测试**：Node 862→**869**（Host +1 Card/Article 策略、Client +6 注册与诊断分类），Host 323、Client 507、packaging 39；inline 套件 9 fixtures；full `test:browser` **11/11**。`tsc --noEmit` 通过。
 - **门禁**：`npm run check` PASS；Node **869/869** = Host **323** + Client **507** + packaging **39**；浏览器 **11/11** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **900 kB**、client **4.21 MB**（js 3.96 / CSS 249.2 kB）；`npm run pack:check` **67** 文件，非构建 **3,778,201** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：本轮由单元/浏览器/提示词内容测试与文档检查验证；未重新跑真实模型 GUI（inline/card 行为沿用上一轮隔离实例证据，document mode 专用 prompt 未真机验证）。复查期间 `artifact-edit` 出现过两次不同步骤的偶发 flake，单独重跑后 944 通过；最终全量跑 11/11。
+
+## 2026-11-19 — 四种交付方式：文字 / 内嵌 / 轮末卡片 / 内嵌 + 卡片
+
+- **背景**：产品上确认“内嵌”和“轮末卡片”不必互斥：解释可以在正文内嵌，独立的可交互交付物仍可在同一回答的轮末生成卡片。Auto 应由模型按情况在这四种方式中选择，而不是把两者固定为二选一。
+- **实现**：普通回答前缀、生成提示词 preamble、`render_ui` 工具描述和 Agent Skill 改为四种交付方式；明确“两职分工”的组合只在解释与交付是两件不同的事时使用，**最多一张卡片、同一内容不重复**；Auto note 同时说明由模型选择交付方式与卡片版式，Card/Article 仍只固定卡片版式。Document mode 与 on-demand 的专用提示词仍保持卡片专用、显式禁止 inline，作为普通策略的例外。文档（README/usage/architecture/limitations/integration/CHANGELOG）同步更新，示例增加“解释 + 做成可交互页面”的组合请求。
+- **测试**：Host prompt 断言改为四种方式、`inline explanation plus one page artifact`、`at most one page artifact`、Auto 同时选择交付方式与版式；guardrails 同步；旧的 `Use one form ... never both` 已移除。Node **869/869**（Host 323 + Client 507 + packaging 39），浏览器 **11/11**；inline browser fixture 覆盖原来的内嵌/卡片边界，但没有新增“真实同一回答同时渲染内嵌与卡片”的端到端用例。
+- **门禁**：`npm run check` PASS；Node **869/869** = Host **323** + Client **507** + packaging **39**；浏览器 **11/11** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **901 kB**、client **4.21 MB**（js 3.96 / CSS 249.2 kB）；`npm run pack:check` **67** 文件，非构建 **3,779,402** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：本轮是提示词/文档策略变更，已由 Node/浏览器套件与 prompt 断言验证；“同一回答内嵌 + 卡片”的联合渲染没有新增真实 GUI 端到端测试，document mode/on-demand 仍未真机复验。

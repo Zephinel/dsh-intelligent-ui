@@ -6,29 +6,30 @@ whenToUse: "A visual, interactive or computed answer would serve better than pro
 
 # Intelligent UI
 
-An OpenUI Lang program can appear two ways: inside a fenced `openui` block in an ordinary answer (rendered in place), or inside a `render_ui` call (a standalone interactive page at the end of the turn). The program is not prose and not HTML: it declares named values and components, and the renderer evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the design playbook and the deep reference that the prompt cannot fit.
+An OpenUI Lang program can appear in four delivery forms: plain Markdown, inline UI, one standalone page artifact, or an inline explanation plus one page artifact. Inline programs live in a fenced `openui` block (rendered in place); a page lives in a `render_ui` call (a standalone interactive page at the end of the turn). The program is not prose and not HTML: it declares named values and components, and the renderer evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the design playbook and the deep reference that the prompt cannot fit.
 
 ## Before you start: is the session enabled?
 
 The extension is opt-in. The deployment-wide switch and default answer style live on the Plugin detail page; the composer can override enablement and style for one session — **Off**, **This session only**, **Follow global** (inherits the global switch; its chip states whether the global switch is on or off), and **Auto** / **Card** / **Article** or a saved custom template. You cannot see the composer, so infer the state from the request:
 
-- **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; decide per answer whether the delivery is inline UI, a standalone page artifact, or plain text.
+- **`render_ui` is in your tools and the `tool:intelligent-ui` prompt section is present** → enabled. Continue; choose among plain Markdown, inline UI, one standalone page artifact, or an inline explanation plus one page artifact.
 - **`render_ui` is absent** → off for this session, or the plugin/host services did not load. Answer in prose. If a page would genuinely serve better, say once that the user can pick **This session only** (仅本会话) in the **UI** chip on the right side of the composer, run `/iui on`, or enable the extension for all sessions on the Plugin detail page. Do not call `render_ui`, do not fake a card, and do not repeat the ask on later turns.
-- **Explicit invocation is a directive:** the user invoked `/intelligent-ui`, or explicitly asked for a page, dashboard, card, tool or UI → use this skill. Deliver inline UI when the request is an explanation, or a standalone page artifact when the user asks for a deliverable; prose only when the user also asked for text or the tool is unavailable.
+- **Explicit invocation is a directive:** the user invoked `/intelligent-ui`, or explicitly asked for a page, dashboard, card, tool or UI → use this skill. Deliver inline UI when the request is an explanation, a standalone page artifact when the user asks for a deliverable, or both when the request has both jobs; prose only when the user also asked for text or the tool is unavailable.
 
 A deployment may also enable **Free-form layout** on the extension's Plugin detail page (Plugins → Intelligent UI). When the injected prompt says "Free-form layout is on for this deployment", the design playbook below is advisory rather than a template.
 
-Ordinary answers may include inline UI by default: see [Inline UI in ordinary answers](#inline-ui-in-ordinary-answers). A standalone page artifact still uses `render_ui`; the injected prompt chooses between them.
+Ordinary answers may include inline UI by default: see [Inline UI in ordinary answers](#inline-ui-in-ordinary-answers). A standalone page artifact still uses `render_ui`; the injected prompt lets the two coexist when they serve distinct roles.
 
 ## Decide the delivery form
 
-The decision policy is owned by the injected `tool:intelligent-ui` prompt; this skill applies it rather than restating it. For each answer choose one of three forms:
+The decision policy is owned by the injected `tool:intelligent-ui` prompt; this skill applies it rather than restating it. For each answer choose one of four forms:
 
-- **Inline UI — the normal form for explanations.** Keep the answer in Markdown; wherever a visual or interactive block helps the reader, place one complete program in a fenced block whose info string is exactly `openui`. Do not call `render_ui` for an ordinary answer. See [Inline UI in ordinary answers](#inline-ui-in-ordinary-answers).
-- **A standalone page artifact — only for a deliverable.** Call `render_ui` once when the user asks for an interactive deliverable to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the skill for that deliverable. Then follow the workflow below.
-- **Plain text.** When neither form helps, answer in Markdown and stop.
+- **Inline UI — the normal form for explanations.** Keep the answer in Markdown; wherever a visual or interactive block helps the reader, place one complete program in a fenced block whose info string is exactly `openui`. An inline explanation does not need `render_ui`. See [Inline UI in ordinary answers](#inline-ui-in-ordinary-answers).
+- **A standalone page artifact — for a deliverable.** Call `render_ui` once when the user asks for an interactive deliverable to use, keep or open on its own — a page, dashboard, tool, form, game or editable result — or explicitly invokes the skill for that deliverable. Then follow the workflow below.
+- **Both forms — when the answer has two distinct jobs.** Keep the explanation in Markdown with inline fences and call `render_ui` once for a separate usable page. Keep the roles distinct and never duplicate the same content in both.
+- **Plain text.** When no UI helps, answer in Markdown and stop.
 
-Use one form per answer: inline fences or one page artifact, never both. The session style is a layout preference for a standalone page artifact, not a requirement to render: Card and Article name the layout, Auto lets you choose Card, Article or a free layout. A page is never faked: if the switch is off or the tool is missing, say so once and answer in prose; never simulate one with HTML.
+Prefer the simplest form. An answer has at most one page artifact; both forms are allowed only when they serve distinct roles. The session style is a layout preference for a standalone page artifact, not a requirement to render: Card and Article name the layout, Auto lets you choose both the form and the layout. A page is never faked: if the switch is off or the tool is missing, say so once and answer in prose; never simulate one with HTML.
 
 ## Answer styles
 
@@ -66,7 +67,7 @@ Day two depends on how much walking you want.
 ````
 
 - One fence is one complete program (`root = …`); use as many fences as the answer needs, and keep the prose outside them. Do not wrap the whole answer in a program.
-- Do not call `render_ui` for an ordinary answer. When the answer is itself a standalone deliverable, use the page-artifact workflow instead (one form per answer, never both).
+- An inline explanation does not need `render_ui`. If the answer also delivers a separate standalone page, the two forms may coexist: keep the roles distinct, do not duplicate content, and render at most one card.
 - The client renders a settled fence in place; while it streams it shows as a code block. A program that cannot render at all keeps the renderer's failure note; a program that drops only some parts keeps the usable page and adds a compact warning. Inline programs are not preflighted by the Host, so keep each fence focused and correct rather than adding a large experimental composition.
 - The rendered block has no card header, editing entry or revision history, but keeps component interaction and `@ToAssistant` follow-ups. The fence source is part of the message, so copying, search and transcript export keep the program text.
 - An explicit `/intelligent-ui` or "use UI" request still follows the delivery decision: inline for an explanation, a page artifact for a deliverable.
@@ -169,7 +170,7 @@ Call `render_ui({ program: <the complete program>, style: <"card"|"article"|"fre
 8. Money, percentages, counts and dates shown as text use `@Format` / `@Plural` / `@FormatDate`; relative dates start from `@Today()`, and dates are ordered with `@DaysBetween(a, b) > 0`.
 9. The program is complete: no `...`, no TODO, no placeholder comments.
 10. One page per turn: a rejected call may be retried; a successful one must not be followed by a second `render_ui` call in the same turn.
-11. Inline fences and page artifacts are alternatives: an `openui` fence holds exactly one complete program, and an answer never combines inline fences with a `render_ui` page.
+11. Inline fences and page artifacts may coexist when they serve distinct roles: an `openui` fence holds exactly one complete program, an answer has at most one page artifact, and the same content is never duplicated in both.
 12. **Keep the extension checkout read-only while answering.** Never add scratch programs, tests, fixtures or build output under the skill base directory or the plugin's source tree (including `test/renderer/.build/`) to test a program. `render_ui` is the preflight; save drafts in a temporary directory outside the repository. Only an explicit request to develop the extension lifts this rule.
 
 Exact signatures, argument order, enums and function list: [references/components.md](references/components.md). Syntax, state and wrong-vs-right snippets: [references/language.md](references/language.md).

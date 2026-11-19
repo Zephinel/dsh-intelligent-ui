@@ -243,7 +243,7 @@ test('style overrides are persisted and forced styles are enforced on the tool',
   assert.match(style.text, /article/)
   assert.equal(viewOf(rec, 's1').style, 'article')
   assert.match(rec.sections[0].text(promptContext('s1')), /Answer style for this session: \*\*Article\*\*/)
-  assert.match(rec.sections[0].text(promptContext('s1')), /Markdown by default, with two ways to add UI/, 'ordinary turns carry the delivery decision')
+  assert.match(rec.sections[0].text(promptContext('s1')), /Choose the form that serves each answer/, 'ordinary turns carry the four-form delivery decision')
   assert.deepEqual(JSON.parse(readFileSync(join(home, 'dsh-intelligent-ui.json'), 'utf8')).styles, { s1: 'article' })
 
   await assert.rejects(
@@ -425,7 +425,6 @@ test('on-demand commands, projection and prompt are transient and session-bound'
   assert.match(invoke('').text, /On-demand UI: running/)
   assert.match(prompt(), /ON-DEMAND UI/)
   assert.match(prompt(), /This turn is an on-demand UI request/, 'a bound on-demand turn requires a page')
-  assert.doesNotMatch(prompt(), /Markdown by default, with two ways to add UI/, 'the ordinary delivery decision is replaced on demand')
   assert.match(prompt(), /explicit exception to the ordinary-answer policy/, 'on-demand turns state the override explicitly')
   assert.match(prompt(), /do not use inline `openui` fences/, 'on-demand turns forbid inline fences')
   assert.match(prompt(), /style: "free"/)

@@ -21,8 +21,9 @@ Describe what you want directly, for example:
 - "Build a 7-speed bicycle shifting simulator" — a standalone interactive tool, a turn-tail card.
 - "Turn these tables into a filterable sales dashboard" — a deliverable dashboard, a turn-tail card.
 - "Explain Chinese history with collapsible dynasties" — an explanatory answer, with inline UI in the message.
+- "Explain the mechanism and build an interactive demo page" — an inline explanation plus one deliverable card.
 
-The model picks the form from the nature of the answer: **explanations, analyses and comparisons** stay Markdown with inline UI where it helps; a **standalone interactive deliverable** (a page, dashboard, tool, form, game or editable result) is the only case that calls `render_ui` for a turn-tail card; text alone when that suffices. One answer uses one UI form, never both. When a card renders, choose the per-session layout under **UI → Display style**: Card / Article, or Auto (Card, Article or a free layout); inline blocks inherit the renderer theme and ignore the display style.
+The model picks one of four delivery forms: plain Markdown, inline UI, a turn-tail page card, or an inline explanation plus a page artifact. **Explanations, analyses and comparisons** usually stay Markdown with inline UI where it helps; a **standalone interactive deliverable** (a page, dashboard, tool, form, game or editable result) uses `render_ui` for a turn-tail card; when both roles are distinct one answer may include both, never duplicating the same content and rendering at most one page card. **Auto** lets the model choose among the four delivery forms and, when a card is included, the layout; Card/Article only pin the card layout. When a card renders, choose the per-session layout under **UI → Display style**: Card / Article, or Auto (Card, Article or a free layout); inline blocks inherit the renderer theme and ignore the display style.
 
 ## Answer as a document (experimental)
 
@@ -50,7 +51,7 @@ Day two depends on how much walking you want.
 - While a fence streams it shows as a plain code block; once settled the client renders it in place. A program that cannot render at all shows the renderer's fallback note; a program that drops only some parts keeps the usable page and adds a compact warning, without breaking the rest of the message.
 - Inline blocks keep component interaction and `@ToAssistant` follow-ups, but have no card editing, revision history, saved templates or image/HTML export. Their source is part of the message, so copy, search and transcript export keep the program text.
 - Only the Web renderer shows the rendered UI; TUI/headless clients see the code block. An older DSH without the `conversation.chat.markdown.fence` slot also shows the code block.
-- For a standalone page that is editable, exportable or savable as a template, ask for a page/dashboard/tool/editable result; the model then calls `render_ui` for a turn-tail card instead (the two forms are alternatives). See [Known limitations](limitations.en.md).
+- For a standalone page that is editable, exportable or savable as a template, ask for a page/dashboard/tool/editable result; the model calls `render_ui` for a turn-tail card. It may coexist with an inline explanation when both roles are distinct (no duplicated content, at most one card). See [Known limitations](limitations.en.md).
 
 ## Images
 
