@@ -60,7 +60,7 @@ test('the published files list covers every runtime and bundle input', () => {
 
 test('every shipped screenshot exists and is used by the matching README', () => {
   const screenshots = readdirSync(new URL('assets', root))
-  assert.equal(screenshots.length, 34, 'assets ships the current README screenshot set')
+  assert.equal(screenshots.length, 36, 'assets ships the current README screenshot set')
   // Source captures are kept in assets/ for docs/history; the READMEs
   // reference the composites instead. The real-* files are raw captures from
   // live DSH model sessions (not reproducible by the capture scripts) that
@@ -88,6 +88,7 @@ test('every shipped screenshot exists and is used by the matching README', () =>
     'intelligent-ui-editing-zh.webp', 'intelligent-ui-editing-en.webp',
     'intelligent-ui-readme-overview-zh.webp', 'intelligent-ui-readme-overview-en.webp',
     'intelligent-ui-readme-generation-zh.webp', 'intelligent-ui-readme-generation-en.webp',
+    'intelligent-ui-readme-inline-zh.webp', 'intelligent-ui-readme-inline-en.webp',
   ])
   for (const image of screenshots) {
     assert.ok(existsSync(new URL(`assets/${image}`, root)), `assets/${image} exists`)

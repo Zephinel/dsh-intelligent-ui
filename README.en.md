@@ -30,9 +30,13 @@ Then the model delivers an editable, exportable, savable interactive page as a c
 
 ## What it looks like
 
-![Overview: itinerary page, editing canvas and settings](assets/intelligent-ui-readme-overview-en.webp)
+![Inline UI inside an explanation: a model-versus-harness comparison table embedded mid-answer](assets/intelligent-ui-readme-inline-en.webp)
 
-An explanation's UI appears inside the answer; a standalone page appears as a card at the end of the answer. Its `$variables`, `@Set` and `@functions` all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request. Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer.
+Explanations and analyses stay Markdown by default; when a chart, table or small interaction helps, the model writes OpenUI Lang into an `openui` fence in the answer, and the UI sits right in the middle of the prose. This is the primary presentation in this release and needs no extra inline switch.
+
+![Overview: standalone itinerary page, editing canvas and settings](assets/intelligent-ui-readme-overview-en.webp)
+
+When you need a standalone page, the same renderer puts it in a turn-tail card that can be expanded, edited, saved as a template and exported. Its `$variables`, `@Set` and `@functions` all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request. Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer.
 
 ## Install
 

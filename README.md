@@ -30,9 +30,13 @@
 
 ## 效果
 
-![总览：行程页面、编辑画布与设置页](assets/intelligent-ui-readme-overview-zh.webp)
+![正文内嵌 UI：解释 model 与 harness 的区别，中间直接嵌一张对比表](assets/intelligent-ui-readme-inline-zh.webp)
 
-普通解释的 UI 内嵌在回答正文里；独立页面的卡片出现在回答末尾。里面的 `$变量`、`@Set`、`@functions` 都在浏览器本地执行：勾选、滑动条、Stepper、计时器、预算分配都不再请求模型。只有真正需要继续对话的动作（`@ToAssistant`，例如表单提交）会把一条简短消息放回输入框。
+解释、分析类回答默认保持 Markdown；需要图、表或小交互时，模型把 OpenUI Lang 写进正文里的 `openui` 围栏，UI 就直接嵌在回答中间，和上下文一起读。这是本版的主要呈现方式，不需要额外的 inline 开关。
+
+![独立页面总览：行程页面、编辑画布与设置页](assets/intelligent-ui-readme-overview-zh.webp)
+
+需要可单独使用的页面时，同一套渲染器把结果放到轮末卡片；卡片可以展开、编辑、保存模板和导出。里面的 `$变量`、`@Set`、`@functions` 都在浏览器本地执行：勾选、滑动条、Stepper、计时器、预算分配都不再请求模型。只有真正需要继续对话的动作（`@ToAssistant`，例如表单提交）会把一条简短消息放回输入框。
 
 ## 安装
 

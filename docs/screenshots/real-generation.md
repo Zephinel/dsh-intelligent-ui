@@ -188,3 +188,5 @@ node scripts/build-readme-generation-bento.mjs --lang=zh
 ```
 
 The script needs the same Chrome that the other README capture scripts use.
+
+Inline UI captures from separate real sessions are documented in [inline-ui.md](inline-ui.md).

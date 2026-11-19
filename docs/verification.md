@@ -1213,3 +1213,11 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **测试**：隔离 rc.5 实例的真实 StylePanel 在修复后：捏合前 `top 24`，捏合后 `top 204`、可视区 `top 180`、`bottom 514.5` 在 `788.7` 内，`max-height 310.5px`（修复前实测 `top 12` 对可视区 `top 171`，被裁切）。Node 869→**872**（Host 323、Client 510、packaging 39），浏览器 **12/12**（新增 anchored-overlay 套件）；`tsc --noEmit` 通过。
 - **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12** 套件，`artifact-edit` **944 checks**、`nested-edit-renderer` **75 checks**、图片导出 **76** 条断言、`update-prompt` **39 checks**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；`npm run pack:check` **67** 文件，非构建 **3,779,407** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：更新提示浮层因当前无新版本未触发；`InputOrbit` 未单独做捏合/平移测试；编辑画布浮层只加了通用 fit，未逐个真机复验；未迁移到 CSS Anchor Positioning。
+
+## 2026-11-19 — README 以正文内嵌 UI 为首屏并补充真实截图
+
+- **背景**：README 的“效果”仍以轮末卡片总览作为第一张图，虽然正文已提到内嵌 UI，但首屏和截图仍然把独立页面当成唯一主角。用户要求按新加入的 in-message artifacts 重新整理 README，并生成截图。
+- **改动**：`README.md`/`README.en.md` 的“效果”改为先展示真实会话里的正文内嵌对比表（`intelligent-ui-readme-inline-zh/en.webp`），再保留轮末卡片/编辑/设置总览作为第二张图；正文和 alt 同步说明“内嵌是主呈现方式，卡片用于独立交付物”。新增 `docs/screenshots/inline-ui.md` 记录两张图的真实会话、prompt、裁剪和不可复现边界。截图来自 rc.5 + DeepSeek V4.1 Flash Max 的两个真实会话，各自只有一个 `openui` 围栏、没有卡片；中文 1456×1090、英文 1456×1270。
+- **资产/结构**：`assets` 增至 **36** 张，新增两张语言配对截图并加入 `test/packaging/manifest.test.mjs` 的 language-specific 集合；README 仍为 **120** 行（zh 11,050 B / en 12,045 B）。
+- **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（本轮仅文档/截图变更未重跑，沿用上一轮）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；`npm run pack:check` **69** 文件，非构建 **3,980,731** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：两张图是真实模型会话的单次捕获，不可精确复现；英文图从第二段开始裁剪以避开模型一句无关开场；没有改动代码或渲染器。
