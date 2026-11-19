@@ -18,7 +18,7 @@
 模型调用 `render_ui` 工具，把答案写成一份 [OpenUI Lang 1.0](https://openui.com) 程序；DSH 在该轮结束时把它渲染成可交互页面——地图、照片、图表、清单、表单、SVG 绘图、小游戏都是真实组件。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **860/860**（Host 320、Client 501、packaging 39）；浏览器 **10/10** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+> **当前状态**：已发布到 GitHub 与 npm，`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **863/863**（Host 323、Client 501、packaging 39）；浏览器 **11/11** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 
 [效果](#效果) · [安装](#安装) · [生成与编辑](#生成与编辑) · [文档索引](#文档索引) · [本地开发](#获取代码与本地开发)
 

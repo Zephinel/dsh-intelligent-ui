@@ -87,6 +87,14 @@ render_ui: document mode does not use saved templates; omit styleId and pass sty
 
 This deployment records ordinary answers as documents: pass `style: "free"`, put the whole answer (prose plus interactive blocks) in the program, and write no Markdown outside the call. Card/Article and saved-template layouts are rejected for these answers; apply on-demand results, saved templates and Artifact edit requests with their own recorded layout instead.
 
+In-message UI mode rejects every ordinary tool call — the answer must stay in Markdown with fenced programs:
+
+````text
+render_ui: in-message UI mode writes the answer as Markdown with fenced `openui` programs; do not call render_ui for an ordinary answer. Write one complete OpenUI Lang program (starting with `root = `) in a ```openui fenced code block inside your answer instead. On-demand results, saved templates and Artifact edit requests keep their own render_ui flow.
+````
+
+In a deployment with in-message UI on, answer ordinary requests as Markdown whose UI blocks are complete programs in `openui` fences; on-demand results, saved templates and Artifact edit requests keep their own `render_ui`/`edit_ui_blocks` flow. The client renders a settled fence in place, keeps the plain code block while it streams, and shows the renderer's failure note (with the source still expandable) when the program is invalid; a Host without the `conversation.chat.markdown.fence` slot leaves every `openui` fence as a plain code block.
+
 Command and result-save failures include:
 
 ```text

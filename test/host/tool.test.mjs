@@ -120,6 +120,37 @@ test('document mode renders ordinary answers as one free document and rejects ca
   )
 })
 
+test('in-message UI mode replaces the style note with the fenced-program contract', () => {
+  const { sections } = mount({ inlineMode: { get: () => true }, answerStyle: { get: () => 'card' } })
+  const prompt = sections[0].text()
+  assert.match(prompt, /in-message UI mode: the answer is ordinary Markdown/)
+  assert.match(prompt, /info string is exactly `openui`/)
+  assert.match(prompt, /Do not call render_ui for an ordinary answer/)
+  assert.match(prompt, /In-message UI mode is on for this deployment/)
+  assert.doesNotMatch(prompt, /Answer style for this session: \*\*/)
+  assert.doesNotMatch(prompt, /Free-form layout is on/)
+})
+
+test('in-message UI takes precedence over document mode when both are on', () => {
+  const { sections } = mount({ inlineMode: { get: () => true }, documentMode: { get: () => true } })
+  const prompt = sections[0].text()
+  assert.match(prompt, /in-message UI mode: the answer is ordinary Markdown/)
+  assert.doesNotMatch(prompt, /document mode: when a page serves the answer/)
+  assert.doesNotMatch(prompt, /Document mode is on for this deployment/)
+})
+
+test('in-message UI mode rejects ordinary render_ui calls with the fence instruction', async () => {
+  const { tool } = mount({ answerStyle: { get: () => 'card' }, inlineMode: { get: () => true } })
+  await assert.rejects(
+    () => tool.execute({ program: VALID, style: 'card' }),
+    /in-message UI mode writes the answer as Markdown with fenced `openui` programs/,
+  )
+  await assert.rejects(
+    () => tool.execute({ program: VALID, style: 'free' }),
+    /do not call render_ui for an ordinary answer/,
+  )
+})
+
 test('ordinary renders record their resolved layout for replay', async () => {
   const { tool } = mount({ answerStyle: { get: () => 'auto' } })
   const free = await tool.execute({ program: VALID, style: 'free' })

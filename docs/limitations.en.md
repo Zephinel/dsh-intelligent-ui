@@ -6,7 +6,7 @@ This page lists only the **current** boundaries and unverified areas; implemente
 
 ## Runtime and compatibility
 
-- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1** (npm `latest`). **0.2.2-rc.3** (the `next` channel) has a community PTC check (plugin loads, `run_code` subrow renders); this fix's card and export have not been re-verified on it, and later DSH versions are untested.
+- The DSH plugin API targets **0.2.2**; the validated build is **0.2.2-rc.1**. **0.2.2-rc.3** (the `next` channel) has a community PTC check (plugin loads, `run_code` subrow renders); on **0.2.2-rc.5** the plugin Host/Client have been confirmed to mount on this machine, but cards, editing and export have not been systematically re-verified there; later DSH versions are untested.
 - Build, test and release workflows use **Node.js 24**; the repository pins neither `engines` nor `.nvmrc`.
 - Validated platforms are macOS (Web + DSH Desktop) and Windows (DSH Desktop); Linux is not verified.
 - The browser half requires `@deepseek-ai/dsh-client-locale` in the deployment (DSH Web 0.2.2 includes it); a minimal profile without it cannot mount the switch or cards.
@@ -23,7 +23,9 @@ This page lists only the **current** boundaries and unverified areas; implemente
 - KaTeX relies on the DSH shell's global styles; removing them degrades `Math` to plain text.
 - `/iui` Host replies, command-palette descriptions and README screenshots stay English; only browser UI copy follows the DSH language.
 
-- **Experimental document answer:** it only simulates message-body presentation — the page still lives in a turn-tail `render_ui` result rather than in the message; copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing; results replay from what was recorded, so the switch only affects new answers. The switch will be removed once DSH supports in-message UI natively.
+- **Experimental document answer:** it only simulates message-body presentation — the page still lives in a turn-tail `render_ui` result rather than in the message; copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing; results replay from what was recorded, so the switch only affects new answers. The switch will be removed once DSH supports in-message UI natively; the extension now provides real **In-message UI (experimental)** through the DSH Markdown-fence slot, so this stopgap can be removed in a later version.
+- **Experimental in-message UI:** only the Web renderer turns an `openui` fence into a page; TUI/headless clients see the fence source. The program is validated and rendered in the browser, and an invalid program keeps the renderer's fallback note (with the source still expandable) rather than a partial page; inline blocks have no card editing, revision history, saved templates, image/HTML export or Artifact lineage. The switch is mutually exclusive with document mode, affects future answers only, and ordinary answers no longer call `render_ui`; it needs the `conversation.chat.markdown.fence` slot from DSH 0.2.2-rc.2+, and on an older Host the fence stays a plain code block.
+
 ## Export
 
 - Image export does not include sandboxed iframe content (`HtmlView` mini-games); maps rely on the WebGL buffer and fall back to the map's own degraded view when WebGL is unavailable.
