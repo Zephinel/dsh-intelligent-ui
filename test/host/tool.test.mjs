@@ -163,6 +163,7 @@ test('ordinary answers default to inline fences while page artifacts stay availa
   assert.match(prompt, /info string is exactly `openui`/)
   assert.match(prompt, /standalone interactive deliverable/)
   assert.match(prompt, /inline explanation plus one page artifact/)
+  assert.match(prompt, /When the page accompanies an inline explanation/)
   assert.match(prompt, /at most one page artifact per answer/i)
   assert.doesNotMatch(prompt, /in-message UI mode/)
   // The Answer style note still applies when the model decides to render a page artifact.

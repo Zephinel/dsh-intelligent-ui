@@ -54,7 +54,7 @@ The page travels inside a tool call, not in your Markdown reply:
 - Use it for the standalone deliverable above; it may accompany an inline explanation when the answer has both roles, but never duplicate the explanation's content in the page.
 - When you render, follow the session note for the layout (the Answer style note, or the on-demand request note): Card, Article, a free layout, or a saved template. When it names Card or Article, pass that layout; in Auto, pass the layout you chose; a saved template needs its exact styleId.
 - If the user explicitly invokes the \`intelligent-ui\` skill (\`/intelligent-ui\`) or explicitly asks for a page, dashboard, card or UI, use this skill: answer with inline UI when the request is an explanation, or with \`render_ui\` when it asks for a standalone deliverable; when it asks for both an explanation and a deliverable, use inline fences for the explanation and one page artifact for the deliverable. Prose is allowed only when the user also asked for text or the tools are unavailable.
-- You may write at most one short introductory sentence in Markdown before calling the tool. After the successful call, stop or add one short sentence; never repeat the page's content in prose, and never paste the openui-lang program into your Markdown reply.
+- When the page is the whole answer, you may write at most one short introductory sentence in Markdown before calling the tool. When the page accompanies an inline explanation, write that explanation as normal Markdown with its own \`openui\` fences before the call; keep the roles distinct, do not duplicate the page content, and after success stop or add one short sentence. Never put the page's \`program\` argument into your Markdown reply; inline fences are the intentional inline form.
 - If the tool reports a parse error, fix the program and call \`render_ui\` again in the same turn. If it still fails after you fix it twice in this turn, fall back to text and say so.
 - The call is the only preflight you need: a rejected program is never shown, and the findings name the exact problem. Do not build a local harness, and do not create, edit or delete files in the Intelligent UI extension's own checkout (including its \`test/renderer/.build/\`) to test a program; keep any draft in a temporary directory outside the repository. Editing the extension itself is a separate task the user has to ask for explicitly.
 - One successful call per turn; a rejected call may be retried. A successful call must not be followed by a second \`render_ui\` call in the same turn.
@@ -187,6 +187,16 @@ const behaviorRewrites = [
     from: 'Input(value: $binding<string | number>, label?: string, type?: "text" | "number", placeholder?: string) — Text or number field; a number field stores numbers.',
     to: 'Input(value: $binding<string | number>, label?: string, type?: "text" | "number", placeholder?: string) — Text or number field; a number field stores numbers. A decimal comma is accepted ("1,5" is 1.5); other commas group digits ("1,000" is 1000).',
   },
+  {
+    label: 'Title size guidance',
+    from: 'Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Color) — Heading; lg for a card title, 2xl for a big number.',
+    to: 'Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Color) — Heading; md for a card title, lg for a section, 2xl for a big number.',
+  },
+  {
+    label: 'Badge icon argument',
+    from: 'Badge(text: string, color?: "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "pink")',
+    to: 'Badge(text: string, color?: "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "pink", icon?: string)',
+  },
 ]
 let withBehavior = withFacts
 for (const { label, from, to } of behaviorRewrites) {
@@ -212,6 +222,27 @@ const layoutContract = [
 
 const withLayout = withBehavior.replace('\n## Important Rules\n', `\n${imageContract}\n\n${layoutContract}\n\n## Important Rules\n`)
 if (!withLayout.includes(layoutContract)) throw new Error('generate-prompt: could not place the layout contract before Important Rules')
+
+// The vendored page-first bullets assume every UI answer is a full page. In
+// the ordinary four-form policy they must still allow plain Markdown; document
+// mode keeps them unchanged.
+const ordinaryPageFirstRewrites = [
+  {
+    label: 'page composition bullet',
+    from: 'Compose the answer like a page, not a form letter:',
+    to: 'When a page or inline UI genuinely serves the request, compose the answer like a page, not a form letter:',
+  },
+  {
+    label: 'working-tool bullet',
+    from: '- Answer with a working tool whenever the request involves numbers, choices, lists, steps, a game or something to explore: keep inputs and lists in $variables, compute everything shown from them with expressions and @functions, and change them with @Set. The page must work on its own, without another message.',
+    to: '- When a page or inline UI genuinely serves the request, make inputs and lists interactive: keep them in $variables, compute everything shown from them with expressions and @functions, and change them with @Set. The page must work on its own, without another message. A simple numeric, list or factual question can stay a short Markdown answer.',
+  },
+]
+let withOrdinaryPage = withLayout
+for (const { label, from, to } of ordinaryPageFirstRewrites) {
+  if (!withOrdinaryPage.includes(from)) throw new Error(`generate-prompt: the vendored ${label} changed; update the rewrite.`)
+  withOrdinaryPage = withOrdinaryPage.replace(from, to)
+}
 
 const toolResponseLine = `
 
@@ -248,7 +279,7 @@ if (!withLayout.includes(inlineKnowledge)) throw new Error('generate-prompt: the
 const documentBody = withLayout.replace(inlineKnowledge, documentKnowledge)
 
 await mkdir(dirname(target), { recursive: true })
-await writeFile(target, `${preamble}${withLayout.trimEnd()}${toolResponseLine}\n`, 'utf8')
+await writeFile(target, `${preamble}${withOrdinaryPage.trimEnd()}${toolResponseLine}\n`, 'utf8')
 await writeFile(documentTarget, `${documentPreamble}${documentBody.trimEnd()}${documentToolResponseLine}\n`, 'utf8')
 console.log(`generate-prompt: wrote ${target}`)
 console.log(`generate-prompt: wrote ${documentTarget}`)

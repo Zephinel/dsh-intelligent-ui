@@ -1228,3 +1228,10 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **改动**：README 与 `skills/intelligent-ui/references/integration.md` 明确区分：npm `0.6.2` 是稳定版（轮末卡片、编辑、导出、模板），正文内嵌 UI 是 `main` 上尚未发布的功能；README Web 安装给出 GitHub main（含内嵌）与 npm 0.6.2（仅卡片）两个命令，first-use 分别说明预期；Desktop 注明 marketplace 0.6.2 只有卡片。`docs/development*.md` 的安装块同步。README 由 120 行增至 **123** 行（仍在预算内）。
 - **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（本轮仅文档变更未重跑，沿用上一轮）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；pack **69** 文件，非构建 **3,981,354** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：未创建 0.6.3 tag、未发布 npm；尚未解决的技能问题（无效 inline 示例、组合形态文案冲突、warning 重试规则等）留待下一步。
+
+## 2026-11-19 — 内建技能与提示词一致性修复
+
+- **修复**：`SKILL.md` 的 inline 示例原为不存在的 `Timeline` + `[...]` 占位符，改为真实的 `List`/`ListItem`；`examples.md` 增加一个真实的 inline 示例和组合形态说明，并把 “Six / 15–23” 修正为 “Seven page programs / 7–23 statements”。合并了回答形态规则：单独页卡仍限一句 intro/close；inline 解释 + 页卡时，正文可先写完整解释和 `openui` fences。warning 策略统一为“一次成功调用，不因 warnings 在同一轮重调”，并同步 `language.md`/`troubleshooting.md`/`SKILL.md`。
+- **提示词/工具契约**：`render_ui` 的 `program` 描述明确 inline fence 不是伴随页卡的替代品；prompt 中“页面式回答/有数字就用工具”改为仅在页面或 inline UI 真正有帮助时；`Title` 改为 `md` card title，`Badge` 补上 `icon?`；`integration.md` 的 one-form 表述、工具描述引用、`editRequestId` schema 和 turn-tail/known-limit 文案同步修正。
+- **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（本轮未重跑）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；pack **69** 文件，非构建 **3,983,411** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：示例修复新增了 `skill.test`/`tool.test` 的静态 guard，但没有新增独立示例解析测试；`architecture` 的显式调用说明同步改为 inline/页卡/两者；浏览器未重跑。

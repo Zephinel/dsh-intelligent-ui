@@ -54,14 +54,14 @@ Rules that bite:
 
 ## 3. References and hoisting
 
-References may point **forward**: use a name before its statement. The parser resolves all references after reading the whole program, so hoisting always works and order never changes the result. Write structure first anyway: the injected prompt models programs that way, and a page whose shell is at the top is easier to scan and repair. In this deployment the card renders from the complete program at the end of the turn, so do not rely on a half-written program being visible.
+References may point **forward**: use a name before its statement. The parser resolves all references after reading the whole program, so hoisting always works and order never changes the result. Write structure first anyway: the injected prompt models programs that way, and a page whose shell is at the top is easier to scan and repair. In this deployment a page card renders only from the complete program at the end of the turn, and an inline fence renders after it settles; do not rely on a half-written program being visible.
 
 Two different "missing" states matter:
 
 - `Unresolved reference: X` — a name was used that no statement declares. This is a **warning**, not fatal; the component receives `null` and part of the page silently disappears. Treat it as a bug.
 - `Unreferenced statement (will not render): X` — a statement is declared but nothing reachable from `root` uses it. Also a warning; the work is wasted.
 
-Both warnings appear in the tool result. A successful `render_ui` can still return warnings — fix them and re-call rather than shipping a half-finished page.
+Both warnings appear in the tool result. A successful `render_ui` can still return warnings; the page is already on screen, so do not re-call in the same turn. Fix the dropped content on a later request, or mention it briefly if it matters.
 
 ## 4. `$` state
 
@@ -111,7 +111,7 @@ several = Button("Start over", Action([@Set($step, 0), @Reset($done, $note)]))
 
 - `@ToAssistant` is the only path back to the model, and each call starts a new turn. Reserve it for what the page cannot compute: a form submit, a request for a new plan, a deeper explanation. Keep the message short and first-person, like the user typed it.
 - **This deployment forwards only the message string** from `@ToAssistant`; the optional `context` object is parsed but not delivered. If the next turn needs a field value, concatenate it into the message: `@ToAssistant("Plan for " + $people + " people on " + $date)`.
-- Clicks are the only event. There is no hover, keypress, drag or scroll handler; `Slider`/`Input` already update their binding as the user moves them.
+- There are no hover, drag or scroll handlers and no model-defined key handlers. Components can provide their documented keyboard activation (for example, `Flashcard` flips on Enter/Space); `Slider`/`Input` already update their binding as the user moves them.
 
 ## 6. Components as values, children and arguments
 
@@ -122,7 +122,7 @@ several = Button("Start over", Action([@Set($step, 0), @Reset($done, $note)]))
 - Prefer **references for blocks** (`mapCard`, `timelineCard`) and inline calls for leaves. References keep the root short and the page easier to repair.
 - Arguments are positional. Skipping a middle optional argument requires `null`: `Row([a, b], 3, null, null, true)`.
 - A component's first argument may itself be a binding (`$` variable) — that is what makes inputs work.
-- Exact signatures live in [components.md](components.md); argument order and enum values are enforced. An unknown extra argument is fatal for `render_ui`; inline fences drop it silently with a recoverable diagnostic.
+- Exact signatures live in [components.md](components.md); argument order and enum values are enforced. An unknown extra argument is fatal for `render_ui`; inline fences drop it silently, with no warning shown.
 
 ## 7. `@Each` and data shapes
 

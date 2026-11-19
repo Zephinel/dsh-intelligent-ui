@@ -52,11 +52,11 @@ Toc(items: string[], anchors?: string[]) — Compact table of contents linking t
 - Color is "ink", "muted", "faint", "canvas", "on-ink", "info", "success", "warning", "danger", "purple", "pink", "chart1" to "chart6", or a CSS color. As a background, status colors are soft tints. "surface", "surface-strong", "border", "canvas" and "on-ink" are background/paint tokens: use them as backgrounds or SVG fills; as text, caption or icon colors they are ignored and the theme ink is used instead (they would disappear). A background of "ink" is an inverted fill and a background of "chart1" to "chart6" is a solid brand fill: in both cases the text and icons switch to a readable color automatically, so leave their color unset unless you need a specific token.
 
 ### Text
-Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Color) — Heading; lg for a card title, 2xl for a big number.
+Title(text: string, size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl", color?: Color) — Heading; md for a card title, lg for a section, 2xl for a big number.
 Text(text: string | Node[], size?: "xs" | "sm" | "md" | "lg", color?: Color, weight?: "normal" | "medium" | "semibold", italic?: boolean, lineThrough?: boolean, tabularNums?: boolean, maxLines?: number) — Paragraph; supports **bold**, *italic*, `code` and [links](https://…). text may be a list mixing strings and inline components: [Icon("clock", "sm"), " 25 min · ", Badge("Easy")].
 Caption(text: string, color?: Color) — Small secondary text.
 Label(text: string) — Field or group label.
-Badge(text: string, color?: "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "pink")
+Badge(text: string, color?: "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "pink", icon?: string)
 Link(text: string, url: string) — Opens an http(s) URL in a new tab.
 List(items: (string | ListItem)[], marker?: "bullet" | "number" | "none", timeline?: boolean) — timeline joins the markers with a line.
 ListItem(title: string, description?: string, marker?: string, children?: Node[]) — marker replaces the bullet or number, e.g. a time or an emoji.

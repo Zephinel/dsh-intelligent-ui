@@ -54,6 +54,8 @@ test('registers the shipped Agent Skill when the skill registry is composed', { 
   assert.ok(typeof skill.content === 'string' && skill.content.length > 1000, 'the body carries the full instructions')
   assert.match(skill.content, /render_ui/)
   assert.match(skill.content, /references\//)
+  assert.match(skill.content, /List\(\[ListItem\(/, 'the inline example uses a shipped component')
+  assert.doesNotMatch(skill.content, /Timeline\(\[\.\.\.\]\)/, 'no placeholder component in the inline example')
   assert.equal(skill.resourceBase.kind, 'directory')
   assert.match(skill.resourceBase.path, /skills\/intelligent-ui$/)
   assert.deepEqual(skill.invocation, { modelInvocable: true, userInvocable: true })

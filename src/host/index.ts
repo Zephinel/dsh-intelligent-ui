@@ -195,8 +195,9 @@ const PARAMETERS = {
       type: 'string',
       description:
         'The complete openui-lang program for a standalone page artifact. Statement per line; define root = Col(...) first. '
-        + 'Every named statement must be reachable from root. For inline UI in an ordinary Markdown answer, write the program in '
-        + 'a fenced `openui` block in the reply instead of calling this tool.',
+        + 'Every named statement must be reachable from root. For inline UI in an ordinary Markdown answer, write that program in '
+        + 'a fenced `openui` block in the reply. If the answer both explains inline and delivers a separate page, still call this '
+        + 'tool once for the page program; the inline fence is not a substitute for the page.',
     },
     title: {
       type: 'string',
@@ -849,7 +850,7 @@ ${section}`
       + 'For a pending Artifact block edit request with selected target blocks, call edit_ui_blocks instead with only those '
       + 'blocks\' updated expressions; order-only or global-only edit requests use this tool with the complete page, and when several edit requests are pending pass editRequestId to choose one. '
       + 'For a pending natural-language style edit request (kind "style"), also call this tool exactly once with the complete updated program, the recorded style, the approved temporaryStyle and editRequestId; keep the layout and the content, and never use edit_ui_blocks for it. '
-      + 'Call it at most once per turn, after any brief introductory sentence.',
+      + 'Call it at most once per turn. When the page is the whole answer, a brief introductory sentence is enough; an inline explanation may precede it as normal Markdown with its own openui fences. Do not repeat the page content.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT,

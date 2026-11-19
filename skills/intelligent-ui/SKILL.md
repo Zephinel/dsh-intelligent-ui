@@ -6,7 +6,7 @@ whenToUse: "A visual, interactive or computed answer would serve better than pro
 
 # Intelligent UI
 
-An OpenUI Lang program can appear in four delivery forms: plain Markdown, inline UI, one standalone page artifact, or an inline explanation plus one page artifact. Inline programs live in a fenced `openui` block (rendered in place); a page lives in a `render_ui` call (a standalone interactive page at the end of the turn). The program is not prose and not HTML: it declares named values and components, and the renderer evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the design playbook and the deep reference that the prompt cannot fit.
+An answer can take four delivery forms: plain Markdown, inline UI, one standalone page artifact, or an inline explanation plus one page artifact. Inline programs live in a fenced `openui` block (rendered in place); a page lives in a `render_ui` call (a standalone interactive page at the end of the turn). The program is not prose and not HTML: it declares named values and components, and the renderer evaluates them in the browser. In a session with Intelligent UI enabled, the plugin injects the complete language prompt (components, functions, syntax); this skill adds the workflow, the design playbook and the deep reference that the prompt cannot fit.
 
 ## Before you start: is the session enabled?
 
@@ -60,7 +60,7 @@ Ordinary explanations use Markdown with inline UI by default; there is no separa
 The route for day one:
 
 ```openui
-root = Col([Title("Day 1"), Timeline([...])])
+root = Col([Title("Day 1"), List([ListItem("The Bund", "Walk from the bridge to Shiliupu.", "08:30"), ListItem("Yu Garden", "Cross the zigzag bridge before lunch.", "11:30")], "none", true)])
 ```
 
 Day two depends on how much walking you want.
@@ -146,14 +146,14 @@ Completion: the program satisfies the hard rules below, and the pre-flight check
 
 ### 4. Call the tool
 
-Call `render_ui({ program: <the complete program>, style: <"card"|"article"|"free">, title: "Short noun phrase" })`. Pass `card` for a compact interactive page, `article` for the reading layout; when the session is Auto, pass the layout you chose (`card`, `article` or `free`). If the answer is better as Markdown text, do not call the tool. For a selected custom template pass its baseLayout (including `free`) and exact `styleId`, without `temporaryStyle`; for new Host-authorized on-demand generation use `free` and add `temporaryStyle` as described above. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). Before the call, at most one short Markdown sentence; after a successful call, stop or add one short sentence. Never paste the program into the reply, and never repeat the page's content in prose.
+Call `render_ui({ program: <the complete program>, style: <"card"|"article"|"free">, title: "Short noun phrase" })`. Pass `card` for a compact interactive page, `article` for the reading layout; when the session is Auto, pass the layout you chose (`card`, `article` or `free`). If the answer is better as Markdown text, do not call the tool. For a selected custom template pass its baseLayout (including `free`) and exact `styleId`, without `temporaryStyle`; for new Host-authorized on-demand generation use `free` and add `temporaryStyle` as described above. The title is card chrome: 2–6 words, no trailing period ("Lisbon in three days", "Sales, last 90 days"). When the page is the whole answer, write at most one short Markdown sentence before the call; after success, stop or add one short sentence. When the page accompanies an inline explanation, write that explanation as normal Markdown with its own `openui` fences before the call; keep the roles distinct and never repeat the page's content. Never paste the page's `program` argument into the reply — inline fences are the intentional inline form.
 
 **The call is the preflight.** The tool validates the program, reports warnings, and never partially renders a rejected call; retry in the same turn, at most twice, then fall back to text instead of building a local harness. Keep the extension checkout read-only while answering — no scratch programs, tests, fixtures or build output anywhere under the plugin's source tree, including `test/renderer/.build/`; put drafts in a temporary directory outside the repository. Hard rule 11 carries the full version.
 
 ### 5. Handle the result
 
 - **Success, no warnings** — done. The page is on screen; do not re-call.
-- **Success, with warnings** — inspect the named parser finding or contrast warning. Ordinary calls may be repaired once; an on-demand success completes its operation even with warnings, so further changes need the user to arm Adjust style again.
+- **Success, with warnings** — the page is already on screen, so do not call `render_ui` again in the same turn. Inspect the named parser finding or contrast warning; if the dropped content matters, mention it briefly and fix it on a later request. An on-demand success completes its operation even with warnings, so further changes need the user to arm Adjust style again.
 - **Success but a missing or broken block** — a render-time crash inside one component is contained: the failing subtree disappears (or keeps stale content) while `render_ui` still reports success, so you get no finding and cannot detect it. Recovery is user-initiated: when the user reports a blank or broken area, rebuild that block more simply in the next turn.
 - **Fatal error** — read every finding after the `render_ui:` prefix, fix all of them, and retry in the same turn. Try at most two fixes. If the same failure returns after two fixes, fall back to text and say so; simplifying the program can be one of the two fixes, but do not loop.
 - **Tool missing** — follow [Before you start](#before-you-start-is-the-session-enabled): answer in prose, and point at [integration.md](references/integration.md#troubleshooting-a-missing-render_ui) if the user is setting it up.
@@ -199,7 +199,7 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 
 ## DSH specifics
 
-- **The card is turn-tail.** It appears after the turn ends; during generation the process area shows one `Interactive answer` row (「交互式回答」 in a Chinese UI). Do not describe the card as if it were streaming; write the intro sentence as if the page appears at the end.
+- **The page card is turn-tail.** It appears after the turn ends; during generation the process area shows one `Interactive answer` row (「交互式回答」 in a Chinese UI). Do not describe the page card as if it were streaming. An inline `openui` fence is not a card: it renders in place after the fence settles.
 - **Title and collapse are chrome.** The card header shows `title`; when it is omitted the localized default is used ("Interactive answer" in English, 「交互式回答」 in Chinese). The card can be collapsed by the user; the program cannot control that. The rendered card is full-width in the chat column and narrow on mobile — use `Grid` with `minChildWidth`, `Row` with `wrap`, and avoid fixed widths over ~600px.
 - **Dark/light is automatic.** Tokens and components follow the host theme; controlled custom themes apply only to the renderer host. Portaled popovers and sandboxed `HtmlView` keep the default host theme. Exported pages freeze the scheme at export time. Do not hardcode white backgrounds or black text.
 - **`HtmlView` is the only escape hatch** for arbitrary HTML/CSS/JS: canvas games, physics toys, custom animations. It runs in a sandboxed iframe with an opaque origin, no access to the page or its storage, and network limited to script/style/font CDNs and https images. Use it only when components plus `Svg` cannot express the idea, and keep the whole game in one string; it cannot share state with the page.
@@ -216,7 +216,7 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 7. **Dates compared with `<`** — comparisons are numeric; use `@DaysBetween`.
 8. **Numbers where strings are required** — `Title($n)` fails; write `$n + ""` or `@Format`.
 9. **Too much page** — more than four block types, lg+ titles inside cards, or a wall of prose in a card. Choose fewer, bigger ideas.
-10. **Program pasted into prose** — the tool carries the program; the reply stays a sentence.
+10. **Page program pasted into prose** — the `render_ui` program belongs in the tool argument; distinct inline `openui` fences are the intended inline form.
 11. **Article page that is only a skeleton** — sections of one-line bullets, cards in place of paragraphs, or a closing "tell me which part to expand". Article needs substantive prose, a `Toc`, and `Section`s; follow up only after a complete answer.
 12. **Interaction instead of information** — a carousel showing one item at a time, or a quiz, cannot substitute for content the user asked to read. Lead with readable content; add controls only when they add depth, sources or comparison.
 13. **Preflighting by editing the plugin** — a scratch harness written into the extension checkout shows the user a spurious file diff in a repository you were not asked to change. Call `render_ui` and use its findings; keep drafts outside the tree.
@@ -237,7 +237,7 @@ Before the call, verify:
 6. The program is complete and self-running: no placeholders, no dependence on a follow-up message.
 7. For an Article answer: every major part is present, each has substantive prose (not only bullets), the core content is readable without interaction, and the page does not claim to be a skeleton.
 8. No file was created or edited outside the requested deliverable — in particular, nothing in the extension checkout was touched to test the program.
-9. The reply around the call is one intro sentence and, after success, at most one closing sentence.
+9. For a standalone page, the reply around the call is one intro sentence and, after success, at most one closing sentence. When the page accompanies an inline explanation, the Markdown explanation and its `openui` fences come first; do not duplicate the page content.
 10. The layout follows the spacing contract: no root/Section/Card gap, no manual vertical spacer or empty blank block, and every stack is left to the renderer's flow rhythm.
 11. Photos are few feature images — roughly one to three per page — and every repeated row is a `Table`/`List` row or an explicitly sized compact thumbnail, not a `SearchImage` per row.
 12. A hand-built row list leaves the list `Col` gap unset (or 2–3), centers rows whose photo is taller, and gives the rank a fixed-width slot so 9 and 10 align.
@@ -250,7 +250,7 @@ Read these when the task needs more than the injected prompt:
 | --- | --- |
 | [references/components.md](references/components.md) | You need an exact signature, default, enum, optional argument position, or the full list of 57 components, 73 functions and 5 action steps. |
 | [references/language.md](references/language.md) | You are unsure about syntax, hoisting, `$` state, actions, `@Each`, comments, coercion, or want wrong-vs-right snippets. |
-| [references/examples.md](references/examples.md) | You want a complete validated program to adapt: itinerary, calculator, SVG tutorial, dashboard, form, quiz + HtmlView game, detailed article. |
+| [references/examples.md](references/examples.md) | You want a complete validated page program or a valid inline example: itinerary, calculator, SVG tutorial, dashboard, form, quiz + HtmlView game, detailed article, plus an inline fence example. |
 | [references/troubleshooting.md](references/troubleshooting.md) | A call failed, the result carried warnings, the card rendered wrong, or media/map/HtmlView degraded. Contains the verbatim host error strings and the retry loop. |
 | [references/integration.md](references/integration.md) | The user is installing or adopting the extension, `render_ui` is missing, the skill is missing from the catalog, or you need the tool contract and limits. |
 

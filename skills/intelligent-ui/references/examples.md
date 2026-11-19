@@ -1,12 +1,28 @@
 # Examples
 
-Six complete programs that the host validator accepts against `vendor/spec.json`. Each one starts with `root`, uses only shipped components and functions, and keeps all state in `$` variables, so it works without another message. They run 15–23 statements: small enough to adapt, large enough to show a real page.
+Seven complete page programs that the host validator accepts against `vendor/spec.json`, plus one inline fence example. Each page program starts with `root`, uses only shipped components and functions, and keeps all state in `$` variables, so it works without another message. The page programs run 7–23 statements: small enough to adapt, large enough to show a real page.
 
 How to use them:
 
 - Pick the example whose **shape** matches the answer, then replace the data, copy and one or two blocks.
 - Keep the statement order: `root` first, then `$` declarations, then derived statements, then leaf data. References may point forward, but this order keeps the program readable and matches the injected prompt.
 - Every program below has been validated with the same parser the host uses. If you edit one, re-check the rules in [language.md](language.md) and the error strings in [troubleshooting.md](troubleshooting.md).
+
+## 0. Inline comparison in an explanation
+
+An inline explanation is ordinary Markdown with one or more `openui` fences; it does not call `render_ui`. Keep the prose outside the fences and put each fence where the UI belongs:
+
+````markdown
+A model is the trained weights; a harness is the loop around it.
+
+```openui
+root = Col([Title("Model vs harness", "md"), Table(["Aspect", "Model", "Harness"], [["Role", "Produces tokens", "Runs the loop"], ["Built by", "Training", "Engineering"]])])
+```
+
+The same model in a different harness behaves very differently.
+````
+
+For the combined form, keep this explanation (including its fences) and call `render_ui` once with a separate page program; do not repeat the table in the page.
 
 ---
 

@@ -8,7 +8,7 @@
 2. **Locate the statement.** The finding names a field path (`/text`, `/children`, `/size`), a component (`Unknown component "Baz"`), a function (`Unknown function "@Magic"`) or a signature. Match it to the offending statement.
 3. **Fix the smallest thing.** A rejected program is never partially rendered, so there is no advantage in rewriting the whole page. Change the argument, the name or the missing reference.
 4. **Call `render_ui` again in the same turn.** Try at most two fixes; the validator errors are precise. If the same finding comes back after two fixes, fall back to text and say so. Simplifying the program can be one of the two fixes, but do not loop.
-5. **On success, stop.** The page is on screen; do not call `render_ui` a second time in the same turn. Close with at most one short sentence. If warnings came back, fix them and re-call once; a successful call with warnings still renders, but the missing pieces are user-visible.
+5. **On success, stop.** The page is on screen; do not call `render_ui` a second time in the same turn. Close with at most one short sentence. Warnings still render the page but the missing pieces are user-visible; fix them on a later request or mention them briefly, rather than calling again in this turn.
 6. **If retries keep failing**, degrade deliberately: remove the most complex block (Map, HtmlView, nested `@Each`), keep the shell and the core content, call once more, and tell the user in one sentence that the interactive part could not be shown.
 
 ## Preflight: call the tool, do not build a harness
@@ -17,7 +17,7 @@
 
 - Write any draft program to a temporary file (for example under `$TMPDIR` or `/tmp`) if it must exist on disk.
 - Treat the extension source tree as read-only while answering; the only exception is a request that explicitly asks you to change the extension itself.
-- If a program fails only at render time, simplify the offending block and re-call; see [Runtime fallbacks](#runtime-fallbacks-valid-program-degraded-media).
+- A fatal parse/validation error is safe to fix and re-call in the same turn. A render-time crash inside one component returns success without a finding; do not loop, and simplify that block on a later request when the user reports it (see [Runtime fallbacks](#runtime-fallbacks-valid-program-degraded-media)).
 
 ## The switch does not admit this session
 
