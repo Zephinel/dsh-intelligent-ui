@@ -173,14 +173,23 @@ export function OpenUIRenderer({ program, scopeId, onToAssistant, themeStyle, sc
   const visible = [...fatal, ...warnings]
   const empty = program.trim() === ''
   // A parser can report no root at all (for example an unknown root component)
-  // without emitting a no-root diagnostic. If nothing mounted, keep the full
-  // fallback; if a subtree dropped but the page rendered, warn and keep it.
+  // without emitting a no-root diagnostic. Scope the DOM probe to the current
+  // program so a synchronous/early onError or a switch between programs cannot
+  // prematurely unmount <Renderer> before the current program has been probed.
   const hostRef = useRef<HTMLDivElement>(null)
-  const [rendered, setRendered] = useState(false)
+  const [probe, setProbe] = useState<{ program: string; measured: boolean; hasNodes: boolean }>({
+    program,
+    measured: false,
+    hasNodes: false,
+  })
   useLayoutEffect(() => {
-    setRendered(hostRef.current?.querySelector('[class^="iui-"], [class*=" iui-"]') !== null)
+    const hasNodes = hostRef.current?.querySelector('[class^="iui-"], [class*=" iui-"]') !== null
+    setProbe((prev) => (prev.program === program && prev.measured && prev.hasNodes === hasNodes
+      ? prev
+      : { program, measured: true, hasNodes }))
   }, [program, diagnostics])
-  const fatalPage = fatal.length > 0 || (visible.length > 0 && !rendered)
+  const measuredCurrent = probe.program === program && probe.measured
+  const fatalPage = fatal.length > 0 || (visible.length > 0 && measuredCurrent && !probe.hasNodes)
 
   return (
     <I18nProvider t={t}>

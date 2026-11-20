@@ -299,10 +299,14 @@ export function apply(ctx: ClientContext): void {
       }
     },
   }, ExportAction))
-  // Replace the generic Tool row for this wire name: the program belongs in the
-  // closing Turn's card, not in the collapsible process list.
+  // Replace the generic Tool row for both UI tools: the program belongs in the
+  // closing Turn's card (or spliced revision), not in the collapsible process list.
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
     { name: 'tool.call.toolview', key: 'render_ui', locale: NS },
+    RenderUiRow,
+  ))
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
+    { name: 'tool.call.toolview', key: BLOCK_EDIT_TOOL, locale: NS },
     RenderUiRow,
   ))
   // Composer controls: one explicit scope/style command per action; the host

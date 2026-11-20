@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项）：当前 0.5.0 发布证据见文末 2026-10-25 的 0.5.0 发布记录（Node **247/247**；renderer 解析/渲染 42/42、CSS 契约 50/50、组件契约 63/63、typography 22/22、media-row 17/17、pressable 9/9、contrast OK、i18n 4 个程序；浏览器 7/7，settings 101、on-demand 114、交互页面 46、图片导出 65 条断言）。下方旧浏览器/模型记录保留为历史。
+- 测试（实时子项）：最新 `main` 与当前发布版本（`0.6.2`）的门禁计数见文末最新验证记录与 `docs/current-facts.json`；下方各版本/早期记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -27,7 +27,7 @@
 - **界面语言**：zh/en 字典 key 对齐、档位控件中文 SSR、渲染器组件（Code / Timer / Map / 空程序兜底）中文与英文回退 SSR 均由自动检查覆盖；尚未在运行中的 Web UI 里手动切换语言做人工点验。
 - **0.2.0 发布**：推送 tag `v0.2.0-26-10-21` 触发 GitHub Actions [run 39592467955](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39592467955)（`publish.yml`，33 s）并完成发布；registry `latest` = `0.2.0-26-10-21`，`gitHead` = `e5ce0af`，`npm audit signatures` 验证了 registry signature 与 provenance attestation（SLSA v1）。GitHub release：[v0.2.0-26-10-21](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.2.0-26-10-21)。
 - **0.2.1 发布**：配置从 Settings 迁移到插件详情页（`plugins.bundle.config`，key 为包名），开关改用 DSH 原生样式；tag `v0.2.1-26-10-21` 触发 [run 39596441971](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39596441971)，registry `latest` = `0.2.1-26-10-21`（`gitHead` = `4dcd34b`），`npm audit signatures` 验证了 provenance；本地 `npm run check` 65 tests、`npm pack` 34 个文件。GitHub release：[v0.2.1-26-10-21](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.2.1-26-10-21)。
-- 已验证的 DSH 版本：**0.2.2-rc.1**（`dsh --version`）。更晚的版本未验证。
+- 已验证的 DSH 版本：**0.2.2-rc.5**（`dsh --version`；正文内嵌 UI 需要 **0.2.2-rc.2+** 的 `conversation.chat.markdown.fence` 插槽）。更晚的版本未验证。
 - **平台覆盖**：macOS（Web + DSH Desktop）与 Windows（DSH Desktop）均已安装并验证基本使用（输入框 UI 控件、卡片）；Linux 未验证。
 - **0.2.2 发布**（纯文档）：修正 README 的 CJK 加粗渲染与平台验证说明；tag `v0.2.2-26-10-21` 触发 [run 39598770488](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39598770488)，registry `latest` = `0.2.2-26-10-21`（`gitHead` = `aac3f86`），provenance 已验证；无代码或行为变化。
 - **0.3.0 发布**：把回答样式、图片导出与交互页面导出作为 0.3.0 发布，并修正随包 Agent Skill 的工具契约文档；tag `v0.3.0-26-10-22`（annotated）触发 [run 39785829751](https://github.com/Zephinel/dsh-intelligent-ui/actions/runs/39785829751)（40 s），registry `latest` = `0.3.0-26-10-22`，`gitHead` = `8cfd0cd`；GitHub Release 于 2026-10-22 回填：[v0.3.0-26-10-22](https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.3.0-26-10-22)。provenance 记录在透明度日志（logIndex 3388870856），临时目录安装后 `npm audit signatures` 报告 2 个包 attestation 验证通过。本地 `npm run check` 102 tests，`npm pack` 40 个文件（3.63 MB / 解包 9.45 MB）。实测 registry 元数据在 publish 后约 5 分钟才可见、tarball 又晚 1–2 分钟（期间 `npm install` 返回 404），不是发布失败。
@@ -1241,3 +1241,30 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **背景**：对 `afb8544` 的两份独立复审确认代码和核心技能修复无回归，但发现 README 对 0.6.2 的行为描述过度绝对、skill pitfall 仍暗示同轮修 warning、architecture/limitations 仍有单形态表述，以及安装 build-script/Desktop 路径和 verification 归因等文档问题。
 - **修复**：README 首用改为“0.6.2 可能得到 Markdown/轮末卡片/document，仅没有 inline；fence 插槽要求只适用于 main”，并补上 GitHub main 的 build-script approval 与 Desktop Git 安装步骤，注明 main 可能仍自报 0.6.2；`SKILL.md` pitfall 与 architecture/limitations 统一为“不因 warnings 同轮重调”；architecture 的交付形式说明允许 inline + 页卡；examples 描述改为 7 个页面程序 + 1 个 inline 示例；frontmatter 描述补组合形态；verification 归因修正。
 - **门禁**：`npm run check` PASS；Node **872/872** = Host **323** + Client **510** + packaging **39**；浏览器 **12/12**（未重跑）；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76**、`update-prompt` **39**；构建 host **901 kB**、client **4.21 MB**（js 3.97 / CSS 249.2 kB）；pack **69** 文件，非构建 **3,984,072** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+
+## 2026-11-20 — 代码、提示词、内建技能与文档全面一致性修复
+
+- **代码修复**：按需轮 prompt 通过 `buildOnDemandPromptText` + `ON_DEMAND_TOOL_PREAMBLE` 剔除普通内嵌前置段，避免自我矛盾（+1 Host 测试）；客户端为 `edit_ui_blocks` 注册 `tool.call.toolview`（`RenderUiRow`，+1 Client 测试）；`src/lib/render.tsx` 将空树检测改为按 `program` 状态化的 `probe` 对象，防止切换程序后出现同诊断触发假 fatal；`src/client/index.css` 折叠 `.dsh-iui-inline-ui` 内单一外层 outline `Card` 的双边框（并新增 Chrome E2E 断言）；`src/shared/locales.ts` 将 Auto/设置提示更新为四形态/内嵌语义；`scripts/generate-prompt.mjs` 补内嵌编写原则（仅在胜过 Markdown 时开围栏、禁外层 `Card`/用 `sm`/`md` 标题/约 3–18 行、多围栏 `$` 状态隔离与随聊天主题）并使文档模式提示词对齐 Host（普通回答覆盖已选保存模板）。
+- **技能与文档**：`skills/intelligent-ui/SKILL.md` 采用渐进披露拆出 `references/on-demand.md` 与 `references/artifact-editing.md`（从 49.8 KB 瘦身至 ~20.4 KB），修正 `Hard rule 12` 引用、`isFuture`、`/iui [on|off]`、`edit_ui_blocks` 契约并在 `examples.md` 补充两段通过解析器校验的交互式 `$state` 内嵌示例；同步修正 `locale/detail.*.md`（移除不存在的侧栏面板、导出入口改回回答底部操作栏）、`README*.md`（便携加粗引用替代 `> [!NOTE]`）、`docs/usage*.md`（内嵌前置、多围栏状态隔离、引导提示）、`docs/limitations*.md`、`docs/architecture*.md`、`docs/development*.md`、`PRODUCT.md`、`release-notes/README.md`、`test/*/README.md` 及维护技能；扩展 `scripts/check-docs-links.mjs` 与 `test/packaging/references.test.mjs` 机械守卫（+1 packaging 测试）；重采确定性 `settings`/`panel` 截图并重建 README bento 拼图。
+- **门禁**：`npm run check` PASS；Node **875/875** = Host **324** + Client **511** + packaging **40**；`npm run test:browser` PASS，浏览器 **12/12** 套件全过，`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.97 / CSS 249.6 kB）；pack **71** 文件，非构建 **3,975,293** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts`/`check:release-notes` 全通过。
+- **证据边界**：本轮覆盖全部 Node 单测、11 项渲染器契约、12 套 Chrome 浏览器 E2E 与确定性设置/面板截图刷新；真实模型会话截图（`inline-zh/en.webp`、`generation-zh.webp`）仍需在运行中的 DSH 实例下实采。
+
+## 2026-11-20 — 真实会话重采 README 截图（内嵌首图与中文仪表盘）
+
+- **背景**：README 的内嵌首图与中文仪表盘卡片仍来自 11-07/11-19 的旧会话，提示词和界面语言与当前四形态策略不一致；本轮要求在**临时隔离的 DSH Web 实例**里重采，避免污染日常 profile。
+- **环境**：`dsh` 0.2.2-rc.5，独立 `DSH_HOME`（`/private/tmp/dsh-shots/iui-a`、`iui-b`）与演示工作区，profile 用 `link:` 指向当前工作树；模型 DeepSeek V4.1 Flash（effort High），会话内 `This session only` + `Auto`，浅色外观、100% 缩放、2× DPR，由 CDP 精确裁切，无手工截图、无像素修补。
+- **图片**：`assets/intelligent-ui-readme-inline-zh.webp`（1530×690，会话 `Agent Harness 与 Model 协作流程`，点击第 2 阶段后截取）、`intelligent-ui-readme-inline-en.webp`（1530×900，会话 `Model and agent harness explained`，点击 `2 Reason`）；两张均为单条 `openui` 围栏、无轮末卡片、无渲染错误横幅，裁切为助手 Markdown 正文 + 24 px。
+- **图片**：`assets/intelligent-ui-real-dashboard-zh.webp` 重采为 1904×1526（会话 `咖啡店30天数据仪表盘`，一次真实轮次，折线峰值 CN¥5,620 / 谷值 CN¥2,840），随后 `node scripts/build-readme-generation-bento.mjs --lang=zh` 重拼 `intelligent-ui-readme-generation-zh.webp`（1600×1130）。
+- **文档**：`docs/screenshots/inline-ui.md` 记录新提示词、会话标题、尺寸与阶段点击；`docs/screenshots/real-generation.md` 增加本轮重采小节并更新尺寸表；`docs/current-facts.json` 按实测 pack 更新（`packedBytes` 6,301,822、`unpackedBytes` 13,365,094、`nonBuildUnpackedBytes` 3,897,231），并同步 CHANGELOG、architecture 与 verification 中的当前值。
+- **门禁**：`npm run check` PASS；Node **875/875** = Host **324** + Client **511** + packaging **40**；浏览器 **12/12**（本轮仅截图与文档变更，未重跑浏览器套件，沿用上一轮结果），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.97 / CSS 249.6 kB）；pack **71** 文件，非构建 **3,897,231** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：真实模型轮次不可复现，图片为一次性实采；中文首图前两次尝试分别因活动节点标签不可见、SVG 过窄而重采（未使用，也未修图）；隔离实例、demo 工作区与临时 `DSH_HOME` 在收尾时删除，未创建 tag、未改版本号、未发布 npm。
+
+## 2026-11-20 — 中文生成画廊精修（行程卡 + 仪表盘卡）
+
+- **背景**：中文三卡拼图与英文版不一致——行程卡右下残留「回到底部」圆形按钮、行前清单没有交互态；仪表盘是竖长卡片，放进 `710×496` 右上格后左右留大白边、字号偏小；三张卡头的「编辑」按钮也不统一。
+- **环境**：临时隔离 DSH `0.2.2-rc.5` 实例（独立 `DSH_HOME`、演示工作区、`link:` 当前工作树），DeepSeek V4.1 Flash（effort High），会话内 `This session only` + `Auto`，浅色、100% 缩放、2× DPR、CDP 裁切。
+- **行程卡**：会话 `生成上海两日游行程卡片`；真实 `Checkbox` 行前清单（默认勾选前 2 项，`已备 2/5` 计数）、逐日时间表、预算表与经济/舒适分段控件；卡头含「编辑」；截图前隐藏输入框并确认页面无任何可见圆形浮动按钮；卡片 `920×1246` CSS，外框 + 16 px → **1904×2556**。
+- **仪表盘**：会话 `咖啡馆30天数据仪表盘`；4 个横排 KPI + 两列 Grid（左折线图 + 7/30 天切换，右 5 行热销表），序列 min **2,840** / max **5,620**；卡片 `920×634` CSS → **1904×1332**（≈1.43:1，填满 `710×496`）；第二轮修正把图表下方约 146 CSS px 的空白压到 13 px，并把正文标题改为「近 30 天经营概览」以去掉与卡头重复。
+- **重拼与文档**：`node scripts/build-readme-generation-bento.mjs --lang=zh` 重拼 `intelligent-ui-readme-generation-zh.webp`（1600×1130）；`docs/screenshots/real-generation.md` 更新尺寸表并新增本轮小节；`docs/current-facts.json` 按实测 pack 更新（`packedBytes` 6,255,149、`unpackedBytes` 13,315,792、`nonBuildUnpackedBytes` 3,897,231），同步 CHANGELOG、architecture 中英与同步技能参考中的字节数。
+- **门禁**：`npm run check` PASS；Node **875/875** = Host **324** + Client **511** + packaging **40**；浏览器 **12/12**（本轮仅截图/文档变更，未重跑），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.97 / CSS 249.6 kB）；pack **71** 文件，非构建 **3,897,231** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：真实模型轮次不可复现；英文三卡与中文小测卡未改动；临时实例与 `DSH_HOME` 已删除，未改版本号、未打 tag、未发布 npm。

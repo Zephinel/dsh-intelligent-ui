@@ -33,6 +33,7 @@ const fixtures = (
     <InlineUIFence code={''} />
     <InlineUIFence code={'root = 42'} />
     <SwitchingFence />
+    <InlineUIFence code={'root = Card([Title("Card-wrapped inline"), Text("Outer card collapses into the inline surface.")], "outline")'} />
   </div>
 )
 

@@ -179,9 +179,10 @@ events but not the full DSH Web integration.
   Box/Grid/Section/Carousel parent chains and Carousel scrolling/overlay
   hit-testing. 75 checks; Carousel off-screen anchors are a known follow-up.
 
-- B2-8/B2-9/B2-10 verification (real GUI, not part of the suites): Article and
-  free-composition layouts were validated (free requires On-demand UI; a plain
-  `render_ui` with free is rejected), 390×844 mobile shows no horizontal
+- B2-8/B2-9/B2-10 verification (real GUI, historical — not part of the suites): Article and
+  free-composition layouts were validated (at that milestone free required On-demand UI and
+  a plain `render_ui` with free was rejected; Auto and document mode now accept `free` too),
+  390×844 mobile shows no horizontal
   overflow and the narrow-width notice instead of the editor while 900×1000
   opens the editor, and manual visual baselines live in
   [`visual-baselines/`](visual-baselines/README.md) (5 PNGs + captures.json +
@@ -196,4 +197,4 @@ The shared launcher retries a headless Chrome start up to three times with a fre
 profile when no page target appears (CI cold starts); only a repeated failure exits
 nonzero.
 
-The suites are outside `npm run check`; CI does not need a browser.
+The browser suites are outside `npm run check`; `.github/workflows/ci.yml` installs Chrome for both the `verify` job (renderer Chrome checks) and the `browser` job (the 12 browser suites on `main` and manual dispatch).

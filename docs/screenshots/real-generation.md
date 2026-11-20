@@ -153,8 +153,8 @@ Card captures (2× crops, card + 16 px padding):
 | `assets/intelligent-ui-real-itinerary-en.webp` | 1904×2743 |
 | `assets/intelligent-ui-real-dashboard-en.webp` | 1904×1330 |
 | `assets/intelligent-ui-real-quiz-en.webp` | 1904×1503 |
-| `assets/intelligent-ui-real-itinerary-zh.webp` | 1904×2384 |
-| `assets/intelligent-ui-real-dashboard-zh.webp` | 1904×1749 |
+| `assets/intelligent-ui-real-itinerary-zh.webp` | 1904×2556 |
+| `assets/intelligent-ui-real-dashboard-zh.webp` | 1904×1332 |
 | `assets/intelligent-ui-real-quiz-zh.webp` | 1904×1278 |
 
 README composites, composed by `scripts/build-readme-generation-bento.mjs`:
@@ -174,6 +174,69 @@ with white margins instead of being cropped; no generated content is cut. The
 script also pins the exact 1600×1130 viewport with
 `Emulation.setDeviceMetricsOverride` before capturing, because the headless
 window is taller than its content viewport.
+
+
+## 2026-11-20 — Chinese dashboard re-shoot
+
+The Chinese dashboard card is the only card re-captured after the inline-UI
+release work. It comes from a **throwaway isolated DSH 0.2.2-rc.5 instance**
+(own `DSH_HOME`, own demo workspace, `link:` to this working tree), not from the
+daily GUI:
+
+- Model **DeepSeek V4.1 Flash**, reasoning effort **High**; scope **This session
+  only**, display style **Auto**; light appearance, 100 % zoom, 2× DPR.
+- Session title `咖啡店30天数据仪表盘`; one real turn, 1 m 58 s, no retry.
+- Prompt (verbatim):
+
+  > 请直接用 render_ui 工具回答，只生成一个智能 UI 页面：一张咖啡馆最近 30 天的
+  > 数据分析仪表盘卡片，紧凑到能放进一张 README 截图。要求：把 render_ui 的 title
+  > 参数设为「咖啡店 · 最近 30 天」；最多一句简短引言；不要调研、不要读写文件、
+  > 不要运行命令；浅色主题，不要外部图片。包含：3–4 个 KPI 指标、一个带真实波动
+  > 趋势（数据有高低起伏，例如 2,800 到 5,620 之间波动）的折线图或柱状图、一张
+  > 热销商品小表，以及一个分段筛选控件。
+
+The card rendered fully expanded (no internal scroll), and the chart is a real
+30-point series the model labelled **峰值 CN¥5,620 · 谷值 CN¥2,840**. Only fixed
+chat chrome that would overlap the card (composer dock) was hidden for the shot;
+the card content and chrome were not touched. Clip = card frame + 16 px → 952
+CSS px wide → **1904×1526**. The Chinese composite was then recomposed with
+`node scripts/build-readme-generation-bento.mjs --lang=zh`.
+
+
+## 2026-11-20 — Chinese gallery polish (itinerary + dashboard)
+
+Both Chinese cards were re-shot once more on the same throwaway isolated
+instance so the Chinese gallery matches the English one: every card header now
+shows the **编辑** button, the itinerary has no stray floating button, and the
+dashboard fills the top-right 710×496 slot instead of leaving wide side gutters.
+
+- Environment: DSH `0.2.2-rc.5`, private `DSH_HOME`, demo workspace, the working
+  tree loaded through a `link:`; DeepSeek V4.1 Flash at effort High, per-session
+  `This session only` + `Auto`, light appearance, 100 % zoom, 2× DPR, CDP clips.
+- **Itinerary** `上海两日游` (session `生成上海两日游行程卡片`): real `Checkbox`
+  rows with the first two ticked and a `已备 2/5` counter, day-by-day timetable,
+  budget table and a 经济/舒适 segmented control. Card `920×1246` CSS, clip =
+  frame + 16 px → **1904×2556**. The composer dock and the floating
+  back-to-bottom button were hidden / unmounted for the shot; a DOM scan for
+  visible round floating buttons returned none.
+- **Dashboard** `咖啡店 · 最近 30 天` (session `咖啡馆30天数据仪表盘`): one row of
+  4 KPI tiles, then a two-column grid — daily-revenue line chart with a 7/30-day
+  toggle on the left, five-row top-products table on the right. Series min
+  **2,840** / max **5,620**. Card `920×634` CSS, clip = frame + 16 px →
+  **1904×1332** (≈1.43:1, so it fills the 710×496 slot). A refinement turn
+  removed a ~146 CSS px dead area under the chart axis (now 13 px from the last
+  content) and un-duplicated the title (body heading `近 30 天经营概览`).
+- Prompt (itinerary):
+
+  > 请直接用 render_ui 工具回答，只生成一个智能 UI 页面：一张紧凑的上海两日游行程卡片，竖版单列长卡片（高度约为宽度的 1.4 倍），适合放进一张 README 截图。把 render_ui 的 title 设为「上海两日游」。最多一句简短引言；不要调研、不要读写文件、不要运行命令；浅色主题，不要外部图片。包含：路线概览（第一天浦西老城与江岸，第二天浦东天际线）、逐日时间表、使用真实 Checkbox 组件的 4–5 项行前清单（默认勾选前 2 项并显示已备计数）、简洁预算表与经济/舒适分段控件。
+
+- Prompt (dashboard):
+
+  > 请直接用 render_ui 工具回答，只生成一个智能 UI 页面：一张横向紧凑布局的咖啡馆最近 30 天数据分析仪表盘，宽高比约 1.4:1（横向宽卡片，不要竖向堆得很长），适合放进 README 右上角网格。把 render_ui 的 title 设为「咖啡店 · 最近 30 天」；最多一句简短引言；不要调研、不要读写文件、不要运行命令；浅色主题，不要外部图片。结构严格紧凑：顶部 4 个横排 KPI 指标；下方用 2 列 Grid 并排摆放——左列是带真实高低起伏（例如 2,840 到 5,620 波动）的每日营业额折线图加「7 天 / 30 天」切换，右列是 5 行热销商品表格。
+
+The Chinese composite was then recomposed with
+`node scripts/build-readme-generation-bento.mjs --lang=zh`; the quiz card and
+the English set are untouched.
 
 ## Reproducing the composites
 

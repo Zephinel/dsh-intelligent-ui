@@ -34,7 +34,7 @@ body { margin:20px; } #root { max-width:700px; }
   cdp = await connectCdp(browser.port)
   await cdp.send('Page.enable')
   await cdp.send('Runtime.enable')
-  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 8 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
+  await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui").length === 9 && document.querySelector("pre[data-fixture=streaming-code]") !== null', 'inline fixtures')
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui")[1]?.querySelector(".dsh-iui-fallback") !== null', 'invalid program fallback')
   await cdp.waitFor('document.querySelectorAll(".dsh-iui-inline-ui")[3]?.querySelector(".dsh-iui-warning") !== null', 'partial program warning')
   await cdp.evaluate('document.querySelector(\'[data-fixture=switch-program]\')?.click()')
@@ -42,10 +42,12 @@ body { margin:20px; } #root { max-width:700px; }
 
   const report = await cdp.evaluate(`(() => {
     const inline = [...document.querySelectorAll('.dsh-iui-inline-ui')]
-    const first = inline[0], second = inline[1], third = inline[2], fourth = inline[3], fifth = inline[4], sixth = inline[5], seventh = inline[6], eighth = inline[7]
+    const first = inline[0], second = inline[1], third = inline[2], fourth = inline[3], fifth = inline[4], sixth = inline[5], seventh = inline[6], eighth = inline[7], ninth = inline[8]
     const streaming = document.querySelector('pre[data-fixture=streaming-code]')
     const firstHost = first?.querySelector('.dsh-iui-host')
     const css = first === undefined ? null : getComputedStyle(first)
+    const collapsedCard = ninth?.querySelector('.iui-card')
+    const collapsedCardCss = collapsedCard === null || collapsedCard === undefined ? null : getComputedStyle(collapsedCard)
     return {
       inlineCount: inline.length,
       firstFlag: first?.getAttribute('data-dsh-iui-inline'),
@@ -74,10 +76,12 @@ body { margin:20px; } #root { max-width:700px; }
       seventhFallbackText: seventh?.innerText ?? '',
       eighthFallback: eighth?.querySelector('.dsh-iui-fallback') !== null,
       eighthFallbackText: eighth?.innerText ?? '',
+      collapsedCardBorder: collapsedCardCss?.borderTopWidth,
+      collapsedCardPadding: collapsedCardCss?.paddingTop,
       scrollOverflow: document.documentElement.scrollWidth <= innerWidth,
     }
   })()`)
-  assert.equal(report.inlineCount, 8, 'settled fences render one inline surface each; the streaming fence stays code')
+  assert.equal(report.inlineCount, 9, 'settled fences render one inline surface each; the streaming fence stays code')
   assert.equal(report.firstFlag, 'true')
   assert.equal(report.firstHasHost, true, 'the settled fence mounts the production renderer')
   assert.equal(report.firstHasProgram, true, 'the settled fence renders the program content')
@@ -103,6 +107,8 @@ body { margin:20px; } #root { max-width:700px; }
   assert.match(report.seventhFallbackText, /root does not evaluate to a component/, 'the fatal fallback carries its diagnostic')
   assert.equal(report.eighthFallback, true, 'changing to a program with the same diagnostic still gets a fallback')
   assert.ok(report.eighthFallbackText.trim().length > 0, 'the switched program is not left blank')
+  assert.equal(report.collapsedCardBorder, '0px', 'a single root outline Card collapses its border inside the inline surface')
+  assert.equal(report.collapsedCardPadding, '0px', 'a single root outline Card collapses its padding inside the inline surface')
   assert.equal(report.scrollOverflow, true, 'the inline surface never scrolls the message horizontally')
   console.log('inline-ui E2E: OK (settled inline, streaming code, invalid fallback, excess args silent, partial warning, localized/empty/fatal fallbacks, switch remount)')
 } finally {

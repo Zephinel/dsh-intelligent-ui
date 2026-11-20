@@ -1,7 +1,7 @@
 ---
 name: release-iui
 description: "Release and publish the dsh-intelligent-ui extension: prepare the version, CHANGELOG, bilingual release notes, README/docs pins, run the local gates, tag, watch Trusted Publishing, verify the registry and create the GitHub Release. Use only when the user explicitly asks to release/publish this repository, or asks to prepare a release that will be tagged later. Never create a tag or publish from a request that only changes code, docs, or a plugin page."
-whenToUse: "发布插件, 发版, 出个版本, 发布 0.6.x, release, publish, cut a release, prepare a release, tag v0.6.x, npm publish, GitHub Release, 发布流程"
+whenToUse: "发布插件, 发版, 出个版本, 发布新版本, release, publish, cut a release, prepare a release, tag v0.x, npm publish, GitHub Release, 发布流程"
 ---
 
 # Release IUI

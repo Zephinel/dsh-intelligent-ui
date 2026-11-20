@@ -28,3 +28,8 @@ test('the fence layer is registered unconditionally', () => {
   const before = source.slice(0, source.indexOf("ctx.slots.inject('conversation.chat.markdown.fence'"))
   assert.doesNotMatch(before, /enabledFor\(|documentMode|inlineMode/, 'the client layer does not gate on a session mode')
 })
+
+test('the client registers compact process rows for both render_ui and edit_ui_blocks', () => {
+  assert.match(source, /name: 'tool\.call\.toolview', key: 'render_ui', locale: NS[\s\S]{0,60}RenderUiRow/)
+  assert.match(source, /name: 'tool\.call\.toolview', key: BLOCK_EDIT_TOOL, locale: NS[\s\S]{0,60}RenderUiRow/)
+})

@@ -6,11 +6,11 @@ product
 
 ## Users
 
-DeepSeek Harness users — developers, analysts, and knowledge workers — who ask the model for a structured answer (itinerary, dashboard, form, comparison) and then refine that rendered page in place. They are mid-conversation inside a dense chat surface, often on a laptop, and they care about preserving the rest of the page while changing a few blocks.
+DeepSeek Harness users — developers, analysts, and knowledge workers — who read explanations enriched with interactive inline UI inside the message, or ask the model for a standalone interactive deliverable (itinerary, dashboard, form, comparison, article) and refine that rendered card in place. They are mid-conversation inside a dense chat surface, often on a laptop, and they care about keeping prose readable while making targeted edits without regenerating the whole page.
 
 ## Product Purpose
 
-Turn a model answer into a real, interactive OpenUI page inside the chat, then let the user revise selected blocks, reorder blocks, and record targeted new revisions without the model rewriting the whole page. Success is that editing feels like operating a precise tool on one artifact: the canvas, the request list, the block arrangement, the revision history, and the composer all describe the same object at the same scope.
+Bring real, interactive OpenUI components directly into DSH answers — inline inside Markdown prose for explanations and mechanisms, and as an editable turn-tail card for standalone deliverables where users revise selected blocks, reorder sections, switch styles, and record targeted revisions without rewriting the whole page. Success is that inline UI feels native to the answer and card editing feels like operating a precise tool on one artifact: the canvas, the request list, the block arrangement, the revision history, and the composer all describe the same object at the same scope.
 
 ## Brand Personality
 

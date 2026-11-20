@@ -234,9 +234,9 @@ root = Col([Title(42 + "", "xl")])
 
 ```openui
 // wrong — treated as a string/number comparison
-$isFuture = $date > @Today()
+isFuture = $date > @Today()
 // right
-$isFuture = @DaysBetween(@Today(), $date) > 0
+isFuture = @DaysBetween(@Today(), $date) > 0
 ```
 
 **Unreachable or unresolved names** — warnings that silently damage the page:

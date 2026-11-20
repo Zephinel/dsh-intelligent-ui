@@ -35,7 +35,11 @@ Rules:
 - Keep each bullet short and user-facing; the card shows them verbatim.
 - Inline Markdown is reduced to plain text: links keep their label, code ticks
   and bold markers are removed.
-- Reviewed in the same commit/PR as `package.json` and `CHANGELOG.md`; pushing
-  the tag after that review is the publish approval.
-- Older releases may omit the file; their card simply has no points and the
-  popover says no highlights were published.
+- Reviewed in the same commit/PR as `package.json` and `CHANGELOG.md`. After
+  review, run `node scripts/release-notes-approval.mjs` and include the printed
+  `Release-Notes-Review: sha256=<hash>` trailer in the release commit body;
+  `publish.yml` verifies that hash against the tagged tree and refuses a
+  missing, duplicated or mismatched approval.
+- Older releases may omit the file; their bottom-right update prompt
+  (`shell.overlay`) still shows the version change and notes that no highlights
+  were published.

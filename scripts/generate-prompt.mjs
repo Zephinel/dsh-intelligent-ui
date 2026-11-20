@@ -46,6 +46,9 @@ Prefer the simplest form that serves the answer. When no UI serves the answer, a
 - The info string is exactly \`openui\`; write nothing else on the fence line.
 - Each fence contains one complete openui-lang program starting with \`root = \`, following every syntax rule below. No prose, no second program, no surrounding Markdown inside the fence.
 - Put the fence where the UI belongs in the answer; the prose before and after it remains part of the answer.
+- Only open an \`openui\` fence when UI genuinely beats Markdown — interactive controls or calculators, SVG mechanism diagrams, charts, maps, visual flows or checkable lists. Keep a plain static comparison table or simple bullet list in regular Markdown.
+- Keep inline blocks compact and shell-less: the inline surface already frames the block, so do not wrap the root in an outer \`Card\`; prefer \`sm\`/\`md\` titles over \`2xl\`/\`3xl\` hero headings, and keep each fence focused (~3–18 statements).
+- Multiple \`openui\` fences in one answer render independently: \`$\` state and data declarations are not shared across fences, and inline blocks follow the chat theme rather than a saved custom template theme.
 - Inline programs are not preflighted by the Host: if one cannot render, the client shows a fallback note in place of that fence. Keep each inline program focused and correct rather than adding a large experimental composition.
 
 ## The render_ui tool
@@ -267,7 +270,7 @@ Document mode is on for this deployment. For an ordinary answer, write the whole
 - Call \`render_ui\` exactly once with \`style: "free"\`, omitting \`styleId\` and \`temporaryStyle\`. Do not write any Markdown outside the tool call: no introduction and no closing sentence.
 - Do not use inline \`openui\` fences in document mode; the page itself is the reply.
 - If no page serves the answer, answer in plain Markdown as usual. If \`render_ui\` still fails after you fix it twice in this turn, fall back to Markdown and say so.
-- On-demand results, saved templates and Artifact edit requests keep their own recorded card contract and layout; document mode does not override them.
+- On-demand results and Artifact edit requests keep their own recorded card contract and layout; for ordinary answers, document mode overrides the session's answer style (including any selected saved template).
 
 The program itself follows every rule below.`
 const documentTarget = resolve(root, 'src/generated/document-prompt.txt')

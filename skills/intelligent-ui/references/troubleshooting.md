@@ -31,7 +31,7 @@ render_ui is disabled for this session. Turn on Intelligent UI with the composer
 
 ## Red `/iui` rows or a missing UI control
 
-- A red command row reading `Usage: /iui [on|off|inherit]` while the **UI** menu offers a **Follow global** entry means the browser half is newer than the host half: restart the process serving the DSH Web UI, then refresh the page. This is version skew, not a program error.
+- A red command row reading `Usage: /iui [on|off]` while the **UI** menu offers a **Follow global** entry means the browser half is newer than the host half: restart the process serving the DSH Web UI, then refresh the page. This is version skew, not a program error.
 - If the **UI** chip is absent, the profile lacks the `sessionProjections` + `commands` services or the browser half did not load. In that deployment the extension is always-on, so a missing `render_ui` points at the plugin itself — see [integration.md](integration.md#troubleshooting-a-missing-render_ui).
 - A `Switch failed`（「切换失败」）inline label means the command request failed before it reached the switch; retry once, then report the exact failure line.
 
@@ -85,7 +85,7 @@ render_ui: document mode renders the answer as one free-layout document; pass st
 render_ui: document mode does not use saved templates; omit styleId and pass style: "free".
 ```
 
-This deployment records ordinary answers as documents: pass `style: "free"`, put the whole answer (prose plus interactive blocks) in the program, and write no Markdown outside the call. Card/Article and saved-template layouts are rejected for these answers; apply on-demand results, saved templates and Artifact edit requests with their own recorded layout instead.
+This deployment records ordinary answers as documents: pass `style: "free"`, put the whole answer (prose plus interactive blocks) in the program, and write no Markdown outside the call. Card/Article and saved-template layouts are rejected for ordinary answers in document mode (document mode overrides any selected saved template); on-demand results and Artifact edit requests keep their own recorded card contract and layout.
 
 Command and result-save failures include:
 
@@ -105,7 +105,7 @@ This template no longer exists.
 Could not save the style. Check its name, scope and theme, then retry.
 ```
 
-The result registry retains only 200 records; eviction can prevent saving while recorded arguments still replay. Save from the result's extension action rather than asking the model to write templates. Re-arming replaces the previous active operation. Keep other tabs from sending in that session while armed: the hint is tab-specific, but the Host binds the next human session message.
+The result registry retains only 200 records; eviction can prevent saving while recorded arguments still replay. Save from the result card's footer **Save as template** button rather than asking the model to write templates. Re-arming replaces an armed operation; while an operation is running or clarifying, cancel it first before re-arming. Keep other tabs from sending in that session while armed: the hint is tab-specific, but the Host binds the next human session message.
 
 ### The program is empty
 

@@ -62,6 +62,19 @@
   max-width: 100%;
 }
 
+/* Collapse a redundant single outline Card inside the inline surface so an
+   inline program does not render card-inside-card double borders. Soft cards
+   and multi-card layouts keep their own borders/backgrounds. Note: OpenUI's
+   DefaultRendererContent wraps the root node in two unclassed View divs. */
+.dsh-iui-inline-ui :where(.dsh-iui-root, .dsh-iui-root > div:only-child, .dsh-iui-root > div:only-child > div:only-child) > .iui-card:not(.iui-card-soft):only-child,
+.dsh-iui-inline-ui :where(.dsh-iui-root, .dsh-iui-root > div:only-child, .dsh-iui-root > div:only-child > div:only-child) > .iui-col:only-child > .iui-card:not(.iui-card-soft):only-child {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .dsh-iui-card {
   box-sizing: border-box;
   min-width: 0;

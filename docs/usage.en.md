@@ -25,14 +25,6 @@ Describe what you want directly, for example:
 
 The model picks one of four delivery forms: plain Markdown, inline UI, a turn-tail page card, or an inline explanation plus a page artifact. **Explanations, analyses and comparisons** usually stay Markdown with inline UI where it helps; a **standalone interactive deliverable** (a page, dashboard, tool, form, game or editable result) uses `render_ui` for a turn-tail card; when both roles are distinct one answer may include both, never duplicating the same content and rendering at most one page card. **Auto** lets the model choose among the four delivery forms and, when a card is included, the layout; Card/Article only pin the card layout. When a card renders, choose the per-session layout under **UI → Display style**: Card / Article, or Auto (Card, Article or a free layout); inline blocks inherit the renderer theme and ignore the display style.
 
-## Answer as a document (experimental)
-
-With **Answer as a document (experimental)** enabled under **Plugins → Intelligent UI → Experimental**, an ordinary rendered answer has no card header, collapse control or frame and reads as this turn's chat message text. The model puts prose, headings, tables and interactive blocks into one page and adds no Markdown outside it; this suits explanations, analyses and debugging answers that should read like a reply rather than a deliverable.
-
-Note: this is an experimental whole-document presentation — the page still lives at the turn tail, and copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing. On-demand generation, saved templates and Artifact edit requests still render as cards. The switch affects future answers only; a recorded document answer keeps its recorded presentation, and new answers return to the default when it is off (Markdown with inline UI; explicit deliverables still render a card). See [Known limitations](limitations.en.md) for the full boundaries.
-
-Ordinary explanations do not need this switch: the inline UI in the next section is the default and its content really lives in the message body.
-
 ## Inline UI in the answer (the default)
 
 An ordinary answer is Markdown by default; when a chart, table, flow or small interaction helps, the UI is written inside the answer as a fenced code block whose info string is `openui`, and the Web client renders it in place. There is no separate mode switch: with the session's UI switch on, the model naturally embeds UI where it helps — you do not have to say "put the page in the reply".
@@ -47,11 +39,19 @@ root = Col([Title("Day 1"), Text("09:00 Yu Garden · 14:00 The Bund"), Badge("2 
 Day two depends on how much walking you want.
 ````
 
-- One fence is one complete program (`root = …`); the model may place several fences anywhere in one answer, and the prose outside them is still the answer.
+- One fence is one complete program (`root = …`); the model may place several fences anywhere in one answer, and the prose outside them is still the answer. Each fence renders independently with its own `$` state and data declarations, and uses the chat theme rather than a saved custom template theme.
 - While a fence streams it shows as a plain code block; once settled the client renders it in place. A program that cannot render at all shows the renderer's fallback note; a program that drops only some parts keeps the usable page and adds a compact warning, without breaking the rest of the message.
 - Inline blocks keep component interaction and `@ToAssistant` follow-ups, but have no card editing, revision history, saved templates or image/HTML export. Their source is part of the message, so copy, search and transcript export keep the program text.
 - Only the Web renderer shows the rendered UI; TUI/headless clients see the code block. An older DSH without the `conversation.chat.markdown.fence` slot also shows the code block.
-- For a standalone page that is editable, exportable or savable as a template, ask for a page/dashboard/tool/editable result; the model calls `render_ui` for a turn-tail card. It may coexist with an inline explanation when both roles are distinct (no duplicated content, at most one card). See [Known limitations](limitations.en.md).
+- **Steering the delivery form**: ask for "plain text only" when you want no UI; for a standalone page that is editable, exportable or savable as a template, ask clearly for a page/dashboard/tool/editable result and the model calls `render_ui` for a turn-tail card. It may coexist with an inline explanation when both roles are distinct (no duplicated content, at most one card). See [Known limitations](limitations.en.md).
+
+## Answer as a document (experimental)
+
+Ordinary explanations do not need this switch: the inline UI in the previous section is the default and its content really lives in the message body.
+
+With **Answer as a document (experimental)** enabled under **Plugins → Intelligent UI → Experimental**, an ordinary rendered answer has no card header, collapse control or frame and reads as this turn's chat message text. The model puts prose, headings, tables and interactive blocks into one page and adds no Markdown outside it; this is for experimental whole-answer turn-tail document presentation.
+
+Note: this is an experimental whole-document presentation — the page still lives at the turn tail, and copying, search and transcript Markdown export omit its body; the document page has no card editing entry or revision history; only the Web renderer (Web/Desktop) shows it, and clients that do not render plugin cards (TUI/headless) show nothing. While enabled, ordinary answers override the session's answer style (including any selected saved template) and use a free layout; on-demand generation and Artifact edit requests still render as cards. The switch affects future answers only; a recorded document answer keeps its recorded presentation, and new answers return to the default when it is off (Markdown with inline UI; explicit deliverables still render a card). See [Known limitations](limitations.en.md) for the full boundaries.
 
 ## Images
 
@@ -59,7 +59,7 @@ Day two depends on how much walking you want.
 - PNG / JPEG / WebP / GIF are accepted, plus small inline `data:image/…;base64` images (≤512 KiB decoded). Local files are capped at 10 MiB and 40 MP (local files and inline data are pre-checked from recognized headers), and the type is sniffed from the bytes, not the extension.
 - An explicit source that cannot load shows an **error placeholder** (missing, too large, unsupported type) and never searches for an unrelated photo; searching belongs to `SearchImage` only.
 - SVG from a path or data source is not supported (it shows an error placeholder); an `http(s)` SVG URL still renders through the browser's `<img>` behavior (no scripts). Markdown `![alt](path)` uses the same resolver; local images inside a sandboxed `HtmlView` are not supported.
-- Local images are read from the viewing session's workspace at render time; restart/re-render after moving or deleting a file. The single-file HTML export inlines them as data URLs so the page works offline.
+- Local images are read from the viewing session's workspace at render time; re-render after moving or deleting a file. The single-file HTML export inlines them as data URLs so the page works offline.
 - Requires the workspace-files service from DSH 0.2.2. On an older Host without it, local paths show the "This Host cannot read local images" placeholder while http(s)/data sources keep working.
 
 ## Edit a rendered page

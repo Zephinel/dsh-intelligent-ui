@@ -1,6 +1,6 @@
 # Examples
 
-Seven complete page programs that the host validator accepts against `vendor/spec.json`, plus one inline fence example. Each page program starts with `root`, uses only shipped components and functions, and keeps all state in `$` variables, so it works without another message. The page programs run 7–23 statements: small enough to adapt, large enough to show a real page.
+Seven complete page programs that the host validator accepts against `vendor/spec.json`, plus three inline fence patterns (an interactive mechanism stepper, a live inline calculator paired with a companion page deliverable, and a minimal inline block). Each program starts with `root`, uses only shipped components and functions, and keeps all state in `$` variables, so it works without another message. The page programs run 7–23 statements: small enough to adapt, large enough to show a real page.
 
 How to use them:
 
@@ -8,21 +8,43 @@ How to use them:
 - Keep the statement order: `root` first, then `$` declarations, then derived statements, then leaf data. References may point forward, but this order keeps the program readable and matches the injected prompt.
 - Every program below has been validated with the same parser the host uses. If you edit one, re-check the rules in [language.md](language.md) and the error strings in [troubleshooting.md](troubleshooting.md).
 
-## 0. Inline comparison in an explanation
+## 0a. Interactive inline mechanism diagram (5 statements)
 
-An inline explanation is ordinary Markdown with one or more `openui` fences; it does not call `render_ui`. Keep the prose outside the fences and put each fence where the UI belongs:
+Use an inline `openui` fence when interactivity or visual structure genuinely beats Markdown — here a clickable 4-stage SVG flow with `$stage` state. Notice: **no outer `Card` wrapper** (the inline surface already frames it), `sm` title, and prose stays outside the fence:
 
 ````markdown
-A model is the trained weights; a harness is the loop around it.
+A model is the trained weights; a harness is the runtime loop around it. Click each stage to see which side owns it:
 
 ```openui
-root = Col([Title("Model vs harness", "md"), Table(["Aspect", "Model", "Harness"], [["Role", "Produces tokens", "Runs the loop"], ["Built by", "Training", "Engineering"]])])
+root = Col([Row([Title("Agent loop: model vs harness", "sm"), Spacer(), Badge(cur.owner, cur.tone)]), SegmentedControl($stage, ["1. Prompt", "2. Model", "3. Tool", "4. Loop"]), diag, Text(cur.desc, "sm")])
+$stage = "1. Prompt"
+stages = [{id: "1. Prompt", owner: "Harness", tone: "info", step: 0, desc: "The harness assembles system prompt, history and tool schemas before calling the model."}, {id: "2. Model", owner: "Model", tone: "purple", step: 1, desc: "The model reads tokens and predicts either prose or a structured tool call."}, {id: "3. Tool", owner: "Harness", tone: "success", step: 2, desc: "The harness executes the tool, enforces permissions and returns the result message."}, {id: "4. Loop", owner: "Harness", tone: "warning", step: 3, desc: "The harness appends the result and calls the model again until the turn settles."}]
+cur = @First(@Filter(stages, "id", "==", $stage))
+diag = Svg([Rect(8, 12, 52, 30, cur.step == 0 ? "info" : "surface", "ink", 1.5, 6), SvgText("Prompt", 34, 30, 10, "ink", "middle"), Line(60, 27, 74, 27, "ink", 1.5), Rect(74, 12, 52, 30, cur.step == 1 ? "purple" : "surface", "ink", 1.5, 6), SvgText("Model", 100, 30, 10, "ink", "middle"), Line(126, 27, 140, 27, "ink", 1.5), Rect(140, 12, 52, 30, cur.step == 2 ? "success" : "surface", "ink", 1.5, 6), SvgText("Tool", 166, 30, 10, "ink", "middle"), Line(192, 27, 206, 27, "ink", 1.5), Rect(206, 12, 52, 30, cur.step == 3 ? "warning" : "surface", "ink", 1.5, 6), SvgText("Loop", 232, 30, 10, "ink", "middle")], "0 0 266 54")
 ```
 
-The same model in a different harness behaves very differently.
+The same weights inside a stricter or richer harness behave like a different system.
 ````
 
-For the combined form, keep this explanation (including its fences) and call `render_ui` once with a separate page program; do not repeat the table in the page.
+## 0b. Combined form: inline calculator + companion page deliverable
+
+When one answer both explains a trade-off interactively in prose and delivers a separate editable page, put the compact inline block inside your Markdown explanation **first**, then call `render_ui` once for the standalone deliverable (e.g. Example 1 below). Keep roles distinct — never duplicate the same content in both:
+
+````markdown
+Before opening the full editable itinerary card below, adjust days and hotel tier to see how the budget splits:
+
+```openui
+root = Col([Row([Title("Budget split preview", "sm"), Spacer(), Badge(@Format(perDay, "currency", 0, "CNY") + " / day", "info")]), Slider($days, 1, 5, 1, "Trip days"), Slider($hotel, 300, 1200, 50, "Hotel / night"), Row([Text("Estimated total: " + @Format(total, "currency", 0, "CNY"), "sm", null, "semibold"), Spacer(), Caption("Includes ¥350/day food & transit")])])
+$days = 2
+$hotel = 600
+total = $days * ($hotel + 350)
+perDay = $days > 0 ? total / $days : 0
+```
+
+Now rendering the interactive two-day Shanghai itinerary card with map, timeline and checklist.
+````
+
+*(Then call `render_ui` once with Example 1's program; do not repeat the budget calculator inside the card if it duplicates the inline preview, and remember each `openui` fence keeps its own isolated `$` state.)*
 
 ---
 

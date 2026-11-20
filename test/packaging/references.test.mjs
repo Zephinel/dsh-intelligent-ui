@@ -121,3 +121,21 @@ test('the shipped file count quoted in integration.md matches the published file
   assert.ok(quoted, 'integration.md quotes the shipped file count')
   assert.equal(Number(quoted[1]), shipped, 'integration.md file count matches package.json files')
 })
+
+test('SKILL.md hard-rule cross-references stay aligned and integration.md documents edit_ui_blocks', () => {
+  const hardRulesSection = skill.slice(skill.indexOf('## Hard rules (OpenUI Lang)'), skill.indexOf('## Design playbook'))
+  const ruleMap = new Map()
+  for (const match of hardRulesSection.matchAll(/^(\d+)\.\s+(.+)$/gm)) {
+    ruleMap.set(Number(match[1]), match[2])
+  }
+  assert.ok(ruleMap.size >= 12, 'SKILL.md lists all numbered hard rules')
+  for (const ref of skill.matchAll(/Hard rule (\d+)/g)) {
+    const n = Number(ref[1])
+    assert.ok(ruleMap.has(n), `SKILL.md references Hard rule ${n}, which exists`)
+  }
+  const checkoutRef = /read-only[\s\S]{0,220}Hard rule (\d+)/i.exec(skill)
+  assert.ok(checkoutRef, 'SKILL.md cross-references the read-only checkout hard rule')
+  assert.match(ruleMap.get(Number(checkoutRef[1])) ?? '', /extension checkout read-only/i)
+  assert.match(integration, /### `edit_ui_blocks` tool contract/, 'integration.md documents edit_ui_blocks alongside render_ui')
+  assert.match(integration, /`edit_ui_blocks`[\s\S]{0,400}required: \["program"\]/, 'integration.md lists edit_ui_blocks required program parameter')
+})

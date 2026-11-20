@@ -23,14 +23,13 @@ Plan two days in Shanghai, with checkboxes and adjustments
 
 Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both UI forms use real components and can coexist: inline UI explains, the turn-tail card delivers. Inline UI needs no extra inline-mode switch (the session UI switch still enables the plugin). Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
-> [!NOTE]
-> **Current status**: `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`; the stable package ships turn-tail cards, editing, export and templates. **Inline UI is new on `main` and has not been published to npm** — install from GitHub main to try it (the next npm release will include it). A main build may still report version 0.6.2; identify it by the inline behavior. The plugin is also listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **872/872** (Host 323, Client 510, packaging 39); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+> **Current status**: `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`; the stable package ships turn-tail cards, editing, export and templates. **Inline UI is new on `main` and has not been published to npm** — install from GitHub main to try it (the next npm release will include it). A main build may still report version 0.6.2; identify it by the inline behavior. The plugin is also listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **875/875** (Host 324, Client 511, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 [What it looks like](#what-it-looks-like) · [Install](#install) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Getting the code and local development](#getting-the-code-and-local-development)
 
 ## What it looks like
 
-![Inline UI inside an explanation: a model-versus-harness comparison table embedded mid-answer](assets/intelligent-ui-readme-inline-en.webp)
+![Inline UI inside an explanation: an interactive four-stage flow diagram embedded mid-answer](assets/intelligent-ui-readme-inline-en.webp)
 
 Explanations and analyses stay Markdown by default; when a chart, table or small interaction helps, the model writes OpenUI Lang into an `openui` fence in the answer, and the UI sits right in the middle of the prose. This is the primary presentation on main and needs no extra inline switch.
 

@@ -747,3 +747,16 @@ test('a clarification-round cap ends with a re-arm error naming the cap', async 
   await assert.rejects(() => m.execute({ style: 'free', temporaryStyle: SNAPSHOT }),
     /ended because it reached the 2-clarification-round cap\. Ask the user to re-arm On-demand UI/)
 })
+
+test('an on-demand prompt omits the ordinary inline-fence preamble so it does not contradict itself', () => {
+  const m = onDemandMount()
+  m.bind()
+  const prompt = m.sections[0].text({ agent: m.agent })
+  assert.match(prompt, /do not use inline `openui` fences/)
+  assert.match(prompt, /## The render_ui tool \(on-demand turn\)/)
+  assert.match(prompt, /extension's own checkout/)
+  assert.doesNotMatch(prompt, /## Four delivery forms/)
+  assert.doesNotMatch(prompt, /## Inline fence rules/)
+  assert.doesNotMatch(prompt, /info string is exactly `openui`/)
+  assert.doesNotMatch(prompt, /stays Markdown with an inline `openui` block/)
+})

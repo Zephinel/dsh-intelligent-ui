@@ -121,10 +121,10 @@ npm run check:docs-links # 校验 README/docs/Agent Skill 的本地链接、锚�
 npm run check:pack-facts # 校验打包文件数与非构建文件字节与 docs/current-facts.json 一致（已含在 check 中）
 npm run pack:check     # npm pack --dry-run，检查最终发布文件清单
 npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内全量文件哈希、挂载、client bundle → 卸载（需要 dsh + pnpm）
-npm run test:browser   # 12 个 Chrome 套件：按需生成、样式面板、主题、内嵌 UI、图片、交互页面、Article、设置、Artifact 区块编辑与编排、嵌套编辑渲染
+npm run test:browser   # 12 个 Chrome 套件：按需生成、样式面板、主题、内嵌 UI、浮层定位（anchored-overlay）、图片导出、交互页面、Article、设置、更新提示（update-prompt）、Artifact 区块编辑与编排、嵌套编辑渲染
 ```
 
-`npm run check` 里的排版检查需要本机 Chrome；没有 Chrome 时该检查会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
+`npm run check` 里的 5 个浏览器渲染器检查（`typography`、`media-row`、`pressable-select`、`css-contract`、`nested-css-contract`）需要本机 Chrome；没有 Chrome 时会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
 - `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护三种提示词变体（普通回答的 inline/交付物策略、document mode、on-demand 覆盖）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
@@ -134,7 +134,7 @@ npm run test:browser   # 12 个 Chrome 套件：按需生成、样式面板、�
 - `src/lib/**`：上游组件库与 59 个 library `@functions` 的移植（含 M4-1 `nestedEditLibrary` 容器 HOC、`nested-edit.css` 直接子选择器补偿与 B2-6 `runtimeState`/`onRuntimeStateChange` 转发）；`src/lib/render.tsx` 是 DSH 封装（主题隔离、错误边界、`@ToAssistant` 回填），`src/lib/i18n.tsx` 给渲染器组件提供 `t` seat 与英文兜底。
 - `src/client/**`：DSH Slot 注册（输入框 UI 开关、插件详情页 `plugins.bundle.config`、消息操作栏的导出入口）、turn-tail 卡片、`render_ui` / `edit_ui_blocks` 进程行（失败时一行原因）、程序提取器（含 block-edit 修订卡片与 `requestId`）、导出消息/Turn 查找、图片导出管线（SnapDOM + 美化合成）、交互页面生成（拉取资产 + 主题快照 + 内联 HTML），以及 `ctx.locale` 字典注册；另有 Artifact 区块编辑与编排（多草稿 store、单 active 画布与草稿切换区、每草稿一个 Composer chip、编辑视图/Artifact 编辑器/区块浮层、实时排序预览、后台修订探测、已发送消息逐信封摘要、Turn 关闭按 `requestId` 对账与 failed 草稿恢复，以及旧修订的 branch 模式和 `local-revisions.ts` 零模型本地修订卡片（localStorage，按 Turn 渲染）、`store.ts` 的 sessionStorage 草稿持久化/懒恢复与 `tabs.ts` 的 BroadcastChannel 跨标签软租约，以及临时样式结果的内容编辑（快照随请求、纯排序/整体说明被阻止）、`nested.ts` 的 CST→嵌套区块映射与编辑画布「嵌套区块」opt-in 模式、嵌套「嵌套区块编排」同父排序（`nestedOrder`/drag/keyboard/reset）、编排行复制/两段式删除/「移动到…」跨容器移动（本地结构修订卡 `kind` 为 structure）、嵌套组「添加区块」（模型 additions）与结构操作 preview→diff 模态确认。
 - `src/standalone/**`：交互页面的独立入口与页面 chrome（卡片标题/折叠、`@ToAssistant` 复制兜底、主题样式）；由 `npm run build` 打成 `lib/standalone.*`，Host 通过 same-origin 路由提供给导出流程。
-- `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）；Artifact 区块编辑也在这里定义任务信封与形状校验（`artifact-edit.ts`，含 `requestId`、`parseEditRequestTexts` 与多卡片批次上限，以及 B1 的 block/style 判别信封与样式序列化）、区块识别/包装与确定性排序（`artifact-blocks.ts`）、区块片段切片/回填（`artifact-block-bundle.ts`），以及基础登记契约与校验（`artifact-base.ts`，供 Host 路由与客户端 shared 使用），和 B2 的结构路由目标契约（`artifact-structure.ts` 的 `targetStyle`/`sessionStyleScope` 与单意图校验）。
+- `src/shared/**`：Host/Client 共享的协议常量（`intelligent-ui.ts`）与中英文 UI 字典（`locales.ts`）；Artifact 区块编辑也在这里定义任务信封与形状校验（`artifact-edit.ts`，含 `requestId`、`parseEditRequestTexts`、多卡片批次上限与 B1 的 block/style 判别信封及样式序列化）、区块识别/包装与确定性排序（`artifact-blocks.ts`）、区块片段切片/回填（`artifact-block-bundle.ts`）、基础登记契约与校验（`artifact-base.ts`，供 Host 路由与客户端 shared 使用）、B2 结构路由目标契约（`artifact-structure.ts` 的 `targetStyle`/`sessionStyleScope` 与单意图校验）、M4 源码 CST 与结构引擎（`program-cst.ts`，含 `insertNode` 与跨容器 `moveNode`），以及 7 类允许容器白名单（`artifact-containers.ts`）。
 - `src/host/**`：工具注册（`render_ui` 与区块片段工具 `edit_ui_blocks`，多 pending 时用 `editRequestId` / `requestId`+`artifactId` 选择，branch 请求允许旧 base）、程序校验、系统提示词 section、设置项 Config（`globalEnabled` / `answerStyle` / `freeComposition` / `documentMode` / `exportBackground` / `exportScale` / `removeFollowUps`）、内嵌 skill 注册，以及（可选注入 `webServer` 时）交互页面资产的 same-origin 路由；`mode.ts` 实现全局默认 + 会话覆盖的开关与样式（持久化文件、命令、投影、每 agent 工具可见性，关闭时 deny 两个工具）；`artifact-revisions.ts` / `artifact-edit.ts` 提供修订注册表、认证查询路由与 POST 零模型恢复路由，以及多信封解析（`parseEditRequestTexts`）、按 `requestId` 的 pending Map、branch 校验、targetOrder 校验、片段合并与确定性排序控制器，M4-2 `orderByParent` 层级校验与最深优先重建、M4-3 权威 program 注册表 + 幂等 ledger + `POST /api/intelligent-ui/artifact-structure` 确定性结构路由、M4-4 共享容器白名单与 Section children 参数接入，以及 `artifact-base.ts` 的 base 登记生命周期与 `resolveArtifactBase` 边界（结构路由共用），`artifact-revisions.ts` 的临时样式快照边界（修订写入前登记 ResultStore）与 history 来源推断，以及 `program-validation.ts`（从 index.ts 抽出的共享程序/Article 校验）与 B2 的结构路由 `executeStyleSwitch` 分支（Host 解析 durable 目标、H1 base 身份校验、no-op/临时快照丢弃、`styleSwitch` 能力位）。
 - `skills/intelligent-ui/**`：随包发布的 Agent Skill。
 - `vendor/`：上游源码（组件/函数/生成物）与许可证。
@@ -215,13 +215,13 @@ npm run pack:check     # 确认最终发布文件清单
 | `locale/en.json` / `locale/zh.json` | 插件市场/插件详情页显示名与描述；`meta.detail` 指向插件详情页的简短指引（`locale/detail.*.md`），缺失时回退到 README |
 | `src/shared/locales.ts` | 中英文 UI 字典（`ctx.locale` 注册、渲染器英文兜底） |
 | `README.md` / `README.en.md` | 中文 / English 文档，顶部互相链接 |
-| `docs/` | 详细文档（架构、开发、验证）；不随 npm 包发布 |
+| `docs/` | 详细文档（使用指南、已知限制、架构、开发、验证）；不随 npm 包发布 |
 | `CHANGELOG.md` | 版本变更记录（英文，历史记录，只追加）；不随 npm 包发布 |
-| `assets/` | README 截图：行程示例、三张组件一览、看板与测验示例、窄屏适配、输入框开关/样式面板与插件设置页（WebP + PNG） |
+| `assets/` | README 截图：中英双语的内嵌 UI、总览、真实生成与编辑画布截图，以及组件一览、控件、按需生成与设置页截图（WebP + PNG） |
 | `screenshots.json` | 社区市场精选截图清单，路径相对于仓库根目录；不随 npm 包发布 |
 | `icon.svg` | 插件卡片图标 |
 | `skills/intelligent-ui/` | 内嵌 + 随包发布的 Agent Skill |
-| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、KaTeX、MapLibre、zod、SnapDOM、React） |
+| `licenses/` | 第三方许可证全文（Open Intelligent UI、OpenUI、lucide、Remix Icon、KaTeX、MapLibre、zod、SnapDOM、React） |
 | `LICENSE` / `NOTICE` | 本项目 MIT 许可证与第三方归属声明 |
 
 ## 发布（Trusted Publishing）

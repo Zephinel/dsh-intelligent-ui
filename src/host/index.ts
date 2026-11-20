@@ -413,6 +413,32 @@ const ON_DEMAND_PREFIX =
   + 'This turn is the explicit exception to the ordinary-answer policy: do not use inline `openui` fences; the page is the requested result and must be rendered through render_ui.\n\n'
 
 /**
+ * Tool-contract preamble for bound on-demand turns. Replaces the ordinary
+ * four-form / inline-fence preamble so the prompt never contradicts
+ * ON_DEMAND_PREFIX in the same system prompt.
+ */
+const ON_DEMAND_TOOL_PREAMBLE = `## The render_ui tool (on-demand turn)
+The page travels inside a \`render_ui\` tool call, not in your Markdown reply and not in an inline \`openui\` fence:
+- Call \`render_ui\` with \`program\` set to one complete openui-lang program, plus \`style\` and \`temporaryStyle\` as required by the on-demand instructions above.
+- You may write at most one short introductory sentence before calling the tool. After a successful call the page is already on screen: the closing Markdown reply, when present, is one short sentence only. Never put the \`program\` argument into your Markdown reply.
+- If the tool reports a parse or snapshot error, fix it and call \`render_ui\` again in the same turn. If it still fails after you fix it twice in this turn, fall back to text and say so.
+- The call is the only preflight you need: a rejected program is never shown, and the findings name the exact problem. Do not build a local harness, and do not create, edit or delete files in the Intelligent UI extension's own checkout (including its \`test/renderer/.build/\`) to test a program; keep any draft in a temporary directory outside the repository. Editing the extension itself is a separate task the user has to ask for explicitly.
+- One successful call per turn; a rejected call may be retried. A successful call must not be followed by a second \`render_ui\` call in the same turn.`
+
+const PROMPT_BODY_MARKER = '\nThe program itself follows every rule below.'
+const INLINE_KNOWLEDGE_SENTENCE = 'an explanation of how a concept, mechanism or process works (a loop, a request path, stages, relations, data to explore) stays Markdown with an inline `openui` block where it helps.'
+const ON_DEMAND_KNOWLEDGE_SENTENCE = 'for this on-demand turn, render the complete requested UI through `render_ui` instead of inline `openui` fences.'
+
+/** Build the on-demand prompt body without the ordinary inline-fence preamble. */
+function buildOnDemandPromptText(ordinaryPrompt: string): string {
+  const markerIndex = ordinaryPrompt.indexOf(PROMPT_BODY_MARKER)
+  const body = markerIndex === -1 ? ordinaryPrompt : `${ON_DEMAND_TOOL_PREAMBLE}\n${ordinaryPrompt.slice(markerIndex)}`
+  return body.replace(INLINE_KNOWLEDGE_SENTENCE, ON_DEMAND_KNOWLEDGE_SENTENCE)
+}
+
+const onDemandPromptText = buildOnDemandPromptText(promptText)
+
+/**
  * Prompt opening for an ordinary answer while the experimental document mode is
  * on: a rendered page is the reply itself, so no Markdown answer may sit
  * outside the program.
@@ -648,9 +674,10 @@ export function apply(ctx: {
       // fence UI and page artifacts are part of the ordinary answer policy. A
       // bound on-demand turn keeps the "render the page" opening and its style.
       const document = !operationNote && isDocumentMode(config)
-      const section = document
+      const basePrompt = document
         ? documentPromptText
-        : isFreeComposition(config) ? `${promptText}${FREE_COMPOSITION_NOTE}` : promptText
+        : operationNote ? onDemandPromptText : promptText
+      const section = !document && isFreeComposition(config) ? `${basePrompt}${FREE_COMPOSITION_NOTE}` : basePrompt
       const template = document ? undefined : mode.templateFor(sessionId)
       const style = mode.styleFor(sessionId)
       const note = operationNote ? '' : document ? DOCUMENT_MODE_NOTE : template === undefined ? STYLE_NOTES[isAnswerStyle(style) ? style : 'auto'] : customStyleNote(template)
@@ -1011,8 +1038,9 @@ ${section}`
       // session's current style only governs ordinary renders.
       const applyingBlockEdit = peekedBlockEdit !== undefined
       // Experimental document mode: an ordinary answer becomes one free-layout
-      // document that the client presents as the message body. On-demand
-      // results, artifact edits and saved templates keep their recorded layout.
+      // document that the client presents as the message body, overriding any
+      // selected saved template. On-demand results and artifact edits keep
+      // their recorded card contract and layout.
       const documentRender = !temporary && !applyingBlockEdit && isDocumentMode(config)
       const template = temporary || applyingBlockEdit || documentRender ? undefined : mode.templateFor(sessionId)
       const effective = temporary || applyingBlockEdit ? args.style : documentRender ? 'free' : template?.baseLayout ?? mode.styleFor(sessionId)

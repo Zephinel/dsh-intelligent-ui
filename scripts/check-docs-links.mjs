@@ -96,6 +96,13 @@ for (const file of DOC_FILES) {
     failures.push(`${file}: doc file is missing`)
     continue
   }
+  const raw = read(file)
+  if (/\/Users\/[A-Za-z0-9._-]+\//.test(raw)) {
+    failures.push(`${file}: contains a personal /Users/<name>/ path`)
+  }
+  if ((file === 'README.md' || file === 'README.en.md') && /^\s*>\s*\[!/m.test(raw)) {
+    failures.push(`${file}: GitHub-only alert syntax (> [!...) renders literally on npmjs.com`)
+  }
   for (const line of proseLines(file)) {
     for (const match of line.matchAll(/!?\[([^\]]*)\]\(([^)\s]+)\)/g)) {
       if (match[0].startsWith('!')) continue // image syntax: covered by the manifest test
