@@ -1268,3 +1268,9 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 - **重拼与文档**：`node scripts/build-readme-generation-bento.mjs --lang=zh` 重拼 `intelligent-ui-readme-generation-zh.webp`（1600×1130）；`docs/screenshots/real-generation.md` 更新尺寸表并新增本轮小节；`docs/current-facts.json` 按实测 pack 更新（`packedBytes` 6,255,149、`unpackedBytes` 13,315,792、`nonBuildUnpackedBytes` 3,897,231），同步 CHANGELOG、architecture 中英与同步技能参考中的字节数。
 - **门禁**：`npm run check` PASS；Node **875/875** = Host **324** + Client **511** + packaging **40**；浏览器 **12/12**（本轮仅截图/文档变更，未重跑），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.97 / CSS 249.6 kB）；pack **71** 文件，非构建 **3,897,231** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
 - **证据边界**：真实模型轮次不可复现；英文三卡与中文小测卡未改动；临时实例与 `DSH_HOME` 已删除，未改版本号、未打 tag、未发布 npm。
+
+## 2026-11-20 — 修复 README Bento 拼图滚动条与首屏结构精修
+
+- **根因**：`scripts/build-readme-bento.mjs` 未对每个拼图组调用 `Emulation.setDeviceMetricsOverride` 且未在 `html, body` 隐藏滚动条/启用 `captureBeyondViewport: true`，导致无头 Chrome 复采 `overview-zh/en`、`components`、`controls` 时出现深色右/底滚动条并裁切底行。
+- **修复**：在 `scripts/build-readme-bento.mjs` 中为每个拼图组固定精确视口、设置 `overflow: hidden` / `::-webkit-scrollbar{display:none}` 并开启 `captureBeyondViewport: true`，重跑 `node scripts/build-readme-bento.mjs` 并逐张看图确认 5 张拼图均无滚动条或底行裁切；同步重排中英 README（约 113 行），将交互内嵌首图提上第一屏、把工程验证拆分挪至「获取代码与本地开发」、去重 `0.6.2 vs main` 提示并清理用户段落内部术语。
+- **门禁**：`npm run check` PASS；Node **875/875** = Host **324** + Client **511** + packaging **40**；浏览器 **12/12**（本轮仅拼图脚本与 README 变更，未重跑），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.97 / CSS 249.6 kB）；pack **71** 文件，非构建 **3,909,340** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。

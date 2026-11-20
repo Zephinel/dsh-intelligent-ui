@@ -72,7 +72,8 @@ try {
       cards.push(`<figure style="grid-column:${cell.col};grid-row:${cell.row}"><img src="${await dataUri(cell.file)}" alt="" style="object-fit:${cell.fit ?? group.fit ?? 'cover'};object-position:${cell.position ?? 'top center'}"></figure>`)
     }
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-html,body{margin:0;padding:0;background:#f4f3f0;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+html,body{margin:0;padding:0;overflow:hidden;background:#f4f3f0;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+::-webkit-scrollbar{display:none}
 #frame{width:${group.width}px;height:${group.height}px;box-sizing:border-box;padding:28px;display:grid;grid-template-columns:repeat(${group.columns ?? 3},1fr);grid-template-rows:${group.rowTemplate ?? `repeat(${group.rows ?? 2},1fr)`};gap:18px}
 figure{margin:0;min-width:0;min-height:0;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgb(0 0 0 / 8%);display:flex;align-items:center;justify-content:center;}
 img{display:block;width:100%;height:100%;}
@@ -85,13 +86,21 @@ img{display:block;width:100%;height:100%;}
       cdp = await connectCdp(browser.port)
       await cdp.send('Page.enable')
       await cdp.send('Runtime.enable')
-    } else {
-      await cdp.send('Page.navigate', { url: server.url })
     }
+    // Pin the exact viewport per group so headless Chrome never clips the
+    // bottom row or paints overlay/classic scrollbars on taller grids.
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: group.width,
+      height: group.height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    })
+    await cdp.send('Page.navigate', { url: server.url })
     await cdp.waitFor('document.readyState === "complete"', 'bento ready', { timeout: 10000 })
     await new Promise(resolve => setTimeout(resolve, 250))
     const shot = await cdp.send('Page.captureScreenshot', {
       format: 'webp', quality: 90,
+      captureBeyondViewport: true,
       clip: { x: 0, y: 0, width: group.width, height: group.height, scale: 1 },
     })
     await writeFile(join(root, group.out), Buffer.from(shot.data, 'base64'))

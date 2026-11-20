@@ -9,114 +9,105 @@
 [![DSH](https://img.shields.io/badge/DSH-0.2.2-4f46e5)](https://www.npmjs.com/package/@deepseek-ai/dsh)
 [![publish](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml/badge.svg)](https://github.com/Zephinel/dsh-intelligent-ui/actions/workflows/publish.yml)
 
-**Let DeepSeek Harness (DSH) answers grow interactive UI right inside them.** After installing and enabling the plugin, ask normally:
-
-```text
-Explain the difference between a harness and a model
-```
-
-Explanations and analyses stay Markdown; where it helps, the model writes [OpenUI Lang 1.0](https://openui.com) into an `openui` fence in the answer — maps, photos, charts, flows, checklists, forms and SVG drawings sit directly inside the reply, read together with the prose. When you need a standalone page you can actually use, ask for it:
-
-```text
-Plan two days in Shanghai, with checkboxes and adjustments
-```
-
-Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both UI forms use real components and can coexist: inline UI explains, the turn-tail card delivers. Inline UI needs no extra inline-mode switch (the session UI switch still enables the plugin). Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
-
-> **Current status**: `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`; the stable package ships turn-tail cards, editing, export and templates. **Inline UI is new on `main` and has not been published to npm** — install from GitHub main to try it (the next npm release will include it). A main build may still report version 0.6.2; identify it by the inline behavior. The plugin is also listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **875/875** (Host 324, Client 511, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
-
-[What it looks like](#what-it-looks-like) · [Install](#install) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Getting the code and local development](#getting-the-code-and-local-development)
-
-## What it looks like
+**Let DeepSeek Harness (DSH) answers grow interactive UI right inside them.** Explanations and analyses stay Markdown with interactive diagrams, charts or widgets embedded directly mid-answer; when you want a standalone itinerary, dashboard, form or quiz, the turn ends with an editable, exportable, savable interactive page. Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT) on [OpenUI Lang 1.0](https://openui.com), with an Agent Skill (`intelligent-ui`) registered automatically.
 
 ![Inline UI inside an explanation: an interactive four-stage flow diagram embedded mid-answer](assets/intelligent-ui-readme-inline-en.webp)
 
-Explanations and analyses stay Markdown by default; when a chart, table or small interaction helps, the model writes OpenUI Lang into an `openui` fence in the answer, and the UI sits right in the middle of the prose. This is the primary presentation on main and needs no extra inline switch.
+> **Current status**: npm `latest` is `@zephinel/dsh-intelligent-ui@0.6.2` (turn-tail cards, editing, export and templates); **inline UI is currently on GitHub `main` and not yet published to npm** (a `main` build may still report version 0.6.2). Also listed in awesome-dsh-plugin / dsh-market and Open Plugin Market; see [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md).
 
-![Overview: standalone itinerary page, editing canvas and settings](assets/intelligent-ui-readme-overview-en.webp)
-
-When you need a standalone page, the same renderer puts it in a turn-tail card that can be expanded, edited, saved as a template and exported. Its `$variables`, `@Set` and `@functions` all execute locally in the browser: checkboxes, sliders, steppers, timers and budget allocation never require another model request. Only actions that genuinely need to continue the conversation (`@ToAssistant`, such as a form submission) put a short message back into the composer.
+[Install](#install) · [What it looks like](#what-it-looks-like) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Local development](#getting-the-code-and-local-development)
 
 ## Install
 
-**DSH Web**: the inline UI shown in this README is on GitHub `main` and not yet on npm; npm `0.6.2` has no inline fence (it can still render a turn-tail card/document). Pick one:
+**DSH Web** (pick one; restart any running Web process after installing):
 
 ```bash
-# main: includes inline UI (unreleased; needs the toolchain and possibly build-script approval)
+# GitHub main: includes inline UI (needs local build tools and possibly build-script approval)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2: stable, no inline fence
+# npm 0.6.2: stable release (turn-tail cards only, no inline UI)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
-If a Web process is already running, restart it after installing; open the URL it prints (the address and port come from the DSH profile), and the **UI** control on the right of the composer means the plugin loaded.
+**DSH Desktop**: the marketplace currently ships `0.6.2`; to try inline UI, install `github:Zephinel/dsh-intelligent-ui` via **Plugins → Add plugin → arrow → Install a third-party plugin**, or wait for the next npm release.
 
-**DSH Desktop**: the marketplace `0.6.2` has no inline fence; install the GitHub `main` bundle via **Plugins → Add plugin → arrow → Install a third-party plugin** and `github:Zephinel/dsh-intelligent-ui`, or wait for the next npm release.
+Once loaded, a **UI** control appears on the right of the composer. Click **UI → This session only** (or send `/iui on`), then ask normally:
 
-For first use, click **UI** and choose "This session only" (or send `/iui on`). With `main`, the explanation example renders inline UI; `0.6.2` has no inline fence, so the explanation example may return Markdown, a turn-tail card or a document and cannot verify inline. The `conversation.chat.markdown.fence` requirement (DSH 0.2.2-rc.2+) applies to `main` only; `0.6.2` has no fence layer on any DSH version. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+```text
+Explain the difference between a harness and a model        # main: embeds interactive UI mid-answer
+Plan two days in Shanghai, with checkboxes and adjustments  # main & 0.6.2: delivers an editable turn-tail page card
+```
+
+Because `0.6.2` has no inline UI yet, the first prompt may return Markdown, a turn-tail card or a document-mode page. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+
+## What it looks like
+
+![Overview: standalone itinerary page, editing canvas and settings](assets/intelligent-ui-readme-overview-en.webp)
+
+Inline blocks and turn-tail cards share one browser renderer, and all interactive state (`$variables`, `@Set`, `@functions`) executes locally: checkboxes, sliders, timers, stage switches and budget recalculations never require another model call. Only actions that intentionally continue the conversation (`@ToAssistant`, such as form submissions) place a short message back into the composer.
 
 ## Generate and edit
 
 ![Three different pages generated by real DSH sessions: a Shanghai itinerary, a coffee-shop dashboard and a European capitals quiz](assets/intelligent-ui-readme-generation-en.webp)
 
-The composite above comes from real DSH sessions (DeepSeek V4.1 Flash · Max): one renderer produced the itinerary, dashboard and quiz, not hand-written samples.
+The three pages above were generated directly in real DSH sessions (DeepSeek V4.1 Flash), not hand-written fixtures.
 
-The model picks one of four delivery forms: plain Markdown, inline UI, a turn-tail page card, or an inline explanation plus a page artifact. **Explanations, analyses and comparisons** usually stay Markdown with inline UI where a chart, table, flow or small interaction helps; a **standalone interactive deliverable** — a page, dashboard, tool, form, game or editable result — uses `render_ui` for a turn-tail card; when both roles are distinct, one answer may include both, but never duplicates the same content and never renders more than one page card. **Auto** lets the model choose among the four forms (and the card layout); when a standalone page renders, you can also pin Card / Article per session under **UI → Display style**; **On-demand UI** only describes the request and picks no template.
+In **Auto** mode, the model chooses among four delivery forms per answer: plain Markdown, inline UI, a turn-tail page card, or an inline explanation plus a companion page (distinct roles, no duplicated content, at most one card per turn). For standalone pages, you can also pin Card or Article layout per session under **UI → Display style**, or use **On-demand UI** to describe a bespoke page in plain language.
 
 ![Editing canvas: orbit glow, style section (Switch style + style instruction), row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
 
-A rendered page can keep changing: write change requests for blocks, drag or keyboard-reorder them, switch or describe the style; the result becomes a new revision, and the history can be reviewed at any time. Full flow: [usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md#edit-a-rendered-page).
+Rendered turn-tail cards stay editable: select blocks to request targeted edits, drag or keyboard-reorder sections, switch or describe a new visual style, and review or restore any revision from history. Full flow: [usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md#edit-a-rendered-page).
 
 ## Components
 
 ![Component and example overview: layout, text, inputs, media, data, interaction, drawing and real examples](assets/intelligent-ui-readme-components.webp)
 
-Generated pages are built from **57 components, 73 functions and 5 action steps**: layout, text, inputs, media, data, interaction and drawing. On narrow screens cards reflow to a single column, and long chart labels truncate instead of overflowing. Full parameter tables: [component catalog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/references/components.md).
+Built from **57 components, 73 functions and 5 action steps** covering layout, typography, inputs, maps/images, charts/tables, interactive quizzes and SVG drawings. Narrow screens reflow to a single column and long chart labels truncate cleanly. Full parameter tables: [component catalog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/references/components.md).
 
 ## Switch and style
 
 ![Controls and panels: composer UI switch, style panel and on-demand hint](assets/intelligent-ui-readme-controls.webp)
 
-- **Global defaults** are on the plugin detail page; the **UI** control to the right of the composer overrides them per session (or `/iui on|off|inherit`), and `/iui style …` commands have their own entry.
-- **Temporary results** are ready to use; only a theme-bearing temporary-style result shows **Save as template**, which asks for a name and reuses the result's validated style without changing the current selection or the global default.
+- **Layered controls**: set global defaults on the Plugins detail page and override per session with the composer **UI** control (or `/iui on|off|inherit`, `/iui style …`). Inline UI needs no separate switch.
+- **Temporary styles and templates**: on-demand pages work right away; theme-bearing results offer **Save as template**, reusing the validated style without changing your current or global default.
 
 ![Temporary results: temporary-style badge, save as template and the fixed dark version](assets/intelligent-ui-readme-temporary.webp)
 
-Switch semantics, styles and templates: [usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md).
+Full switch, template and export details: [usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md).
 
 ## Documentation index
 
-Detailed docs live in the repository's `docs/` directory and are not published with the npm package, so the links below use absolute GitHub URLs; uncommitted features follow the files in the checkout.
+Detailed docs live in `docs/` (excluded from the npm tarball, so links below point to GitHub):
 
 | Document | What it covers |
 | --- | --- |
-| [Usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md) | Switch, asking and styles, editing and revisions, templates, export, FAQ |
+| [Usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md) | Switch and prompts, inline UI, editing and revision history, templates, export, FAQ |
 | [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md) | Install/uninstall/restart, local commands, CI, release flow, marketplace maintenance |
 | [Architecture and behavior](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/architecture.en.md) | Host/Client tree, switch semantics, editing pipeline, export and update prompt |
 | [Known limitations](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/limitations.en.md) | Boundaries that still exist or are unverified |
-| [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) · [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md) · [GitHub Releases](https://github.com/Zephinel/dsh-intelligent-ui/releases) | Test and packaging results, version changes and release pages |
-| [Agent Skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/SKILL.md) · [Component catalog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/references/components.md) | Model-facing syntax and component parameter tables |
+| [Verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md) · [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md) · [GitHub Releases](https://github.com/Zephinel/dsh-intelligent-ui/releases) | Test and packaging records, version changes and releases |
+| [Agent Skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/SKILL.md) · [Component catalog](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/skills/intelligent-ui/references/components.md) | Model-facing syntax, delivery rules and component parameter tables |
 
 ## Getting the code and local development
 
 ```bash
 git clone https://github.com/Zephinel/dsh-intelligent-ui.git
 cd dsh-intelligent-ui
-npm install          # prepare builds automatically
+npm install                # prepare builds automatically
 node scripts/install.mjs   # install into the web profile
 dsh web
 ```
 
-To submit changes, fork the repository and clone your copy first.
+Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI on `main` needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm) and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
 
-Environment: the DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`, `dsh` CLI; inline UI needs the fence slot in `0.2.2-rc.2+`), Node 24 with its bundled npm, and Git; the browser half needs `@deepseek-ai/dsh-client-locale` (DSH Web 0.2.2 includes it by default). The extension has no separate development server or watch mode: rebuild with `npm run build` and restart DSH after a change. Run `npm run check` before submitting; the full command table, install-mode switching, CI and release flow are in [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development).
+Current verification: Node tests **875/875** (Host 324, Client 511, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Full commands and history: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development) and [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 ## Contributing
 
-- Questions and feature requests: use [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues).
-- Run `npm run check` before opening a PR. CI ([`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)) runs the local gate on PRs and main: docs-only changes (CHANGELOG/PRODUCT/docs) take the docs checks, while README is packaged content and takes the full gate. Releases run on `v*` tags through the [Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml).
-- When behavior, copy or counts change, sync both READMEs, `CHANGELOG.md` and the matching documents under `docs/` per the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md) (in a checkout, the local file is authoritative). Maintainer: [@Zephinel](https://github.com/Zephinel).
+- Issues and feature requests: [GitHub Issues](https://github.com/Zephinel/dsh-intelligent-ui/issues); fork before cloning to submit a PR, and run `npm run check` first.
+- CI ([`ci.yml`](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/ci.yml)): docs-only changes (CHANGELOG/PRODUCT/docs) run docs checks, while README is packaged content and runs the full gate. Releases run on `v*` tags via the [Trusted Publishing workflow](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.github/workflows/publish.yml).
+- When behavior, copy or counts change, sync both READMEs, `CHANGELOG.md` and `docs/` per the [doc-sync skill](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/.agents/skills/sync-iui-docs/SKILL.md). Maintainer: [@Zephinel](https://github.com/Zephinel).
 
 ## License
 
-This project is [MIT](LICENSE), based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem. The distributed artifact includes third-party components; full license notices are in [NOTICE](NOTICE) and [licenses/](licenses/). Map basemaps and route data come from OpenFreeMap / OpenMapTiles / OpenStreetMap, Esri and OSRM, and their attribution is shown in the map itself. If something is missing or misattributed, please open an issue or PR.
+This project is [MIT](LICENSE), based on Open Intelligent UI (MIT, Copyright (c) 2026 Thesys Inc.) and the OpenUI ecosystem. Third-party notices live in [NOTICE](NOTICE) and [licenses/](licenses/). Map basemaps and route data come from OpenFreeMap / OpenMapTiles / OpenStreetMap, Esri and OSRM, with attribution displayed inside rendered maps.
