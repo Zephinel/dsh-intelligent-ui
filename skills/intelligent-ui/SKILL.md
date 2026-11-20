@@ -1,6 +1,6 @@
 ---
 name: intelligent-ui
-description: "Answer with UI in DSH: ordinary explanations stay Markdown, with one complete OpenUI Lang program inside an `openui` fenced block wherever a visual or interaction helps; call `render_ui` only for a standalone interactive deliverable — a page, dashboard, tool, form, game or editable result. Use this skill for structured answers when Intelligent UI is enabled; the model decides the delivery form per answer and loads this skill only when it renders UI. If render_ui is missing, answer in prose."
+description: "Answer with UI in DSH: explanations stay Markdown with a complete OpenUI Lang program inside an `openui` fence where a visual or interaction helps; call `render_ui` for a standalone interactive page/dashboard/tool/form/game/editable result, or alongside inline UI when both roles differ. Use for structured answers when Intelligent UI is on; the model decides the delivery form per answer and loads this skill only when it renders UI. If render_ui is missing, answer in prose."
 whenToUse: "A visual, interactive or computed answer would serve better than prose — day plans, dashboards, comparisons, budgets, how-to drawings, forms, games, timelines, explainers — or the user asks to render, show, visualize or build a page, or invokes /intelligent-ui. Not for a bare fact, a term restatement, a one-line factual reply, or a plain text/code answer."
 ---
 
@@ -210,7 +210,7 @@ The compactness bullets below describe **Card** pages and side cards inside an A
 1. **Named arguments / extra arguments** — `Col(children: [...])` or one argument too many. Positional, optional from the end.
 2. **`@Each` template extracted into a statement** — the loop variable is undefined there; the page renders empty rows. Inline the template.
 3. **Dead controls** — a Slider or Input bound to a `$` variable nothing reads. Connect it or remove it.
-4. **Ignored warnings** — unresolved names null out content; unreachable statements never render. Fix them even when the tool "succeeds". Re-read the program with the warning's name in hand.
+4. **Ignored warnings** — unresolved names null out content; unreachable statements never render. A successful call with warnings already rendered the page; note the warning and fix the dropped content on a later request instead of re-calling in the same turn.
 5. **Mismatched chart keys** — `Chart` gets rows whose `x` key or `series` keys do not exist, or `@GroupBy` rows fed with the wrong key names. Grouped/bucketed rows use `key` and `value`.
 6. **Swapped map coordinates** — `MapMarker(label, lat, lng)`. Latitude is ~31 for Shanghai, ~37.8 for San Francisco; longitude is ~121 or ~-122.
 7. **Dates compared with `<`** — comparisons are numeric; use `@DaysBetween`.

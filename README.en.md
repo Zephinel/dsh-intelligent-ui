@@ -24,7 +24,7 @@ Plan two days in Shanghai, with checkboxes and adjustments
 Then the model delivers an editable, exportable, savable interactive page as a card at the end of the turn. Both UI forms use real components and can coexist: inline UI explains, the turn-tail card delivers. Inline UI needs no extra inline-mode switch (the session UI switch still enables the plugin). Ported from [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) (MIT), with an Agent Skill (`intelligent-ui`) that the plugin registers automatically.
 
 > [!NOTE]
-> **Current status**: `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`; the stable package ships turn-tail cards, editing, export and templates. **Inline UI is new on `main` and has not been published to npm** — install from GitHub main to try it (the next npm release will include it). The plugin is also listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **872/872** (Host 323, Client 510, packaging 39); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+> **Current status**: `@zephinel/dsh-intelligent-ui@0.6.2` is npm `latest`; the stable package ships turn-tail cards, editing, export and templates. **Inline UI is new on `main` and has not been published to npm** — install from GitHub main to try it (the next npm release will include it). A main build may still report version 0.6.2; identify it by the inline behavior. The plugin is also listed in awesome-dsh-plugin / dsh-market, Open Plugin Market and other community markets. Verification: Node tests **872/872** (Host 323, Client 510, packaging 39); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Version changes are in the [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md); past verification is in the [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 [What it looks like](#what-it-looks-like) · [Install](#install) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Getting the code and local development](#getting-the-code-and-local-development)
 
@@ -40,21 +40,21 @@ When you need a standalone page, the same renderer puts it in a turn-tail card t
 
 ## Install
 
-**DSH Web**: the inline UI shown in this README is on GitHub `main` and not yet on npm; npm `0.6.2` ships turn-tail cards only. Pick one:
+**DSH Web**: the inline UI shown in this README is on GitHub `main` and not yet on npm; npm `0.6.2` has no inline fence (it can still render a turn-tail card/document). Pick one:
 
 ```bash
-# main: includes inline UI (unreleased; needs the build toolchain)
+# main: includes inline UI (unreleased; needs the toolchain and possibly build-script approval)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2: stable, turn-tail cards only
+# npm 0.6.2: stable, no inline fence
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
 If a Web process is already running, restart it after installing; open the URL it prints (the address and port come from the DSH profile), and the **UI** control on the right of the composer means the plugin loaded.
 
-**DSH Desktop**: the marketplace `0.6.2` is card-only; install the GitHub `main` bundle for inline UI, or wait for the next npm release.
+**DSH Desktop**: the marketplace `0.6.2` has no inline fence; install the GitHub `main` bundle via **Plugins → Add plugin → arrow → Install a third-party plugin** and `github:Zephinel/dsh-intelligent-ui`, or wait for the next npm release.
 
-For first use, click **UI** and choose "This session only" (or send `/iui on`). With `main`, the explanation example renders inline UI; with `0.6.2`, it returns Markdown and only the itinerary request renders a turn-tail card. Inline fences need the `conversation.chat.markdown.fence` slot in DSH 0.2.2-rc.2+; earlier builds show a code block. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+For first use, click **UI** and choose "This session only" (or send `/iui on`). With `main`, the explanation example renders inline UI; `0.6.2` has no inline fence, so the explanation example may return Markdown, a turn-tail card or a document and cannot verify inline. The `conversation.chat.markdown.fence` requirement (DSH 0.2.2-rc.2+) applies to `main` only; `0.6.2` has no fence layer on any DSH version. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
 
 ## Generate and edit
 

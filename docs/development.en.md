@@ -24,7 +24,7 @@ Install the bundle from npm or GitHub (recommended):
 ```bash
 # main: includes inline UI (unreleased; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm stable 0.6.2: turn-tail cards only
+# npm stable 0.6.2: no inline fence (may render a card/document)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
 # DSH Desktop: quit and reopen the app; systemd/launchd: restart the corresponding service)
@@ -32,7 +32,7 @@ dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 
 > The npm package name is **`@zephinel/dsh-intelligent-ui`**: the unscoped `dsh-intelligent-ui` is taken by another, unrelated project, so the package uses the `@zephinel` scope. GitHub installs are unaffected.
 
-Both install sources provide only published or committed code; neither installs uncommitted changes from the current checkout. Before the first use of a profile, `dsh plugin --profile web list` shows and initializes it.
+Both install sources provide only published or committed code; neither installs uncommitted changes from the current checkout. Before the first use of a profile, `dsh plugin --profile web list` shows and initializes it. A GitHub main install runs the `prepare` build from source; pnpm may ask you to allow build scripts on the first attempt, then retry. Desktop **Add plugin** also accepts a Git address: arrow → **Install a third-party plugin** → `github:Zephinel/dsh-intelligent-ui`.
 
 On the Web side you can also install and enable it from the **Plugins** page. DSH Desktop installs the same bundle inside the app: **Plugins** in the sidebar → **Add plugin** (or the arrow → **Install a third-party plugin**) → enter the package name and version → **Install** → **Enable now**. The desktop profile is owned by the Electron app, so `dsh plugin --profile desktop` is rejected; if the **UI** control does not appear after enabling, quit and reopen Desktop. A mainland-China mirror can lag behind the official npm registry for a fresh release; switch the install source back to npm if the version is not found. With a bundle install the skill appears automatically along with the Host plugin and needs no separate installation.
 

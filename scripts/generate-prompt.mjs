@@ -235,7 +235,7 @@ const ordinaryPageFirstRewrites = [
   {
     label: 'working-tool bullet',
     from: '- Answer with a working tool whenever the request involves numbers, choices, lists, steps, a game or something to explore: keep inputs and lists in $variables, compute everything shown from them with expressions and @functions, and change them with @Set. The page must work on its own, without another message.',
-    to: '- When a page or inline UI genuinely serves the request, make inputs and lists interactive: keep them in $variables, compute everything shown from them with expressions and @functions, and change them with @Set. The page must work on its own, without another message. A simple numeric, list or factual question can stay a short Markdown answer.',
+    to: '- When a page or inline UI genuinely serves the request, make inputs and lists interactive: keep them in $variables, compute everything shown from them with expressions and @functions, and change them with @Set. The UI you render must work on its own, without another message. A simple numeric, list or factual question can stay a short Markdown answer.',
   },
 ]
 let withOrdinaryPage = withLayout

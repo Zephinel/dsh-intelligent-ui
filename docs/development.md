@@ -24,7 +24,7 @@ dsh --version    # 已验证：0.2.2-rc.5；内嵌 UI 需要 0.2.2-rc.2+ 的 fen
 ```bash
 # main：包含正文内嵌 UI（尚未发布，需构建工具链）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 稳定版 0.6.2：只有轮末卡片
+# npm 稳定版 0.6.2：没有 inline fence（可能出卡片/document）
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
 # DSH Desktop：退出并重开应用；systemd/launchd：重启对应服务）
@@ -32,7 +32,7 @@ dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 
 > npm 包名是 **`@zephinel/dsh-intelligent-ui`**：无 scope 的 `dsh-intelligent-ui` 已被另一个无关项目占用，因此使用 `@zephinel` scope。GitHub 安装不受影响。
 
-两种安装来源都只安装已发布或已提交的版本，不包含当前 checkout 的未提交改动。首次使用某个 profile 前，可用 `dsh plugin --profile web list` 查看并初始化它。
+两种安装来源都只安装已发布或已提交的版本，不包含当前 checkout 的未提交改动。首次使用某个 profile 前，可用 `dsh plugin --profile web list` 查看并初始化它。GitHub main 会从源码运行 `prepare` 构建；pnpm 首次可能要求允许 build scripts，允许后重试。Desktop 的 **添加插件** 也接受 Git 地址：箭头 → **安装第三方插件** → `github:Zephinel/dsh-intelligent-ui`。
 
 Web 端也可以在 **Plugins** 页面安装并启用。DSH Desktop 同样在应用内安装：侧栏 **插件** → **添加插件**（或箭头 → **安装第三方插件**）→ 输入包名及版本 → **安装** → **立即启用**。桌面版 profile 由 Electron 应用独占管理，`dsh plugin --profile desktop` 会被拒绝；启用后若输入框右侧没有 **UI** 控件，退出并重开 Desktop。国内镜像可能晚于 npm 官方源同步刚发布的版本，装不到时把安装源切回 npm 官方源。bundle 安装后 skill 随 Host 插件自动出现，无需单独安装。
 

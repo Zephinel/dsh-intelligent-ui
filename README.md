@@ -24,7 +24,7 @@
 模型才会在该轮末尾交付一张可编辑、可导出、可存模板的交互页面。两种 UI 形式都是真实组件，也可以同时使用：正文内嵌负责解释，轮末卡片负责交付；内嵌 UI 无需额外的 inline 模式开关（仍需会话 UI 开关启用插件）。基于 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)（MIT）移植，并附带随插件注册的 Agent Skill（`intelligent-ui`）。
 
 > [!NOTE]
-> **当前状态**：`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，稳定版提供轮末卡片、编辑、导出和模板；**正文内嵌 UI 是 main 上的新功能，尚未发布到 npm**，要体验请从 GitHub main 安装（下一版发布后改用 npm）。也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **872/872**（Host 323、Client 510、packaging 39）；浏览器 **12/12** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+> **当前状态**：`@zephinel/dsh-intelligent-ui@0.6.2` 是 npm `latest`，稳定版提供轮末卡片、编辑、导出和模板；**正文内嵌 UI 是 main 上的新功能，尚未发布到 npm**，要体验请从 GitHub main 安装（下一版发布后改用 npm）。main 构建可能仍自报 0.6.2，以是否出现 inline 行为区分。也已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场。验证：Node 测试 **872/872**（Host 323、Client 510、packaging 39）；浏览器 **12/12** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)，历史验证见[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 
 [效果](#效果) · [安装](#安装) · [生成与编辑](#生成与编辑) · [文档索引](#文档索引) · [本地开发](#获取代码与本地开发)
 
@@ -40,21 +40,21 @@
 
 ## 安装
 
-**DSH Web**：README 展示的正文内嵌 UI 目前在 GitHub main，尚未发布到 npm；npm 上的 `0.6.2` 只有轮末卡片。二选一：
+**DSH Web**：README 展示的正文内嵌 UI 目前在 GitHub main，尚未发布到 npm；npm 上的 `0.6.2` 没有 inline fence（仍可能生成轮末卡片/document）。二选一：
 
 ```bash
-# main：包含正文内嵌 UI（未发布，需构建工具）
+# main：包含正文内嵌 UI（未发布；需构建工具，首次可能要求允许 build scripts）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2：稳定版，仅轮末卡片
+# npm 0.6.2：稳定版，无 inline fence
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
 已有 Web 进程时，安装后重启该进程；打开它打印的 URL（地址与端口由 DSH profile 决定），输入框右侧出现 **UI** 控件即加载成功。
 
-**DSH Desktop**：插件市场安装的 `0.6.2` 只有轮末卡片；正文内嵌 UI 需从 GitHub main 安装，或等下一版 npm 发布。
+**DSH Desktop**：插件市场安装的 `0.6.2` 没有 inline fence；正文内嵌 UI 可从 **插件 → 添加插件 → 箭头 → 安装第三方插件** 输入 `github:Zephinel/dsh-intelligent-ui` 安装，或等下一版 npm 发布。
 
-首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`）。从 main 安装后发送解释示例，正文出现内嵌 UI 即验证成功；`0.6.2` 发送解释示例只会得到 Markdown，发送行程示例才会在该轮末尾生成页面卡片。内嵌围栏需要 DSH 0.2.2-rc.2+ 的 `conversation.chat.markdown.fence` 插槽；更早版本只显示代码块。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
+首次使用点 **UI** 控件选择「仅本会话」（或发送 `/iui on`）。从 main 安装后发送解释示例，正文出现内嵌 UI 即验证成功；`0.6.2` 没有 inline fence，解释示例可能得到 Markdown、轮末卡片或 document，不能用 inline 验证。fence 插槽要求（DSH 0.2.2-rc.2+ 的 `conversation.chat.markdown.fence`）只适用于 main；`0.6.2` 在任何 DSH 版本都没有 fence 层。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
 
 ## 生成与编辑
 

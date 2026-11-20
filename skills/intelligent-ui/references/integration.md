@@ -56,7 +56,7 @@ The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, a
 ```sh
 # main (inline UI, unreleased; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2 (stable, turn-tail cards only)
+# npm 0.6.2 (stable, no inline fence)
 dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 ```
 
