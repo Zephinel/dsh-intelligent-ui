@@ -1289,7 +1289,7 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 ## 2026-11-21 — 0.7.0 发布结果
 
-- **发布**：annotated tag `v0.7.0` 指向发布提交；tag 触发的 `publish.yml` 校验 release-notes 审批哈希、CHANGELOG 版本段与打包清单后，用 OIDC + provenance 发布。
-- **核验**：npm `latest` = `0.7.0`，版本端点含 `dist.attestations.provenance`，`gitHead` 与 tag 提交一致，GitHub Release 页面带中英要点。发布前本地门禁：`npm run check`、`npm run check:release-notes`（5 条中文 + 5 条英文要点）、`npm run pack:check`、`npm run check:release`、`git diff --check`。
-- **门禁**：Node **880/880** = Host **324** + Client **516** + packaging **40**；浏览器 **12/12**（`main` 最近 CI），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.96 / CSS 249.3 kB）；pack **71** 文件，非构建 **3,909,920** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
-- **证据边界**：registry 传播是异步的，工作流最多轮询十分钟；本条在 publish workflow 落定后补入 run id 与 registry 响应。
+- **发布**：annotated tag `v0.7.0` 指向 `ab60a21`；publish workflow run `44931642625` success，覆盖本地门禁、打包清单、CHANGELOG 版本段、release-notes 格式与审批哈希，并以 provenance 发布。GitHub Release：https://github.com/Zephinel/dsh-intelligent-ui/releases/tag/v0.7.0 。
+- **核验**：npm `latest` = `0.7.0`；版本端点 `gitHead` = `ab60a21` 且含 `dist.attestations.provenance`，tag 固定的中英 notes 原始链接均返回 200。发布前本地门禁：`npm run check`、`check:release-notes`（5 条中文 + 5 条英文要点）、`pack:check`、`check:release` PASS、`git diff --check` 干净。
+- **门禁**：Node **880/880** = Host **324** + Client **516** + packaging **40**；浏览器 **12/12**（`ab60a21` 的绿色 `main` CI），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.96 / CSS 249.3 kB）；pack **71** 文件，非构建 **3,909,920** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：registry 传播由工作流在其十分钟窗口内直接核验；本次 publish run 端到端耗时 6m24s。真实 PTC 会话中的卡片渲染仍待 issue 报告者复验；插件市场列表跟随 npm `latest` 自身节奏更新。
