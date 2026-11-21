@@ -37,22 +37,37 @@ export type UpdatePromptProps = PropsRuntime<'shell.overlay'>
     readonly t?: Translate
   }
 
-/** The extension's own app icon, inlined so the prompt carries the brand mark. */
+/**
+ * The extension's own app icon, inlined so the prompt carries the brand mark.
+ * This is the small-size cut of icon.svg (bubble + image block + action), which
+ * stays legible at the prompt's 24 px. Colors are baked in like icon.svg, so it
+ * reads the same on light and dark shells.
+ */
 function PluginMark(): ReactNode {
+  const tile = 'M15.5 2h33A13.5 13.5 0 0 1 62 15.5v33A13.5 13.5 0 0 1 48.5 62h-33A13.5 13.5 0 0 1 2 48.5v-33A13.5 13.5 0 0 1 15.5 2Z'
   return (
     <svg className="dsh-iui-update-prompt-mark" width="24" height="24" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
       <defs>
-        <linearGradient id="dsh-iui-update-prompt-accent" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#5aa9ff" />
-          <stop offset="1" stopColor="#38d6a4" />
+        <linearGradient id="dsh-iui-mark-tile" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2a2d31" />
+          <stop offset="1" stopColor="#111418" />
+        </linearGradient>
+        <linearGradient id="dsh-iui-mark-glyph" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f8f9f7" />
+          <stop offset="1" stopColor="#dddfda" />
+        </linearGradient>
+        <linearGradient id="dsh-iui-mark-accent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#d4f35e" />
+          <stop offset="1" stopColor="#b4d82c" />
         </linearGradient>
       </defs>
-      <rect className="dsh-iui-update-prompt-tile" x="2" y="2" width="60" height="60" rx="16" />
-      <rect className="dsh-iui-update-prompt-edge" x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" fill="none" strokeWidth="1.5" />
-      <path className="dsh-iui-update-prompt-spark" d="M26 15.5c0 5.9 3.6 9.5 9.5 9.5-5.9 0-9.5 3.6-9.5 9.5 0-5.9-3.6-9.5-9.5-9.5 5.9 0 9.5-3.6 9.5-9.5Z" />
-      <path d="M43.5 24c0 3.6 2.2 5.8 5.8 5.8-3.6 0-5.8 2.2-5.8 5.8 0-3.6-2.2-5.8-5.8-5.8 3.6 0 5.8-2.2 5.8-5.8Z" fill="url(#dsh-iui-update-prompt-accent)" />
-      <rect className="dsh-iui-update-prompt-line-one" x="15" y="40" width="24" height="3.4" rx="1.7" />
-      <rect className="dsh-iui-update-prompt-line-two" x="15" y="46.4" width="15" height="3.4" rx="1.7" />
+      <path d={tile} fill="url(#dsh-iui-mark-tile)" />
+      <path d={tile} fill="none" stroke="#fff" strokeOpacity=".07" strokeWidth=".7" />
+      <g transform="translate(0 2.4)">
+        <path d="M21 11h22a10 10 0 0 1 10 10v14a10 10 0 0 1-10 10H30l-6.6 5.4c-.9.7-2.4.2-2.4-1V45a10 10 0 0 1-10-10v-14a10 10 0 0 1 10-10Z" fill="url(#dsh-iui-mark-glyph)" />
+        <rect x="16.5" y="16.5" width="31" height="14" rx="3" fill="#15181d" />
+        <rect x="33" y="34" width="14.5" height="6" rx="3" fill="url(#dsh-iui-mark-accent)" />
+      </g>
     </svg>
   )
 }

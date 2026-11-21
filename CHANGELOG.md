@@ -13,6 +13,8 @@ been published yet.
 
 ### Changed
 
+- **New app icon.** `icon.svg` is now a chat bubble holding a generated card (image block, title line and a lime action button) on a near-black tile with light depth, shared in shape and palette with the DSH Power Suite icon. The update prompt's inlined 24 px mark (`PluginMark` in `src/client/UpdatePrompt.tsx`) uses the icon's small cut with the same baked-in colors, so the Plugins page and the prompt show one identity; the theme-token rules that tinted the old mark (`.dsh-iui-update-prompt-tile/-edge/-spark/-line-*`) are removed. Gate: Node **880/880**, `update-prompt` **39 checks**, pack **71 files**, non-build **3,909,989** bytes; `check:docs-facts`, `check:docs-links` and `check:pack-facts` pass.
+
 - **Four delivery forms, including inline + page.** Auto now lets the model choose plain Markdown, inline UI, a turn-tail page artifact, or an inline explanation plus one page artifact. The two UI forms may coexist when they have distinct roles (the inline part explains, the card delivers); one answer renders at most one card and never duplicates the same content. Document mode and on-demand turns remain card-only overrides.
 
 - **DSH rc.2 positioning and tool-error audit.** Custom menus/panels still position with `fixed`/`getBoundingClientRect`; since DSH 0.2.2-rc.2 the native menus use CSS Anchor Positioning for page zoom/pan, so this remains a documented risk pending a real-GUI zoom/pan pass and migration. Tool-result reads only `isError`, `error.name`/`code`/`reason` and `meta` — no dependency on the old tool-error classification codes; the package requirements now cite rc.5 validation and the rc.2+ fence slot.

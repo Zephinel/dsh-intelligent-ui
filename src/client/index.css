@@ -2298,34 +2298,12 @@
   height: 24px;
 }
 
-/* The extension's app mark (icon.svg) inlined with theme tokens so the prompt
-   carries the plugin identity in both light and dark shells. */
+/* The extension's app mark (small cut of icon.svg), inlined with its colors
+   baked in so the prompt shows the same plugin identity as the Plugins page. */
 .dsh-iui-update-prompt-mark {
   display: block;
   width: 24px;
   height: 24px;
-}
-
-.dsh-iui-update-prompt-tile {
-  fill: var(--dsw-alias-bg-layer-2);
-}
-
-.dsh-iui-update-prompt-edge {
-  stroke: var(--dsw-alias-border-l2);
-}
-
-.dsh-iui-update-prompt-spark,
-.dsh-iui-update-prompt-line-one,
-.dsh-iui-update-prompt-line-two {
-  fill: var(--dsw-alias-label-primary);
-}
-
-.dsh-iui-update-prompt-line-one {
-  fill-opacity: 0.82;
-}
-
-.dsh-iui-update-prompt-line-two {
-  fill-opacity: 0.38;
 }
 
 .dsh-iui-update-prompt-titles {
