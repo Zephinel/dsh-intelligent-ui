@@ -2,4 +2,5 @@
 
 - **Release / publish work:** load `.agents/skills/release-iui/SKILL.md` before changing a version, release notes, tags, or publishing. A code/docs/page change is not a release request; preparation and tagging are separate approval gates, and tagging/publishing needs the user's explicit approval for the exact version.
 - **Documentation sync:** load `.agents/skills/sync-iui-docs/SKILL.md` after behavior, UI copy, counts, dependencies, install steps, or release-state changes, and when a docs/consistency check fails.
+- **Docs freshness:** never write unverifiable "current" claims for asynchronous systems (marketplace index versions, DSH Desktop availability, npm propagation); state the refresh policy and verify after publish. Deterministic release facts (version, install pins, CHANGELOG, release notes) are written in the release commit before the tag. CLI install commands must pin the version (`check:docs-install`); the pre-tag release claims audit and the post-publish `check:published-install` are part of the release flow.
 - Keep `README.md` and `README.en.md` in sync; `docs/verification*.md` is historical evidence, not as-built truth.

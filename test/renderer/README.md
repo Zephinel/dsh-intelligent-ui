@@ -2,7 +2,7 @@
 
 Half of these scripts cover the `src/lib` half (the OpenUI Lang renderer) in Node without a
 browser; five (`typography-check`, `media-row-check`, `pressable-select-check`,
-`css-contract-check`, and `nested-css-contract-check`) use headless Chrome. They are not part of the client
+`css-contract-check`, and `prop-contract-check`) use headless Chrome. `nested-css-contract-check` is a static scan. They are not part of the client
 bundle. `npm run test:renderer` runs the parser, render, contrast, i18n, typography,
 media-row, pressable-select, CSS-contract, prop-contract, nested-CSS-contract and
 capture-token-contract checks in order; `npm run check` runs them after the build

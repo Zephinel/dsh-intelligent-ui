@@ -54,11 +54,13 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# npm latest (inline UI, cards, editing and export)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# npm 0.7.0 (inline UI, cards, editing and export; pinned)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.7.0
 # or GitHub main (latest commits; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
+
+`dsh plugin` forwards to pnpm, so CLI installs need pnpm on PATH. pnpm 11/12 enables a 24-hour `minimumReleaseAge` by default; pin the version (as above) to install a fresh release immediately, while a bare package name can resolve to the previous mature version on release day.
 
 The npm package name is **`@zephinel/dsh-intelligent-ui`** (the unscoped `dsh-intelligent-ui` is owned by an unrelated project), published under the `@zephinel` npm scope.
 
@@ -216,7 +218,7 @@ Work top-down; each step rules out one layer:
 
 - The **page card** appears at the end of the turn (turn-tail); an `openui` fence renders inline in the message. During card generation the process row reads the localized "Interactive answer" (「交互式回答」 in a Chinese UI).
 - Model-authored programs occasionally fail validation; the host returns exact errors and the model is expected to self-repair in the same turn. Repeated failures are a prompt/model issue, not a host issue.
-- The generation prompt is about 10K tokens and is sent **only for a session the switch admits**; otherwise the prompt section is empty and the tool schema is hidden. Prompt caching absorbs most of the cost while on.
+- The generation prompt is about 45 KB (about 11K tokens) and is sent **only for a session the switch admits**; otherwise the prompt section is empty and the tool schema is hidden. Prompt caching absorbs most of the cost while on.
 - Photos, map tiles and routing are third-party services with offline fallbacks (see [troubleshooting.md](troubleshooting.md#runtime-fallbacks-valid-program-degraded-media)).
 - `Math` relies on the host's global KaTeX styles; if a future DSH shell drops them, formulas degrade to text.
 - This extension is web-only: profiles without a browser surface register the tool but have no card to render into.

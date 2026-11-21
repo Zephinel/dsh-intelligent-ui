@@ -12,7 +12,7 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
 
 - **A change request is not a release request.** Adding a feature, fixing a bug, or editing docs/README/plugin pages never authorizes a version bump, tag, push, or publish.
 - **Preparation and publishing are separate gates.** If the user says "prepare 0.6.2" or "把发布准备好", do the preparation below but stop before the tag and show the release-notes text for review.
-- **Tagging/publishing requires an explicit approval for the exact version** ("发布吧", "publish 0.6.2", "tag it"). Record the approved version in the commit and tag. That approval authorizes the version only: the release-notes Highlights still need the owner's own review in step 1.8 unless the owner explicitly waives it ("要点不用 review").
+- **Tagging/publishing requires an explicit approval for the exact version** ("发布吧", "publish 0.6.2", "tag it"). Record the approved version in the commit and tag. That approval authorizes the version only: the release-notes Highlights still need the owner's own review in step 1.9 unless the owner explicitly waives it ("要点不用 review").
 - Do not bump a version, create `release-notes/<version>*`, or rerun the publish workflow without that approval. Do not retag or republish an already-published version.
 - This skill does not override product decisions, code review, or the `sync-iui-docs` skill; use both for release docs.
 
@@ -38,11 +38,13 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
    - `## Highlights` with **2–6 short, user-facing bullets**; no implementation detail unless the user wants it.
    - The publish workflow refuses a tag whose notes file is missing or has no Highlights; an English file is validated when present and falls back to the default file.
    - Keep each bullet plain user language; the update prompt renders these verbatim.
-5. Update current version/status claims:
-   - README pair status block and install pins (`README.md`, `README.en.md`);
-   - `docs/development*.md` latest pin/tag examples;
+5. Update current version/status claims. **Deterministic release facts are written now, before the tag**; do not leave them for a post-publish docs commit:
+   - README pair status block and install pins (`README.md`, `README.en.md`): every documented CLI install pins `@<version>`;
+   - `docs/development*.md` install commands, latest pin/tag examples;
    - `docs/current-facts.json` **after** remeasuring the packed facts;
    - `docs/architecture*`, latest verification record, and `sync-iui-docs` maintenance metadata when counts/sizes changed.
+
+   **Asynchronous external state is never asserted as current.** Marketplace index versions, DSH Desktop marketplace availability and npm propagation are not known at commit time; write the refresh policy (for example "indexes refresh on their own schedule; the previous release may still show") and verify the real state after publish. A statement such as "the marketplace currently has `<version>`" is forbidden unless it was observed.
 6. Run `sync-iui-docs` (delta mode) so README/docs/CHANGELOG/release-notes agree.
 7. If packed files changed (README, locale, `skills/`, `lib/`, assets), remeasure:
    ```bash
@@ -51,14 +53,20 @@ This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-tr
    npm pack --dry-run --json --ignore-scripts   # non-build bytes = all non-lib/ packed files
    ```
    Update `docs/current-facts.json` and the current claims from that output. Do not quote compressed tarball bytes in docs; only the portable non-build byte sum and packed file count are guarded.
-8. **Notes review gate (never skipped implicitly).** Show the complete `release-notes/<version>.md` Highlights (plus `.en.md` when present) to the owner and wait for an explicit approve-or-changes answer before step 2 — even when the owner's message already named the version ("发布 0.6.2"). These bullets render verbatim in the update prompt and the tag pins them, so a wording fix after the tag is impossible. After approval run `node scripts/release-notes-approval.mjs`: it reprints the reviewed bullets and a `Release-Notes-Review: sha256=<hash>` line; put that line in the release commit body (the commit that gets tagged). The hash covers the version plus both notes files, so any later notes edit invalidates the approval and `publish.yml` refuses to publish. Only an explicit "要点没问题 / skip the review" waives this gate.
+8. **Release claims audit (pre-tag, recorded in the release commit body).** Check the docs as a user, not as their author:
+   - `npm run check:docs-install` passes: every documented CLI install pins `@<version>` (a bare package name can resolve to the previous release under pnpm 11/12's default 24-hour `minimumReleaseAge`), and the guard rejects marketplace/Desktop current-version claims.
+   - The upgrade path from the previous release is documented: the pinned install command, or GitHub `main`.
+   - Query the configured market indexes (`plugin_market` → both sources) and record their current versions. README/development must not claim a market or DSH Desktop already has the new version; they state the refresh policy and point to the pinned command for immediate use. Third-party listing descriptions are external and are corrected separately.
+   - Record the audit summary in the release commit body, e.g. `Release-Claims-Audit: docs-install ok; markets=<observed>,<observed>; pinned=<version>`.
+
+9. **Notes review gate (never skipped implicitly).** Show the complete `release-notes/<version>.md` Highlights (plus `.en.md` when present) to the owner and wait for an explicit approve-or-changes answer before step 2 — even when the owner's message already named the version ("发布 0.6.2"). These bullets render verbatim in the update prompt and the tag pins them, so a wording fix after the tag is impossible. After approval run `node scripts/release-notes-approval.mjs`: it reprints the reviewed bullets and a `Release-Notes-Review: sha256=<hash>` line; put that line in the release commit body (the commit that gets tagged). The hash covers the version plus both notes files, so any later notes edit invalidates the approval and `publish.yml` refuses to publish. Only an explicit "要点没问题 / skip the review" waives this gate.
 
 ## 2. Gates before tagging
 
 Run all of these from the prepared commit:
 
 ```bash
-npm run check                 # typecheck/build/tests/renderer/docs-facts/docs-links/pack-facts
+npm run check                 # typecheck/build/tests/renderer/check:docs-install/docs-facts/docs-links/pack-facts
 npm run check:release-notes   # release-notes highlights, default + optional English
 node scripts/release-notes-approval.mjs --verify   # the tagged commit carries the approved notes hash
 npm run pack:check            # packed manifest
@@ -104,8 +112,10 @@ gh run watch <run-id> --exit-status --interval 10
   ```bash
   npm view @zephinel/dsh-intelligent-ui version dist-tags --json --prefer-online
   curl -sS "https://registry.npmjs.org/@zephinel/dsh-intelligent-ui/<version>"   # check dist.attestations.provenance
+  npm run check:published-install   # the documented pinned command installs <version> into a throwaway DSH_HOME
   ```
-  A temporary install + `npm audit signatures` is optional but useful for provenance.
+  `check:published-install` proves the install path, not just the registry: if it fails, fix the docs before announcing. A temporary install + `npm audit signatures` is optional but useful for provenance.
+- Read the configured market indexes after the release and record what they still show. If an index shows the previous release, that is expected; do not edit docs to claim otherwise. A marketplace description that is materially outdated is a separate correction request.
 
 ## 5. Post-publish
 
@@ -120,14 +130,16 @@ gh run watch <run-id> --exit-status --interval 10
    ```
 3. If the release was prompted by an issue, comment with the fixed version and evidence, then close it if the reporter's scenario is resolved.
 4. Record the release result in `docs/verification*.md` (workflow run, npm `latest`, provenance, Release URL) and push with `sync-iui-docs`; this is a docs-only follow-up and must not bump the version.
-5. Marketplace listings follow npm `latest` on their own schedule; the repository only needs its README/screenshots pushed.
+5. Marketplace listings follow npm `latest` on their own schedule and may still show the previous release. Record the observed index state; do not assert their current version in docs. The repository only needs its README/screenshots pushed; materially outdated listing text is corrected through the market entry.
 
 ## Don't
 
 - Don't tag or publish while release-notes are still draft or without the exact-version approval.
-- Don't treat an exact-version approval as sign-off on the Highlights: the notes review (step 1.8) is a separate gate unless the owner explicitly waives it.
+- Don't treat an exact-version approval as sign-off on the Highlights: the notes review (step 1.9) is a separate gate unless the owner explicitly waives it.
 - Don't tag a release commit without the `Release-Notes-Review: sha256=<hash>` line, and don't edit the notes files after approval — `publish.yml` refuses either case.
 - Don't `npm publish` locally; Trusted Publishing is the only path.
+- Don't ship a bare `dsh plugin add @zephinel/dsh-intelligent-ui` in docs: pnpm 11/12's 24-hour release-age default makes it install the previous version on release day. Pin the version.
+- Don't assert a marketplace, DSH Desktop or second-party index "currently" has the new version. State the refresh policy and verify the observed state after publish.
 - Don't amend, delete, or retag an already-published tag.
 - Don't rewrite released CHANGELOG sections; add a new Unreleased entry for a fix.
 - Don't treat a short registry lag or a stale client page as a failed release; verify the registry endpoints first.

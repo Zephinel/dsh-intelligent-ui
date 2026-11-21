@@ -45,7 +45,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/host/*.test.mjs test/client/*.test.mjs test/packaging/*.test.mjs",
     "test:renderer": "node test/renderer/check.mjs && node test/renderer/render-check.mjs && node test/renderer/contrast-check.mjs && node test/renderer/i18n-check.mjs && node test/renderer/typography-check.mjs && node test/renderer/media-row-check.mjs && node test/renderer/pressable-select-check.mjs && node test/renderer/css-contract-check.mjs && node test/renderer/prop-contract-check.mjs && node test/renderer/nested-css-contract-check.mjs && node test/renderer/capture-token-contract-check.mjs",
-    "check": "npm run typecheck && npm run build && npm test && npm run test:renderer && npm run check:docs-facts && npm run check:docs-links && npm run check:pack-facts",
+    "check": "npm run typecheck && npm run build && npm test && npm run test:renderer && npm run check:docs-install && npm run check:docs-facts && npm run check:docs-links && npm run check:pack-facts",
     "pack:check": "npm pack --dry-run --json",
     "check:release": "node scripts/release-check.mjs",
     "prepare": "node scripts/build.mjs",
@@ -55,7 +55,9 @@
     "check:docs-facts": "node scripts/check-doc-facts.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs",
     "check:pack-facts": "node scripts/check-pack-facts.mjs",
-    "check:release-notes": "node scripts/check-release-notes.mjs"
+    "check:release-notes": "node scripts/check-release-notes.mjs",
+    "check:docs-install": "node scripts/check-docs-install.mjs",
+    "check:published-install": "node scripts/check-published-install.mjs"
   },
   "keywords": [
     "deepseek-harness",

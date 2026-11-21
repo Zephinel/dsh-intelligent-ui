@@ -19,11 +19,13 @@ npm --version
 dsh --version    # 已验证：0.2.2-rc.5；内嵌 UI 需要 0.2.2-rc.2+ 的 fence 插槽
 ```
 
+`dsh plugin` 把参数转发给 pnpm，因此 pnpm 必须在 PATH 上；缺少时 DSH 会报 `pnpm was not found`。
+
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# npm 最新版：正文内嵌 UI 与轮末卡片（含编辑、导出与模板）
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# npm 0.7.0：正文内嵌 UI 与轮末卡片（含编辑、导出与模板；固定版本）
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.7.0
 # 或跟随 GitHub main 的最新提交（需构建工具链）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
@@ -31,6 +33,8 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
 
 > npm 包名是 **`@zephinel/dsh-intelligent-ui`**：无 scope 的 `dsh-intelligent-ui` 已被另一个无关项目占用，因此使用 `@zephinel` scope。GitHub 安装不受影响。
+
+pnpm 11/12 默认启用 24 小时的 `minimumReleaseAge`：裸包名在版本发布当天会解析到上一个已成熟版本，所以上面的 npm 命令固定版本号，可以立即安装。需要跟随 `latest` 时请理解这段延迟。
 
 两种安装来源都只安装已发布或已提交的版本，不包含当前 checkout 的未提交改动。首次使用某个 profile 前，可用 `dsh plugin --profile web list` 查看并初始化它。GitHub main 会从源码运行 `prepare` 构建；pnpm 首次可能要求允许 build scripts，允许后重试。Desktop 的 **添加插件** 也接受 Git 地址：箭头 → **安装第三方插件** → `github:Zephinel/dsh-intelligent-ui`。
 
@@ -124,10 +128,10 @@ npm run check:release  # 打包 → 一次性 DSH_HOME 安装 → 校验包内�
 npm run test:browser   # 12 个 Chrome 套件：按需生成、样式面板、主题、内嵌 UI、浮层定位（anchored-overlay）、图片导出、交互页面、Article、设置、更新提示（update-prompt）、Artifact 区块编辑与编排、嵌套编辑渲染
 ```
 
-`npm run check` 里的 5 个浏览器渲染器检查（`typography`、`media-row`、`pressable-select`、`css-contract`、`nested-css-contract`）需要本机 Chrome；没有 Chrome 时会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
+`npm run check` 里的 5 个浏览器渲染器检查（`typography`、`media-row`、`pressable-select`、`css-contract`、`prop-contract`）需要本机 Chrome；`nested-css-contract` 是静态检查，不需要 Chrome。没有 Chrome 时上述检查会跳过，其余测试仍会运行。非默认安装位置可用 `CHROME_BIN` 指定 Chrome 可执行文件（也适用于浏览器套件）。
 
 - `scripts/build.mjs`：Host 打成 ESM（Node 内置模块与 `@deepseek-ai/schemastery` 之外全部打进 bundle；后者是插件详情页 Config 的运行时依赖）；Client 打成 CJS body + `window.__ModuleLoader__.load({ id, factory })` 外壳，React/Cordis/DSH client 平台包由 loader 注入，第三方库私有打包，CSS 收成字符串在插件加载时注入；另外把独立页面入口打成 `lib/standalone.js` / `lib/standalone.css`（内联 KaTeX 字体，供交互页面导出使用）。
-- `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护三种提示词变体（普通回答的 inline/交付物策略、document mode、on-demand 覆盖）与布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；改完重新 `npm run build`。
+- `scripts/generate-prompt.mjs`：把上游生成的 OpenUI Lang 提示词改写成「通过 render_ui 工具调用」的版本，并在这里维护普通回答（inline/交付物策略）与 document mode 两个 prompt 变体，以及布局/间距契约（页面节奏由渲染器负责，模型不手动加根 gap/空白块）；on-demand 前置段在 `src/host/index.ts` 的 `ON_DEMAND_TOOL_PREAMBLE` / `buildOnDemandPromptText`，不在此脚本；改完重新 `npm run build`。
 - `scripts/install.mjs`：本地 checkout 的 profile 安装/卸载（写入带标记的 patch 块，自动备份）。
 - `scripts/release-check.mjs`：发布前的包级检查。`npm pack` 产物解包后与 checkout 逐文件对比（每个打包路径都必须存在于 checkout，`lib/`、`skills/`、`locale/` 与 bundle patch 全量哈希一致），再装进一次性 `$DSH_HOME`（独立端口启动 Web），校验安装后的文件集合与哈希和 tarball 逐字节一致、组合树出现 loader row、boot graph 与实际提供的 client bundle 来自安装包、卸载后依赖/bundle row/目录全部消失。`npm pack` 会运行仓库的 `prepare` 构建（重写 ignored 的 `lib/`），但脚本不读写现有 profile、不碰运行中的服务；需要 `dsh` 与 `pnpm` 在 PATH 上。
 - `scripts/capture-screenshots.mjs`：`node scripts/capture-screenshots.mjs` 在 Chrome 2x 重建组件 tour、UI 菜单/样式面板、armed 提示、临时结果（明/暗）与插件设置截图。使用固定主题 token、生产组件与假投影/catalog/form，不需运行 DSH；壳层卡片图标用 lucide 替身。`--dark --out-dir=/tmp/iui-dark` 可在独立目录重跑全套深色截图；没有 Chrome 时跳过。禁止手工编辑图片。
@@ -198,9 +202,12 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 发布前按顺序运行：
 
 ```bash
-npm run check          # typecheck、构建、Node/renderer 测试与 docs-facts
+npm run check          # typecheck、构建、Node/renderer 测试、docs-facts 与 check:docs-install
 npm run check:release  # 把打包产物装进一次性 DSH_HOME，校验全量文件哈希、挂载、client bundle 与卸载
+npm run check:release-notes   # 预览 release-notes 要点门禁
+node scripts/release-notes-approval.mjs --verify  # release 提交已带审批哈希（打 tag 前）
 npm run pack:check     # 确认最终发布文件清单
+git diff --check
 ```
 
 `check:release` 需要 `dsh` 与 `pnpm` 在 PATH 上；`npm pack` 会先跑仓库构建（只写 ignored 的 `lib/`），脚本自己启动隔离实例，不读写当前 profile、不触碰运行中的服务。发布本身由 `v*` tag 触发 [publish.yml](../.github/workflows/publish.yml)（Trusted Publishing、OIDC 与 provenance），细节见下一节。
@@ -263,11 +270,11 @@ git push origin v0.7.0
 
 收录完成后，日常开发和发版沿用上面的发布流程，无需为每个新版本重新申请收录。
 
-- **收录位置**：扩展已发布到 npm 与 GitHub（DSH 官方没有内置插件市场，Discover 只读取用户添加的索引源），各市场收录条目均跟随 npm `latest`：
+- **收录位置**：扩展已发布到 npm 与 GitHub（DSH 官方没有内置插件市场，Discover 只读取用户添加的索引源）。各市场索引在自身构建时读取 npm 版本，刷新前可能仍显示上一版：
   - **npm 包**：[`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephinel/dsh-intelligent-ui)；**GitHub 仓库**：[Zephinel/dsh-intelligent-ui](https://github.com/Zephinel/dsh-intelligent-ui)（topics：`dsh-plugin`、`dsh-bundle`、`deepseek-harness`、`intelligent-ui`、`agent-skills`）。
   - **awesome-dsh-plugin / dsh-market**：[awesome 条目](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/Zephinel__dsh-intelligent-ui.yml) · [展示页](https://awesome-dsh-plugin.com/p/Zephinel/dsh-intelligent-ui/)；dsh-market 的目录来自 awesome，随其同步。
   - **Open Plugin Market**：[索引条目](https://dshopen.org/zh/plugins/@zephinel/dsh-intelligent-ui/)（[dshopen.org](https://dshopen.org/zh/)）。
   - **bradeGithub/DSH-Plugins-Marketplace**：[仓库](https://github.com/bradeGithub/DSH-Plugins-Marketplace)，按 GitHub `dsh-plugin` topic 自动收录。
-- **版本同步**：正式版本发布到 npm 的 `latest` 标签，并用 `npm view @zephinel/dsh-intelligent-ui dist-tags` 确认。awesome / dsh-market 会自动关联指向本仓库的 npm 包，Open Plugin Market 当前条目未固定版本，默认跟随 `latest`；各市场按自己的构建周期刷新。保持 npm 包的 `repository` 指向本仓库，并保留 GitHub 的 `dsh-plugin` topic，供自动索引发现。[awesome 收录规则](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market 维护规则](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
+- **版本同步**：正式版本发布到 npm 的 `latest` 标签，并用 `npm view @zephinel/dsh-intelligent-ui dist-tags` 确认。awesome / dsh-market 会自动关联指向本仓库的 npm 包，Open Plugin Market 的条目在索引重建时取 npm 版本；各市场按自己的构建周期刷新，刷新前显示上一版。文档不要写市场的「当前版本」，只写刷新策略；要立即安装请用固定版本命令或 GitHub main。保持 npm 包的 `repository` 指向本仓库，并保留 GitHub 的 `dsh-plugin` topic，供自动索引发现。[awesome 收录规则](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market 维护规则](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
 - **截图更新**：更新本仓库的 `screenshots.json` 和对应图片，再推送到默认分支即可；清单保留 1 到 8 张截图，使用仓库内有效的相对路径。市场在后续构建时采集，无需单独向市场提 PR，也无需仅为市场截图重发 npm 包。[截图规则](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#screenshots--截图optional-recommended--可选推荐)
 - **资料更正**：包名、仓库地址、分类改变，或市场介绍明显过时时，再更新对应市场的条目。awesome 只修改自己的 `data/plugins/Zephinel__dsh-intelligent-ui.yml`；Open Plugin Market 可在原[收录申请](https://github.com/polang233/dsh-plugin-index/issues/40)补充信息，或提交资料更正申请。

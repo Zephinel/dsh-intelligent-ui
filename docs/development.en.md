@@ -19,11 +19,13 @@ npm --version
 dsh --version    # validated: 0.2.2-rc.5; inline UI needs the fence slot in 0.2.2-rc.2+
 ```
 
+`dsh plugin` forwards to pnpm, so pnpm must be on PATH; without it DSH reports `pnpm was not found`.
+
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# npm latest: inline UI and turn-tail cards (with editing, export and templates)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# npm 0.7.0: inline UI and turn-tail cards (with editing, export and templates; pinned)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.7.0
 # or follow the latest commits on GitHub main (needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
@@ -31,6 +33,8 @@ dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 ```
 
 > The npm package name is **`@zephinel/dsh-intelligent-ui`**: the unscoped `dsh-intelligent-ui` is taken by another, unrelated project, so the package uses the `@zephinel` scope. GitHub installs are unaffected.
+
+pnpm 11/12 enables a 24-hour `minimumReleaseAge` by default: a bare package name resolves to the previous mature version during a release day, so the npm command above pins the version and installs immediately. Follow `latest` with that delay in mind.
 
 Both install sources provide only published or committed code; neither installs uncommitted changes from the current checkout. Before the first use of a profile, `dsh plugin --profile web list` shows and initializes it. A GitHub main install runs the `prepare` build from source; pnpm may ask you to allow build scripts on the first attempt, then retry. Desktop **Add plugin** also accepts a Git address: arrow → **Install a third-party plugin** → `github:Zephinel/dsh-intelligent-ui`.
 
@@ -124,10 +128,10 @@ npm run check:release  # pack → throwaway DSH_HOME install → check full pack
 npm run test:browser   # 12 Chrome suites: on-demand, style panel, theme, inline UI, anchored-overlay, image export, standalone page, Article, settings, update-prompt, Artifact block editing and arrangement, nested edit-renderer
 ```
 
-The five browser-based renderer checks inside `npm run check` (`typography`, `media-row`, `pressable-select`, `css-contract`, `nested-css-contract`) need a local Chrome; without one they skip while the other tests still run. For a non-default Chrome location, set `CHROME_BIN` (it also applies to the browser suites).
+The five browser-based renderer checks inside `npm run check` (`typography`, `media-row`, `pressable-select`, `css-contract`, `prop-contract`) need a local Chrome; `nested-css-contract` is static and does not. Without Chrome those checks skip while the other tests still run. For a non-default Chrome location, set `CHROME_BIN` (it also applies to the browser suites).
 
 - `scripts/build.mjs`: bundles the Host into an ESM with Node built-ins and `@deepseek-ai/schemastery` external (the latter backs the Plugin detail page Config schema); the Client becomes a CJS body plus a `window.__ModuleLoader__.load({ id, factory })` shell, with React/Cordis/DSH client platform packages injected by the loader, third-party libraries bundled privately, and CSS collected into a string that is injected when the plugin loads. It also builds the standalone page entry into `lib/standalone.js` / `lib/standalone.css` (KaTeX fonts inlined) for the interactive-page export.
-- `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version invoked through `render_ui` / inline `openui` fences, maintaining the prompt variants (ordinary four-form inline/deliverable policy, document mode, plus Host-side on-demand framing) and the layout/spacing contract (the renderer owns the page rhythm; the model does not add root gaps or manual blank blocks); rebuild after editing.
+- `scripts/generate-prompt.mjs`: rewrites the OpenUI Lang prompt generated upstream into a version invoked through `render_ui` / inline `openui` fences, maintaining the ordinary four-form inline/deliverable and document-mode prompt variants plus the layout/spacing contract (the renderer owns the page rhythm; the model does not add root gaps or manual blank blocks). The on-demand preamble lives in `src/host/index.ts` (`ON_DEMAND_TOOL_PREAMBLE` / `buildOnDemandPromptText`), not this script; rebuild after editing.
 - `scripts/install.mjs`: profile install/uninstall for a local checkout (writes a marked patch block, with automatic backup).
 - `scripts/release-check.mjs`: the pre-release package-level check. It extracts the `npm pack` artifact and compares every packed file with the checkout (every packed path must exist in the checkout, and `lib/`, `skills/`, `locale/` plus the bundle patch must hash-match it), then installs the tarball into a throwaway `$DSH_HOME` (booting Web on an isolated port) and verifies that the installed file set and hashes are byte-identical to the tarball, that the composed tree carries the loader row, that the boot graph and the actually served client bundle come from the installed package, and that uninstall removes the dependency, bundle row and directory. `npm pack` runs the repository's `prepare` build (rewriting the ignored `lib/`), but the script never reads or writes the user's profiles or the running service; the `dsh` CLI and pnpm must be on PATH.
 - `scripts/capture-screenshots.mjs`: `node scripts/capture-screenshots.mjs` captures the component tour, UI menu/style panel, armed hint, temporary result (light/dark) and settings at 2x in Chrome. Fixed tokens, production components and fake projection/catalog/form services need no DSH; shell card glyphs use lucide stand-ins. `--dark --out-dir=/tmp/iui-dark` reruns all captures in dark mode in a separate directory; skips without Chrome. Never hand-edit images.
@@ -198,9 +202,12 @@ Two GitHub Actions workflows (GitHub-hosted `ubuntu-latest`, Node 24; Chrome com
 Run these in order before publishing:
 
 ```bash
-npm run check          # typecheck, build, Node/renderer tests and docs-facts
+npm run check          # typecheck, build, Node/renderer tests, docs-facts and check:docs-install
 npm run check:release  # install the packed artifact into a throwaway DSH_HOME and check full file hashes, mount, client bundle and uninstall
+npm run check:release-notes   # preview the release-notes gate
+node scripts/release-notes-approval.mjs --verify  # release commit carries the approval hash (before the tag)
 npm run pack:check     # confirm the final published file list
+git diff --check
 ```
 
 `check:release` needs the `dsh` CLI and pnpm on PATH; `npm pack` first runs the repository build (writing only the ignored `lib/`), and the script boots its own isolated instance, so it never reads or writes the current profile or the running service. Publishing itself is triggered by a `v*` tag through [publish.yml](../.github/workflows/publish.yml) (Trusted Publishing, OIDC and provenance); details are in the next section.
@@ -263,11 +270,11 @@ git push origin v0.7.0
 
 Once listed, continue developing and releasing through the workflow above. Each new version does not need a new listing request.
 
-- **Listing locations**: the extension is published to npm and GitHub (DSH has no built-in official plugin marketplace; Discover only reads user-added index sources), and every market entry follows npm `latest`:
+- **Listing locations**: the extension is published to npm and GitHub (DSH has no built-in official plugin marketplace; Discover only reads user-added index sources). Each market index reads the npm versions when it rebuilds, so it may still show the previous release until then:
   - **npm package**: [`@zephinel/dsh-intelligent-ui`](https://www.npmjs.com/package/@zephinel/dsh-intelligent-ui); **GitHub repository**: [Zephinel/dsh-intelligent-ui](https://github.com/Zephinel/dsh-intelligent-ui) (topics: `dsh-plugin`, `dsh-bundle`, `deepseek-harness`, `intelligent-ui`, `agent-skills`).
   - **awesome-dsh-plugin / dsh-market**: [awesome entry](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/Zephinel__dsh-intelligent-ui.yml) · [listing page](https://awesome-dsh-plugin.com/p/Zephinel/dsh-intelligent-ui/); dsh-market's catalog comes from awesome and syncs with it.
   - **Open Plugin Market**: [index entry](https://dshopen.org/plugins/@zephinel/dsh-intelligent-ui/) ([dshopen.org](https://dshopen.org/)).
   - **bradeGithub/DSH-Plugins-Marketplace**: [repository](https://github.com/bradeGithub/DSH-Plugins-Marketplace), auto-indexed from the GitHub `dsh-plugin` topic.
-- **Version updates**: publish production releases to npm's `latest` tag and confirm it with `npm view @zephinel/dsh-intelligent-ui dist-tags`. awesome / dsh-market automatically associates the npm package that points to this repository; the current Open Plugin Market entry has no version pin and follows `latest`. Each market refreshes on its own build schedule. Keep the npm package's `repository` pointing here and retain the GitHub `dsh-plugin` topic for automatic discovery. [awesome listing rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market maintenance rules](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
+- **Version updates**: publish production releases to npm's `latest` tag and confirm it with `npm view @zephinel/dsh-intelligent-ui dist-tags`. awesome / dsh-market automatically associates the npm package that points to this repository; the Open Plugin Market entry takes the npm version when its index rebuilds. Each market refreshes on its own build schedule and shows the previous release until then. Do not write a market's "current version" into docs; state the refresh policy and point users to the pinned install command or GitHub main for immediate use. Keep the npm package's `repository` pointing here and retain the GitHub `dsh-plugin` topic for automatic discovery. [awesome listing rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#npm-package--npm-包optional--可选) · [Open Plugin Market maintenance rules](https://github.com/polang233/dsh-plugin-index/blob/main/.github/CONTRIBUTING.md)
 - **Screenshots**: update this repository's `screenshots.json` and the corresponding images, then push to the default branch. Keep 1-8 screenshots with valid repository-relative paths. Markets pick them up in a later build; no separate market PR or npm release is needed just to update marketplace screenshots. [Screenshot rules](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#screenshots--截图optional-recommended--可选推荐)
 - **Listing corrections**: update the relevant market entry when the package name, repository URL or category changes, or the description becomes outdated. For awesome, edit only `data/plugins/Zephinel__dsh-intelligent-ui.yml`; for Open Plugin Market, add details to the original [listing request](https://github.com/polang233/dsh-plugin-index/issues/40) or submit a correction request.

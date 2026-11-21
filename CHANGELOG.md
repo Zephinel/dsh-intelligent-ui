@@ -7,6 +7,10 @@ been published yet.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Post-release docs freshness correction and install-pin guard.** A read-only 0.7.0 docs audit found two claims that would mislead installs and several smaller drifts. Documented CLI installs now pin `@zephinel/dsh-intelligent-ui@0.7.0` in the README pair, both development guides and the shipped integration reference, with a note that pnpm must be on PATH and that pnpm 11/12's default 24-hour `minimumReleaseAge` resolves a bare package name to the previous release on release day; the marketplace/DSH Desktop sentences now state the index refresh policy instead of asserting a current version. The architecture and limitations publish-gate text adds the tagged commit's `Release-Notes-Review: sha256=<hash>` approval, the renderer Chrome-check list names `prop-contract` instead of the static `nested-css-contract`, the architecture history pair aligns on 519 checks, the usage guides quote the actual **Top level / Nested** toggle labels, the prompt-size note moves to ~45 KB / ~11K tokens, the pre-release checklist adds the notes gates, `generate-prompt.mjs` is credited only for the ordinary/document variants, and pnpm joins the prerequisites. New guards: `npm run check:docs-install` (inside `npm run check`) fails on a bare or stale install pin or a marketplace current-version claim; `npm run check:published-install` installs the documented pinned release into a throwaway `DSH_HOME` after publishing. `release-iui` gains a pre-tag release-claims audit, `sync-iui-docs` gains an install/release claim group and freshness contract, and `AGENTS.md` records the no-unverifiable-current-claims rule. Final gate: Node **880/880** (Host **324**, Client **516**, packaging **40**), browser **12/12** suites (latest `main` CI), `artifact-edit` **944 checks**, `update-prompt` **39 checks**, nested renderer **75**, image export **76** assertions; build host **904 kB**, client **4.21 MB** (js 3.96 / css 249.3 kB); pack **71 files**, non-build **3,910,928** bytes; `check:docs-install`, `check:docs-facts`, `check:docs-links` and `check:pack-facts` pass.
+
 ## [0.7.0] - 2026-11-21
 
 ### Added

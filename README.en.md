@@ -22,14 +22,16 @@
 **DSH Web** (pick one; restart any running Web process after installing):
 
 ```bash
-# npm latest: inline UI, turn-tail cards, editing and export
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# npm 0.7.0: inline UI, turn-tail cards, editing and export (pinned)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.7.0
 # or follow the latest commits on GitHub main (needs local build tools and possibly build-script approval)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
 dsh web
 ```
 
-**DSH Desktop**: the marketplace follows npm `latest` (currently `0.7.0`) and installs inside the app; you can also install `github:Zephinel/dsh-intelligent-ui` via **Plugins → Add plugin → arrow → Install a third-party plugin** to follow the repository's latest commits.
+`dsh plugin` needs pnpm. pnpm 11/12 does not resolve versions published less than 24 hours ago by default; the npm command above pins the version, so it installs immediately.
+
+**DSH Desktop**: the marketplace follows its own index build schedule and may still show the previous release; to use the current release immediately, install `github:Zephinel/dsh-intelligent-ui` via **Plugins → Add plugin → arrow → Install a third-party plugin** to follow the repository's latest commits, or install the pinned npm version above.
 
 Once loaded, a **UI** control appears on the right of the composer. Click **UI → This session only** (or send `/iui on`), then ask normally:
 
@@ -98,7 +100,7 @@ node scripts/install.mjs   # install into the web profile
 dsh web
 ```
 
-Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm) and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
+Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm), pnpm and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
 
 Current verification: Node tests **880/880** (Host 324, Client 516, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Full commands and history: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development) and [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
