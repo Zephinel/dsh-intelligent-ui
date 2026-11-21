@@ -34,7 +34,7 @@ Provide these in the subagent prompt:
 Identity and git state:
 
 - `git status --porcelain` is empty; `git rev-parse HEAD` equals the supplied release commit; the tag does not exist yet.
-- `git log -1 --format=%H%n%B` shows the release commit and, when required, the `Release-Notes-Review: sha256=<hash>` trailer.
+- `git log -1 --format=%H%n%B` shows the release commit and, when required, the `Release-Notes-Review: sha256=<hash>` trailer. Verify the **release commit tree**, not HEAD/main: `git show <sha>:README.md`, `git show <sha>:skills/intelligent-ui/references/integration.md`. A later docs commit on main is not part of the tagged release.
 - No unexpected files are added, deleted or modified; no secrets or local paths in the diff.
 - The release commit is the one that will be tagged (a later docs-only commit is allowed only if it is also the tagged commit or explicitly outside the release).
 
@@ -43,12 +43,12 @@ Version, changelog and notes:
 - `package.json` version and `package-lock.json` root/`packages[""].version` equal the target version.
 - `CHANGELOG.md` has `## [<version>] - <UTC date>` and no released section was rewritten; `## [Unreleased]` still exists.
 - `release-notes/<version>.md` exists with 2–6 plain bullets; `.en.md` exists and is reviewed when present; the bullets match what the owner approved.
-- `node scripts/release-notes-approval.mjs --verify` passes for the release commit; `npm run check:release-notes` passes.
+- `node scripts/release-notes-approval.mjs --verify --message "$(git show -s --format=%B <release-commit>)"` passes for the release commit (do not rely on the default HEAD check when docs commits follow); `npm run check:release-notes` passes.
 - `npm view @zephinel/dsh-intelligent-ui version dist-tags --json --prefer-online` still shows the previous version as `latest` (the target must not already be published).
 
 Docs and claims:
 
-- Every documented CLI install of the package pins `@<version>` (`npm run check:docs-install`); pnpm/cooldown prerequisites are present.
+- Every documented CLI install in the release commit tree pins `@<version>` (`npm run check:docs-install` on that commit); check the packed README pair and the shipped integration reference explicitly, because those are what the tarball ships. pnpm/cooldown prerequisites are present.
 - Marketplace/DSH Desktop text states the index refresh policy, not a "current version"; no asynchronous npm propagation is asserted as a fact.
 - README status, `docs/development*.md` pins/tag examples, the shipped integration reference and `docs/current-facts.json` are consistent with the version and measured pack.
 - The publish-gate docs describe both `check:release-notes` and the `Release-Notes-Review` approval.
@@ -64,9 +64,9 @@ Gates:
 
 - The `publish.yml` run for the tag succeeded, including the notes approval and registry verification.
 - `npm view @zephinel/dsh-intelligent-ui version dist-tags --json --prefer-online` shows the target as `latest`; the version document reports `gitHead` equal to the release commit and `dist.attestations.provenance`.
-- The annotated tag points at the release commit; `git tag -n99 v<version>` shows the expected message and verification line.
+- The annotated tag points at the release commit; `git tag -n99 v<version>` shows the expected message and a `Release-Verification: PASS (<verifier>)` line. The publish workflow requires that line; it is a record, not cryptographic proof, so do not treat a missing verifier run as covered by the line.
 - The GitHub Release exists with the target title/date and the paired Chinese/English notes; the tag-pinned raw notes return 200 for both files.
-- `npm run check:published-install` installs the documented pinned version into a throwaway `DSH_HOME`.
+- `npm run check:published-install` downloads the **published tarball**, scans its README pair and shipped integration reference for install pins, and installs the pinned spec into a throwaway `DSH_HOME`. A tagged artifact with stale docs must fail.
 - Read the configured market indexes (`plugin_market` or the index JSON) and record what they show; the docs must not claim a market current version. A stale index is expected, not a release failure.
 - The release result in `docs/verification*.md` records the workflow run, registry/provenance, Release URL, `check:published-install`, the verifier verdict and any residual risks.
 - Confirm no version bump or released-section rewrite happened after the tag; the working tree is clean.

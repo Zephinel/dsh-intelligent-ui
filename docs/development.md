@@ -205,7 +205,7 @@ DSH 0.2.2 的 `dsh-tools` 只接受 `type` / `oneOf` / `properties` / `required`
 npm run check          # typecheck、构建、Node/renderer 测试、docs-facts 与 check:docs-install
 npm run check:release  # 把打包产物装进一次性 DSH_HOME，校验全量文件哈希、挂载、client bundle 与卸载
 npm run check:release-notes   # 预览 release-notes 要点门禁
-node scripts/release-notes-approval.mjs --verify  # release 提交已带审批哈希（打 tag 前）
+node scripts/release-notes-approval.mjs --verify --message "$(git show -s --format=%B HEAD)"  # release 提交已带审批哈希（打 tag 前）
 npm run pack:check     # 确认最终发布文件清单
 git diff --check
 ```
@@ -251,19 +251,21 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；审核通过后运行 `node scripts/release-notes-approval.mjs`，把打印的 `Release-Notes-Review: sha256=<hash>` 放进 release 提交正文（`publish.yml` 会校验，缺失或不匹配拒绝发布）；
 3. 运行 `npm run check`；
 4. 提交并推送 `main`；
-5. 打 tag 前启动**独立 subagent** 只读验证（操作与验证分离；清单与 prompt 见 `.agents/skills/release-iui/references/independent-verification.md`）。只有 PASS 才进入下一步；FAIL/CONDITIONAL 先修复并重新验证；
+5. 打 tag 前启动**独立 subagent** 只读验证（操作与验证分离；清单与 prompt 见 `.agents/skills/release-iui/references/independent-verification.md`）。验证对象是 **release 提交树**（`git show <sha>:README.md`、`git show <sha>:skills/intelligent-ui/references/integration.md`），不是之后 main 的 HEAD。只有 PASS 才进入下一步；FAIL/CONDITIONAL 先修复并重新验证；
 6. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送），并在 tag 说明中写入验证结论：
 
 ```bash
-git tag -a v0.7.0 -m "0.7.0 — 2026-11-21" -m "Release-Verification: PASS (<verifier>)"
-git push origin v0.7.0
+git tag -a v<version> -m "<version> — <UTC date>" -m "Release-Verification: PASS (<verifier>)"
+git push origin v<version>
 ```
 
-7. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.7.0 — 2026-11-21`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。发布后由**新的**独立 subagent 只读复核 registry、tag、Release、tag 固定的 notes 与 `npm run check:published-install`，结论写入验证记录。
+`publish.yml` 会拒绝 tag 说明不含 `Release-Verification: PASS` 的推送；该行是流程记录，不是独立性的密码学证明。
+
+7. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.7.0 — 2026-11-21`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。发布后由**新的**独立 subagent 只读复核 registry、tag、Release、tag 固定的 notes 与 `npm run check:published-install`（该检查会下载已发布 tarball，扫描 README 对与随包 integration 的安装命令）；结论写入验证记录。
 
 > 发布操作由主 Agent 执行，验证由独立 subagent 执行；主 Agent 不得用自测结果替代 verifier 的 PASS，也不得在 PASS 前打 tag 或宣布发布。
 
-`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段、`release-notes/<version>.md` 有已审核的 `## Highlights`，且 tag 提交正文的审批哈希与 notes 内容一致，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
+`.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段、`release-notes/<version>.md` 有已审核的 `## Highlights`，且 tag 提交正文的审批哈希与 notes 内容一致、tag 说明含 `Release-Verification: PASS` 记录，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
 > 版本号约定：正式版使用稳定 semver（如 `0.7.0`，tag `v0.7.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 

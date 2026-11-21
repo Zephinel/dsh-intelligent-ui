@@ -97,7 +97,7 @@ git diff --check
 After the gates pass, the release commit is pushed and CI is green, launch the independent verifier:
 
 - Use `subagent` with the prompt from [`references/independent-verification.md`](references/independent-verification.md), stage `pre-tag`; give the exact commit SHA, version, notes paths, owner approvals, CI run id and any caveats.
-- The verifier must read the files and run its own checks (git state, version/lock, CHANGELOG, notes approval, install pins/market wording, `npm run check`, `check:release`, `pack:check`, CI). It must not trust this skill or the operator's summary.
+- The verifier must read the files and run its own checks (git state, version/lock, CHANGELOG, notes approval, install pins/market wording, `npm run check`, `check:release`, `pack:check`, CI). It must verify the **release commit tree** (`git show <sha>:README.md`, `git show <sha>:skills/.../integration.md`), not a later HEAD. It must not trust this skill or the operator's summary.
 - FAIL/CONDITIONAL: fix, re-run the local gates and CI, then launch a **fresh** verifier for the new commit. Do not create the tag.
 - PASS: record the verdict and verifier name, then proceed to step 3.
 
@@ -112,7 +112,7 @@ git push origin v<version>
 
 Rules:
 
-- Use an **annotated** tag (`git tag -a`); the existing releases are annotated.
+- Use an **annotated** tag (`git tag -a`); the existing releases are annotated. The tag message must carry `Release-Verification: PASS (<verifier>)`; `publish.yml` rejects a tag without it. This is a record, not cryptographic proof of independence.
 - The tag must match `package.json`; `publish.yml` rejects a mismatch.
 - Do not use `--follow-tags` from an unrelated commit: push the tag explicitly so the workflow runs exactly once for this version.
 - The workflow reruns `npm run check`, `pack:check`, the CHANGELOG section check and `check:release-notes`, then publishes with OIDC + provenance. There is no `NODE_AUTH_TOKEN`.
@@ -137,7 +137,7 @@ gh run watch <run-id> --exit-status --interval 10
   curl -sS "https://registry.npmjs.org/@zephinel/dsh-intelligent-ui/<version>"   # check dist.attestations.provenance
   npm run check:published-install   # the documented pinned command installs <version> into a throwaway DSH_HOME
   ```
-  `check:published-install` proves the install path, not just the registry: if it fails, fix the docs before announcing. A temporary install + `npm audit signatures` is optional but useful for provenance.
+  `check:published-install` downloads the published tarball, scans its packed README/integration install pins and proves the documented install path, not just the registry: if it fails, do not announce; fix the docs and publish a new version (the old tarball is immutable). A temporary install + `npm audit signatures` is optional but useful for provenance.
 - Read the configured market indexes after the release and record what they still show. If an index shows the previous release, that is expected; do not edit docs to claim otherwise. A marketplace description that is materially outdated is a separate correction request.
 - Launch a **fresh** independent verifier for `post-publish` (do not reuse the pre-tag context) after the workflow and registry settle. It verifies the publish run, registry/provenance, tag/commit, GitHub Release, tag-pinned notes, `check:published-install` and the observed market state. If it fails, fix and re-verify; do not announce until PASS.
 

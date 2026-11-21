@@ -64,6 +64,20 @@ jobs:
           fi
           echo "publishing ${version}"
 
+      - name: Release verification record on the tag
+        # The release flow requires an independent verifier to return PASS
+        # before the main agent tags. The tag message records the verdict and
+        # verifier name. This check is a record, not cryptographic proof: the
+        # verifier cannot sign in this flow, so the skill's separation of
+        # duties remains the authority.
+        run: |
+          message="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")"
+          printf '%s\n' "$message"
+          if ! printf '%s\n' "$message" | grep -Eq '^Release-Verification: PASS \(.+\)$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} has no Release-Verification: PASS record"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 

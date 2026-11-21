@@ -205,7 +205,7 @@ Run these in order before publishing:
 npm run check          # typecheck, build, Node/renderer tests, docs-facts and check:docs-install
 npm run check:release  # install the packed artifact into a throwaway DSH_HOME and check full file hashes, mount, client bundle and uninstall
 npm run check:release-notes   # preview the release-notes gate
-node scripts/release-notes-approval.mjs --verify  # release commit carries the approval hash (before the tag)
+node scripts/release-notes-approval.mjs --verify --message "$(git show -s --format=%B HEAD)"  # release commit carries the approval hash (before the tag)
 npm run pack:check     # confirm the final published file list
 git diff --check
 ```
@@ -251,19 +251,21 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 2. write and human-review `release-notes/<version>.md` (required) plus an optional `release-notes/<version>.en.md` for English UIs (the Host falls back to the default file when it is missing); `## Highlights` with at least one bullet, format in `release-notes/README.md`; `npm run check:release-notes` previews the gate locally; after approval run `node scripts/release-notes-approval.mjs` and put the printed `Release-Notes-Review: sha256=<hash>` line in the release commit body (`publish.yml` refuses a missing or mismatched approval);
 3. run `npm run check`;
 4. commit and push `main`;
-5. before tagging, launch an **independent subagent** for read-only verification (operation and verification are separate; checklist and prompt in `.agents/skills/release-iui/references/independent-verification.md`). Only PASS proceeds; fix and re-verify after FAIL/CONDITIONAL;
+5. before tagging, launch an **independent subagent** for read-only verification (operation and verification are separate; checklist and prompt in `.agents/skills/release-iui/references/independent-verification.md`). It verifies the **release commit tree** (`git show <sha>:README.md`, `git show <sha>:skills/intelligent-ui/references/integration.md`), not a later HEAD on main. Only PASS proceeds; fix and re-verify after FAIL/CONDITIONAL;
 6. create and push an annotated tag that matches the version (`main` was pushed in step 4), with the verification verdict in the tag message:
 
 ```bash
-git tag -a v0.7.0 -m "0.7.0 — 2026-11-21" -m "Release-Verification: PASS (<verifier>)"
-git push origin v0.7.0
+git tag -a v<version> -m "<version> — <UTC date>" -m "Release-Verification: PASS (<verifier>)"
+git push origin v<version>
 ```
 
-7. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.7.0 — 2026-11-21`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately. After publish, a **fresh** independent subagent verifies the registry, tag, Release, tag-pinned notes and `npm run check:published-install`, and its verdict is recorded.
+`publish.yml` rejects a tag whose message has no `Release-Verification: PASS` record; the line is a process record, not cryptographic proof of independence.
+
+7. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.7.0 — 2026-11-21`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately. After publish, a **fresh** independent subagent verifies the registry, tag, Release, tag-pinned notes and `npm run check:published-install` (which downloads the published tarball and scans the README pair and shipped integration install commands), and its verdict is recorded.
 
 > The main agent performs the release operations; an independent subagent performs verification. The main agent must not substitute its own results for the verifier's PASS, and must not tag or announce before that PASS.
 
-`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version, reviewed `## Highlights` in `release-notes/<version>.md` (`npm run check:release-notes`) and a `Release-Notes-Review: sha256=<hash>` approval in the tagged commit that matches the notes content, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag by polling the registry endpoints directly for up to ten minutes to cover propagation delay. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
+`.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version, reviewed `## Highlights` in `release-notes/<version>.md` (`npm run check:release-notes`), a `Release-Notes-Review: sha256=<hash>` approval in the tagged commit that matches the notes content, and a `Release-Verification: PASS` record in the tag message, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag by polling the registry endpoints directly for up to ten minutes to cover propagation delay. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
 
 > Version convention: production releases use stable semver (for example `0.7.0`, tag `v0.7.0`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 

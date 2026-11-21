@@ -9,9 +9,9 @@
 #   group so every commit on main runs to completion (a release branch must not
 #   skip gates).
 # - `browser` runs the twelve Chrome suites only on main/manual dispatch. Local
-#   measurements: artifact-edit dominates (~58 s of ~78 s total), so sharding
-#   across runners adds more setup than it saves; the single job stays, and it is
-#   not a PR gate because artifact-edit has a known small flake probability.
+#   measurements: artifact-edit dominates (~58 s of ~78 s total), so it runs in
+#   its own shard while the other eleven suites share the second shard; browser
+#   is not a PR gate because artifact-edit has a known small flake probability.
 # - Caches: only actions/setup-node's npm cache (lockfile keyed). `lib/` is an
 #   ignored build artifact and is rebuilt in ~0.8 s, so it is not cached.
 # - `check:release` (pack -> throwaway DSH_HOME -> serve -> uninstall) is still a
