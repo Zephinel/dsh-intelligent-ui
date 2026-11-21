@@ -1,6 +1,6 @@
 {
   "name": "@zephinel/dsh-intelligent-ui",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Intelligent UI for DeepSeek Harness: explanations embed interactive OpenUI Lang UI inline in the answer, while standalone deliverables (maps, charts, forms, drawings, tools or articles) render as editable cards at the turn end. Global defaults live on the Plugins detail page; the composer overrides enablement and answer style per session.",
   "type": "module",
   "main": "lib/index.js",

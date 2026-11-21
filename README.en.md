@@ -13,7 +13,7 @@
 
 ![Inline UI inside an explanation: an interactive four-stage flow diagram embedded mid-answer](assets/intelligent-ui-readme-inline-en.webp)
 
-> **Current status**: npm `latest` is `@zephinel/dsh-intelligent-ui@0.6.2` (turn-tail cards, editing, export and templates); **inline UI is currently on GitHub `main` and not yet published to npm** (a `main` build may still report version 0.6.2). Also listed in awesome-dsh-plugin / dsh-market and Open Plugin Market; see [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md).
+> **Current status**: npm `latest` is `@zephinel/dsh-intelligent-ui@0.7.0`: inline UI in explanations by default, standalone pages as editable cards, plus editing, revisions, export and templates. Also listed in awesome-dsh-plugin / dsh-market and Open Plugin Market; see [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md).
 
 [Install](#install) · [What it looks like](#what-it-looks-like) · [Generate and edit](#generate-and-edit) · [Documentation index](#documentation-index) · [Local development](#getting-the-code-and-local-development)
 
@@ -22,23 +22,23 @@
 **DSH Web** (pick one; restart any running Web process after installing):
 
 ```bash
-# GitHub main: includes inline UI (needs local build tools and possibly build-script approval)
+# npm latest: inline UI, turn-tail cards, editing and export
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# or follow the latest commits on GitHub main (needs local build tools and possibly build-script approval)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2: stable release (turn-tail cards only, no inline UI)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
-**DSH Desktop**: the marketplace currently ships `0.6.2`; to try inline UI, install `github:Zephinel/dsh-intelligent-ui` via **Plugins → Add plugin → arrow → Install a third-party plugin**, or wait for the next npm release.
+**DSH Desktop**: the marketplace follows npm `latest` (currently `0.7.0`) and installs inside the app; you can also install `github:Zephinel/dsh-intelligent-ui` via **Plugins → Add plugin → arrow → Install a third-party plugin** to follow the repository's latest commits.
 
 Once loaded, a **UI** control appears on the right of the composer. Click **UI → This session only** (or send `/iui on`), then ask normally:
 
 ```text
-Explain the difference between a harness and a model        # main: embeds interactive UI mid-answer
-Plan two days in Shanghai, with checkboxes and adjustments  # main & 0.6.2: delivers an editable turn-tail page card
+Explain the difference between a harness and a model        # embeds interactive UI mid-answer
+Plan two days in Shanghai, with checkboxes and adjustments  # delivers an editable turn-tail page card
 ```
 
-Because `0.6.2` has no inline UI yet, the first prompt may return Markdown, a turn-tail card or a document-mode page. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
+Inline UI needs the `conversation.chat.markdown.fence` slot from DSH 0.2.2-rc.2+; an older Host keeps the inline programs as code blocks. Install sources, uninstall, version switching and troubleshooting: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#installation).
 
 ## What it looks like
 
@@ -98,7 +98,7 @@ node scripts/install.mjs   # install into the web profile
 dsh web
 ```
 
-Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI on `main` needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm) and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
+Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm) and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
 
 Current verification: Node tests **880/880** (Host 324, Client 516, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Full commands and history: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development) and [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 

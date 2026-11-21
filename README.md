@@ -13,7 +13,7 @@
 
 ![正文内嵌 UI：解释 Agent Harness 与 Model 的分工，中间直接嵌一个可交互的四阶段流程图](assets/intelligent-ui-readme-inline-zh.webp)
 
-> **当前状态**：npm `latest` 为 `@zephinel/dsh-intelligent-ui@0.6.2`（轮末卡片、编辑、导出与模板）；**正文内嵌 UI 目前在 GitHub `main`（尚未发版到 npm）**，安装 `main` 构建可能仍显示 0.6.2。已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场，版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)。
+> **当前状态**：npm `latest` 为 `@zephinel/dsh-intelligent-ui@0.7.0`：解释类回答默认正文内嵌 UI，独立页面以可编辑卡片交付，并含编辑、修订、导出与模板。已收录于 awesome-dsh-plugin / dsh-market、Open Plugin Market 等社区市场，版本变更见 [CHANGELOG](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/CHANGELOG.md)。
 
 [安装](#安装) · [效果](#效果) · [生成与编辑](#生成与编辑) · [文档索引](#文档索引) · [本地开发](#获取代码与本地开发)
 
@@ -22,23 +22,23 @@
 **DSH Web**（二选一，安装后若已有 Web 进程请重启）：
 
 ```bash
-# GitHub main：含正文内嵌 UI（需本地构建工具，首次可能提示允许 build scripts）
+# npm 最新版：正文内嵌 UI、轮末卡片、编辑与导出
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# 或跟随 GitHub main 的最新提交（需本地构建工具，首次可能提示允许 build scripts）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2：稳定版（仅轮末卡片，不含正文内嵌）
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 dsh web
 ```
 
-**DSH Desktop**：插件市场当前为 `0.6.2`；要体验正文内嵌 UI，可从 **插件 → 添加插件 → 箭头 → 安装第三方插件** 输入 `github:Zephinel/dsh-intelligent-ui`，或等下一版 npm 发布。
+**DSH Desktop**：插件市场跟随 npm `latest`（当前 `0.7.0`），可在应用内直接安装；也可从 **插件 → 添加插件 → 箭头 → 安装第三方插件** 输入 `github:Zephinel/dsh-intelligent-ui` 跟随仓库最新提交。
 
 打开 DSH 后输入框右侧出现 **UI** 控件即加载成功。点击 **UI → 仅本会话**（或发送 `/iui on`）启用，直接像平常一样提问：
 
 ```text
-解释一下 harness 和 model 的区别        # main：在正文里直接嵌入可交互 UI
-帮我排一个上海两日游，要能勾选和调整    # main & 0.6.2：轮末交付可编辑的独立页面卡片
+解释一下 harness 和 model 的区别        # 在正文里直接嵌入可交互 UI
+帮我排一个上海两日游，要能勾选和调整    # 轮末交付可编辑的独立页面卡片
 ```
 
-`0.6.2` 尚无正文内嵌，第一条提问可能返回 Markdown、轮末卡片或文档模式页面。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
+正文内嵌需要 DSH 0.2.2-rc.2+ 的 `conversation.chat.markdown.fence` 插槽；更旧的 Host 会把内嵌程序保留为代码块。安装来源、卸载、版本切换与排障见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#安装)。
 
 ## 效果
 
@@ -98,7 +98,7 @@ node scripts/install.mjs   # 装进 web profile
 dsh web
 ```
 
-环境要求：DSH 0.2.2 插件接口（验证于 `0.2.2-rc.5`；`main` 的正文内嵌需要 `0.2.2-rc.2+` 的 `conversation.chat.markdown.fence` 插槽）、Node 24（含 npm）与 Git；浏览器端依赖 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）。无独立 watch 服务，改动后运行 `npm run build` 并重启 DSH。
+环境要求：DSH 0.2.2 插件接口（验证于 `0.2.2-rc.5`；正文内嵌需要 `0.2.2-rc.2+` 的 `conversation.chat.markdown.fence` 插槽）、Node 24（含 npm）与 Git；浏览器端依赖 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）。无独立 watch 服务，改动后运行 `npm run build` 并重启 DSH。
 
 当前验证：Node 测试 **880/880**（Host 324、Client 516、packaging 40）；浏览器 **12/12** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。完整命令与历史记录见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#开发)与[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 

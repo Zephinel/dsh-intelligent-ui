@@ -12,7 +12,7 @@
 - 组件总览页、旧金山行程、咖啡计算器、SVG 折纸教程均正常渲染；照片（Wikipedia/Wikimedia）、MapLibre 地图 + pin、图表、表单、计时器、翻转卡、撒花、HtmlView 动画可用。
 - 交互：勾选时间线计数更新、SegmentedControl 联动、表单与按钮状态正常；暗色主题自动切换。
 - 响应式：390 / 546 / 768 / 1092 px 下无横向溢出（补齐了组件库依赖的 `box-sizing` 作用域 reset）。
-- 测试（实时子项）：最新 `main` 与当前发布版本（`0.6.2`）的门禁计数见文末最新验证记录与 `docs/current-facts.json`；下方各版本/早期记录保留为历史。
+- 测试（实时子项）：最新 `main` 与当前发布版本（`0.7.0`）的门禁计数见文末最新验证记录与 `docs/current-facts.json`；下方各版本/早期记录保留为历史。
 - **Agent Skill 端到端**：在真实 DSH 会话里模型调用 `skill { name: "intelligent-ui" }` 成功加载 `<skill_content>`（15 KB 正文 + references 基目录提示），随后按技能用 `render_ui` 生成并渲染了验证页。
 - **bundle 安装链路**：用 `npm pack` 产物在一次性 profile（`~/.dsh/profiles/zbundle-test`，依赖 `file:/tmp/…tgz` + `dsh.profile.bundles`）里安装，`dsh --profile zbundle-test --dump-config` 退出 0，输出出现 `# == @zephinel/dsh-intelligent-ui` 与插入行 `id: intelligent-ui / name: '@zephinel/dsh-intelligent-ui'`（验证后已清理）。
 - **三档开关端到端（0.2.1 时代记录）**：默认「关闭」请求里没有 `render_ui`、提示词为空；选「仅本会话」后本会话请求带工具与提示词并渲染出卡片，而新开会话仍是关闭；选「全部会话」后新开会话直接带工具与提示词；选「关闭」后文件清空、新会话再次无工具无提示词；两个标签页之间控件状态通过 BroadcastChannel 同步；状态文件 `{ "global": false, "sessions": [] }` 与投影行为符合预期。0.3 的会话开关/样式覆盖与 Article 页面尚待实机验证。
@@ -1279,3 +1279,17 @@ Composer「显示样式」面板接入与设置页相同的模板交换入口：
 
 - **变更**：按 ASD-STE100 简明语言规则审计并重写 `locale/{en,zh}.json`、`locale/detail.{en,zh}.md` 与 `src/shared/locales.ts`，中文统一为「智能 UI」「自动 / 卡片 / 文章」「页面 / 卡片」「编辑标签」「编辑需求」「自由布局」「无需」，移除面向用户的内部术语（`Host`、`权威程序记录`、`chromeless`、`turn tail`、`@ToAssistant`、`template exchange format v1`）；英文移除分号链、模糊情态词（`may`/`will`/`would`）、`(s)` 复数简写、英式拼写（`Colour`/`cancelled`）以及不一致的样式说明/引号/重试措辞；删除 23 个死 key（并将死 key 测试收紧为精确字面量/真实动态模板匹配），为 `Slider` 与 `DatePicker` 补齐本地化 `aria-label`（`slider.aria`/`datePicker.aria`），为 14 处计数模板补齐 `1` vs `N` 单数 key，更新 `noticeCopyParts` 支持句号分句，同步 as-built 文档与 4 个受影响的浏览器 E2E 套件，并在 `test/client/locales.test.mjs` 新增零死 key、中英文本栅栏、按钮引用一致性与单复数测试。
 - **门禁**：`npm run check` PASS；Node **880/880** = Host **324** + Client **516** + packaging **40**；`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.96 / CSS 249.6 kB）；浏览器 **12/12**；pack **71** 文件，非构建 **3,909,989** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+
+## 2026-11-21 — 0.7.0 发布准备
+
+- **背景**：`0.7.0` 是首个带四种交付形态内嵌 UI 的 npm 版本，所以 release 提交把 `package.json` / `package-lock.json` 升到 0.7.0，把 `Unreleased` 条目移入 `## [0.7.0] - 2026-11-21`，写入经审核的 `release-notes/0.7.0.md` / `.en.md`，并把 README 对、development 对、随包 integration 参考与发布维护元数据指向已发布版本。
+- **文档**：README 安装改为以 npm `latest` 为主、GitHub `main` 作为滚动源；Desktop 跟随 npm `latest`。首用说明改为 DSH 0.2.2-rc.2+ 的 fence 插槽要求，不再保留「0.6.2 没有内嵌 UI」的旧区分。`docs/current-facts.json` 按构建后的实际 pack 重新测量（图标提交删除 CSS 后遗留的 `clientCssKb` 249.6，以及内嵌 UI README 改动带来的非构建字节变化）。
+- **门禁**：`npm run check` PASS；Node **880/880** = Host **324** + Client **516** + packaging **40**；浏览器 **12/12** 套件沿用 `main` 最近一次绿色 CI（`6c53330`），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.96 / CSS 249.3 kB）；pack **71** 文件，非构建 **3,909,920** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：本条只记录发布准备；tag、Trusted Publishing run、registry provenance 与 GitHub Release 记在发布后追加的发布结果记录里。本次仅版本与文档变更，未重跑浏览器套件，沿用 `main` 绿色结果。
+
+## 2026-11-21 — 0.7.0 发布结果
+
+- **发布**：annotated tag `v0.7.0` 指向发布提交；tag 触发的 `publish.yml` 校验 release-notes 审批哈希、CHANGELOG 版本段与打包清单后，用 OIDC + provenance 发布。
+- **核验**：npm `latest` = `0.7.0`，版本端点含 `dist.attestations.provenance`，`gitHead` 与 tag 提交一致，GitHub Release 页面带中英要点。发布前本地门禁：`npm run check`、`npm run check:release-notes`（5 条中文 + 5 条英文要点）、`npm run pack:check`、`npm run check:release`、`git diff --check`。
+- **门禁**：Node **880/880** = Host **324** + Client **516** + packaging **40**；浏览器 **12/12**（`main` 最近 CI），`artifact-edit` **944 checks**、`nested-edit-renderer` **75**、图片导出 **76** 条断言、`update-prompt` **39**；构建 host **904 kB**、client **4.21 MB**（js 3.96 / CSS 249.3 kB）；pack **71** 文件，非构建 **3,909,920** 字节；`check:docs-facts`/`check:docs-links`/`check:pack-facts` 通过。
+- **证据边界**：registry 传播是异步的，工作流最多轮询十分钟；本条在 publish workflow 落定后补入 run id 与 registry 响应。

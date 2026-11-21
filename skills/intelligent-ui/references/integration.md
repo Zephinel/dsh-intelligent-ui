@@ -9,7 +9,7 @@ The same package ships the Agent Skill in `skills/intelligent-ui/`. A deployment
 
 ## Current status
 
-**Published stable:** `@zephinel/dsh-intelligent-ui@0.6.2` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`; that package has turn-tail cards, in-place editing with revision history, standalone pages, local images and style switching, but **no inline UI**. The four-form inline UI is new on `main` and unreleased on npm; install the GitHub bundle or a local checkout to use it. The next npm release will carry it. Prefer the npm or GitHub bundle install below; the local-checkout flow remains available for development.
+**Published stable:** `@zephinel/dsh-intelligent-ui@0.7.0` is on npm and the repository is public at `Zephinel/dsh-intelligent-ui`; that package carries the four-form inline UI as the default presentation for explanations, plus turn-tail cards, in-place editing with revision history, standalone pages, local images and style switching. Install the npm package for a released version or the GitHub bundle for the latest commits; the local-checkout flow remains available for development.
 
 ## Requirements
 
@@ -54,10 +54,10 @@ The browser half follows DSH's UI language and needs no configuration:
 The package declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`, and that patch inserts the host row `id: intelligent-ui` with `name: '@zephinel/dsh-intelligent-ui'`. Installing the repository as a bundle installs the package into the profile and selects it in the profile's ordered layer list:
 
 ```sh
-# main (inline UI, unreleased; needs the build toolchain)
+# npm latest (inline UI, cards, editing and export)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# or GitHub main (latest commits; needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 0.6.2 (stable, no inline fence)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 ```
 
 The npm package name is **`@zephinel/dsh-intelligent-ui`** (the unscoped `dsh-intelligent-ui` is owned by an unrelated project), published under the `@zephinel` npm scope.
@@ -74,7 +74,7 @@ If DSH refuses the package for version incompatibility, either install a compati
 
 ```sh
 dsh plugin --profile web version-exemptions
-dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.6.2 --dsh-version 0.2.2-rc.5 --accept-risk
+dsh plugin --profile web allow-version @zephinel/dsh-intelligent-ui@0.7.0 --dsh-version 0.2.2-rc.5 --accept-risk
 ```
 
 Remove it with the mirror command:
@@ -224,4 +224,4 @@ Work top-down; each step rules out one layer:
 - Interactive pages are self-contained but large (about 3.4–4.9 MB) and keep only the exporting theme; non-free cards keep the 760px measure and the live 12px card gap, free results use the full page width, and their photos, maps and routing still use the same third-party services as inside DSH.
 - **Image export follows the live cards, not the whole page.** Portaled overlays — an open `Popover` panel and `Celebration` confetti live on `<body>` — are visible on screen but absent from the saved PNG; everything inside the card, including an expanded `Map` dialog, is captured.
 - The `/iui` Host replies and the command palette's command description stay English even in a Chinese UI; both are DSH platform behavior, and the command palette localizes only first-party commands by identity.
-- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.6.2`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.
+- The package is published on npm as `@zephinel/dsh-intelligent-ui@0.7.0`; pin a version for reproducibility. Publishing a new version needs a version bump plus the packaging checks in `test/packaging/`.

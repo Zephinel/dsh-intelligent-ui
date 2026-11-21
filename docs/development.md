@@ -22,10 +22,10 @@ dsh --version    # 已验证：0.2.2-rc.5；内嵌 UI 需要 0.2.2-rc.2+ 的 fen
 从 npm 或 GitHub 安装 bundle（推荐）：
 
 ```bash
-# main：包含正文内嵌 UI（尚未发布，需构建工具链）
+# npm 最新版：正文内嵌 UI 与轮末卡片（含编辑、导出与模板）
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# 或跟随 GitHub main 的最新提交（需构建工具链）
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm 稳定版 0.6.2：没有 inline fence（可能出卡片/document）
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # 重启承载 Web UI 的 DSH 进程（前台 `dsh web`：Ctrl+C 后重新运行；
 # DSH Desktop：退出并重开应用；systemd/launchd：重启对应服务）
 ```
@@ -247,15 +247,15 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 5. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送）：
 
 ```bash
-git tag -a v0.6.2 -m "0.6.2 — 2026-11-16"
-git push origin v0.6.2
+git tag -a v0.7.0 -m "0.7.0 — 2026-11-21"
+git push origin v0.7.0
 ```
 
-6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.6.2 — 2026-11-16`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
+6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.7.0 — 2026-11-21`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
 
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段、`release-notes/<version>.md` 有已审核的 `## Highlights`，且 tag 提交正文的审批哈希与 notes 内容一致，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
-> 版本号约定：正式版使用稳定 semver（如 `0.6.2`，tag `v0.6.2`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
+> 版本号约定：正式版使用稳定 semver（如 `0.7.0`，tag `v0.7.0`），GitHub Release 标题带日期；CHANGELOG 段日期与 GitHub Release 标题使用 **UTC 发布日期**（仅历史版本 `0.1.0-26-10-21` 的后缀沿用当时本地日期，属例外）。历史版本使用 `<semver>-YY-MM-DD` 形式（如 `0.3.0-26-10-22`）；该后缀在 semver 中是 prerelease，只用于当时的预发布版本。早期 `0.0.0-stage`（npm 预演）与 `0.1.0-26-10-20` 在 tag/GitHub Release 流程建立前发布，没有对应 tag 与 Release；其余已发布版本均有 tag 与 GitHub Release。
 
 > 旧的 granular token 直接发布方式将在 2027-01 移除；这个流程不依赖长期 token。
 

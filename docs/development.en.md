@@ -22,10 +22,10 @@ dsh --version    # validated: 0.2.2-rc.5; inline UI needs the fence slot in 0.2.
 Install the bundle from npm or GitHub (recommended):
 
 ```bash
-# main: includes inline UI (unreleased; needs the build toolchain)
+# npm latest: inline UI and turn-tail cards (with editing, export and templates)
+dsh plugin --profile web add @zephinel/dsh-intelligent-ui
+# or follow the latest commits on GitHub main (needs the build toolchain)
 dsh plugin --profile web add github:Zephinel/dsh-intelligent-ui
-# npm stable 0.6.2: no inline fence (may render a card/document)
-dsh plugin --profile web add @zephinel/dsh-intelligent-ui@0.6.2
 # Restart the DSH process that serves the Web UI (foreground `dsh web`: Ctrl+C, then run it again;
 # DSH Desktop: quit and reopen the app; systemd/launchd: restart the corresponding service)
 ```
@@ -247,15 +247,15 @@ or npmjs.com → the package → Settings → Trusted Publishing → GitHub Acti
 5. create and push an annotated tag that matches the version (`main` was pushed in step 4):
 
 ```bash
-git tag -a v0.6.2 -m "0.6.2 — 2026-11-16"
-git push origin v0.6.2
+git tag -a v0.7.0 -m "0.7.0 — 2026-11-21"
+git push origin v0.7.0
 ```
 
-6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.6.2 — 2026-11-16`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.
+6. create a GitHub Release page titled `<version> — YYYY-MM-DD` (for example `0.7.0 — 2026-11-21`) with a short summary (its body can reuse the highlights from `release-notes/<version>.md`). npm publish is triggered by the tag; the Release page is created separately.
 
 `.github/workflows/publish.yml` rejects a tag that does not match `package.json`, runs `npm run check` and `npm run pack:check`, requires a `CHANGELOG.md` section for the version, reviewed `## Highlights` in `release-notes/<version>.md` (`npm run check:release-notes`) and a `Release-Notes-Review: sha256=<hash>` approval in the tagged commit that matches the notes content, then publishes with OIDC + `--provenance`; no `NODE_AUTH_TOKEN` is needed. The job afterwards verifies the published registry version and `latest` dist-tag by polling the registry endpoints directly for up to ten minutes to cover propagation delay. `npm run check:release` is not wired into the publish workflow yet (Linux runner behaviour unverified); run it locally before releasing.
 
-> Version convention: production releases use stable semver (for example `0.6.2`, tag `v0.6.2`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
+> Version convention: production releases use stable semver (for example `0.7.0`, tag `v0.7.0`), and the GitHub Release title carries the date; CHANGELOG section dates and GitHub Release titles use the **UTC publish date** (only the historical `0.1.0-26-10-21` suffix kept the local date, an exception). Historical versions used `<semver>-YY-MM-DD` (for example `0.3.0-26-10-22`); that suffix is a semver prerelease and was only used for those prerelease builds. The early `0.0.0-stage` (npm staging publish) and `0.1.0-26-10-20` were published before the tag/GitHub Release flow existed and have no tag or Release; every other published version has both.
 
 > The old direct-publish granular token flow is removed in January 2027; this pipeline does not depend on a long-lived token.
 
