@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Intelligent UI",
-    "description": "Interactive answers for DeepSeek Harness: explanatory replies embed maps, charts and interactions inline, standalone pages render at the turn end; with custom visual templates and chat-native on-demand generation. Use temporary results immediately, adjust or save them later; manage templates and export images or interactive pages.",
+    "description": "Interactive answers for DeepSeek Harness. Explanatory replies embed maps, charts, and controls inline, while standalone pages render as editable cards. Includes custom visual templates, on-demand generation, and image or HTML export.",
     "detail": "locale/detail.en.md"
   }
 }

@@ -47,7 +47,7 @@ events but not the full DSH Web integration.
   and shows two sent-summary chips. The final reconciliation scenario closes the
   Turn: when every submitted request produced a revision the drafts and badges
   disappear, and when a batch is only partially fulfilled the untouched draft
-  comes back with the `failed` draft badge (**Not completed; draft kept**) and
+  comes back with the `failed` draft badge (**Incomplete · draft kept**) and
   can be re-attached into a new chip. The M3-2 scenarios restore an old revision
   into a local revision card without a model call (local badge, restore-done
   notice, exactly one copy) and branch from an outdated revision's conflict

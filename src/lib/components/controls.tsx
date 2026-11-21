@@ -336,6 +336,7 @@ export const Slider = defineComponent({
     const readout = prefix ? `${unit}${value}` : `${value}${unit}`;
     const marks = (props.marks ?? []).filter((m) => m && Number.isFinite(m.value) && m.value >= min && m.value <= max);
     const id = useId();
+    const t = useT();
     return (
       <div className="iui-slider">
         {(props.label || props.unit) && (
@@ -352,7 +353,7 @@ export const Slider = defineComponent({
           max={max}
           step={step}
           value={value}
-          aria-label={props.label ? undefined : "Value"}
+          aria-label={props.label ? undefined : t("slider.aria")}
           aria-valuetext={readout}
           onChange={(event) => field.setValue(Number(event.target.value))}
         />
@@ -441,6 +442,7 @@ export const DatePicker = defineComponent({
   component: ({ props, statementId }) => {
     const field = useStateField(useFieldName(props.label, statementId), props.value);
     const value = typeof field.value === "string" && DATE.test(field.value) ? field.value : "";
+    const t = useT();
     return (
       <Field label={props.label}>
         <input
@@ -449,7 +451,7 @@ export const DatePicker = defineComponent({
           value={value}
           min={props.min && DATE.test(props.min) ? props.min : undefined}
           max={props.max && DATE.test(props.max) ? props.max : undefined}
-          aria-label={props.label ? undefined : "Date"}
+          aria-label={props.label ? undefined : t("datePicker.aria")}
           onChange={(event) => field.setValue(event.target.value)}
         />
       </Field>

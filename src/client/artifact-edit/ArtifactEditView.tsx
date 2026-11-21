@@ -180,7 +180,7 @@ export function ArtifactEditView({
       <div className="dsh-iui-edit-toolbar">
         <div className="dsh-iui-edit-toolbar-row">
           <span className="dsh-iui-edit-toolbar-title">{t('edit.title')}</span>
-          <span className="dsh-iui-edit-count">{t('edit.availableBlocks', { count: blockCount })}</span>
+          <span className="dsh-iui-edit-count">{t(blockCount === 1 ? 'edit.availableBlocksOne' : 'edit.availableBlocks', { count: blockCount })}</span>
           {session.orderChanged ? <span className="dsh-iui-edit-preview" data-dsh-iui-edit-preview>{t('edit.previewOrder')}</span> : null}
           {canNest
             ? (

@@ -814,7 +814,7 @@ function BatchToolbar({ t, nested, count, allSelected, canMove, structureDisable
       ) : null}
       <div className="dsh-iui-edit-batch-pending" {...hook('pending')} role="status" aria-live="polite">
         <span className="dsh-iui-edit-batch-pending-label">
-          {t('edit.batchPending', { count: pendingOps })}
+          {t(pendingOps === 1 ? 'edit.batchPendingOne' : 'edit.batchPending', { count: pendingOps })}
         </span>
         {pendingLabels.length === 0 ? null : (
           <ul className="dsh-iui-edit-batch-pending-list">
@@ -2274,7 +2274,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
           <section className="dsh-iui-edit-section" aria-label={t('edit.requests')}>
             <div className="dsh-iui-edit-section-head">
               <span className="dsh-iui-edit-section-title">{t('edit.requests')}</span>
-              <span className="dsh-iui-edit-section-meta">{t('edit.requestsCount', { count: session.selection.length })}</span>
+              <span className="dsh-iui-edit-section-meta">{t(session.selection.length === 1 ? 'edit.requestsCountOne' : 'edit.requestsCount', { count: session.selection.length })}</span>
               <span className="dsh-iui-edit-section-spacer" />
               <button
                 type="button"
@@ -2334,7 +2334,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
         >
           <div className="dsh-iui-edit-section-head">
             <span className="dsh-iui-edit-section-title">{t('edit.arrangement')}</span>
-            <span className="dsh-iui-edit-section-meta">· {t('edit.blockCount', { count: session.blocks.length })}</span>
+            <span className="dsh-iui-edit-section-meta">· {t(session.blocks.length === 1 ? 'edit.blockCountOne' : 'edit.blockCount', { count: session.blocks.length })}</span>
             <span className="dsh-iui-edit-section-spacer" />
             {structureBusy ? (
               <span className="dsh-iui-edit-structure-busy" role="status" data-dsh-iui-edit-structure-busy>
@@ -2920,7 +2920,7 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               ? t('edit.applySummary', { ops: pendingOps.length, count: session.selection.length })
               : styleOnly
                 ? t('edit.applySummaryStyle')
-                : hasModelContent ? t('edit.applySummaryModel', { count: session.selection.length }) : t('edit.applySummaryEmpty')}
+                : hasModelContent ? t(session.selection.length === 1 ? 'edit.applySummaryModelOne' : 'edit.applySummaryModel', { count: session.selection.length }) : t('edit.applySummaryEmpty')}
           </span>
           <button
             type="button"
@@ -3002,10 +3002,10 @@ export function EditPanel({ t, session, actions, closing = false, onOpenHistory,
               <h2 id={applyTitleId} className="dsh-iui-edit-preview-title">{t('edit.applyPreviewTitle')}</h2>
               <p className="dsh-iui-edit-preview-subtitle">
                 <span className="dsh-iui-edit-preview-operation" data-dsh-iui-edit-apply-ops-count>
-                  {t('edit.applyPreviewOpsCount', { count: applyPreview.ops.length })}
+                  {t(applyPreview.ops.length === 1 ? 'edit.applyPreviewOpsCountOne' : 'edit.applyPreviewOpsCount', { count: applyPreview.ops.length })}
                 </span>
                 <span className="dsh-iui-edit-preview-block" data-dsh-iui-edit-apply-model-count>
-                  {t('edit.applyPreviewModelCount', { count: applyPreview.model.requestCount })}
+                  {t(applyPreview.model.requestCount === 1 ? 'edit.applyPreviewModelCountOne' : 'edit.applyPreviewModelCount', { count: applyPreview.model.requestCount })}
                 </span>
               </p>
             </div>

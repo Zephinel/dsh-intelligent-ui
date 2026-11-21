@@ -142,9 +142,9 @@ test('a Chinese locale seat translates the chip, aria label and tooltip', () => 
   const t = translate(zh)
   const { html } = render(view({ sessionEnable: 'on' }), { t })
   assert.match(html, /data-state="on"/)
-  assert.match(html, /aria-label="Intelligent UI：仅本会话"/)
+  assert.match(html, /aria-label="智能 UI：仅本会话"/)
   assert.match(html, />UI：仅本会话</)
-  assert.match(html, /title="Intelligent UI 在本会话开启（\/iui on） — 点击更改"/)
+  assert.match(html, /title="智能 UI 在本会话开启（\/iui on） — 点击更改"/)
 })
 
 test('pending disables the chip and reports the pending state', () => {

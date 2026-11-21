@@ -54,7 +54,7 @@ The three pages above were generated directly in real DSH sessions (DeepSeek V4.
 
 In **Auto** mode, the model chooses among four delivery forms per answer: plain Markdown, inline UI, a turn-tail page card, or an inline explanation plus a companion page (distinct roles, no duplicated content, at most one card per turn). For standalone pages, you can also pin Card or Article layout per session under **UI → Display style**, or use **On-demand UI** to describe a bespoke page in plain language.
 
-![Editing canvas: orbit glow, style section (Switch style + style instruction), row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
+![Editing canvas: orbit glow, style section (Switch now + style instruction), row More menu, arrangement and request panel](assets/intelligent-ui-editing-en.webp)
 
 Rendered turn-tail cards stay editable: select blocks to request targeted edits, drag or keyboard-reorder sections, switch or describe a new visual style, and review or restore any revision from history. Full flow: [usage guide](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.en.md#edit-a-rendered-page).
 
@@ -100,7 +100,7 @@ dsh web
 
 Environment: DSH 0.2.2 plugin API (validated on `0.2.2-rc.5`; inline UI on `main` needs the `conversation.chat.markdown.fence` slot from `0.2.2-rc.2+`), Node 24 (with npm) and Git; the browser half uses `@deepseek-ai/dsh-client-locale` (included in DSH Web 0.2.2). There is no watch server: run `npm run build` and restart DSH after changes.
 
-Current verification: Node tests **875/875** (Host 324, Client 511, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Full commands and history: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development) and [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
+Current verification: Node tests **880/880** (Host 324, Client 516, packaging 40); **12/12** browser suites pass, including **944** checks in the Artifact block-editing suite, **75** checks in the nested edit-renderer suite and **76** image-export assertions. Full commands and history: [Development and deployment](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.en.md#development) and [verification record](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.en.md).
 
 ## Contributing
 

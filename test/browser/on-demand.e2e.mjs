@@ -95,7 +95,7 @@ body { margin:0; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-l
   check(await read('window.__calls.at(-1).command'), '/iui on-demand off')
   await project('cancelled')
   await wait('!document.querySelector("[data-dsh-iui-on-demand-hint]")')
-  for (const [status, copy] of [['running', 'Building the UI'], ['clarifying', 'Waiting for your answer']]) {
+  for (const [status, copy] of [['running', 'Building the UI'], ['clarifying', 'Answer the question above']]) {
     await project(status)
     await wait('!!document.querySelector("[data-dsh-iui-on-demand-hint]")')
     if (status === 'running') await writeFile('/tmp/iui-on-demand-running.png', Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
@@ -226,7 +226,7 @@ body { margin:0; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-l
     await read(`window.__styleError=${JSON.stringify(code)}`)
     await popupButton('Save'); await wait(`!!document.querySelector('${dialog} [role=alert]')`)
     check(await read(`document.querySelector('${dialog} input').value`), 'Reusable style', 'retry preserves fields')
-    check(await read(`document.querySelector('${dialog} [role=alert]').textContent.includes(${JSON.stringify(code === 'duplicate_name' ? 'already exists' : 'no longer available')})`), true)
+    check(await read(`document.querySelector('${dialog} [role=alert]').textContent.includes(${JSON.stringify(code === 'duplicate_name' ? 'already exists' : 'exceeded the retention limit')})`), true)
   }
   await read(`window.__styleError='';window.__styleDelay=true`)
   const commandsBeforeSave = await read('window.__calls.length')

@@ -831,6 +831,8 @@ test('store: temporary-style results and unsupported programs never open', () =>
 
 test('chip label helper covers every request shape', () => {
   assert.equal(editChipLabel({ count: 0, reordered: true, hasGlobal: false }), en['edit.chip.order'])
+  assert.equal(editChipLabel({ count: 1, reordered: false, hasGlobal: false }), en['edit.chip.editsOne'].replace('{count}', '1'))
+  assert.equal(editChipLabel({ count: 1, reordered: true, hasGlobal: false }), en['edit.chip.mixedOne'].replace('{count}', '1'))
   assert.equal(editChipLabel({ count: 2, reordered: false, hasGlobal: false }), en['edit.chip.edits'].replace('{count}', '2'))
   assert.equal(editChipLabel({ count: 2, reordered: true, hasGlobal: false }), en['edit.chip.mixed'].replace('{count}', '2'))
   assert.equal(editChipLabel({ count: 0, reordered: false, hasGlobal: true }), en['edit.chip.global'])
@@ -845,7 +847,7 @@ test('chip label reports queue-only and queued+mixed drafts', () => {
     title: '样例', baseRevision: 1, selection: [], orderChanged: false,
     globalInstruction: '', styleInstruction: '', branch: false,
   }
-  const ops = count => en['edit.chipTail.ops'].replace('{count}', String(count))
+  const ops = count => en[count === 1 ? 'edit.chipTail.opsOne' : 'edit.chipTail.ops'].replace('{count}', String(count))
   const queueOnly = chipLabelForSession({ ...base, pendingOps: [{}, {}] })
   assert.equal(queueOnly.includes(ops(2)), true, 'a queue-only draft reports the structure operations')
   assert.equal(queueOnly.includes(en['edit.chipTail.global']), false, 'a queue-only draft is not mislabelled as a global note')
@@ -855,7 +857,7 @@ test('chip label reports queue-only and queued+mixed drafts', () => {
     globalInstruction: '保持风格',
     pendingOps: [{}],
   })
-  assert.equal(mixed.includes(en['edit.chipTail.edits'].replace('{count}', '1')), true)
+  assert.equal(mixed.includes(en['edit.chipTail.editsOne'].replace('{count}', '1')), true)
   assert.equal(mixed.includes(en['edit.chipTail.suffix']), true, 'the global suffix survives a queued operation')
   assert.equal(mixed.includes(ops(1)), true, 'a mixed draft appends the queued operations')
 })
@@ -1284,7 +1286,7 @@ test('store: each attached draft has its own chip label and reference', async ()
   assert.equal(upsert.label, chipLabelForSession(draftSessionFor(key)))
   assert.equal(upsert.label.includes('Page A'), true)
   assert.equal(upsert.label.includes(en['edit.revision'].replace('{n}', '1')), true)
-  assert.equal(upsert.label.includes(en['edit.chipTail.edits'].replace('{count}', '1')), true)
+  assert.equal(upsert.label.includes(en['edit.chipTail.editsOne'].replace('{count}', '1')), true)
 })
 
 test('composer: chips are inserted, updated and removed by reference', () => {

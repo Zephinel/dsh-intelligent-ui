@@ -2,11 +2,11 @@
  * Typographic split of one post-Apply notice, without touching its copy.
  *
  * The row renders the status clause as a 600-weight lead and the remaining
- * explanation as a secondary detail. The split prefers the first semicolon
- * (`；`/`;`) because it separates the status from the follow-up in both
- * locales; a message without one falls back to the first comma (`，`/`,`).
- * The separator itself stays at the start of the detail clause, so lead +
- * detail concatenate back to the original string character for character.
+ * explanation as a secondary detail. The split prefers the first internal
+ * sentence or clause boundary (`；`, `;`, `。` followed by text, or `.` followed
+ * by whitespace), falling back to the first comma (`，`/`,`). The separator
+ * itself stays at the start of the detail clause, so lead + detail concatenate
+ * back to the original string character for character.
  */
 export interface NoticeCopyParts {
   /** Status clause rendered in the primary ink. */
@@ -21,9 +21,9 @@ export interface NoticeCopyParts {
  * @returns the lead clause and the detail clause (empty when there is no separator).
  */
 export function noticeCopyParts(message: string): NoticeCopyParts {
-  const semicolon = message.search(/[；;]/)
+  const clause = message.search(/[；;]|。(?=.)|\.(?=\s)/)
   const comma = message.search(/[，,]/)
-  const cut = semicolon >= 0 ? semicolon : comma
+  const cut = clause >= 0 ? clause : comma
   if (cut < 0) return { lead: message, detail: '' }
   return { lead: message.slice(0, cut), detail: message.slice(cut) }
 }

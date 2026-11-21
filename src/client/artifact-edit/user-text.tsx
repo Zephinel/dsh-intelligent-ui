@@ -55,9 +55,9 @@ export function ArtifactEditSummary({ node, raw, t }: SummaryProps): React.React
   const reordered = node.data.reordered === true
   if (node.data.style === true) return <ReferenceChip appearance="file" label={t('edit.chip.style')} title={raw} />
   let label = count > 0 && reordered
-    ? t('edit.chip.mixed', { count })
+    ? t(count === 1 ? 'edit.chip.mixedOne' : 'edit.chip.mixed', { count })
     : count > 0
-      ? t('edit.chip.edits', { count })
+      ? t(count === 1 ? 'edit.chip.editsOne' : 'edit.chip.edits', { count })
       : reordered
         ? t('edit.chip.order')
         : t('edit.chip.global')

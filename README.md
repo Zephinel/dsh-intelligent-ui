@@ -52,11 +52,11 @@ dsh web
 
 上面的三张页面均由真实 DSH 会话（DeepSeek V4.1 Flash）直接生成，不是手写样例。
 
-**Auto** 模式下，模型按每次回答的实际需要在四种形态里自动选择：纯 Markdown、正文内嵌 UI、轮末独立页面卡片，或“正文内嵌解释 + 轮末交付页”（两者各司其职、不重复内容，单轮最多一张卡片）。生成独立页面时，也可在 **UI → 显示样式** 按会话固定卡片/长文版式，或通过**按需生成**直接用自然语言描述期望界面。
+**自动**（Auto）模式下，模型按每次回答的实际需要在四种形态里自动选择：纯 Markdown、正文内嵌 UI、轮末独立页面卡片，或“正文内嵌解释 + 轮末交付页”（两者各司其职、不重复内容，单轮最多一张卡片）。生成独立页面时，也可在 **UI → 显示样式** 按会话固定卡片 / 文章版式，或通过**按需生成**直接用自然语言描述期望界面。
 
-![编辑画布：轨道光晕、样式区、行尾 More 菜单、编排与请求面板](assets/intelligent-ui-editing-zh.webp)
+![编辑画布：轨道光晕、样式区、行尾「更多」菜单、编排与请求面板](assets/intelligent-ui-editing-zh.webp)
 
-已渲染的轮末卡片可以继续迭代：点选区块填写修改需求、拖拽或键盘调整顺序、切换或用自然语言描述新样式，每次修改都会记为独立修订，随时可对比或回退。完整流程见[使用指南](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.md#编辑已渲染页面)。
+已渲染的轮末卡片可以继续迭代：点选区块填写编辑需求、拖拽或键盘调整顺序、切换或用自然语言描述新样式，每次修改都会记为独立修订，随时可对比或回退。完整流程见[使用指南](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/usage.md#编辑已渲染页面)。
 
 ## 组件
 
@@ -100,7 +100,7 @@ dsh web
 
 环境要求：DSH 0.2.2 插件接口（验证于 `0.2.2-rc.5`；`main` 的正文内嵌需要 `0.2.2-rc.2+` 的 `conversation.chat.markdown.fence` 插槽）、Node 24（含 npm）与 Git；浏览器端依赖 `@deepseek-ai/dsh-client-locale`（DSH Web 0.2.2 默认包含）。无独立 watch 服务，改动后运行 `npm run build` 并重启 DSH。
 
-当前验证：Node 测试 **875/875**（Host 324、Client 511、packaging 40）；浏览器 **12/12** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。完整命令与历史记录见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#开发)与[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
+当前验证：Node 测试 **880/880**（Host 324、Client 516、packaging 40）；浏览器 **12/12** 套件通过，其中 Artifact 区块编辑套件 **944** 条检查、嵌套编辑渲染套件 **75** 条检查、图片导出 **76** 条断言。完整命令与历史记录见[开发与部署](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/development.md#开发)与[验证记录](https://github.com/Zephinel/dsh-intelligent-ui/blob/main/docs/verification.md)。
 
 ## 贡献
 

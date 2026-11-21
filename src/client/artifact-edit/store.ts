@@ -3640,8 +3640,8 @@ export function editChipLabel(facts: EditChipFacts): string {
   const t = translate
   if (facts.style === true) return t('edit.chipTail.style')
   let base = t('edit.chip.order')
-  if (facts.count > 0 && facts.reordered) base = t('edit.chip.mixed', { count: facts.count })
-  else if (facts.count > 0) base = t('edit.chip.edits', { count: facts.count })
+  if (facts.count > 0 && facts.reordered) base = t(facts.count === 1 ? 'edit.chip.mixedOne' : 'edit.chip.mixed', { count: facts.count })
+  else if (facts.count > 0) base = t(facts.count === 1 ? 'edit.chip.editsOne' : 'edit.chip.edits', { count: facts.count })
   else if (!facts.reordered) base = t('edit.chip.global')
   return facts.hasGlobal && (facts.count > 0 || facts.reordered) ? `${base}${t('edit.chip.suffix')}` : base
 }
@@ -3665,16 +3665,16 @@ export function chipLabelForSession(session: Pick<ArtifactEditSession, 'title' |
   let summary = hasStyle
     ? t('edit.chipTail.style')
     : count > 0 && reordered
-      ? t('edit.chipTail.mixed', { count })
+      ? t(count === 1 ? 'edit.chipTail.mixedOne' : 'edit.chipTail.mixed', { count })
       : count > 0
-        ? t('edit.chipTail.edits', { count })
+        ? t(count === 1 ? 'edit.chipTail.editsOne' : 'edit.chipTail.edits', { count })
         : reordered
           ? t('edit.chipTail.order')
           : t('edit.chipTail.global')
   if (!hasStyle && hasGlobal && (count > 0 || reordered)) summary = `${summary}${t('edit.chipTail.suffix')}`
   // A queue-only draft says so instead of pretending to be a global note.
   if (opsCount > 0) {
-    const ops = t('edit.chipTail.ops', { count: opsCount })
+    const ops = t(opsCount === 1 ? 'edit.chipTail.opsOne' : 'edit.chipTail.ops', { count: opsCount })
     summary = hasModelContent ? `${summary} · ${ops}` : ops
   }
   const branchSuffix = session.branch === true ? t('edit.chip.branchSuffix') : ''

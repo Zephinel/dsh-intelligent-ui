@@ -90,7 +90,7 @@ test('off shows every control with its default state', () => {
 test('on reflects the global enable, style, and free-composition values', () => {
   const html = render({ form: form({ value: { globalEnabled: true, answerStyle: 'article', freeComposition: true, documentMode: true } }) })
   assert.equal((html.match(/aria-checked="true"/g) ?? []).length, 4)
-  assert.match(html, /On: ordinary answers become one chromeless document page/)
+  assert.match(html, /On: ordinary answers become a full-page document without a card frame/)
   assert.match(html, /On: new sessions start with Intelligent UI enabled/)
   assert.match(html, /On: layout and typography guidance becomes advisory/)
   assert.match(html, /data-active="true"/)
@@ -155,7 +155,7 @@ test('stored custom styles stay selected; missing references render a fallback n
   assert.match(html, /Field notes/)
   assert.match(html, new RegExp(`data-style-id="${saved.id}"[^>]+aria-pressed="true"`))
   const missing = render({ form: form({ value: { answerStyle: saved.id } }) })
-  assert.match(missing, /Style unavailable; using the default/)
+  assert.match(missing, /Style unavailable\. Using the default\./)
   assert.doesNotMatch(missing, /data-style-id="(?:auto|card|article)"[^>]+aria-pressed="true"/)
   const invalid = render({ form: form({ value: { answerStyle: 'not-a-style' } }) })
   assert.match(invalid, /data-style-id="auto"[^>]+aria-pressed="true"/)

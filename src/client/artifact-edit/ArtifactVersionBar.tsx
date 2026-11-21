@@ -487,7 +487,7 @@ export function ArtifactVersionBar(props: ArtifactVersionBarProps): ReactElement
         })}
       </div>
       {built.total > items.length
-        ? <p className="dsh-iui-version-more" data-dsh-iui-version-more>{t('version.more', { count: built.total - items.length })}</p>
+        ? <p className="dsh-iui-version-more" data-dsh-iui-version-more>{t(built.total - items.length === 1 ? 'version.moreOne' : 'version.more', { count: built.total - items.length })}</p>
         : null}
       {error === undefined ? null : <p className="dsh-iui-version-status is-error" data-dsh-iui-version-action-error role="alert">{error}</p>}
     </div>,

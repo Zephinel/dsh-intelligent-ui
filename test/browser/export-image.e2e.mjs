@@ -340,7 +340,7 @@ try {
     await cdp.evaluate(`(() => { const menus = [...document.querySelectorAll('[data-dsh-iui-export-menu]')]; const menu = menus[menus.length - 1]; menu.querySelector('[data-export-style="card"]').click(); return menus.length })()`)
     await cdp.waitFor('!!document.querySelector(".dsh-iui-export-status.is-error")', 'missing-stage export error copy')
     const missingCopy = await cdp.evaluate('document.querySelector(".dsh-iui-export-status.is-error").textContent')
-    assert.match(missingCopy, /latest revision card is not on the page/i, 'the export failure names the concrete no-capturable-stage cause')
+    assert.match(missingCopy, /latest card is elsewhere on the page/i, 'the export failure names the concrete no-capturable-stage cause')
     assert.match(missingCopy, /Open the latest revision/, 'the failure copy explains the recovery instead of asking to retry')
     await new Promise(resolve => setTimeout(resolve, 300))
     assert.equal(await cdp.evaluate('window.downloads.length'), downloadsBeforeMissing, 'a notice-only answer downloads nothing')

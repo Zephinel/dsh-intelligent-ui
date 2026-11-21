@@ -381,7 +381,7 @@ function draftBadgeLabel(session: ArtifactEditSession, t: Translate): string {
   if (session.submitFailed === true) return t('edit.draftFailed')
   if (session.styleInstruction.trim() !== '') return `${t('edit.pendingDrafts')} · ${t('edit.chipTail.style')}`
   const count = session.selection.length
-  if (count > 0) return `${t('edit.pendingDrafts')} · ${t('edit.requestsCount', { count })}`
+  if (count > 0) return `${t('edit.pendingDrafts')} · ${t(count === 1 ? 'edit.requestsCountOne' : 'edit.requestsCount', { count })}`
   if (session.orderChanged) return `${t('edit.pendingDrafts')} · ${t('edit.summaryOrderChanged')}`
   return `${t('edit.pendingDrafts')} · ${t('edit.summaryGlobal')}`
 }

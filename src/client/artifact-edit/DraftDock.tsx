@@ -46,9 +46,10 @@ function draftSummaryLabel(draft: ArtifactEditSession, t: Translate): string {
     return t(hasBlockContent ? 'edit.styleMixed' : 'edit.summaryStyle')
   }
   const ops = draft.pendingOps?.length ?? 0
-  const opsLabel = ops > 0 ? t('edit.summaryOps', { count: ops }) : ''
+  const opsLabel = ops > 0 ? t(ops === 1 ? 'edit.summaryOpsOne' : 'edit.summaryOps', { count: ops }) : ''
   const count = draft.selection.length
-  if (count > 0) return opsLabel === '' ? t('edit.requestsCount', { count }) : `${opsLabel} · ${t('edit.requestsCount', { count })}`
+  const requestsLabel = t(count === 1 ? 'edit.requestsCountOne' : 'edit.requestsCount', { count })
+  if (count > 0) return opsLabel === '' ? requestsLabel : `${opsLabel} · ${requestsLabel}`
   if (draft.orderChanged || draft.nestedOrderChanged === true) return opsLabel === '' ? t('edit.summaryOrderChanged') : `${opsLabel} · ${t('edit.summaryOrderChanged')}`
   if (opsLabel !== '') return opsLabel
   return t('edit.summaryGlobal')
