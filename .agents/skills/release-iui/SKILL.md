@@ -8,6 +8,20 @@ whenToUse: "发布插件, 发版, 出个版本, 发布新版本, release, publis
 
 This repository publishes `@zephinel/dsh-intelligent-ui` to npm through a tag-triggered Trusted Publishing workflow. This skill fixes the release procedure so a new session does not have to rediscover it, and keeps the human approval gates explicit.
 
+## Two processes: operation and independent verification
+
+A release has two owners and they must not collapse into one:
+
+1. **Operation (main agent).** Prepare the version, docs and release notes; run the local gates; commit and push; tag; watch the publish workflow; create the GitHub Release; record the result.
+2. **Verification (independent subagent).** A fresh-context, read-only subagent verifies the prepared commit before the tag and the published result after the workflow. It must not edit files, commit, tag, push, publish or restart services. It returns PASS / FAIL / CONDITIONAL with evidence.
+
+Rules:
+
+- Start the verifier with `subagent` (fresh context), never `subagent_fork` (it inherits the operator's conversation).
+- The main agent's own gate results are not the verification verdict. Only a PASS (plus the owner's version and notes approvals) opens the tag gate; do not tag on "should be fine".
+- Use a fresh verifier for each round after fixes; do not ask one context to bless its own earlier finding.
+- The verifier's checklist, independence constraints, report format and prompt template live in [`references/independent-verification.md`](references/independent-verification.md).
+
 ## Authorization (read first)
 
 - **A change request is not a release request.** Adding a feature, fixing a bug, or editing docs/README/plugin pages never authorizes a version bump, tag, push, or publish.
@@ -78,12 +92,21 @@ git diff --check
 - If code or renderer dependencies changed, also run the browser suites locally when feasible (`npm run test:browser`), or confirm the latest full CI run on the same tree is green.
 - Commit the prepared tree, push `main`, and wait for CI to be green before tagging. A push-triggered `verify` run is not the publish gate; the tag reruns its own checks.
 
+## 2.5 Independent pre-tag verification
+
+After the gates pass, the release commit is pushed and CI is green, launch the independent verifier:
+
+- Use `subagent` with the prompt from [`references/independent-verification.md`](references/independent-verification.md), stage `pre-tag`; give the exact commit SHA, version, notes paths, owner approvals, CI run id and any caveats.
+- The verifier must read the files and run its own checks (git state, version/lock, CHANGELOG, notes approval, install pins/market wording, `npm run check`, `check:release`, `pack:check`, CI). It must not trust this skill or the operator's summary.
+- FAIL/CONDITIONAL: fix, re-run the local gates and CI, then launch a **fresh** verifier for the new commit. Do not create the tag.
+- PASS: record the verdict and verifier name, then proceed to step 3.
+
 ## 3. Tag and publish
 
 Only after explicit approval of the exact version and release-notes text:
 
 ```bash
-git tag -a v<version> -m "<version> — <UTC date>"
+git tag -a v<version> -m "<version> — <UTC date>" -m "Release-Verification: PASS (<verifier name>)"
 git push origin v<version>
 ```
 
@@ -116,6 +139,7 @@ gh run watch <run-id> --exit-status --interval 10
   ```
   `check:published-install` proves the install path, not just the registry: if it fails, fix the docs before announcing. A temporary install + `npm audit signatures` is optional but useful for provenance.
 - Read the configured market indexes after the release and record what they still show. If an index shows the previous release, that is expected; do not edit docs to claim otherwise. A marketplace description that is materially outdated is a separate correction request.
+- Launch a **fresh** independent verifier for `post-publish` (do not reuse the pre-tag context) after the workflow and registry settle. It verifies the publish run, registry/provenance, tag/commit, GitHub Release, tag-pinned notes, `check:published-install` and the observed market state. If it fails, fix and re-verify; do not announce until PASS.
 
 ## 5. Post-publish
 
@@ -129,7 +153,7 @@ gh run watch <run-id> --exit-status --interval 10
    curl -fsS "https://raw.githubusercontent.com/Zephinel/dsh-intelligent-ui/v<version>/release-notes/<version>.md" >/dev/null
    ```
 3. If the release was prompted by an issue, comment with the fixed version and evidence, then close it if the reporter's scenario is resolved.
-4. Record the release result in `docs/verification*.md` (workflow run, npm `latest`, provenance, Release URL) and push with `sync-iui-docs`; this is a docs-only follow-up and must not bump the version.
+4. Record the release result in `docs/verification*.md` (workflow run, npm `latest`, provenance, Release URL, `check:published-install`, the independent verifier name/verdict and any residual risks) and push with `sync-iui-docs`; this is a docs-only follow-up and must not bump the version.
 5. Marketplace listings follow npm `latest` on their own schedule and may still show the previous release. Record the observed index state; do not assert their current version in docs. The repository only needs its README/screenshots pushed; materially outdated listing text is corrected through the market entry.
 
 ## Don't
@@ -138,6 +162,7 @@ gh run watch <run-id> --exit-status --interval 10
 - Don't treat an exact-version approval as sign-off on the Highlights: the notes review (step 1.9) is a separate gate unless the owner explicitly waives it.
 - Don't tag a release commit without the `Release-Notes-Review: sha256=<hash>` line, and don't edit the notes files after approval — `publish.yml` refuses either case.
 - Don't `npm publish` locally; Trusted Publishing is the only path.
+- Don't self-verify a release or tag before the independent verifier returns PASS. Don't let the verifier edit, commit, tag, push or publish; it is read-only.
 - Don't ship a bare `dsh plugin add @zephinel/dsh-intelligent-ui` in docs: pnpm 11/12's 24-hour release-age default makes it install the previous version on release day. Pin the version.
 - Don't assert a marketplace, DSH Desktop or second-party index "currently" has the new version. State the refresh policy and verify the observed state after publish.
 - Don't amend, delete, or retag an already-published tag.

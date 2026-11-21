@@ -251,14 +251,17 @@ npm trust github @zephinel/dsh-intelligent-ui --file publish.yml \
 2. 编写并人工审核 `release-notes/<version>.md`（必需）与可选的 `release-notes/<version>.en.md`（英文界面用；缺失时 Host 回退默认文件）；`## Highlights` 至少一条，格式见 `release-notes/README.md`，`npm run check:release-notes` 可本地预览门禁结果；审核通过后运行 `node scripts/release-notes-approval.mjs`，把打印的 `Release-Notes-Review: sha256=<hash>` 放进 release 提交正文（`publish.yml` 会校验，缺失或不匹配拒绝发布）；
 3. 运行 `npm run check`；
 4. 提交并推送 `main`；
-5. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送）：
+5. 打 tag 前启动**独立 subagent** 只读验证（操作与验证分离；清单与 prompt 见 `.agents/skills/release-iui/references/independent-verification.md`）。只有 PASS 才进入下一步；FAIL/CONDITIONAL 先修复并重新验证；
+6. 创建并推送与版本一致的 annotated tag（`main` 已在第 4 步推送），并在 tag 说明中写入验证结论：
 
 ```bash
-git tag -a v0.7.0 -m "0.7.0 — 2026-11-21"
+git tag -a v0.7.0 -m "0.7.0 — 2026-11-21" -m "Release-Verification: PASS (<verifier>)"
 git push origin v0.7.0
 ```
 
-6. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.7.0 — 2026-11-21`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。
+7. 在 GitHub 创建 Release 页面，标题写 `<version> — YYYY-MM-DD`（例如 `0.7.0 — 2026-11-21`），正文可复用 `release-notes/<version>.md` 的 Highlights；npm publish 由 tag 触发，Release 页面需单独创建。发布后由**新的**独立 subagent 只读复核 registry、tag、Release、tag 固定的 notes 与 `npm run check:published-install`，结论写入验证记录。
+
+> 发布操作由主 Agent 执行，验证由独立 subagent 执行；主 Agent 不得用自测结果替代 verifier 的 PASS，也不得在 PASS 前打 tag 或宣布发布。
 
 `.github/workflows/publish.yml` 会拒绝 tag 与 `package.json` 版本不一致的推送，先跑 `npm run check` 与 `npm run pack:check`、校验 `CHANGELOG.md` 存在当前版本段、`release-notes/<version>.md` 有已审核的 `## Highlights`，且 tag 提交正文的审批哈希与 notes 内容一致，再用 OIDC + `--provenance` 发布到 npm，发布后自动核对 registry 版本与 `latest` dist-tag（直接轮询 registry 端点，最多等待 10 分钟以覆盖传播延迟）；不需要 `NODE_AUTH_TOKEN`。`npm run check:release` 仍未接入发布 workflow（Linux runner 行为待验证），发版前请在本地跑一次。
 
